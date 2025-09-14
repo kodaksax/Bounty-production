@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { ArrowLeft, Paperclip, Send, X, FileText, ImageIcon, Target } from "lucide-react"
 import { cn } from "lib/utils"
+import { ArrowLeft, FileText, ImageIcon, Paperclip, Send, Target, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 interface BountyDetailModalProps {
   bounty: {

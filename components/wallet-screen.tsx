@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { CreditCard, Plus, ArrowDown, ArrowLeft } from "lucide-react"
-import { Target } from "lucide-react"
-import { WithdrawScreen } from "./withdraw-screen"
-import { AddMoneyScreen } from "./add-money-screen"
-import { PaymentMethodsModal } from "./payment-methods-modal"
-import { TransactionHistoryScreen } from "./transaction-history-screen"
+
+import { ArrowDown, ArrowLeft, CreditCard, Plus, Target } from "lucide-react";
+import React, { useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { AddMoneyScreen } from "./add-money-screen";
+import { PaymentMethodsModal } from "./payment-methods-modal";
+import { TransactionHistoryScreen } from "./transaction-history-screen";
+import { WithdrawScreen } from "./withdraw-screen";
 
 interface WalletScreenProps {
   onBack?: () => void
@@ -25,131 +26,266 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   }
 
   if (showWithdraw) {
-    return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />
+    return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
   }
-
   if (showAddMoney) {
-    return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={handleAddMoney} />
+    return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={handleAddMoney} />;
   }
-
   if (showTransactionHistory) {
-    return <TransactionHistoryScreen onBack={() => setShowTransactionHistory(false)} />
+    return <TransactionHistoryScreen onBack={() => setShowTransactionHistory(false)} />;
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
-      {/* Header - iPhone optimized with safe area inset */}
-      <div className="flex justify-between items-center p-4 pt-safe">
-        <div className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTitleRow}>
+          <Target color="#fff" size={20} style={{ marginRight: 8 }} />
+          <Text style={styles.headerTitle}>BOUNTY</Text>
+        </View>
         {onBack && (
-          <button onClick={onBack} className="p-2 touch-target-min">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <ArrowLeft color="#fff" size={20} />
+          </TouchableOpacity>
         )}
-      </div>
-
-      {/* Balance Card */}
-      <div className="px-4 mb-6">
-        <div className="bg-emerald-700 rounded-xl p-5 shadow-lg">
-          <div className="text-center mb-4">
-            <p className="text-sm text-emerald-300 uppercase font-medium">BALANCE</p>
-            <h1 className="text-4xl font-bold mt-1">${balance.toFixed(2)}</h1>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <button
-              className="bg-emerald-800 hover:bg-emerald-900 transition-colors py-3 rounded-lg text-base font-medium flex items-center justify-center touch-target-min"
-              onClick={() => setShowAddMoney(true)}
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Add Money
-            </button>
-            <button
-              className="bg-emerald-800 hover:bg-emerald-900 transition-colors py-3 rounded-lg text-base font-medium flex items-center justify-center touch-target-min"
-              onClick={() => setShowWithdraw(true)}
-            >
-              <ArrowDown className="h-5 w-5 mr-2" />
-              Withdraw
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Linked Accounts Section */}
-      <div className="px-4 mb-4">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-base font-medium">Linked Accounts</h2>
-          <button className="text-sm text-emerald-300 p-2 touch-target-min" onClick={() => setShowPaymentMethods(true)}>
-            Manage
-          </button>
-        </div>
-
-        <div className="bg-emerald-700/80 rounded-xl p-4 mb-3 shadow-md">
-          <div className="flex items-center">
-            <div className="h-12 w-12 bg-emerald-800 rounded-lg flex items-center justify-center mr-3">
-              <CreditCard className="h-6 w-6" />
-            </div>
-            <div className="flex-1">
-              <p className="text-base font-medium">VISA **** **** 3456</p>
-              <p className="text-sm text-emerald-300">Default Payment Method</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-emerald-700/80 rounded-xl p-4 shadow-md">
-          <div className="flex items-center">
-            <div className="h-12 w-12 bg-emerald-800 rounded-lg flex items-center justify-center mr-3">
-              <CreditCard className="h-6 w-6" />
-            </div>
-            <div className="flex-1">
-              <p className="text-base font-medium">AMEX **** **** 7890</p>
-              <p className="text-sm text-emerald-300">Added 02/15/2025</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bounty Postings Section */}
-      <div className="px-4 mb-4 flex-1 ios-scroll">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-base font-medium">Bounty Postings</h2>
-          <button
-            className="text-sm text-emerald-300 p-2 touch-target-min"
-            onClick={() => setShowTransactionHistory(true)}
-          >
-            View All
-          </button>
-        </div>
-
-        <div className="bg-emerald-700/80 rounded-xl p-4 mb-3 shadow-md">
-          <div className="flex justify-between items-center">
-            <p className="text-base font-medium">Bounty</p>
-            <p className="text-base font-medium">$15.00</p>
-          </div>
-        </div>
-
-        <div className="bg-emerald-700/80 rounded-xl p-4 shadow-md">
-          <div className="flex justify-between items-center">
-            <p className="text-base font-medium">Bounty</p>
-            <p className="text-base font-medium">$25.00</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Navigation Indicator - With safe area inset */}
-      <div className="flex justify-center pb-safe pt-4">
-        <div className="h-1 w-1 rounded-full bg-white mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-      </div>
-
-      {/* Payment Methods Modal */}
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Balance Card */}
+        <View style={styles.sectionPad}>
+          <View style={styles.balanceCard}>
+            <View style={styles.balanceCardHeader}>
+              <Text style={styles.balanceLabel}>BALANCE</Text>
+              <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
+            </View>
+            <View style={styles.balanceActionsRow}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => setShowAddMoney(true)}>
+                <Plus color="#fff" size={20} style={{ marginRight: 8 }} />
+                <Text style={styles.actionButtonText}>Add Money</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={() => setShowWithdraw(true)}>
+                <ArrowDown color="#fff" size={20} style={{ marginRight: 8 }} />
+                <Text style={styles.actionButtonText}>Withdraw</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+        {/* Linked Accounts Section */}
+        <View style={styles.sectionPad}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Linked Accounts</Text>
+            <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
+              <Text style={styles.sectionManage}>Manage</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.accountCard}>
+            <View style={styles.accountIcon}><CreditCard color="#fff" size={24} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.accountName}>VISA **** **** 3456</Text>
+              <Text style={styles.accountSub}>Default Payment Method</Text>
+            </View>
+          </View>
+          <View style={styles.accountCard}>
+            <View style={styles.accountIcon}><CreditCard color="#fff" size={24} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.accountName}>AMEX **** **** 7890</Text>
+              <Text style={styles.accountSub}>Added 02/15/2025</Text>
+            </View>
+          </View>
+        </View>
+        {/* Bounty Postings Section */}
+        <View style={[styles.sectionPad, { flex: 1 }]}> 
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Bounty Postings</Text>
+            <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+              <Text style={styles.sectionManage}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.bountyCard}>
+            <Text style={styles.bountyName}>Bounty</Text>
+            <Text style={styles.bountyAmount}>$15.00</Text>
+          </View>
+          <View style={styles.bountyCard}>
+            <Text style={styles.bountyName}>Bounty</Text>
+            <Text style={styles.bountyAmount}>$25.00</Text>
+          </View>
+        </View>
+      </ScrollView>
+      {/* Bottom Navigation Indicator */}
+      <View style={styles.bottomNavRow}>
+        <View style={styles.bottomNavDotActive} />
+        <View style={styles.bottomNavDot} />
+        <View style={styles.bottomNavDot} />
+        <View style={styles.bottomNavDot} />
+        <View style={styles.bottomNavDot} />
+      </View>
       <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
-    </div>
-  )
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 32,
+    paddingHorizontal: 16,
+    backgroundColor: '#059669',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  backButton: {
+    padding: 8,
+  },
+  sectionPad: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  balanceCard: {
+    backgroundColor: '#047857',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    marginBottom: 8,
+  },
+  balanceCardHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  balanceLabel: {
+    color: '#6ee7b7',
+    fontSize: 14,
+    textTransform: 'uppercase',
+    fontWeight: 'bold',
+  },
+  balanceAmount: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  balanceActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#065f46',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    flex: 1,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  sectionManage: {
+    color: '#6ee7b7',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  accountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#047857cc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  accountIcon: {
+    height: 48,
+    width: 48,
+    backgroundColor: '#065f46',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  accountName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  accountSub: {
+    color: '#6ee7b7',
+    fontSize: 13,
+  },
+  bountyCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#047857cc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  bountyName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  bountyAmount: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  bottomNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 16,
+    paddingTop: 8,
+  },
+  bottomNavDotActive: {
+    height: 8,
+    width: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    marginHorizontal: 4,
+  },
+  bottomNavDot: {
+    height: 8,
+    width: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff6',
+    marginHorizontal: 4,
+  },
+});
+

@@ -1,15 +1,13 @@
 "use client"
 
-import { CategoryFilter } from "components/category-filter"
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
-import { TaskCard } from "components/task-card"
 import { WalletScreen } from "components/wallet-screen"
-import { DollarSign, MessageSquare, Package, Search, Target, User, Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarIcon, DollarSign, MessageSquare, Package, Search, Target } from "lucide-react"
 import React, { useEffect, useState } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
   id: string
@@ -109,13 +107,19 @@ export function  BountyApp() {
     return <SearchScreen onBack={() => setShowSearch(false)} />
   }
 
+
   // Render dashboard content when activeScreen is "bounty" (previously "home")
-  // ...existing code...
-  // (Refactored renderDashboardContent and return JSX to use React Native components)
-  // ...existing code...
+  function renderDashboardContent() {
+    return (
+      <View style={styles.dashboardContainer}>
+        <Text style={styles.dashboardTitle}>Dashboard</Text>
+        {/* Add your dashboard components here */}
+      </View>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-700 text-white">
+    <View style={styles.container}>
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -127,37 +131,95 @@ export function  BountyApp() {
       ) : activeScreen === "create" ? (
         <MessengerScreen />
       ) : activeScreen === "calendar" ? (
-        <div className="flex justify-center items-center h-screen">
+        <View style={styles.calendarContainer}>
           <Calendar
             mode="single"
             selected={date}
             onSelect={setDate}
-            className="rounded-md border"
+            // className="rounded-md border" // Not used in RN
           />
-        </div>
+        </View>
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
-      <div className="fixed bottom-0 left-0 right-0 h-16 bg-emerald-800/80 backdrop-blur-sm flex justify-around items-center px-6 pb-safe z-20 shadow-lg">
-        <button onClick={() => setActiveScreen("create")} className="p-3 touch-target-min">
-          <MessageSquare className={`h-6 w-6 ${activeScreen === "create" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("wallet")} className="p-3 touch-target-min">
-          <DollarSign className={`h-6 w-6 ${activeScreen === "wallet" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <div
-          className="h-14 w-14 bg-transparent border-2 border-white rounded-full flex items-center justify-center -mt-5 cursor-pointer touch-target-min"
-          onClick={() => setActiveScreen("bounty")}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity onPress={() => setActiveScreen("create")}
+          style={styles.navButton}
         >
-          <Target className={`h-7 w-7 ${activeScreen === "bounty" ? "text-white" : "text-white/70"}`} />
-        </div>
-        <button onClick={() => setActiveScreen("postings")} className="p-3 touch-target-min">
-          <Search className={`h-6 w-6 ${activeScreen === "postings" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("calendar")} className="p-3 touch-target-min">
-          <CalendarIcon className={`h-6 w-6 ${activeScreen === "calendar" ? "text-white" : "text-white/70"}`} />
-        </button>
-      </div>
-    </div>
-  )
+          <MessageSquare color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("wallet")}
+          style={styles.navButton}
+        >
+          <DollarSign color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.centerButton}
+          onPress={() => setActiveScreen("bounty")}
+        >
+          <Target color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("postings")}
+          style={styles.navButton}
+        >
+          <Search color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("calendar")}
+          style={styles.navButton}
+        >
+          <CalendarIcon color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  dashboardContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  dashboardTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  calendarContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 64,
+    backgroundColor: '#065f46', // emerald-800
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    elevation: 10,
+  },
+  navButton: {
+    padding: 12,
+  },
+  centerButton: {
+    height: 56,
+    width: 56,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#fff',
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -20,
+  },
+});

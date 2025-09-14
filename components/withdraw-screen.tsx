@@ -1,185 +1,322 @@
-"use client"
-
-import type React from "react"
-
-import { ArrowLeft, Check, ChevronRight, Home, Plus, Target } from "lucide-react"
-import { useState } from "react"
-import { cn } from "lib/utils"
+import React, { useState } from "react";
+import { ArrowLeft, Check, ChevronRight, Home, Plus, Target } from "lucide-react";
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from "react-native";
 
 interface WithdrawScreenProps {
-  onBack?: () => void
-  balance: number
+  onBack?: () => void;
+  balance: number;
 }
 
 interface PaymentMethod {
-  id: string
-  name: string
-  details: string
-  icon: React.ReactNode
+  id: string;
+  name: string;
+  details: string;
+  icon: React.ReactNode;
 }
 
 export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
-  const [selectedMethod, setSelectedMethod] = useState<string>("bank-of-america")
-  const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0)
+  const [selectedMethod, setSelectedMethod] = useState<string>("bank-of-america");
+  const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0);
 
   const paymentMethods: PaymentMethod[] = [
     {
       id: "bank-of-america",
       name: "Bank Of America",
       details: "Checking XXXXXX23",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "apple-pay",
       name: "Apple Pay",
       details: "ending in 1138",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "chase-bank",
       name: "Chase Bank",
       details: "Checking XXXXXX45",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "wells-fargo",
       name: "Wells Fargo",
       details: "Savings XXXXXX78",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "venmo",
       name: "Venmo",
       details: "@username",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "paypal",
       name: "PayPal",
       details: "user@example.com",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
     {
       id: "cash-app",
       name: "Cash App",
       details: "$username",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Home color="#fff" size={20} />,
     },
-  ]
+  ];
 
   return (
-    <div className="flex flex-col h-screen bg-emerald-600 text-white overflow-hidden">
-      {/* Fixed Header */}
-      <div className="sticky top-0 z-10 bg-emerald-600">
-        <div className="flex items-center p-4 pt-8">
-          <button onClick={onBack} className="mr-3">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex items-center">
-            <Target className="h-5 w-5 mr-2" />
-            <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-          </div>
-        </div>
-
-        {/* Title */}
-        <div className="px-4 py-2">
-          <h1 className="text-2xl font-bold tracking-wider">WITHDRAW</h1>
-        </div>
-
-        {/* Balance Info */}
-        <div className="px-4 py-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-emerald-200">Your Balance:</span>
-            <span className="text-sm text-emerald-200">Withdrawal: ${withdrawalAmount.toFixed(2)}</span>
-          </div>
-          <div className="relative h-2 bg-emerald-700/50 rounded-full overflow-hidden">
-            <div
-              className="absolute top-0 left-0 h-full bg-emerald-400"
-              style={{ width: `${(withdrawalAmount / balance) * 100}%` }}
-            ></div>
-          </div>
-          <div className="flex justify-between items-center mt-1">
-            <span className="text-xs text-emerald-300">$0</span>
-            <span className="text-xs text-emerald-300">${balance.toFixed(2)}</span>
-          </div>
-        </div>
-
-        {/* Withdrawal Amount */}
-        <div className="px-4 py-2">
-          <label className="block text-sm text-emerald-200 mb-1">Amount:</label>
-          <input
-            type="number"
-            value={withdrawalAmount || ""}
-            onChange={(e) =>
-              setWithdrawalAmount(Math.min(balance, Math.max(0, Number.parseFloat(e.target.value) || 0)))
-            }
-            placeholder="Enter amount to withdraw"
-            className="w-full bg-emerald-700/30 border border-emerald-500/30 rounded-lg p-2 text-white placeholder:text-emerald-300/50 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-          />
-        </div>
-      </div>
-
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto pb-24">
-        {/* Payment Methods */}
-        <div className="px-4 py-4">
-          <h2 className="text-sm font-medium mb-3">Select Withdrawal Method</h2>
-          <div className="space-y-3">
-            {paymentMethods.map((method) => (
-              <div
-                key={method.id}
-                className={cn(
-                  "flex items-center justify-between p-3 rounded-lg",
-                  selectedMethod === method.id ? "bg-emerald-700" : "bg-emerald-700/50",
-                )}
-                onClick={() => setSelectedMethod(method.id)}
-              >
-                <div className="flex items-center">
-                  <div className="h-8 w-8 rounded-full bg-emerald-800 flex items-center justify-center mr-3">
-                    {method.icon}
-                  </div>
-                  <div>
-                    <p className="font-medium">{method.name}</p>
-                    {method.details && <p className="text-xs text-emerald-300">{method.details}</p>}
-                  </div>
-                </div>
-                <div className="h-5 w-5 rounded-full border border-emerald-400 flex items-center justify-center">
-                  {selectedMethod === method.id && <Check className="h-3 w-3 text-emerald-400" />}
-                </div>
-              </div>
-            ))}
-
-            {/* Add New Bank Account */}
-            <div className="flex items-center justify-between p-3 bg-emerald-700/50 rounded-lg">
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-emerald-800 flex items-center justify-center mr-3">
-                  <Plus className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">New Bank Account</p>
-                  <p className="text-xs text-emerald-300">Menu description</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-emerald-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Fixed Button at Bottom */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-emerald-600 border-t border-emerald-500/30 shadow-lg z-10">
-        <button
-          className={cn(
-            "w-full py-3 rounded-lg font-medium text-center",
-            withdrawalAmount > 0
-              ? "bg-emerald-500 hover:bg-emerald-600 transition-colors"
-              : "bg-emerald-700/50 text-emerald-200 cursor-not-allowed",
-          )}
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <ArrowLeft color="#fff" size={20} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleRow}>
+          <Target color="#fff" size={20} style={{ marginRight: 8 }} />
+          <Text style={styles.headerTitle}>BOUNTY</Text>
+        </View>
+      </View>
+      <View style={styles.titleBox}>
+        <Text style={styles.title}>WITHDRAW</Text>
+      </View>
+      <View style={styles.balanceBox}>
+        <View style={styles.balanceRow}>
+          <Text style={styles.balanceLabel}>Your Balance:</Text>
+          <Text style={styles.balanceLabel}>Withdrawal: ${withdrawalAmount.toFixed(2)}</Text>
+        </View>
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBar, { width: `${(withdrawalAmount / balance) * 100}%` }]} />
+        </View>
+        <View style={styles.balanceRow}>
+          <Text style={styles.balanceSubLabel}>$0</Text>
+          <Text style={styles.balanceSubLabel}>${balance.toFixed(2)}</Text>
+        </View>
+      </View>
+      <View style={styles.amountBox}>
+        <Text style={styles.amountLabel}>Amount:</Text>
+        <TextInput
+          style={styles.amountInput}
+          keyboardType="numeric"
+          value={withdrawalAmount ? withdrawalAmount.toString() : ""}
+          onChangeText={text => {
+            const val = parseFloat(text);
+            setWithdrawalAmount(Math.min(balance, Math.max(0, isNaN(val) ? 0 : val)));
+          }}
+          placeholder="Enter amount to withdraw"
+          placeholderTextColor="#6ee7b7"
+        />
+      </View>
+      <ScrollView style={styles.scrollArea} contentContainerStyle={{ paddingBottom: 120 }}>
+        <View style={styles.methodsBox}>
+          <Text style={styles.methodsTitle}>Select Withdrawal Method</Text>
+          {paymentMethods.map((method) => (
+            <TouchableOpacity
+              key={method.id}
+              style={[
+                styles.methodRow,
+                selectedMethod === method.id ? styles.methodRowActive : styles.methodRowInactive,
+              ]}
+              onPress={() => setSelectedMethod(method.id)}
+            >
+              <View style={styles.methodIconCircle}>{method.icon}</View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodName}>{method.name}</Text>
+                {method.details ? <Text style={styles.methodDetails}>{method.details}</Text> : null}
+              </View>
+              <View style={styles.methodCheckCircle}>
+                {selectedMethod === method.id && <Check color="#34d399" size={16} />}
+              </View>
+            </TouchableOpacity>
+          ))}
+          {/* Add New Bank Account */}
+          <View style={styles.methodRowInactive}>
+            <View style={styles.methodIconCircle}><Plus color="#fff" size={20} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.methodName}>New Bank Account</Text>
+              <Text style={styles.methodDetails}>Menu description</Text>
+            </View>
+            <ChevronRight color="#34d399" size={20} />
+          </View>
+        </View>
+      </ScrollView>
+      <View style={styles.bottomButtonBox}>
+        <TouchableOpacity
+          style={[
+            styles.bottomButton,
+            withdrawalAmount > 0 ? styles.bottomButtonActive : styles.bottomButtonInactive,
+          ]}
           disabled={withdrawalAmount <= 0}
         >
-          Begin Withdrawal
-        </button>
-      </div>
-    </div>
-  )
+          <Text style={styles.bottomButtonText}>Begin Withdrawal</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 32,
+    paddingHorizontal: 16,
+    backgroundColor: '#059669',
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  titleBox: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  balanceBox: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  balanceLabel: {
+    color: '#a7f3d0',
+    fontSize: 14,
+  },
+  balanceSubLabel: {
+    color: '#6ee7b7',
+    fontSize: 12,
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#047857',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#34d399',
+    borderRadius: 4,
+  },
+  amountBox: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  amountLabel: {
+    color: '#a7f3d0',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  amountInput: {
+    backgroundColor: '#047857',
+    borderColor: '#10b981',
+    borderWidth: 1,
+    borderRadius: 8,
+    color: '#fff',
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  methodsBox: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  methodsTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    justifyContent: 'space-between',
+  },
+  methodRowActive: {
+    backgroundColor: '#047857',
+  },
+  methodRowInactive: {
+    backgroundColor: '#04785799',
+  },
+  methodIconCircle: {
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    backgroundColor: '#065f46',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  methodName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  methodDetails: {
+    color: '#6ee7b7',
+    fontSize: 12,
+  },
+  methodCheckCircle: {
+    height: 20,
+    width: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#34d399',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomButtonBox: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 16,
+    backgroundColor: '#059669',
+    borderTopWidth: 1,
+    borderTopColor: '#10b981',
+    elevation: 10,
+  },
+  bottomButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  bottomButtonActive: {
+    backgroundColor: '#10b981',
+  },
+  bottomButtonInactive: {
+    backgroundColor: '#04785799',
+  },
+  bottomButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});

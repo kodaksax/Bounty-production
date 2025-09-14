@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { X, ArrowDown, ArrowUp, Target, CheckCircle, CreditCard, Calendar, Clock, Info } from "lucide-react"
-import { cn } from "lib/utils"
 import { format } from "date-fns"
+import { cn } from "lib/utils"
+import { ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, CreditCard, Info, Target, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import type { Transaction } from "./transaction-history-screen"
 
 interface TransactionDetailModalProps {
@@ -31,10 +31,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
+    // In React Native, use TouchableWithoutFeedback for click outside modal.
   }, [])
 
   // Get transaction icon based on type
