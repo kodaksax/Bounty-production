@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 
 import { Alert, AlertDescription } from "components/ui/alert"
 import { Button } from "components/ui/button"
@@ -69,16 +70,16 @@ export function SignUpForm() {
 
   if (success) {
     return (
-      <div className="space-y-4">
+      <View className="space-y-4">
         <Alert>
           <AlertDescription>
             Check your email for a confirmation link. You'll need to confirm your email before signing in.
           </AlertDescription>
         </Alert>
-        <Button onClick={() => router.push("/sign-in")} className="w-full">
+        <Button onPress={() => router.push("/sign-in")} className="w-full">
           Go to Sign In
         </Button>
-      </div>
+      </View>
     )
   }
 
@@ -90,7 +91,7 @@ export function SignUpForm() {
         </Alert>
       )}
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -101,10 +102,10 @@ export function SignUpForm() {
           aria-invalid={!!getFieldError("email")}
           disabled={isLoading}
         />
-        {getFieldError("email") && <p className="text-sm text-red-500">{getFieldError("email")}</p>}
-      </div>
+        {getFieldError("email") && <Text className="text-sm text-red-500">{getFieldError("email")}</Text>}
+      </View>
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="username">Username</Label>
         <Input
           id="username"
@@ -115,10 +116,10 @@ export function SignUpForm() {
           aria-invalid={!!getFieldError("username")}
           disabled={isLoading}
         />
-        {getFieldError("username") && <p className="text-sm text-red-500">{getFieldError("username")}</p>}
-      </div>
+        {getFieldError("username") && <Text className="text-sm text-red-500">{getFieldError("username")}</Text>}
+      </View>
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
@@ -128,8 +129,8 @@ export function SignUpForm() {
           aria-invalid={!!getFieldError("password")}
           disabled={isLoading}
         />
-        {getFieldError("password") && <p className="text-sm text-red-500">{getFieldError("password")}</p>}
-      </div>
+        {getFieldError("password") && <Text className="text-sm text-red-500">{getFieldError("password")}</Text>}
+      </View>
 
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? (
@@ -142,12 +143,12 @@ export function SignUpForm() {
         )}
       </Button>
 
-      <p className="text-center text-sm">
+      <Text className="text-center text-sm">
         Already have an account?{" "}
-        <Button variant="link" className="p-0 h-auto" onClick={() => router.push("/sign-in")} type="button">
+        <Button variant="link" className="p-0 h-auto" onPress={() => router.push("/sign-in")} type="button">
           Sign in
         </Button>
-      </p>
+      </Text>
     </form>
   )
 }

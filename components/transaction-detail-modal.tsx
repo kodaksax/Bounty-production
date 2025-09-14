@@ -4,6 +4,7 @@ import { format } from "date-fns"
 import { cn } from "lib/utils"
 import { ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, CreditCard, Info, Target, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
 
 interface TransactionDetailModalProps {
@@ -83,7 +84,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <View className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div
         ref={modalRef}
         className={cn(
@@ -92,28 +93,28 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-emerald-700">
-          <h2 className="text-lg font-bold text-white">Transaction Details</h2>
-          <button onClick={handleClose} className="text-white p-2 touch-target-min">
+        <View className="flex items-center justify-between p-4 bg-emerald-700">
+          <Text className="text-lg font-bold text-white">Transaction Details</Text>
+          <TouchableOpacity onPress={handleClose} className="text-white p-2 touch-target-min">
             <X className="h-5 w-5" />
-          </button>
-        </div>
+          </TouchableOpacity>
+        </View>
 
         {/* Transaction Summary */}
-        <div className="p-5 border-b border-emerald-700/50">
-          <div className="flex items-center mb-4">
-            <div className="h-12 w-12 rounded-full bg-emerald-800/80 flex items-center justify-center mr-4">
+        <View className="p-5 border-b border-emerald-700/50">
+          <View className="flex items-center mb-4">
+            <View className="h-12 w-12 rounded-full bg-emerald-800/80 flex items-center justify-center mr-4">
               {getTransactionIcon()}
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">{getTransactionTitle()}</h3>
-              <p className="text-sm text-emerald-200">
+            </View>
+            <View>
+              <Text className="text-lg font-bold text-white">{getTransactionTitle()}</Text>
+              <Text className="text-sm text-emerald-200">
                 {format(transaction.date, "MMMM d, yyyy")} at {format(transaction.date, "h:mm a")}
-              </p>
-            </div>
-          </div>
+              </Text>
+            </View>
+          </View>
 
-          <div className="bg-emerald-700/50 rounded-lg p-4 mb-4">
+          <View className="bg-emerald-700/50 rounded-lg p-4 mb-4">
             <p
               className={cn(
                 "text-2xl font-bold text-center",
@@ -121,97 +122,97 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
               )}
             >
               {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-            </p>
-          </div>
+            </Text>
+          </View>
 
-          <p className="text-sm text-emerald-100">{getTransactionDescription()}</p>
-        </div>
+          <Text className="text-sm text-emerald-100">{getTransactionDescription()}</Text>
+        </View>
 
         {/* Transaction Details */}
-        <div className="p-5">
-          <h3 className="text-sm font-medium text-emerald-300 mb-3">Details</h3>
+        <View className="p-5">
+          <Text className="text-sm font-medium text-emerald-300 mb-3">Details</Text>
 
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+          <View className="space-y-4">
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                 <Info className="h-4 w-4 text-emerald-300" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-emerald-300">Transaction ID</p>
-                <p className="text-sm text-white">{transaction.id}</p>
-              </div>
-            </div>
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Transaction ID</Text>
+                <Text className="text-sm text-white">{transaction.id}</Text>
+              </View>
+            </View>
 
-            <div className="flex items-center">
-              <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                 <Calendar className="h-4 w-4 text-emerald-300" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-emerald-300">Date</p>
-                <p className="text-sm text-white">{format(transaction.date, "MMMM d, yyyy")}</p>
-              </div>
-            </div>
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Date</Text>
+                <Text className="text-sm text-white">{format(transaction.date, "MMMM d, yyyy")}</Text>
+              </View>
+            </View>
 
-            <div className="flex items-center">
-              <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                 <Clock className="h-4 w-4 text-emerald-300" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-emerald-300">Time</p>
-                <p className="text-sm text-white">{format(transaction.date, "h:mm:ss a")}</p>
-              </div>
-            </div>
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Time</Text>
+                <Text className="text-sm text-white">{format(transaction.date, "h:mm:ss a")}</Text>
+              </View>
+            </View>
 
             {transaction.details.status && (
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                   <CheckCircle className="h-4 w-4 text-emerald-300" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-emerald-300">Status</p>
-                  <p className="text-sm text-white">{transaction.details.status}</p>
-                </div>
-              </div>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">Status</Text>
+                  <Text className="text-sm text-white">{transaction.details.status}</Text>
+                </View>
+              </View>
             )}
 
             {transaction.details.method && (
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                   <CreditCard className="h-4 w-4 text-emerald-300" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-emerald-300">Method</p>
-                  <p className="text-sm text-white">{transaction.details.method}</p>
-                </div>
-              </div>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">Method</Text>
+                  <Text className="text-sm text-white">{transaction.details.method}</Text>
+                </View>
+              </View>
             )}
 
             {transaction.details.counterparty && (
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
                   <Target className="h-4 w-4 text-emerald-300" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-emerald-300">
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">
                     {transaction.type === "bounty_completed" ? "Paid to" : "From"}
-                  </p>
-                  <p className="text-sm text-white">{transaction.details.counterparty}</p>
-                </div>
-              </div>
+                  </Text>
+                  <Text className="text-sm text-white">{transaction.details.counterparty}</Text>
+                </View>
+              </View>
             )}
-          </div>
-        </div>
+          </View>
+        </View>
 
         {/* Action Button */}
-        <div className="p-5 pt-0">
+        <View className="p-5 pt-0">
           <button
-            onClick={handleClose}
+            onPress={handleClose}
             className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium"
           >
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   )
 }

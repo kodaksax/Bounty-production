@@ -208,96 +208,96 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <button className="p-2" onClick={onBack}>
+      <View className="flex justify-between items-center p-4 pt-8">
+        <TouchableOpacity className="p-2" onPress={onBack}>
           <FileText className="h-5 w-5" />
-        </button>
-        <button className="p-2" onClick={() => setShowSettings(true)}>
+        </TouchableOpacity>
+        <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
           <Settings className="h-5 w-5" />
-        </button>
-      </div>
+        </TouchableOpacity>
+      </View>
 
       {/* Profile Info */}
-      <div className="px-4 py-2">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
+      <View className="px-4 py-2">
+        <View className="flex items-center gap-4">
+          <View className="relative">
+            <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
               <Target className="h-8 w-8" />
-            </div>
-            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+            </View>
+            <View className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
               lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
-            </div>
-          </div>
-          <div>
-            <h1 className="text-lg font-bold">{profileData.name}</h1>
-            <p className="text-sm text-emerald-200">{profileData.about}</p>
-          </div>
-        </div>
-      </div>
+            </View>
+          </View>
+          <View>
+            <Text className="text-lg font-bold">{profileData.name}</Text>
+            <Text className="text-sm text-emerald-200">{profileData.about}</Text>
+          </View>
+        </View>
+      </View>
 
-      <div className="flex-1 overflow-y-auto pb-4 hide-scrollbar">
+      <View className="flex-1 overflow-y-auto pb-4 hide-scrollbar">
         {/* Stats */}
-        <div className="px-4 py-4">
-          <div className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="transition-all duration-300 transform hover:scale-105">
-                <p className="text-2xl font-bold animate-pulse">{stats.jobsAccepted}</p>
-                <p className="text-xs text-emerald-200 mt-1">Jobs Accepted</p>
-              </div>
-              <div className="transition-all duration-300 transform hover:scale-105">
-                <p className="text-2xl font-bold animate-pulse">{stats.bountiesPosted}</p>
-                <p className="text-xs text-emerald-200 mt-1">Bounties Posted</p>
-              </div>
-              <div className="transition-all duration-300 transform hover:scale-105">
-                <p className="text-2xl font-bold animate-pulse">{stats.badgesEarned}</p>
-                <p className="text-xs text-emerald-200 mt-1">Badges Earned</p>
-              </div>
-            </div>
+        <View className="px-4 py-4">
+          <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
+            <View className="grid grid-cols-3 gap-4 text-center">
+              <View className="transition-all duration-300 transform hover:scale-105">
+                <Text className="text-2xl font-bold animate-pulse">{stats.jobsAccepted}</Text>
+                <Text className="text-xs text-emerald-200 mt-1">Jobs Accepted</Text>
+              </View>
+              <View className="transition-all duration-300 transform hover:scale-105">
+                <Text className="text-2xl font-bold animate-pulse">{stats.bountiesPosted}</Text>
+                <Text className="text-xs text-emerald-200 mt-1">Bounties Posted</Text>
+              </View>
+              <View className="transition-all duration-300 transform hover:scale-105">
+                <Text className="text-2xl font-bold animate-pulse">{stats.badgesEarned}</Text>
+                <Text className="text-xs text-emerald-200 mt-1">Badges Earned</Text>
+              </View>
+            </View>
 
             {/* Test buttons (hidden in production) */}
-            <div className="mt-4 flex justify-center gap-2">
-              <button onClick={simulateJobAccepted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
+            <View className="mt-4 flex justify-center gap-2">
+              <TouchableOpacity onPress={simulateJobAccepted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
                 Test: Complete Job
-              </button>
-              <button onClick={simulateBountyPosted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
+              </TouchableOpacity>
+              <TouchableOpacity onPress={simulateBountyPosted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
                 Test: Post Bounty
-              </button>
-            </div>
-          </div>
-        </div>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
 
         {/* Skills */}
-        <div className="px-4 py-2">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm font-medium">Skillsets:</h2>
+        <View className="px-4 py-2">
+          <View className="flex justify-between items-center mb-2">
+            <Text className="text-sm font-medium">Skillsets:</Text>
             <button
               className="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
-              onClick={() => setIsEditing(true)}
+              onPress={() => setIsEditing(true)}
             >
               Edit
-            </button>
-          </div>
+            </TouchableOpacity>
+          </View>
 
-          <div className="space-y-3">
+          <View className="space-y-3">
             {skills.map((skill) => (
-              <div key={skill.id} className="flex items-center gap-2">
+              <View key={skill.id} className="flex items-center gap-2">
                 {getIconComponent(skill.icon)}
-                <p className="text-sm">{skill.text}</p>
-              </div>
+                <Text className="text-sm">{skill.text}</Text>
+              </View>
             ))}
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="px-4 py-4">
-          <h2 className="text-sm font-medium mb-2">Activity</h2>
-          <div className="space-y-4">
+        <View className="px-4 py-4">
+          <Text className="text-sm font-medium mb-2">Activity</Text>
+          <View className="space-y-4">
             {activities.length > 0 ? (
               activities.map((activity, i) => (
-                <div key={i} className="bg-emerald-700/30 rounded-lg p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-medium flex items-center gap-1">
+                <View key={i} className="bg-emerald-700/30 rounded-lg p-3">
+                  <View className="flex justify-between items-center mb-1">
+                    <Text className="text-sm font-medium flex items-center gap-1">
                       {activity.type === "bounty_posted" && <Target className="h-3 w-3" />}
                       {activity.type === "job_accepted" && <CheckCircle className="h-3 w-3" />}
                       {activity.type === "badge_earned" && <Award className="h-3 w-3 text-yellow-400" />}
@@ -306,23 +306,23 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                         : activity.type === "job_accepted"
                           ? "Job Accepted"
                           : "Badge Earned"}
-                    </span>
-                    <span className="text-xs text-emerald-300">{formatTimeAgo(activity.timestamp)}</span>
-                  </div>
-                  <p className="text-sm text-emerald-200">{activity.title}</p>
-                </div>
+                    </Text>
+                    <Text className="text-xs text-emerald-300">{formatTimeAgo(activity.timestamp)}</Text>
+                  </View>
+                  <Text className="text-sm text-emerald-200">{activity.title}</Text>
+                </View>
               ))
             ) : (
-              <div className="text-center py-4 text-emerald-300">
-                <p>No activity yet</p>
-              </div>
+              <View className="text-center py-4 text-emerald-300">
+                <Text>No activity yet</Text>
+              </View>
             )}
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="px-4 py-4">
-          <h2 className="text-sm font-medium mb-2">Achievements</h2>
-          <div className="grid grid-cols-3 gap-3">
+        <View className="px-4 py-4">
+          <Text className="text-sm font-medium mb-2">Achievements</Text>
+          <View className="grid grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => {
               const isEarned = i < stats.badgesEarned
               return (
@@ -342,26 +342,26 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                     ) : (
                       <Globe className={`h-5 w-5 ${isEarned ? "text-yellow-400" : "text-emerald-300"}`} />
                     )}
-                  </div>
-                  <span className="text-xs text-center">
+                  </View>
+                  <Text className="text-xs text-center">
                     {i % 3 === 0 ? "Sharpshooter" : i % 3 === 1 ? "Helper" : "Explorer"}
-                  </span>
-                </div>
+                  </Text>
+                </View>
               )
             })}
-          </div>
-        </div>
-      </div>
+          </View>
+        </View>
+      </View>
 
       {/* Bottom Navigation Indicator */}
-      <div className="mt-auto flex justify-center pb-6">
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-      </div>
-    </div>
+      <View className="mt-auto flex justify-center pb-6">
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+      </View>
+    </View>
   )
 }
 

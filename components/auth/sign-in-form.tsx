@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 
 import { Alert, AlertDescription } from "components/ui/alert"
 import { Button } from "components/ui/button"
@@ -72,7 +73,7 @@ export function SignInForm() {
         </Alert>
       )}
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -83,21 +84,21 @@ export function SignInForm() {
           aria-invalid={!!getFieldError("email")}
           disabled={isLoading}
         />
-        {getFieldError("email") && <p className="text-sm text-red-500">{getFieldError("email")}</p>}
-      </div>
+        {getFieldError("email") && <Text className="text-sm text-red-500">{getFieldError("email")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
+      <View className="space-y-2">
+        <View className="flex items-center justify-between">
           <Label htmlFor="password">Password</Label>
           <Button
             variant="link"
             className="p-0 h-auto text-xs"
-            onClick={() => router.push("/reset-password")}
+            onPress={() => router.push("/reset-password")}
             type="button"
           >
             Forgot password?
           </Button>
-        </div>
+        </View>
         <Input
           id="password"
           type="password"
@@ -106,8 +107,8 @@ export function SignInForm() {
           aria-invalid={!!getFieldError("password")}
           disabled={isLoading}
         />
-        {getFieldError("password") && <p className="text-sm text-red-500">{getFieldError("password")}</p>}
-      </div>
+        {getFieldError("password") && <Text className="text-sm text-red-500">{getFieldError("password")}</Text>}
+      </View>
 
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? (
@@ -120,12 +121,12 @@ export function SignInForm() {
         )}
       </Button>
 
-      <p className="text-center text-sm">
+      <Text className="text-center text-sm">
         Don't have an account?{" "}
-        <Button variant="link" className="p-0 h-auto" onClick={() => router.push("/sign-up")} type="button">
+        <Button variant="link" className="p-0 h-auto" onPress={() => router.push("/sign-up")} type="button">
           Sign up
         </Button>
-      </p>
+      </Text>
     </form>
   )
 }

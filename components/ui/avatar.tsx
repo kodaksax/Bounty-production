@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import * as AvatarPrimitive from "@radix-ui/react-avatar"
 
 import { cn } from "lib/utils"
