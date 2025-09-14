@@ -18,6 +18,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useState } from "react"
 import { EditProfileScreen } from "./edit-profile-screen"
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -53,65 +54,179 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
     )
   }
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669', // emerald-600
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      paddingTop: 32,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerIcon: {
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    balanceText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+    },
+    backContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    backButton: {
+      marginRight: 8,
+    },
+    titleText: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: 'white',
+    },
+    profileSection: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: 'rgba(6, 95, 70, 0.3)', // emerald-700/30
+    },
+    profileContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    profileInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    avatarContainer: {
+      marginRight: 12,
+    },
+    profileName: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+    profileAbout: {
+      fontSize: 12,
+      color: '#A7F3D0', // emerald-200
+    },
+    settingsContainer: {
+      flex: 1,
+    },
+    settingsContent: {
+      paddingVertical: 8,
+    },
+    navigationIndicator: {
+      marginTop: 'auto',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingBottom: 24,
+    },
+    indicator: {
+      height: 4,
+      width: 4,
+      borderRadius: 2,
+      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+      marginHorizontal: 4,
+    },
+    settingsItem: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    settingsItemContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    settingsItemIcon: {
+      marginRight: 12,
+    },
+    settingsItemLabel: {
+      color: 'white',
+      fontSize: 16,
+    },
+  });
+
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <div className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <span className="text-lg font-bold">$ 40.00</span>
-      </div>
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Target color="white" size={20} style={styles.headerIcon} />
+          <Text style={styles.headerTitle}>BOUNTY</Text>
+        </View>
+        <Text style={styles.balanceText}>$ 40.00</Text>
+      </View>
 
       {/* Back button and title */}
-      <div className="px-4 py-2 flex items-center">
-        <button onClick={onBack} className="mr-2">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="text-xl font-medium">Settings</h1>
-      </div>
+      <View style={styles.backContainer}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <ArrowLeft color="white" size={20} />
+        </TouchableOpacity>
+        <Text style={styles.titleText}>Settings</Text>
+      </View>
 
       {/* Profile section */}
-      <div className="px-4 py-3 bg-emerald-700/30">
-        <div className="flex items-center justify-between" onClick={() => setShowEditProfile(true)}>
-          <div className="flex items-center">
-            <Avatar className="h-12 w-12 mr-3 border-2 border-white">
-              <AvatarImage src={profileData.avatar} alt={profileData.name} />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-            <div>
-              <h2 className="font-medium">{profileData.name}</h2>
-              <p className="text-xs text-emerald-200">{profileData.about}</p>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-emerald-300" />
-        </div>
-      </div>
+      <TouchableOpacity style={styles.profileSection} onPress={() => setShowEditProfile(true)}>
+        <View style={styles.profileContent}>
+          <View style={styles.profileInfo}>
+            <View style={styles.avatarContainer}>
+              <Avatar>
+                <AvatarImage src={profileData.avatar} alt={profileData.name} />
+                <AvatarFallback>JD</AvatarFallback>
+              </Avatar>
+            </View>
+            <View>
+              <Text style={styles.profileName}>{profileData.name}</Text>
+              <Text style={styles.profileAbout}>{profileData.about}</Text>
+            </View>
+          </View>
+          <ChevronRight color="#6EE7B7" size={20} />
+        </View>
+      </TouchableOpacity>
 
       {/* Settings options */}
-      <div className="flex-1">
-        <div className="py-2">
-          <SettingsItem icon={<Star className="h-5 w-5 text-yellow-400" />} label="Starred Messages" />
-          <SettingsItem icon={<Laptop className="h-5 w-5 text-teal-400" />} label="WhatsApp Web/Desktop" />
-          <SettingsItem icon={<User className="h-5 w-5 text-blue-400" />} label="Account" />
-          <SettingsItem icon={<MessageSquare className="h-5 w-5 text-green-400" />} label="Chats" />
-          <SettingsItem icon={<Bell className="h-5 w-5 text-red-400" />} label="Notifications" />
-          <SettingsItem icon={<Database className="h-5 w-5 text-purple-400" />} label="Data and Storage Usage" />
-          <SettingsItem icon={<HelpCircle className="h-5 w-5 text-blue-400" />} label="Help" />
-          <SettingsItem icon={<Heart className="h-5 w-5 text-red-400" />} label="Tell a Friend" />
-        </div>
-      </div>
+      <View style={styles.settingsContainer}>
+        <ScrollView style={styles.settingsContent}>
+          <SettingsItem icon={<Star color="#FCD34D" size={20} />} label="Starred Messages" />
+          <SettingsItem icon={<Laptop color="#14B8A6" size={20} />} label="WhatsApp Web/Desktop" />
+          <SettingsItem icon={<User color="#60A5FA" size={20} />} label="Account" />
+          <SettingsItem icon={<MessageSquare color="#34D399" size={20} />} label="Chats" />
+          <SettingsItem icon={<Bell color="#F87171" size={20} />} label="Notifications" />
+          <SettingsItem icon={<Database color="#A78BFA" size={20} />} label="Data and Storage Usage" />
+          <SettingsItem icon={<HelpCircle color="#60A5FA" size={20} />} label="Help" />
+          <SettingsItem icon={<Heart color="#F87171" size={20} />} label="Tell a Friend" />
+        </ScrollView>
+      </View>
 
       {/* Bottom Navigation Indicator */}
-      <div className="mt-auto flex justify-center pb-6">
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-      </div>
-    </div>
+      <View style={styles.navigationIndicator}>
+        <View style={styles.indicator} />
+        <View style={styles.indicator} />
+        <View style={styles.indicator} />
+        <View style={styles.indicator} />
+        <View style={styles.indicator} />
+      </View>
+    </View>
   )
 }
 
@@ -122,16 +237,41 @@ interface SettingsItemProps {
 }
 
 function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
+  const styles = StyleSheet.create({
+    settingsItem: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    settingsItemContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    settingsItemIcon: {
+      marginRight: 12,
+    },
+    settingsItemLabel: {
+      color: 'white',
+      fontSize: 16,
+    },
+  });
+
   return (
-    <button
-      className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700/30 transition-colors"
-      onClick={onClick}
+    <TouchableOpacity
+      style={styles.settingsItem}
+      onPress={onClick}
     >
-      <div className="flex items-center">
-        {icon}
-        <span className="ml-3">{label}</span>
-      </div>
-      <ChevronRight className="h-5 w-5 text-emerald-300" />
-    </button>
+      <View style={styles.settingsItemContent}>
+        <View style={styles.settingsItemIcon}>
+          {icon}
+        </View>
+        <Text style={styles.settingsItemLabel}>{label}</Text>
+      </View>
+      <ChevronRight color="#6EE7B7" size={20} />
+    </TouchableOpacity>
   )
 }
