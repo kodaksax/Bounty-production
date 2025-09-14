@@ -9,7 +9,7 @@ import { TaskCard } from "components/task-card"
 import { WalletScreen } from "components/wallet-screen"
 import { DollarSign, MessageSquare, Package, Search, Target, User, Calendar as CalendarIcon } from "lucide-react"
 import React, { useEffect, useState } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Pressable } from 'react-native';
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
   id: string
@@ -21,6 +21,117 @@ type Bounty = {
 }
 
 import { Calendar } from "components/ui/calendar"
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  dashboardContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  header: {
+    paddingTop: 40,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  targetIcon: {
+    marginRight: 8,
+    color: 'white',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+    letterSpacing: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  balanceContainer: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  balanceAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  bountiesContainer: {
+    paddingBottom: 100, // Space for bottom navigation
+  },
+  loadingText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  errorText: {
+    color: '#FCA5A5', // red-300
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  calendarContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomNavigation: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+    backgroundColor: 'rgba(6, 95, 70, 0.8)', // emerald-800 with opacity
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 8, // Safe area inset
+  },
+  navButton: {
+    padding: 12,
+  },
+  centerNavButton: {
+    height: 56,
+    width: 56,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'white',
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -20,
+  },
+});
 
 export function  BountyApp() {
   const [activeCategory, setActiveCategory] = useState("local")
@@ -110,12 +221,61 @@ export function  BountyApp() {
   }
 
   // Render dashboard content when activeScreen is "bounty" (previously "home")
-  // ...existing code...
-  // (Refactored renderDashboardContent and return JSX to use React Native components)
-  // ...existing code...
+  const renderDashboardContent = () => {
+    return (
+      <ScrollView style={styles.dashboardContainer}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Target style={styles.targetIcon} />
+            <Text style={styles.headerTitle}>BOUNTY</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Find bounties near you</Text>
+        </View>
+
+        <View style={styles.balanceContainer}>
+          <Text style={styles.balanceLabel}>Your Balance</Text>
+          <Text style={styles.balanceAmount}>${userBalance.toFixed(2)}</Text>
+        </View>
+
+        <View style={styles.categoriesContainer}>
+          {categories.map((category) => (
+            <CategoryFilter
+              key={category.id}
+              label={category.label}
+              icon={category.icon}
+              isActive={activeCategory === category.id}
+              onClick={() => setActiveCategory(category.id)}
+            />
+          ))}
+        </View>
+
+        <View style={styles.bountiesContainer}>
+          {isLoading ? (
+            <Text style={styles.loadingText}>Loading bounties...</Text>
+          ) : error ? (
+            <Text style={styles.errorText}>Error: {error}</Text>
+          ) : filteredBounties.length === 0 ? (
+            <Text style={styles.emptyText}>No bounties available</Text>
+          ) : (
+            filteredBounties.map((bounty) => (
+              <TaskCard
+                key={bounty.id}
+                id={Number(bounty.id)}
+                username={bounty.user_id}
+                title={bounty.title}
+                price={Number(bounty.amount)}
+                distance={calculateDistance(bounty.location || "")}
+                description={bounty.description}
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-700 text-white">
+    <View style={styles.container}>
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -127,37 +287,36 @@ export function  BountyApp() {
       ) : activeScreen === "create" ? (
         <MessengerScreen />
       ) : activeScreen === "calendar" ? (
-        <div className="flex justify-center items-center h-screen">
+        <View style={styles.calendarContainer}>
           <Calendar
             mode="single"
             selected={date}
             onSelect={setDate}
-            className="rounded-md border"
           />
-        </div>
+        </View>
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
-      <div className="fixed bottom-0 left-0 right-0 h-16 bg-emerald-800/80 backdrop-blur-sm flex justify-around items-center px-6 pb-safe z-20 shadow-lg">
-        <button onClick={() => setActiveScreen("create")} className="p-3 touch-target-min">
-          <MessageSquare className={`h-6 w-6 ${activeScreen === "create" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("wallet")} className="p-3 touch-target-min">
-          <DollarSign className={`h-6 w-6 ${activeScreen === "wallet" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <div
-          className="h-14 w-14 bg-transparent border-2 border-white rounded-full flex items-center justify-center -mt-5 cursor-pointer touch-target-min"
-          onClick={() => setActiveScreen("bounty")}
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity onPress={() => setActiveScreen("create")} style={styles.navButton}>
+          <MessageSquare color={activeScreen === "create" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("wallet")} style={styles.navButton}>
+          <DollarSign color={activeScreen === "wallet" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <Pressable
+          style={styles.centerNavButton}
+          onPress={() => setActiveScreen("bounty")}
         >
-          <Target className={`h-7 w-7 ${activeScreen === "bounty" ? "text-white" : "text-white/70"}`} />
-        </div>
-        <button onClick={() => setActiveScreen("postings")} className="p-3 touch-target-min">
-          <Search className={`h-6 w-6 ${activeScreen === "postings" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("calendar")} className="p-3 touch-target-min">
-          <CalendarIcon className={`h-6 w-6 ${activeScreen === "calendar" ? "text-white" : "text-white/70"}`} />
-        </button>
-      </div>
-    </div>
+          <Target color={activeScreen === "bounty" ? "white" : "rgba(255,255,255,0.7)"} size={28} />
+        </Pressable>
+        <TouchableOpacity onPress={() => setActiveScreen("postings")} style={styles.navButton}>
+          <Search color={activeScreen === "postings" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("calendar")} style={styles.navButton}>
+          <CalendarIcon color={activeScreen === "calendar" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
