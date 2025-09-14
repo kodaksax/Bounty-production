@@ -1,6 +1,8 @@
-import type { Bounty } from "lib/services/database.types"
-import { logger } from "lib/utils/error-logger"
-import { z } from "zod"
+import type { Bounty } from "lib/services/database.types";
+import { logger } from "lib/utils/error-logger";
+import { z } from "zod";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 // ANNOTATION: This schema should be defined in a shared location, e.g., 'lib/validation/bounty-schema.ts'
 import { bountySchema } from "components/bounty/bounty-form"; // Assuming it's exported from here
@@ -62,19 +64,21 @@ export const enhancedBountyService = {
 
       // Try to get data from local storage first (for offline support)
       let cachedData: Bounty[] | null = null
-      try {
-        const cacheKey = `bounties_cache_${JSON.stringify(options)}`
-        const cachedString = localStorage.getItem(cacheKey)
-        if (cachedString) {
-          const cached = JSON.parse(cachedString)
-          if (cached.timestamp > Date.now() - 5 * 60 * 1000) {
-            // 5 minute cache
-            cachedData = cached.data
-          }
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
+try {
+  const cacheKey = `bounties_cache_${JSON.stringify(options)}`
+  const cachedString = await AsyncStorage.getItem(cacheKey);
+  if (cachedString !== null) {
+    try {
+      // You can parse and use cachedString here if needed
+      const cached = JSON.parse(cachedString);
+      cachedData = cached.data;
+    } catch (error) {
+      // Handle JSON parse error
+    }
+  }
+} catch (e) {
+  // Ignore AsyncStorage errors
+}
 
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
       const API_URL = "https://your-hostinger-domain.com/api/bounties"
@@ -99,7 +103,7 @@ export const enhancedBountyService = {
         // If we have cached data and there's a network error, use the cache
         if (cachedData && (errorText.includes("Failed to fetch") || errorText.includes("network"))) {
           logger.warning("Using cached data due to network error", { options })
-          return { bounties: cachedData, count: cachedData.length, error: null }
+          return { bounties: cachedData, count: (cachedData as Bounty[] | null)?.length ?? null, error: null }
         }
         throw new Error(`Failed to fetch bounties: ${errorText}`)
       }
@@ -110,7 +114,7 @@ export const enhancedBountyService = {
       // Update cache
       try {
         const cacheKey = `bounties_cache_${JSON.stringify(options)}`
-        localStorage.setItem(
+        AsyncStorage.setItem(
           cacheKey,
           JSON.stringify({
             data: bounties,
@@ -118,7 +122,7 @@ export const enhancedBountyService = {
           }),
         )
       } catch (e) {
-        // Ignore localStorage errors
+        // Ignore AsyncStorage errors
       }
 
       return { bounties: bounties || [], count, error: null }
@@ -129,14 +133,15 @@ export const enhancedBountyService = {
       // Try to get data from local storage as fallback
       try {
         const cacheKey = `bounties_cache_${JSON.stringify(options)}`
-        const cachedString = localStorage.getItem(cacheKey)
+        const cachedString = await AsyncStorage.getItem(cacheKey);
+        
         if (cachedString) {
           const cached = JSON.parse(cachedString)
           logger.info("Using cached data as fallback", { options })
           return { bounties: cached.data, count: cached.data.length, error: null }
         }
       } catch (e) {
-        // Ignore localStorage errors
+        // Ignore AsyncStorage errors
       }
 
       return { bounties: [], count: null, error }
@@ -243,11 +248,11 @@ export const enhancedBountyService = {
   /**
    * Helper method to update local cache
    */
-  updateLocalCache(bounty: Bounty): void {
+ async updateLocalCache(bounty: Bounty): Promise<void> {
     try {
       // Update user's bounties cache
       const userCacheKey = `bounties_cache_${JSON.stringify({ userId: bounty.user_id })}`
-      const userCachedString = localStorage.getItem(userCacheKey)
+      const userCachedString = await AsyncStorage.getItem(userCacheKey)
 
       if (userCachedString) {
         const userCached = JSON.parse(userCachedString)
@@ -261,7 +266,7 @@ export const enhancedBountyService = {
           bounties.unshift(bounty)
         }
 
-        localStorage.setItem(
+        AsyncStorage.setItem(
           userCacheKey,
           JSON.stringify({
             data: bounties,
@@ -272,7 +277,7 @@ export const enhancedBountyService = {
 
       // Update all bounties cache
       const allCacheKey = `bounties_cache_${JSON.stringify({})}`
-      const allCachedString = localStorage.getItem(allCacheKey)
+      const allCachedString = await AsyncStorage.getItem(allCacheKey)
 
       if (allCachedString) {
         const allCached = JSON.parse(allCachedString)
@@ -286,7 +291,7 @@ export const enhancedBountyService = {
           bounties.unshift(bounty)
         }
 
-        localStorage.setItem(
+        AsyncStorage.setItem(
           allCacheKey,
           JSON.stringify({
             data: bounties,
@@ -295,7 +300,7 @@ export const enhancedBountyService = {
         )
       }
     } catch (e) {
-      // Ignore localStorage errors
+      // Ignore AsyncStorage errors
     }
   },
 
@@ -318,10 +323,10 @@ export const enhancedBountyService = {
 
       // Update local caches to remove this bounty
       try {
-        const cacheKeys = Object.keys(localStorage).filter((key) => key.startsWith("bounties_cache_"))
+        const cacheKeys = Object.keys(AsyncStorage).filter((key) => key.startsWith("bounties_cache_"))
 
         for (const key of cacheKeys) {
-          const cachedString = localStorage.getItem(key)
+          const cachedString = await AsyncStorage.getItem(key)
           if (cachedString) {
             const cached = JSON.parse(cachedString)
             const bounties = cached.data || []
@@ -329,7 +334,7 @@ export const enhancedBountyService = {
             // Remove the bounty from cache
             const filteredBounties = bounties.filter((b: Bounty) => b.id !== id)
 
-            localStorage.setItem(
+            AsyncStorage.setItem(
               key,
               JSON.stringify({
                 data: filteredBounties,
@@ -339,7 +344,7 @@ export const enhancedBountyService = {
           }
         }
       } catch (e) {
-        // Ignore localStorage errors
+        // Ignore AsyncStorage errors
       }
 
       return { success: true, error: null }

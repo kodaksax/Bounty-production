@@ -19,9 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="theme-color" content="#10b981" />
+        {/* <meta name="apple-mobile-web-app-capable" content="yes" /> */}
+        {/* <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /> */}
+        {/* <meta name="theme-color" content="#10b981" /> */}
       </head>
       <body className="bg-emerald-600">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>

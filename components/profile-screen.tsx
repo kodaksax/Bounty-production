@@ -1,5 +1,5 @@
 "use client"
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
@@ -96,11 +96,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   // Listen for changes from settings screen
   useEffect(() => {
-    const storedProfile = localStorage.getItem("profileData")
+  AsyncStorage.getItem("profileData").then((storedProfile) => {
     if (storedProfile) {
       setProfileData(JSON.parse(storedProfile))
     }
-  }, [showSettings])
+  }).catch((error) => {
+    console.error("Error fetching stored profile:", error)
+  })
+}, [showSettings])
 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {

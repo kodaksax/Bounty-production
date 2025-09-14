@@ -1,6 +1,6 @@
 // Create a new file for centralized error logging
 export type ErrorLogLevel = "info" | "warning" | "error" | "critical"
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 interface ErrorLogEntry {
   level: ErrorLogLevel
   message: string
@@ -25,7 +25,7 @@ class ErrorLogger {
         this.handleOffline()
       }
     })
-    // Try to load offline queue from localStorage (if available)
+    // Try to load offline queue from AsyncStorage (if available)
     this.loadOfflineQueue()
   }
 
@@ -38,20 +38,20 @@ class ErrorLogger {
     this.isOnline = false
   }
 
-  private loadOfflineQueue() {
-    try {
-      const storedQueue = localStorage.getItem("error_log_queue")
-      if (storedQueue) {
-        this.offlineQueue = JSON.parse(storedQueue)
-      }
-    } catch (e) {
-      console.error("Failed to load offline error log queue", e)
+  private async loadOfflineQueue() {
+  try {
+    const storedQueue = await AsyncStorage.getItem("error_log_queue")
+    if (storedQueue) {
+      this.offlineQueue = JSON.parse(storedQueue)
     }
+  } catch (e) {
+    console.error("Failed to load offline error log queue", e)
   }
+}
 
-  private saveOfflineQueue() {
+  private async saveOfflineQueue() {
     try {
-      localStorage.setItem("error_log_queue", JSON.stringify(this.offlineQueue))
+      await AsyncStorage.setItem("error_log_queue", JSON.stringify(this.offlineQueue))
     } catch (e) {
       console.error("Failed to save offline error log queue", e)
     }

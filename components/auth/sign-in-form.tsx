@@ -48,7 +48,7 @@ export function SignInForm() {
 
       // --- Authentication Success ---
       // Your backend should return a token (e.g., JWT) to store.
-      // localStorage.setItem('authToken', data.token);
+      // AsyncStorage.setItem('authToken', data.token);
 
       router.push("/dashboard")
       router.refresh()

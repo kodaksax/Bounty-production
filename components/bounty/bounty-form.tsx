@@ -1,22 +1,22 @@
 "use client"
 
-import type React from "react"
+import type React from "react";
 
+import { Alert, AlertDescription } from "components/ui/alert";
+import { Button } from "components/ui/button";
+import { Checkbox } from "components/ui/checkbox";
+import { Input } from "components/ui/input";
+import { Label } from "components/ui/label";
+import { Textarea } from "components/ui/textarea";
 import type { BountyFormValues } from "lib/types"; // Assuming you move types here
-import { Alert, AlertDescription } from "components/ui/alert"
-import { Button } from "components/ui/button"
-import { Checkbox } from "components/ui/checkbox"
-import { Input } from "components/ui/input"
-import { Label } from "components/ui/label"
-import { Textarea } from "components/ui/textarea"
-import { Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
-import type { z } from "zod"
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { z } from "zod";
 
 // This schema was previously in lib/supabase/schema.
 // You should keep validation, so we define it here or in a shared types file.
-import { z as zod } from "zod"
+import { z as zod } from "zod";
 export const bountySchema = zod.object({
   title: zod.string().min(5, "Title must be at least 5 characters"),
   description: zod.string().min(20, "Description must be at least 20 characters"),
@@ -77,7 +77,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       }
 
       // TODO: Get the auth token you stored after login
-      // const authToken = localStorage.getItem('authToken');
+      // const authToken = AsyncStorage.getItem('authToken');
       // if (!authToken) {
       //   setSubmitError("You must be signed in to post a bounty");
       //   return;
