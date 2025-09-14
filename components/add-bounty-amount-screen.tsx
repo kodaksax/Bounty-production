@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import { Target, X } from "lucide-react"
 import { cn } from "lib/utils"
 
@@ -78,99 +79,99 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   }, [animateAmount])
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <button onClick={onBack} className="p-1">
+      <View className="flex justify-between items-center p-4 pt-8">
+        <TouchableOpacity onPress={onBack} className="p-1">
           <X className="h-6 w-6 text-white" />
-        </button>
-        <div className="flex items-center">
+        </TouchableOpacity>
+        <View className="flex items-center">
           <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <div className="w-6"></div> {/* Empty div for spacing */}
-      </div>
+          <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+        </View>
+        <View className="w-6" /> {/* Empty view for spacing */}
+      </View>
 
       {/* Title */}
-      <div className="px-4 py-2">
-        <h1 className="text-xl font-medium">Add Bounty Amount</h1>
-      </div>
+      <View className="px-4 py-2">
+        <Text className="text-xl font-medium text-white">Add Bounty Amount</Text>
+      </View>
 
       {/* Amount Display */}
-      <div className="flex justify-center items-center py-6">
-        <div
+      <View className="flex justify-center items-center py-6">
+        <Text
           className={cn(
-            "text-5xl font-bold transition-transform duration-300",
+            "text-5xl font-bold transition-transform duration-300 text-white",
             animateAmount ? "scale-110" : "scale-100",
           )}
         >
           ${formattedAmount()}
-        </div>
-      </div>
+        </Text>
+      </View>
 
       {/* For Honor Toggle */}
-      <div className="px-4 py-2 flex items-center justify-between">
-        <span className="text-sm font-medium">For Honor</span>
-        <button
-          onClick={() => setIsForHonor(!isForHonor)}
+      <View className="px-4 py-2 flex items-center justify-between">
+        <Text className="text-sm font-medium text-white">For Honor</Text>
+        <TouchableOpacity
+          onPress={() => setIsForHonor(!isForHonor)}
           className={cn(
             "w-12 h-6 rounded-full relative transition-colors",
             isForHonor ? "bg-emerald-400" : "bg-emerald-800",
           )}
         >
-          <span
+          <View
             className={cn(
               "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
               isForHonor ? "translate-x-7" : "translate-x-1",
             )}
           />
-        </button>
-      </div>
+        </TouchableOpacity>
+      </View>
 
       {isForHonor && (
-        <div className="px-4 py-1">
-          <p className="text-xs text-emerald-300">
+        <View className="px-4 py-1">
+          <Text className="text-xs text-emerald-300">
             This bounty will be posted without monetary reward. People will complete it for honor and reputation.
-          </p>
-        </div>
+          </Text>
+        </View>
       )}
 
       {/* Keypad */}
-      <div className="flex-1 px-4 mt-4">
-        <div className="grid grid-cols-3 gap-4">
+      <View className="flex-1 px-4 mt-4">
+        <View className="grid grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
+            <TouchableOpacity
               key={num}
               className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-              onClick={() => handleNumberPress(num)}
+              onPress={() => handleNumberPress(num)}
             >
-              {num}
-            </button>
+              <Text className="text-2xl font-medium text-white">{num}</Text>
+            </TouchableOpacity>
           ))}
-          <button
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={handleDecimalPress}
+            onPress={handleDecimalPress}
           >
-            .
-          </button>
-          <button
+            <Text className="text-2xl font-medium text-white">.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={() => handleNumberPress(0)}
+            onPress={() => handleNumberPress(0)}
           >
-            0
-          </button>
-          <button
+            <Text className="text-2xl font-medium text-white">0</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={handleDeletePress}
+            onPress={handleDeletePress}
           >
-            &lt;
-          </button>
-        </div>
-      </div>
+            <Text className="text-2xl font-medium text-white">&lt;</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Add Button */}
-      <div className="p-4 pb-8">
-        <button
+      <View className="p-4 pb-8">
+        <TouchableOpacity
           className={cn(
             "w-full py-4 rounded-lg font-medium text-center",
             Number.parseFloat(amount) > 0 || isForHonor
@@ -178,11 +179,11 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               : "bg-emerald-800/50 text-emerald-300 cursor-not-allowed",
           )}
           disabled={!(Number.parseFloat(amount) > 0 || isForHonor)}
-          onClick={handleAddBounty}
+          onPress={handleAddBounty}
         >
-          Add
-        </button>
-      </div>
-    </div>
+          <Text className="text-white font-medium text-center">Add</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
