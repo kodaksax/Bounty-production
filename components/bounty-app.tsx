@@ -8,6 +8,8 @@ import { WalletScreen } from "components/wallet-screen"
 import { Calendar as CalendarIcon, DollarSign, MessageSquare, Package, Search, Target } from "lucide-react"
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+
+import { Calendar } from "components/ui/calendar"
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
   id: string
@@ -17,8 +19,6 @@ type Bounty = {
   location?: string
   description?: string
 }
-
-import { Calendar } from "components/ui/calendar"
 
 export function  BountyApp() {
   const [activeCategory, setActiveCategory] = useState("local")

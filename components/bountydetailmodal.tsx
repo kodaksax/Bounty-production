@@ -13,12 +13,12 @@ interface BountyDetailModalProps {
     price: number
     distance: number
     description?: string
-    attachments?: Array<{
+    attachments?: {
       id: string
       type: "image" | "document"
       name: string
       size: string
-    }>
+    }[]
   }
   onClose: () => void
 }
