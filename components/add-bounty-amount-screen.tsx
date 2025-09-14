@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Target, X } from "lucide-react"
 import { cn } from "lib/utils"
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -13,7 +14,7 @@ interface AddBountyAmountScreenProps {
 export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
-  const [animateAmount, setAnimateAmount] = useState<boolean>(false)
+  const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
 
   // Format the amount with commas for thousands
   const formattedAmount = () => {
@@ -27,7 +28,11 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   }
 
   const handleNumberPress = (num: number) => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
 
     if (amount === "0") {
       setAmount(num.toString())
@@ -45,14 +50,24 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   }
 
   const handleDecimalPress = () => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
+
     if (!amount.includes(".")) {
       setAmount(amount + ".")
     }
   }
 
   const handleDeletePress = () => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
+
     if (amount.length > 1) {
       setAmount(amount.slice(0, -1))
     } else {
@@ -67,122 +82,270 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     }
   }
 
-  // Reset animation state after animation completes
-  useEffect(() => {
-    if (animateAmount) {
-      const timer = setTimeout(() => {
-        setAnimateAmount(false)
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [animateAmount])
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669', // emerald-600
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      paddingTop: 32,
+    },
+    headerButton: {
+      padding: 4,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerIcon: {
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    spacer: {
+      width: 24,
+    },
+    titleContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: 'white',
+    },
+    amountContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 24,
+    },
+    amountText: {
+      fontSize: 48,
+      fontWeight: 'bold',
+      color: 'white',
+    },
+    toggleContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    toggleLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: 'white',
+    },
+    toggleButton: {
+      width: 48,
+      height: 24,
+      borderRadius: 12,
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    toggleButtonActive: {
+      backgroundColor: '#10B981', // emerald-400
+    },
+    toggleButtonInactive: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    toggleCircle: {
+      position: 'absolute',
+      top: 4,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: 'white',
+    },
+    toggleCircleActive: {
+      right: 4,
+    },
+    toggleCircleInactive: {
+      left: 4,
+    },
+    honorDescription: {
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+    },
+    honorDescriptionText: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    keypadContainer: {
+      flex: 1,
+      paddingHorizontal: 16,
+      marginTop: 16,
+    },
+    keypadGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+    },
+    keypadButton: {
+      width: '30%',
+      height: 56,
+      borderRadius: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      backgroundColor: 'transparent',
+    },
+    keypadButtonPressed: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+    },
+    keypadButtonText: {
+      fontSize: 24,
+      fontWeight: '500',
+      color: 'white',
+    },
+    addButtonContainer: {
+      padding: 16,
+      paddingBottom: 32,
+    },
+    addButton: {
+      width: '100%',
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addButtonEnabled: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    addButtonDisabled: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-800/50
+    },
+    addButtonText: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+    addButtonTextDisabled: {
+      color: '#6EE7B7', // emerald-300
+    },
+  });
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <button onClick={onBack} className="p-1">
-          <X className="h-6 w-6 text-white" />
-        </button>
-        <div className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <div className="w-6"></div> {/* Empty div for spacing */}
-      </div>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.headerButton}>
+          <X color="white" size={24} />
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Target color="white" size={20} style={styles.headerIcon} />
+          <Text style={styles.headerTitle}>BOUNTY</Text>
+        </View>
+        <View style={styles.spacer} />
+      </View>
 
       {/* Title */}
-      <div className="px-4 py-2">
-        <h1 className="text-xl font-medium">Add Bounty Amount</h1>
-      </div>
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>Add Bounty Amount</Text>
+      </View>
 
       {/* Amount Display */}
-      <div className="flex justify-center items-center py-6">
-        <div
-          className={cn(
-            "text-5xl font-bold transition-transform duration-300",
-            animateAmount ? "scale-110" : "scale-100",
-          )}
+      <View style={styles.amountContainer}>
+        <Animated.Text
+          style={[
+            styles.amountText,
+            { transform: [{ scale: animateAmount }] }
+          ]}
         >
           ${formattedAmount()}
-        </div>
-      </div>
+        </Animated.Text>
+      </View>
 
       {/* For Honor Toggle */}
-      <div className="px-4 py-2 flex items-center justify-between">
-        <span className="text-sm font-medium">For Honor</span>
-        <button
-          onClick={() => setIsForHonor(!isForHonor)}
-          className={cn(
-            "w-12 h-6 rounded-full relative transition-colors",
-            isForHonor ? "bg-emerald-400" : "bg-emerald-800",
-          )}
+      <View style={styles.toggleContainer}>
+        <Text style={styles.toggleLabel}>For Honor</Text>
+        <TouchableOpacity
+          onPress={() => setIsForHonor(!isForHonor)}
+          style={[
+            styles.toggleButton,
+            isForHonor ? styles.toggleButtonActive : styles.toggleButtonInactive,
+          ]}
         >
-          <span
-            className={cn(
-              "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
-              isForHonor ? "translate-x-7" : "translate-x-1",
-            )}
+          <View
+            style={[
+              styles.toggleCircle,
+              isForHonor ? styles.toggleCircleActive : styles.toggleCircleInactive,
+            ]}
           />
-        </button>
-      </div>
+        </TouchableOpacity>
+      </View>
 
       {isForHonor && (
-        <div className="px-4 py-1">
-          <p className="text-xs text-emerald-300">
+        <View style={styles.honorDescription}>
+          <Text style={styles.honorDescriptionText}>
             This bounty will be posted without monetary reward. People will complete it for honor and reputation.
-          </p>
-        </div>
+          </Text>
+        </View>
       )}
 
       {/* Keypad */}
-      <div className="flex-1 px-4 mt-4">
-        <div className="grid grid-cols-3 gap-4">
+      <View style={styles.keypadContainer}>
+        <View style={styles.keypadGrid}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
+            <TouchableOpacity
               key={num}
-              className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-              onClick={() => handleNumberPress(num)}
+              style={styles.keypadButton}
+              onPress={() => handleNumberPress(num)}
+              activeOpacity={0.7}
             >
-              {num}
-            </button>
+              <Text style={styles.keypadButtonText}>{num}</Text>
+            </TouchableOpacity>
           ))}
-          <button
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={handleDecimalPress}
+          <TouchableOpacity
+            style={styles.keypadButton}
+            onPress={handleDecimalPress}
+            activeOpacity={0.7}
           >
-            .
-          </button>
-          <button
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={() => handleNumberPress(0)}
+            <Text style={styles.keypadButtonText}>.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.keypadButton}
+            onPress={() => handleNumberPress(0)}
+            activeOpacity={0.7}
           >
-            0
-          </button>
-          <button
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
-            onClick={handleDeletePress}
+            <Text style={styles.keypadButtonText}>0</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.keypadButton}
+            onPress={handleDeletePress}
+            activeOpacity={0.7}
           >
-            &lt;
-          </button>
-        </div>
-      </div>
+            <Text style={styles.keypadButtonText}>⌫</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Add Button */}
-      <div className="p-4 pb-8">
-        <button
-          className={cn(
-            "w-full py-4 rounded-lg font-medium text-center",
-            Number.parseFloat(amount) > 0 || isForHonor
-              ? "bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 transition-colors"
-              : "bg-emerald-800/50 text-emerald-300 cursor-not-allowed",
-          )}
+      <View style={styles.addButtonContainer}>
+        <TouchableOpacity
+          style={[
+            styles.addButton,
+            (Number.parseFloat(amount) > 0 || isForHonor) ? styles.addButtonEnabled : styles.addButtonDisabled,
+          ]}
           disabled={!(Number.parseFloat(amount) > 0 || isForHonor)}
-          onClick={handleAddBounty}
+          onPress={handleAddBounty}
         >
-          Add
-        </button>
-      </div>
-    </div>
+          <Text style={[
+            styles.addButtonText,
+            !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
+          ]}>
+            Add
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
