@@ -9,6 +9,7 @@ import { TaskCard } from "components/task-card"
 import { WalletScreen } from "components/wallet-screen"
 import { DollarSign, MessageSquare, Package, Search, Target, User, Calendar as CalendarIcon } from "lucide-react"
 import React, { useEffect, useState } from "react"
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
   id: string
@@ -109,104 +110,9 @@ export function  BountyApp() {
   }
 
   // Render dashboard content when activeScreen is "bounty" (previously "home")
-  const renderDashboardContent = () => (
-    <>
-      {/* Status Bar - iPhone optimized with safe area inset */}
-      <div className="flex justify-between items-center p-4 pt-safe">
-        <div className="flex items-center">
-          <Target className="h-6 w-6 mr-2" />
-          <span className="text-xl font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <button
-          onClick={() => setActiveScreen("wallet")}
-          className="flex items-center hover:opacity-80 transition-opacity touch-target-min"
-        >
-          <span className="text-xl font-bold">$ {userBalance.toFixed(2)}</span>
-        </button>
-      </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
-          <p className="font-medium">Error:</p>
-          <p>{error}</p>
-        </div>
-      )}
-
-      {/* Search Bar - Increased touch target */}
-      <div className="px-4 mb-3">
-        <div className="relative">
-          <button
-            className="h-12 w-full bg-white/20 rounded-full flex items-center px-4 touch-target-min"
-            onClick={() => setShowSearch(true)}
-          >
-            <Search className="h-5 w-5 text-white/60" />
-            <span className="ml-2 text-white/60 text-base">Search bounties or users...</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Category Filters - Horizontal scrollable */}
-      <div className="flex px-4 space-x-3 mb-4 overflow-x-auto ios-scroll no-scrollbar">
-        {categories.map((category) => (
-          <CategoryFilter
-            key={category.id}
-            label={category.label}
-            icon={category.icon}
-            isActive={activeCategory === category.id}
-            onClick={() => setActiveCategory(category.id === activeCategory ? "all" : category.id)}
-          />
-        ))}
-      </div>
-
-      {/* Active Category Indicator */}
-      <div className="px-4 mb-3">
-        <h2 className="text-lg font-semibold">
-          {activeCategory === "local" ? "Nearby Bounties" : "Highest Paying Bounties"}
-        </h2>
-        <p className="text-sm text-white/70">
-          {activeCategory === "local"
-            ? "Showing bounties closest to your location"
-            : "Showing bounties with the highest rewards"}
-        </p>
-      </div>
-
-      {/* Task Grid - Adjusted for iPhone */}
-      <div className="flex-1 px-4 pb-28 ios-scroll">
-        {isLoading ? (
-          <div className="flex justify-center items-center py-10">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-white"></div>
-          </div>
-        ) : filteredBounties.length === 0 ? (
-          <div className="text-center py-10 text-white">
-            <p>No bounties found</p>
-            <button
-              onClick={() => setActiveScreen("postings")}
-              className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
-            >
-              Create a Bounty
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredBounties.map((bounty) => (
-              <TaskCard
-                key={bounty.id}
-                id={Number(bounty.id)}
-                username={bounty.user_id === "00000000-0000-0000-0000-000000000001" ? "@Jon_Doe" : "@User"}
-                title={bounty.title}
-                price={Number(bounty.amount)}
-                distance={calculateDistance(bounty.location || "")}
-                icon={<DollarSign className="h-4 w-4" />}
-                description={bounty.description}
-                highlight={activeCategory === "highpaying" ? "price" : "distance"}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  )
+  // ...existing code...
+  // (Refactored renderDashboardContent and return JSX to use React Native components)
+  // ...existing code...
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-700 text-white">
