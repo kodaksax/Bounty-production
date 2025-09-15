@@ -1,79 +1,97 @@
 import * as React from "react"
-import { View, Text, Image, StyleSheet } from "react-native"
+import { View, Text, Image, ViewProps, ImageProps, TextProps } from "react-native"
 
-interface AvatarProps {
-  style?: any
-  children?: React.ReactNode
-}
+import { cn } from "lib/utils"
 
-interface AvatarImageProps {
-  src?: string
-  alt?: string
-  style?: any
-}
-
-interface AvatarFallbackProps {
-  style?: any
-  children?: React.ReactNode
+interface AvatarProps extends ViewProps {
+  className?: string;
 }
 
 const Avatar = React.forwardRef<View, AvatarProps>(
-  ({ style, children, ...props }, ref) => (
+  ({ className, ...props }, ref) => (
     <View
       ref={ref}
-      style={[avatarStyles.avatar, style]}
-      {...props}
-    >
-      {children}
-    </View>
-  )
-)
-Avatar.displayName = "Avatar"
-
-const AvatarImage = React.forwardRef<Image, AvatarImageProps>(
-  ({ style, src, alt, ...props }, ref) => (
-    <Image
-      ref={ref}
-      source={{ uri: src || "/placeholder.svg?height=40&width=40" }}
-      style={[avatarStyles.image, style]}
-      accessibilityLabel={alt}
+      className={cn(
+        "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
+        className
+      )}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
       {...props}
     />
   )
-)
-AvatarImage.displayName = "AvatarImage"
+);
+Avatar.displayName = "Avatar";
+
+interface AvatarImageProps extends Omit<ImageProps, 'source'> {
+  src?: string;
+  alt?: string;
+  className?: string;
+}
+
+const AvatarImage = React.forwardRef<Image, AvatarImageProps>(
+  ({ className, src, alt, ...props }, ref) => {
+    const [hasError, setHasError] = React.useState(false);
+    
+    if (!src || hasError) {
+      return null;
+    }
+
+    return (
+      <Image
+        ref={ref}
+        source={{ uri: src }}
+        onError={() => setHasError(true)}
+        className={cn("aspect-square h-full w-full", className)}
+        style={{
+          width: '100%',
+          height: '100%',
+        }}
+        {...props}
+      />
+    );
+  }
+);
+AvatarImage.displayName = "AvatarImage";
+
+interface AvatarFallbackProps extends ViewProps {
+  className?: string;
+  children?: React.ReactNode;
+}
 
 const AvatarFallback = React.forwardRef<View, AvatarFallbackProps>(
-  ({ style, children, ...props }, ref) => (
+  ({ className, children, ...props }, ref) => (
     <View
       ref={ref}
-      style={[avatarStyles.fallback, style]}
+      className={cn(
+        "flex h-full w-full items-center justify-center rounded-full bg-muted",
+        className
+      )}
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#f5f5f5',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       {...props}
     >
-      {children}
+      {typeof children === 'string' ? (
+        <Text style={{ fontSize: 14, fontWeight: '500', color: '#666' }}>
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
     </View>
   )
-)
-AvatarFallback.displayName = "AvatarFallback"
+);
+AvatarFallback.displayName = "AvatarFallback";
 
-const avatarStyles = StyleSheet.create({
-  avatar: {
-    position: 'relative',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  fallback: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6', // muted
-  },
-})
 
 export { Avatar, AvatarImage, AvatarFallback }

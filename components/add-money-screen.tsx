@@ -83,26 +83,26 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
               style="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
               onPress={() => handleNumberPress(num)}
             >
-              {num}
+              <Text className="text-2xl font-medium text-white">{num}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
-            style="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={handleDecimalPress}
           >
-            .
+            <Text className="text-2xl font-medium text-white">.</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={() => handleNumberPress(0)}
           >
-            0
+            <Text className="text-2xl font-medium text-white">0</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={handleDeletePress}
           >
-            &lt;
+            <Text className="text-2xl font-medium text-white">{"<"}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -120,7 +120,10 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             disabled={Number.parseFloat(amount) <= 0}
             onPress={handleAddMoney}
           >
-            Add
+            <Text className={cn(
+              "font-medium text-center",
+              Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+            )}>Add</Text>
           </TouchableOpacity>
         </View>
       </View>

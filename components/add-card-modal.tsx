@@ -183,7 +183,10 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
               : "bg-gray-700/50 text-gray-300 cursor-not-allowed",
           )}
         >
-          Save
+          <Text className={cn(
+            "text-center font-medium",
+            isFormValid ? "text-white" : "text-gray-300"
+          )}>Save</Text>
         </TouchableOpacity>
       </View>
     </View>

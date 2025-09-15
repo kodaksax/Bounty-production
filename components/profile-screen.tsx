@@ -273,10 +273,12 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <View className="flex justify-between items-center mb-2">
             <Text className="text-sm font-medium">Skillsets:</Text>
             <TouchableOpacity
-              style="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
+
+              className="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
+
               onPress={() => setIsEditing(true)}
             >
-              Edit
+              <Text className="text-xs text-emerald-200">Edit</Text>
             </TouchableOpacity>
           </View>
 

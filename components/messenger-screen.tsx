@@ -98,7 +98,9 @@ export function MessengerScreen() {
       <View className="p-4 pt-8 pb-2">
         <View className="flex justify-between items-center">
           <View className="flex items-center">
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+
+            <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
+
             <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
           </View>
           <Text className="text-lg font-bold">$ 40.00</Text>
@@ -129,23 +131,23 @@ export function MessengerScreen() {
       {/* Bottom Navigation */}
       <View className="flex justify-around items-center p-4 bg-emerald-700/50">
         <TouchableOpacity className="flex flex-col items-center text-white">
-          <MaterialIcons name="chat" size={24} color="#000000" />
+          <MaterialIcons name="message" size={24} color="#10b981" />
           <Text className="text-xs mt-1">Chats</Text>
         </TouchableOpacity>
         <TouchableOpacity className="flex flex-col items-center text-white/60">
-          <MaterialIcons name="phone" size={24} color="#000000" />
+          <MaterialIcons name="phone" size={24} color="#10b981" />
           <Text className="text-xs mt-1">Calls</Text>
         </TouchableOpacity>
         <TouchableOpacity className="flex flex-col items-center text-white/60">
-          <Camera className="h-6 w-6" />
+          <MaterialIcons name="camera-alt" size={24} color="#10b981" />
           <Text className="text-xs mt-1">Camera</Text>
         </TouchableOpacity>
         <TouchableOpacity className="flex flex-col items-center text-white/60">
-          <MaterialIcons name="search" size={24} color="#000000" />
-          <Text className="text-xs mt-1">MaterialIcons</Text>
+          <MaterialIcons name="search" size={24} color="#10b981" />
+          <Text className="text-xs mt-1">Search</Text>
         </TouchableOpacity>
         <TouchableOpacity className="flex flex-col items-center text-white/60">
-          <MaterialIcons name="person" size={24} color="#000000" />
+          <MaterialIcons name="person" size={24} color="#10b981" />
           <Text className="text-xs mt-1">Profile</Text>
         </TouchableOpacity>
       </View>
@@ -181,7 +183,7 @@ function ConversationItem({ conversation, onClick }: ConversationItemProps) {
         </View>
         <View className="flex justify-between items-center mt-1">
           <Text
-            style={cn(
+            className={cn(
               "text-sm truncate max-w-[200px]",
               conversation.isTyping ? "text-emerald-300" : "text-emerald-200",
             )}
@@ -193,7 +195,8 @@ function ConversationItem({ conversation, onClick }: ConversationItemProps) {
               {conversation.unread}
             </View>
           ) : conversation.isRead ? (
-            <MaterialIcons name="check" size={24} color="#000000" />
+
+            <MaterialIcons name="check" size={16} color="#10b981" />
           ) : null}
         </View>
       </View>

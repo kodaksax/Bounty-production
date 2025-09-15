@@ -1,18 +1,16 @@
 "use client"
 
 import type React from "react"
-import { View, Text, TouchableOpacity, TextInput, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
 
-import { motion } from "framer-motion"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
-import { View, Text, TouchableOpacity, TextInput, ScrollView } from "react-native"
 import { AddBountyAmountScreen } from "./add-bounty-amount-screen"
 import { ArchivedBountiesScreen } from "./archived-bounties-screen"
 import { BountyConfirmationCard } from "./bounty-confirmation-card"
@@ -320,7 +318,12 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                   activeTab === tab.id ? "text-white border-b-2 border-white" : "text-emerald-200/70",
                 )}
               >
-                {tab.label}
+                <Text className={cn(
+                  "text-base font-medium",
+                  activeTab === tab.id ? "text-white" : "text-emerald-200/70",
+                )}>
+                  {tab.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -339,14 +342,9 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
 
       {/* Success message */}
       {postSuccess && (
-        <motion.div
-          className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg text-white text-sm"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-        >
-          Bounty posted successfully!
-        </motion.div>
+        <View className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg">
+          <Text className="text-white text-sm">Bounty posted successfully!</Text>
+        </View>
       )}
 
       {/* Scrollable Content Area - iPhone optimized */}
@@ -356,7 +354,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
             <View className="space-y-3">
               {isLoading.inProgress ? (
                 <View className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
+                  <ActivityIndicator size="large" color="white" />
                 </View>
               ) : inProgressBounties.length === 0 ? (
                 <View className="text-center py-10 text-emerald-200">
@@ -379,7 +377,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
             <View className="space-y-3">
               {isLoading.requests ? (
                 <View className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
+                  <ActivityIndicator size="large" color="white" />
                 </View>
               ) : bountyRequests.length === 0 ? (
                 <View className="text-center py-10 text-emerald-200">
@@ -406,43 +404,43 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
           ) : activeTab === "new" ? (
             <View className="space-y-6">
               {/* New bounty form - iPhone optimized */}
-              <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Title</label>
+                <Text className="text-emerald-100/90 text-base">Title</Text>
                 <TextInput
-                  
-                  name="title"
                   value={formData.title}
-                  onChangeText={handleInputChange}
+                  onChangeText={(text) => handleInputChange({ target: { name: 'title', value: text } })}
                   placeholder="A brief description of the job you need done"
-                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  placeholderTextColor="#6ee7b7"
                 />
               </View>
 
               <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Bounty description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="This is the long form description of the task and this can be anything from commissioning an art design to having something delivered to hunting down your fathers killer"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base min-h-[150px] resize-none touch-target-min"
-                />
-              </View>
-
-              <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Location</label>
+                <Text className="text-emerald-100/90 text-base">Bounty description</Text>
                 <TextInput
-                  
-                  name="location"
-                  value={formData.location}
-                  onChangeText={handleInputChange}
-                  placeholder="A location where the task can begin"
-                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  value={formData.description}
+                  onChangeText={(text) => handleInputChange({ target: { name: 'description', value: text } })}
+                  placeholder="This is the long form description of the task and this can be anything from commissioning an art design to having something delivered to hunting down your fathers killer"
+                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base min-h-[150px] touch-target-min"
+                  placeholderTextColor="#6ee7b7"
+                  multiline
+                  numberOfLines={6}
                 />
               </View>
 
               <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Bounty Amount</label>
+                <Text className="text-emerald-100/90 text-base">Location</Text>
+                <TextInput
+                  value={formData.location}
+                  onChangeText={(text) => handleInputChange({ target: { name: 'location', value: text } })}
+                  placeholder="A location where the task can begin"
+                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  placeholderTextColor="#6ee7b7"
+
+                />
+              </View>
+
+              <View className="space-y-3">
+                <Text className="text-emerald-100/90 text-base">Bounty Amount</Text>
                 <TouchableOpacity
                   onPress={() => setShowAddBountyAmount(true)}
                   className="w-full bg-emerald-700/50 rounded-lg p-4 text-left text-white focus:ring-1 focus:ring-white text-base flex justify-between items-center touch-target-min"
@@ -459,26 +457,25 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
               </View>
 
               <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Timeline</label>
+                <Text className="text-emerald-100/90 text-base">Timeline</Text>
                 <TextInput
-                  
-                  name="timeline"
                   value={formData.timeline}
-                  onChangeText={handleInputChange}
+                  onChangeText={(text) => handleInputChange({ target: { name: 'timeline', value: text } })}
                   placeholder="When does this need to be completed by?"
-                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  placeholderTextColor="#6ee7b7"
                 />
               </View>
 
               <View className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Skills Required</label>
+
+                <Text className="text-emerald-100/90 text-base">Skills Required</Text>
                 <TextInput
-                  
-                  name="skills"
                   value={formData.skills}
-                  onChangeText={handleInputChange}
+                  onChangeText={(text) => handleInputChange({ target: { name: 'skills', value: text } })}
                   placeholder="What skills are needed for this bounty?"
-                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  placeholderTextColor="#6ee7b7"
                 />
               </View>
             </View>
@@ -486,7 +483,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
             <View className="space-y-3">
               {isLoading.myBounties ? (
                 <View className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
+                  <ActivityIndicator size="large" color="white" />
                 </View>
               ) : myBounties.length === 0 ? (
                 <View className="text-center py-10 text-emerald-200">
@@ -495,7 +492,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                     onPress={() => setActiveTab("new")}
                     className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
                   >
-                    Create Your First Bounty
+                    <Text className="text-white text-base">Create Your First Bounty</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -540,9 +537,9 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
       {activeTab === "new" && (
         <View className="fixed bottom-16 left-0 right-0 p-4 flex justify-between items-center bg-emerald-600 border-t border-emerald-500/30 pb-safe">
           <TouchableOpacity className="rounded-full p-3 bg-emerald-700/50 touch-target-min">
-            <Share2 className="h-6 w-6 text-white" />
+            <MaterialIcons name="share" size={24} color="white" />
           </TouchableOpacity>
-          <motion.button
+          <TouchableOpacity
             ref={postButtonRef}
             onPress={handleShowConfirmation}
             disabled={
@@ -554,25 +551,10 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                 ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600"
                 : "bg-emerald-500/50 cursor-not-allowed",
             )}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            initial={{ scale: 1 }}
-            animate={
-              postSuccess
-                ? {
-                    scale: [1, 1.1, 1],
-                    transition: {
-                      duration: 0.5,
-                      times: [0, 0.5, 1],
-                      ease: "easeInOut",
-                    },
-                  }
-                : { scale: 1 }
-            }
           >
-            {isSubmitting && <Loader2 className="h-5 w-5 mr-2 animate-spin" />}
-            Post Bounty
-          </motion.button>
+            {isSubmitting && <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />}
+            <Text className="text-white font-medium">Post Bounty</Text>
+          </TouchableOpacity>
         </View>
       )}
 

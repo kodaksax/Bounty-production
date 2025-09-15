@@ -149,12 +149,15 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
             {/* Swipe indicator */}
             <View className="mt-8 flex flex-col items-center">
               <View
-                style={cn(
+
+                className={cn(
                   "text-center text-emerald-200 font-medium mb-3 transition-opacity",
                   isConfirming ? "opacity-0" : "opacity-100",
                 )}
               >
-                {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
+                <Text className="text-center text-emerald-200 font-medium">
+                  {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
+                </Text>
               </View>
 
               <View className="relative h-16 w-full flex justify-center">
