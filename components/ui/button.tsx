@@ -1,6 +1,5 @@
 import * as React from "react"
-import { TouchableOpacity, TouchableOpacityProps } from "react-native"
-import { Slot } from "@radix-ui/react-slot"
+import { TouchableOpacity, TouchableOpacityProps, Text } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "lib/utils"
@@ -37,21 +36,26 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends TouchableOpacityProps,
     VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-  className?: string
+  className?: string;
+  children?: React.ReactNode;
 }
 
 const Button = React.forwardRef<TouchableOpacity, ButtonProps>(
-  ({ className, variant, size, asChild = false, disabled, onPress, ...props }, ref) => {
-    const Comp = asChild ? Slot : TouchableOpacity
+  ({ className, variant, size, disabled, onPress, children, ...props }, ref) => {
     return (
-      <Comp
+      <TouchableOpacity
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled}
         onPress={onPress}
         {...props}
-      />
+      >
+        {typeof children === 'string' ? (
+          <Text className="text-inherit font-inherit">{children}</Text>
+        ) : (
+          children
+        )}
+      </TouchableOpacity>
     )
   }
 )
