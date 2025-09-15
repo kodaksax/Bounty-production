@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { View, Text, TouchableOpacity } from "react-native"
-import { Target, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 
 interface AddBountyAmountScreenProps {
@@ -83,10 +83,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
         <TouchableOpacity onPress={onBack} className="p-1">
-          <X className="h-6 w-6 text-white" />
+          <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <View className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
         </View>
         <View className="w-6" /> {/* Empty view for spacing */}

@@ -4,7 +4,7 @@ import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import { type DialogProps } from "@radix-ui/react-dialog"
 import { Command as CommandPrimitive } from "cmdk"
-import { Search } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 import { Dialog, DialogContent } from "components/ui/dialog"
@@ -41,7 +41,7 @@ const CommandInput = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
   <View className="flex items-center border-b px-3" cmdk-input-wrapper="">
-    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+    <MaterialIcons name="search" size={24} color="#000000" />
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
@@ -130,8 +130,8 @@ const CommandShortcut = ({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
-    <span
-      className={cn(
+    <Text
+      style={cn(
         "ml-auto text-xs tracking-widest text-muted-foreground",
         className
       )}

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Home, Plus, Target } from "lucide-react";
+import { MaterialIcons } from "@expo/vector-icons";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from "react-native";
 
 interface WithdrawScreenProps {
@@ -23,43 +23,43 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       id: "bank-of-america",
       name: "Bank Of America",
       details: "Checking XXXXXX23",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "apple-pay",
       name: "Apple Pay",
       details: "ending in 1138",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "chase-bank",
       name: "Chase Bank",
       details: "Checking XXXXXX45",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "wells-fargo",
       name: "Wells Fargo",
       details: "Savings XXXXXX78",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "venmo",
       name: "Venmo",
       details: "@username",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "paypal",
       name: "PayPal",
       details: "user@example.com",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "cash-app",
       name: "Cash App",
       details: "$username",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
   ];
 
@@ -68,10 +68,10 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <ArrowLeft color="#fff" size={20} />
+          <MaterialIcons name="arrow-back" size={20} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
-          <Target color="#fff" size={20} style={{ marginRight: 8 }} />
+          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
       </View>
@@ -123,18 +123,18 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
                 {method.details ? <Text style={styles.methodDetails}>{method.details}</Text> : null}
               </View>
               <View style={styles.methodCheckCircle}>
-                {selectedMethod === method.id && <Check color="#34d399" size={16} />}
+                {selectedMethod === method.id && <MaterialIcons name="check" size={16} color="#34d399" />}
               </View>
             </TouchableOpacity>
           ))}
           {/* Add New Bank Account */}
           <View style={styles.methodRowInactive}>
-            <View style={styles.methodIconCircle}><Plus color="#fff" size={20} /></View>
+            <View style={styles.methodIconCircle}><MaterialIcons name="add" size={20} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.methodName}>New Bank Account</Text>
               <Text style={styles.methodDetails}>Menu description</Text>
             </View>
-            <ChevronRight color="#34d399" size={20} />
+            <MaterialIcons name="keyboard-arrow-right" size={20} color="#34d399" />
           </View>
         </View>
       </ScrollView>

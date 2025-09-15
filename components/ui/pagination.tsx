@@ -1,6 +1,6 @@
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 import { ButtonProps, buttonVariants } from "components/ui/button"
@@ -46,9 +46,9 @@ const PaginationLink = ({
   size = "icon",
   ...props
 }: PaginationLinkProps) => (
-  <a
+  <TouchableOpacity
     aria-current={isActive ? "page" : undefined}
-    className={cn(
+    style={cn(
       buttonVariants({
         variant: isActive ? "outline" : "ghost",
         size,
@@ -70,7 +70,7 @@ const PaginationPrevious = ({
     className={cn("gap-1 pl-2.5", className)}
     {...props}
   >
-    <ChevronLeft className="h-4 w-4" />
+    <MaterialIcons name="keyboard-arrow-left" size={24} color="#000000" />
     <Text>Previous</Text>
   </PaginationLink>
 )
@@ -87,7 +87,7 @@ const PaginationNext = ({
     {...props}
   >
     <Text>Next</Text>
-    <ChevronRight className="h-4 w-4" />
+    <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
   </PaginationLink>
 )
 PaginationNext.displayName = "PaginationNext"
@@ -96,12 +96,12 @@ const PaginationEllipsis = ({
   className,
   ...props
 }: React.ComponentProps<"span">) => (
-  <span
+  <Text
     aria-hidden
-    className={cn("flex h-9 w-9 items-center justify-center", className)}
+    style={cn("flex h-9 w-9 items-center justify-center", className)}
     {...props}
   >
-    <MoreHorizontal className="h-4 w-4" />
+    <MaterialIcons name="more-horiz" size={24} color="#000000" />
     <Text className="sr-only">More pages</Text>
   </Text>
 )

@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity, TextInput } from "react-native"
 
 import { useState, useRef } from "react"
 import { View, Text, TouchableOpacity, TextInput } from "react-native"
-import { ArrowLeft, Target, Camera } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 
 interface EditProfileScreenProps {
@@ -61,7 +61,7 @@ export function EditProfileScreen({
         <View className="p-4 pt-8 pb-2">
           <View className="flex justify-between items-center">
             <View className="flex items-center">
-              <Target className="h-5 w-5 mr-2" />
+              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
               <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
             </View>
             <Text className="text-lg font-bold">$ 40.00</Text>
@@ -73,7 +73,7 @@ export function EditProfileScreen({
         <View className="px-4 py-2 flex items-center justify-between bg-emerald-700/30">
           <View className="flex items-center">
             <TouchableOpacity onPress={onBack} className="mr-2">
-              <ArrowLeft className="h-5 w-5" />
+              <MaterialIcons name="arrow-back" size={24} color="#000000" />
             </TouchableOpacity>
             <Text className="text-lg">Settings</Text>
           </View>
@@ -99,8 +99,8 @@ export function EditProfileScreen({
                 {initialName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <button
-              className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
+            <TouchableOpacity
+              style="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
               onPress={handleAvatarClick}
             >
               <Camera className="h-4 w-4 text-white" />
@@ -115,30 +115,30 @@ export function EditProfileScreen({
 
         {/* Name Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+          <TextInput
+            
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChangeText={(e) => setName(e.target.value)}
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         {/* Phone Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+          <TextInput
+            
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChangeText={(e) => setPhone(e.target.value)}
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         {/* About Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+          <TextInput
+            
             value={about}
-            onChange={(e) => setAbout(e.target.value)}
+            onChangeText={(e) => setAbout(e.target.value)}
             placeholder="About"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
@@ -147,46 +147,46 @@ export function EditProfileScreen({
         {/* Additional Fields for Scrolling */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-1">Email</label>
-          <input
+          <TextInput
             type="email"
             placeholder="your.email@example.com"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-1">Location</label>
-          <input
-            type="text"
+          <TextInput
+            
             placeholder="City, Country"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-1">Website</label>
-          <input
+          <TextInput
             type="url"
             placeholder="https://yourwebsite.com"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-1">Birthday</label>
-          <input
-            type="text"
+          <TextInput
+            
             placeholder="MM/DD/YYYY"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-1">Languages</label>
-          <input
-            type="text"
+          <TextInput
+            
             placeholder="English, Spanish, etc."
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 

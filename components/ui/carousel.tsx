@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity } from "react-native"
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from "embla-carousel-react"
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 import { Button } from "components/ui/button"
@@ -88,10 +88,10 @@ const Carousel = React.forwardRef<
 
     const handleKeyDown = React.useCallback(
       (event: React.KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === "ArrowLeft") {
+        if (event.key === "MaterialIcons") {
           event.preventDefault()
           scrollPrev()
-        } else if (event.key === "ArrowRight") {
+        } else if (event.key === "MaterialIcons") {
           event.preventDefault()
           scrollNext()
         }
@@ -135,10 +135,10 @@ const Carousel = React.forwardRef<
           canScrollNext,
         }}
       >
-        <div
+        <View
           ref={ref}
           onKeyDownCapture={handleKeyDown}
-          className={cn("relative", className)}
+          style={cn("relative", className)}
           role="region"
           aria-roledescription="carousel"
           {...props}
@@ -159,9 +159,9 @@ const CarouselContent = React.forwardRef<
 
   return (
     <View ref={carouselRef} className="overflow-hidden">
-      <div
+      <View
         ref={ref}
-        className={cn(
+        style={cn(
           "flex",
           orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col",
           className
@@ -180,11 +180,11 @@ const CarouselItem = React.forwardRef<
   const { orientation } = useCarousel()
 
   return (
-    <div
+    <View
       ref={ref}
       role="group"
       aria-roledescription="slide"
-      className={cn(
+      style={cn(
         "min-w-0 shrink-0 grow-0 basis-full",
         orientation === "horizontal" ? "pl-4" : "pt-4",
         className
@@ -202,11 +202,11 @@ const CarouselPrevious = React.forwardRef<
   const { orientation, scrollPrev, canScrollPrev } = useCarousel()
 
   return (
-    <Button
+    <TouchableOpacity
       ref={ref}
       variant={variant}
       size={size}
-      className={cn(
+      style={cn(
         "absolute  h-8 w-8 rounded-full",
         orientation === "horizontal"
           ? "-left-12 top-1/2 -translate-y-1/2"
@@ -217,9 +217,9 @@ const CarouselPrevious = React.forwardRef<
       onPress={scrollPrev}
       {...props}
     >
-      <ArrowLeft className="h-4 w-4" />
+      <MaterialIcons name="arrow-back" size={24} color="#000000" />
       <Text className="sr-only">Previous slide</Text>
-    </Button>
+    </TouchableOpacity>
   )
 })
 CarouselPrevious.displayName = "CarouselPrevious"
@@ -231,11 +231,11 @@ const CarouselNext = React.forwardRef<
   const { orientation, scrollNext, canScrollNext } = useCarousel()
 
   return (
-    <Button
+    <TouchableOpacity
       ref={ref}
       variant={variant}
       size={size}
-      className={cn(
+      style={cn(
         "absolute h-8 w-8 rounded-full",
         orientation === "horizontal"
           ? "-right-12 top-1/2 -translate-y-1/2"
@@ -246,9 +246,9 @@ const CarouselNext = React.forwardRef<
       onPress={scrollNext}
       {...props}
     >
-      <ArrowRight className="h-4 w-4" />
+      <MaterialIcons name="arrow-forward" size={24} color="#000000" />
       <Text className="sr-only">Next slide</Text>
-    </Button>
+    </TouchableOpacity>
   )
 })
 CarouselNext.displayName = "CarouselNext"

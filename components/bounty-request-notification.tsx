@@ -1,7 +1,7 @@
 "use client"
 
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { Check, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 interface BountyRequestNotificationProps {
   username: string
@@ -32,13 +32,13 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
             onPress={onAccept}
             className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center hover:bg-emerald-400 transition-colors"
           >
-            <Check className="h-5 w-5 text-white" />
+            <MaterialIcons name="check" size={24} color="#000000" />
           </TouchableOpacity>
           <button
             onPress={onReject}
             className="h-8 w-8 rounded-full bg-red-500/70 flex items-center justify-center hover:bg-red-400/70 transition-colors"
           >
-            <X className="h-5 w-5 text-white" />
+            <MaterialIcons name="close" size={24} color="#000000" />
           </TouchableOpacity>
         </View>
       </View>

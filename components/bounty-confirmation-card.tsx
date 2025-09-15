@@ -90,13 +90,13 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
   // If you want to handle hardware back button on Android, use BackHandler from 'react-native'.
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    <View
+      style="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onPress={onCancel}
     >
-      <div
+      <View
         ref={dragConstraintsRef}
-        className="flex items-center justify-center w-full h-full px-4"
+        style="flex items-center justify-center w-full h-full px-4"
         onPress={(e) => e.stopPropagation()}
       >
         <motion.div
@@ -148,8 +148,8 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
             {/* Swipe indicator */}
             <View className="mt-8 flex flex-col items-center">
-              <div
-                className={cn(
+              <View
+                style={cn(
                   "text-center text-emerald-200 font-medium mb-3 transition-opacity",
                   isConfirming ? "opacity-0" : "opacity-100",
                 )}

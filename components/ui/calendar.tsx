@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import  { DayPicker }from "react-day-picker"
 
 import { cn } from "lib/utils"

@@ -3,19 +3,7 @@
 import type React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 
-import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
-  Database,
-  HelpCircle,
-  Heart,
-  MessageSquare,
-  Star,
-  Target,
-  User,
-  Laptop,
-} from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useState } from "react"
 import { View, Text, TouchableOpacity } from "react-native"
@@ -60,7 +48,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
         <View className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
         </View>
         <Text className="text-lg font-bold">$ 40.00</Text>
@@ -69,7 +57,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
       {/* Back button and title */}
       <View className="px-4 py-2 flex items-center">
         <TouchableOpacity onPress={onBack} className="mr-2">
-          <ArrowLeft className="h-5 w-5" />
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
         <Text className="text-xl font-medium">Settings</Text>
       </View>
@@ -87,21 +75,21 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
               <Text className="text-xs text-emerald-200">{profileData.about}</Text>
             </View>
           </View>
-          <ChevronRight className="h-5 w-5 text-emerald-300" />
+          <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
         </View>
       </View>
 
       {/* Settings options */}
       <View className="flex-1">
         <View className="py-2">
-          <SettingsItem icon={<Star className="h-5 w-5 text-yellow-400" />} label="Starred Messages" />
+          <SettingsItem icon={<MaterialIcons name="star" size={24} color="#000000" />} label="Starred Messages" />
           <SettingsItem icon={<Laptop className="h-5 w-5 text-teal-400" />} label="WhatsApp Web/Desktop" />
-          <SettingsItem icon={<User className="h-5 w-5 text-blue-400" />} label="Account" />
-          <SettingsItem icon={<MessageSquare className="h-5 w-5 text-green-400" />} label="Chats" />
-          <SettingsItem icon={<Bell className="h-5 w-5 text-red-400" />} label="Notifications" />
+          <SettingsItem icon={<MaterialIcons name="person" size={24} color="#000000" />} label="Account" />
+          <SettingsItem icon={<MaterialIcons name="chat" size={24} color="#000000" />} label="Chats" />
+          <SettingsItem icon={<MaterialIcons name="notifications" size={24} color="#000000" />} label="Notifications" />
           <SettingsItem icon={<Database className="h-5 w-5 text-purple-400" />} label="Data and Storage Usage" />
           <SettingsItem icon={<HelpCircle className="h-5 w-5 text-blue-400" />} label="Help" />
-          <SettingsItem icon={<Heart className="h-5 w-5 text-red-400" />} label="Tell a Friend" />
+          <SettingsItem icon={<MaterialIcons name="favorite" size={24} color="#000000" />} label="Tell a Friend" />
         </View>
       </View>
 
@@ -125,15 +113,15 @@ interface SettingsItemProps {
 
 function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
   return (
-    <button
-      className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700/30 transition-colors"
+    <TouchableOpacity
+      style="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700/30 transition-colors"
       onPress={onClick}
     >
       <View className="flex items-center">
         {icon}
         <Text className="ml-3">{label}</Text>
       </View>
-      <ChevronRight className="h-5 w-5 text-emerald-300" />
+      <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
     </TouchableOpacity>
   )
 }

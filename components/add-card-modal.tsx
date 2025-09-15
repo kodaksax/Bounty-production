@@ -3,7 +3,7 @@
 import type React from "react"
 import { View, Text, TouchableOpacity, TextInput } from "react-native"
 
-import { ArrowLeft } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { View, Text, TouchableOpacity, TextInput } from "react-native"
 import { cn } from "lib/utils"
@@ -75,7 +75,7 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
       {/* Header */}
       <View className="flex items-center justify-between p-4 pt-8">
         <TouchableOpacity onPress={onBack} className="p-1">
-          <ArrowLeft className="h-5 w-5" />
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
         <Text className="text-lg font-medium">Add Card</Text>
         <View className="w-5"></View> {/* Empty div for spacing */}
@@ -122,22 +122,22 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
         <View className="space-y-4">
           <View className="space-y-1">
             <label className="text-sm text-emerald-200">Card Number</label>
-            <input
-              type="text"
+            <TextInput
+              
               value={cardNumber}
-              onChange={handleCardNumberChange}
+              onChangeText={handleCardNumberChange}
               placeholder="1244 1234 1345 3255"
               maxLength={19}
-              className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+              style="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
             />
           </View>
 
           <View className="space-y-1">
             <label className="text-sm text-emerald-200">Cardholder Name</label>
-            <input
-              type="text"
+            <TextInput
+              
               value={cardholderName}
-              onChange={(e) => setCardholderName(e.target.value)}
+              onChangeText={(e) => setCardholderName(e.target.value)}
               placeholder="Yessie"
               className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
             />
@@ -146,22 +146,22 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
           <View className="grid grid-cols-2 gap-4">
             <View className="space-y-1">
               <label className="text-sm text-emerald-200">Expiry Date</label>
-              <input
-                type="text"
+              <TextInput
+                
                 value={expiryDate}
-                onChange={handleExpiryDateChange}
+                onChangeText={handleExpiryDateChange}
                 placeholder="MM/YY"
                 maxLength={5}
-                className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+                style="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
               />
             </View>
 
             <View className="space-y-1">
               <label className="text-sm text-emerald-200">Security Code</label>
-              <input
+              <TextInput
                 type="password"
                 value={securityCode}
-                onChange={(e) => setSecurityCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onChangeText={(e) => setSecurityCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 placeholder="•••"
                 maxLength={4}
                 className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
@@ -173,10 +173,10 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
 
       {/* Save Button */}
       <View className="p-4 pb-8">
-        <button
+        <TouchableOpacity
           onPress={handleSave}
           disabled={!isFormValid}
-          className={cn(
+          style={cn(
             "w-full py-3 rounded-full text-center font-medium",
             isFormValid
               ? "bg-gray-700 hover:bg-gray-600 text-white transition-colors"

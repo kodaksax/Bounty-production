@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Target } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { ArchivedBountyCard } from "./archived-bounty-card"
 import { useState } from "react"
 import { View, Text, TouchableOpacity, ScrollView } from "react-native"
@@ -46,7 +46,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
         <View className="flex items-center gap-3">
-          <Target className="h-5 w-5 text-white" />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
         </View>
         <View className="flex items-center gap-4">
@@ -57,7 +57,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
       {/* Title with back button */}
       <View className="px-4 py-2 flex items-center">
         <TouchableOpacity onPress={onBack} className="mr-3 text-white">
-          <ArrowLeft className="h-5 w-5" />
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
         <Text className="text-white text-xl font-bold tracking-wide uppercase text-center flex-1 mr-5">
           Archived Bounty

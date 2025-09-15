@@ -3,7 +3,7 @@
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
-import { Check, ChevronRight, Circle } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 
@@ -35,7 +35,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto" />
+    <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
   </DropdownMenuPrimitive.SubTrigger>
 ))
 DropdownMenuSubTrigger.displayName =
@@ -108,7 +108,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <Text className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <MaterialIcons name="check" size={24} color="#000000" />
       </DropdownMenuPrimitive.ItemIndicator>
     </Text>
     {children}
@@ -174,8 +174,8 @@ const DropdownMenuShortcut = ({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
-    <span
-      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
+    <Text
+      style={cn("ml-auto text-xs tracking-widest opacity-60", className)}
       {...props}
     />
   )

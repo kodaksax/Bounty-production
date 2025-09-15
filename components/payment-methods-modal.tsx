@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { ArrowLeft, Plus } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useRef, useState } from "react"
 import { Dimensions, PanResponder, View } from "react-native"
 import { AddCardModal } from "./add-card-modal"
@@ -79,7 +79,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
           <TouchableOpacity onPress={onClose} style={{ padding: 4, backgroundColor: 'transparent', borderWidth: 0 }}>
-            <ArrowLeft className="h-5 w-5" />
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={{ marginLeft: 12, fontSize: 18, fontWeight: '500', color: 'white' }}>Add Payment Method</Text>
         </View>
@@ -95,11 +95,11 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
           />
         ) : (
           <View style={{ padding: 24, alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-            <button
+            <TouchableOpacity
               style={{ height: 64, width: 64, borderRadius: 32, backgroundColor: '#047857', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}
               onPress={() => setShowAddCard(true)}
             >
-              <Plus className="h-8 w-8 text-white" />
+              <MaterialIcons name="add" size={24} color="#000000" />
             </TouchableOpacity>
             <Text style={{ color: 'white', fontWeight: '500' }}>Add Card</Text>
           </View>
