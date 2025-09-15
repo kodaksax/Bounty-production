@@ -38,19 +38,19 @@ export function ConnectionStatus() {
         isOnline ? "bg-green-500" : "bg-red-500",
       )}
     >
-      <div className="flex items-center py-2 px-4">
+      <View className="flex items-center py-2 px-4">
         {isOnline ? (
           <>
             <Wifi className="h-4 w-4 text-white mr-2" />
-            <span className="text-white text-sm font-medium">Back online</span>
+            <Text className="text-white text-sm font-medium">Back online</Text>
           </>
         ) : (
           <>
             <WifiOff className="h-4 w-4 text-white mr-2" />
-            <span className="text-white text-sm font-medium">You're offline</span>
+            <Text className="text-white text-sm font-medium">You're offline</Text>
           </>
         )}
-      </div>
-    </div>
+      </View>
+    </View>
   )
 }

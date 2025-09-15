@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
 
 import { cn } from "lib/utils"

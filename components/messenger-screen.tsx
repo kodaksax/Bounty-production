@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { Target, Check, Search, Phone, Camera, User, MessageSquare } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
@@ -92,63 +93,63 @@ export function MessengerScreen() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="p-4 pt-8 pb-2">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center">
+      <View className="p-4 pt-8 pb-2">
+        <View className="flex justify-between items-center">
+          <View className="flex items-center">
             <Target className="h-5 w-5 mr-2" />
-            <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-          </div>
-          <span className="text-lg font-bold">$ 40.00</span>
-        </div>
-        <div className="h-px bg-emerald-500/50 my-2"></div>
-      </div>
+            <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+          </View>
+          <Text className="text-lg font-bold">$ 40.00</Text>
+        </View>
+        <View className="h-px bg-emerald-500/50 my-2"></View>
+      </View>
 
       {/* Inbox Header */}
-      <div className="px-4 py-2 flex justify-between items-center">
-        <h1 className="text-xl font-bold">INBOX</h1>
-        <div className="flex gap-4">
-          <button className="text-sm">Edit</button>
-          <button className="text-sm flex items-center">New Group</button>
-        </div>
-      </div>
+      <View className="px-4 py-2 flex justify-between items-center">
+        <Text className="text-xl font-bold">INBOX</Text>
+        <View className="flex gap-4">
+          <TouchableOpacity className="text-sm">Edit</TouchableOpacity>
+          <TouchableOpacity className="text-sm flex items-center">New Group</TouchableOpacity>
+        </View>
+      </View>
 
       {/* Conversation List */}
-      <div className="flex-1 px-2 overflow-y-auto">
+      <View className="flex-1 px-2 overflow-y-auto">
         {conversations.map((conversation) => (
           <ConversationItem
             key={conversation.id}
             conversation={conversation}
-            onClick={() => handleConversationClick(conversation.id)}
+            onPress={() => handleConversationClick(conversation.id)}
           />
         ))}
-      </div>
+      </View>
 
       {/* Bottom Navigation */}
-      <div className="flex justify-around items-center p-4 bg-emerald-700/50">
-        <button className="flex flex-col items-center text-white">
+      <View className="flex justify-around items-center p-4 bg-emerald-700/50">
+        <TouchableOpacity className="flex flex-col items-center text-white">
           <MessageSquare className="h-6 w-6" />
-          <span className="text-xs mt-1">Chats</span>
-        </button>
-        <button className="flex flex-col items-center text-white/60">
+          <Text className="text-xs mt-1">Chats</Text>
+        </TouchableOpacity>
+        <TouchableOpacity className="flex flex-col items-center text-white/60">
           <Phone className="h-6 w-6" />
-          <span className="text-xs mt-1">Calls</span>
-        </button>
-        <button className="flex flex-col items-center text-white/60">
+          <Text className="text-xs mt-1">Calls</Text>
+        </TouchableOpacity>
+        <TouchableOpacity className="flex flex-col items-center text-white/60">
           <Camera className="h-6 w-6" />
-          <span className="text-xs mt-1">Camera</span>
-        </button>
-        <button className="flex flex-col items-center text-white/60">
+          <Text className="text-xs mt-1">Camera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity className="flex flex-col items-center text-white/60">
           <Search className="h-6 w-6" />
-          <span className="text-xs mt-1">Search</span>
-        </button>
-        <button className="flex flex-col items-center text-white/60">
+          <Text className="text-xs mt-1">Search</Text>
+        </TouchableOpacity>
+        <TouchableOpacity className="flex flex-col items-center text-white/60">
           <User className="h-6 w-6" />
-          <span className="text-xs mt-1">Profile</span>
-        </button>
-      </div>
-    </div>
+          <Text className="text-xs mt-1">Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
 
@@ -159,8 +160,8 @@ interface ConversationItemProps {
 
 function ConversationItem({ conversation, onClick }: ConversationItemProps) {
   return (
-    <div className="flex items-center p-3 hover:bg-emerald-700/30 rounded-lg cursor-pointer" onClick={onClick}>
-      <div className="relative">
+    <View className="flex items-center p-3 hover:bg-emerald-700/30 rounded-lg cursor-pointer" onPress={onClick}>
+      <View className="relative">
         {conversation.isGroup ? (
           <GroupAvatar />
         ) : (
@@ -171,14 +172,14 @@ function ConversationItem({ conversation, onClick }: ConversationItemProps) {
             </AvatarFallback>
           </Avatar>
         )}
-      </div>
+      </View>
 
-      <div className="ml-3 flex-1 min-w-0">
-        <div className="flex justify-between items-center">
-          <span className="font-medium">{conversation.name}</span>
-          <span className="text-xs text-emerald-300">{conversation.time}</span>
-        </div>
-        <div className="flex justify-between items-center mt-1">
+      <View className="ml-3 flex-1 min-w-0">
+        <View className="flex justify-between items-center">
+          <Text className="font-medium">{conversation.name}</Text>
+          <Text className="text-xs text-emerald-300">{conversation.time}</Text>
+        </View>
+        <View className="flex justify-between items-center mt-1">
           <p
             className={cn(
               "text-sm truncate max-w-[200px]",
@@ -186,41 +187,41 @@ function ConversationItem({ conversation, onClick }: ConversationItemProps) {
             )}
           >
             {conversation.lastMessage}
-          </p>
+          </Text>
           {conversation.unread > 0 ? (
-            <div className="bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <View className="bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {conversation.unread}
-            </div>
+            </View>
           ) : conversation.isRead ? (
             <Check className="h-4 w-4 text-emerald-300" />
           ) : null}
-        </div>
-      </div>
-    </div>
+        </View>
+      </View>
+    </View>
   )
 }
 
 function GroupAvatar() {
   return (
-    <div className="relative h-12 w-12">
-      <div className="absolute top-0 left-0 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
+    <View className="relative h-12 w-12">
+      <View className="absolute top-0 left-0 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 1" />
           <AvatarFallback className="bg-emerald-800 text-emerald-200 text-xs">M1</AvatarFallback>
         </Avatar>
-      </div>
-      <div className="absolute top-1 right-0 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
+      </View>
+      <View className="absolute top-1 right-0 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 2" />
           <AvatarFallback className="bg-emerald-800 text-emerald-200 text-xs">M2</AvatarFallback>
         </Avatar>
-      </div>
-      <div className="absolute bottom-0 left-1 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
+      </View>
+      <View className="absolute bottom-0 left-1 h-8 w-8 rounded-full bg-emerald-700 border-2 border-emerald-600 flex items-center justify-center overflow-hidden">
         <Avatar className="h-full w-full">
           <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Member 3" />
           <AvatarFallback className="bg-emerald-800 text-emerald-200 text-xs">M3</AvatarFallback>
         </Avatar>
-      </div>
-    </div>
+      </View>
+    </View>
   )
 }

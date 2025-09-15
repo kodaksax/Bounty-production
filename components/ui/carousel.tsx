@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from "embla-carousel-react"
@@ -143,7 +144,7 @@ const Carousel = React.forwardRef<
           {...props}
         >
           {children}
-        </div>
+        </View>
       </CarouselContext.Provider>
     )
   }
@@ -157,7 +158,7 @@ const CarouselContent = React.forwardRef<
   const { carouselRef, orientation } = useCarousel()
 
   return (
-    <div ref={carouselRef} className="overflow-hidden">
+    <View ref={carouselRef} className="overflow-hidden">
       <div
         ref={ref}
         className={cn(
@@ -167,7 +168,7 @@ const CarouselContent = React.forwardRef<
         )}
         {...props}
       />
-    </div>
+    </View>
   )
 })
 CarouselContent.displayName = "CarouselContent"
@@ -213,11 +214,11 @@ const CarouselPrevious = React.forwardRef<
         className
       )}
       disabled={!canScrollPrev}
-      onClick={scrollPrev}
+      onPress={scrollPrev}
       {...props}
     >
       <ArrowLeft className="h-4 w-4" />
-      <span className="sr-only">Previous slide</span>
+      <Text className="sr-only">Previous slide</Text>
     </Button>
   )
 })
@@ -242,11 +243,11 @@ const CarouselNext = React.forwardRef<
         className
       )}
       disabled={!canScrollNext}
-      onClick={scrollNext}
+      onPress={scrollNext}
       {...props}
     >
       <ArrowRight className="h-4 w-4" />
-      <span className="sr-only">Next slide</span>
+      <Text className="sr-only">Next slide</Text>
     </Button>
   )
 })

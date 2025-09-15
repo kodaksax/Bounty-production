@@ -88,12 +88,12 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onCancel}
+      onPress={onCancel}
     >
       <div
         ref={dragConstraintsRef}
         className="flex items-center justify-center w-full h-full px-4"
-        onClick={(e) => e.stopPropagation()}
+        onPress={(e) => e.stopPropagation()}
       >
         <motion.div
           className="bg-emerald-600 rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto"
@@ -125,25 +125,25 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
           }}
         >
           {/* Header */}
-          <div className="p-4 bg-emerald-700 flex items-center justify-center">
+          <View className="p-4 bg-emerald-700 flex items-center justify-center">
             <Target className="h-5 w-5 mr-2 text-white" />
-            <span className="text-lg font-bold tracking-wider text-white">BOUNTY</span>
-          </div>
+            <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+          </View>
 
           {/* Content */}
-          <div className="p-5 overflow-y-auto" style={{ maxHeight: `${windowHeight * 0.5}px` }}>
-            <h2 className="text-xl font-bold text-white mb-3">{bountyData.title}</h2>
-            <p className="text-emerald-100 mb-4 text-base line-clamp-3">{bountyData.description}</p>
+          <View className="p-5 overflow-y-auto" style={{ maxHeight: `${windowHeight * 0.5}px` }}>
+            <Text className="text-xl font-bold text-white mb-3">{bountyData.title}</Text>
+            <Text className="text-emerald-100 mb-4 text-base line-clamp-3">{bountyData.description}</Text>
 
-            <div className="flex justify-between items-center mb-4">
-              <div className="bg-emerald-700/50 px-4 py-2 rounded-lg text-white font-bold text-lg">
+            <View className="flex justify-between items-center mb-4">
+              <View className="bg-emerald-700/50 px-4 py-2 rounded-lg text-white font-bold text-lg">
                 {bountyData.isForHonor ? "For Honor" : `$${bountyData.amount.toLocaleString()}`}
-              </div>
-              <div className="text-base text-emerald-200">{bountyData.location}</div>
-            </div>
+              </View>
+              <View className="text-base text-emerald-200">{bountyData.location}</View>
+            </View>
 
             {/* Swipe indicator */}
-            <div className="mt-8 flex flex-col items-center">
+            <View className="mt-8 flex flex-col items-center">
               <div
                 className={cn(
                   "text-center text-emerald-200 font-medium mb-3 transition-opacity",
@@ -151,11 +151,11 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
                 )}
               >
                 {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
-              </div>
+              </View>
 
-              <div className="relative h-16 w-full flex justify-center">
+              <View className="relative h-16 w-full flex justify-center">
                 {/* Progress bar background */}
-                <div className="absolute inset-0 bg-emerald-700/30 rounded-full max-w-48 mx-auto"></div>
+                <View className="absolute inset-0 bg-emerald-700/30 rounded-full max-w-48 mx-auto"></View>
 
                 {/* Progress bar fill */}
                 <motion.div
@@ -167,7 +167,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
                 />
 
                 {/* Chevron indicators */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
+                <View className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
                   <ChevronUp
                     className={cn(
                       "h-6 w-6 text-white transition-all",
@@ -186,20 +186,20 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
                       isDragging ? "opacity-0" : "opacity-40 animate-bounce animation-delay-200",
                     )}
                   />
-                </div>
-              </div>
-            </div>
-          </div>
+                </View>
+              </View>
+            </View>
+          </View>
 
           {/* Confirmation state */}
           {isConfirming && (
-            <div className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
-              <div className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></div>
-              <p className="text-white font-medium text-lg">Posting your bounty...</p>
-            </div>
+            <View className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
+              <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
+              <Text className="text-white font-medium text-lg">Posting your bounty...</Text>
+            </View>
           )}
         </motion.div>
-      </div>
-    </div>
+      </View>
+    </View>
   )
 }

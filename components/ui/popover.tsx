@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "lib/utils"
