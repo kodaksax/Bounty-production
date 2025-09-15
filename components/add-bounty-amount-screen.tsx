@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -14,7 +15,7 @@ interface AddBountyAmountScreenProps {
 export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
-  const [animateAmount, setAnimateAmount] = useState<boolean>(false)
+  const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
 
   // Format the amount with commas for thousands
   const formattedAmount = () => {
@@ -28,7 +29,11 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   }
 
   const handleNumberPress = (num: number) => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
 
     if (amount === "0") {
       setAmount(num.toString())
@@ -46,14 +51,24 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   }
 
   const handleDecimalPress = () => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
+
     if (!amount.includes(".")) {
       setAmount(amount + ".")
     }
   }
 
   const handleDeletePress = () => {
-    setAnimateAmount(true)
+    // Animate the amount display
+    Animated.sequence([
+      Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
+      Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start()
+
     if (amount.length > 1) {
       setAmount(amount.slice(0, -1))
     } else {
@@ -68,15 +83,156 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     }
   }
 
-  // Reset animation state after animation completes
-  useEffect(() => {
-    if (animateAmount) {
-      const timer = setTimeout(() => {
-        setAnimateAmount(false)
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [animateAmount])
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669', // emerald-600
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      paddingTop: 32,
+    },
+    headerButton: {
+      padding: 4,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerIcon: {
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    spacer: {
+      width: 24,
+    },
+    titleContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: 'white',
+    },
+    amountContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 24,
+    },
+    amountText: {
+      fontSize: 48,
+      fontWeight: 'bold',
+      color: 'white',
+    },
+    toggleContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    toggleLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: 'white',
+    },
+    toggleButton: {
+      width: 48,
+      height: 24,
+      borderRadius: 12,
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    toggleButtonActive: {
+      backgroundColor: '#10B981', // emerald-400
+    },
+    toggleButtonInactive: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    toggleCircle: {
+      position: 'absolute',
+      top: 4,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: 'white',
+    },
+    toggleCircleActive: {
+      right: 4,
+    },
+    toggleCircleInactive: {
+      left: 4,
+    },
+    honorDescription: {
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+    },
+    honorDescriptionText: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    keypadContainer: {
+      flex: 1,
+      paddingHorizontal: 16,
+      marginTop: 16,
+    },
+    keypadGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+    },
+    keypadButton: {
+      width: '30%',
+      height: 56,
+      borderRadius: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      backgroundColor: 'transparent',
+    },
+    keypadButtonPressed: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+    },
+    keypadButtonText: {
+      fontSize: 24,
+      fontWeight: '500',
+      color: 'white',
+    },
+    addButtonContainer: {
+      padding: 16,
+      paddingBottom: 32,
+    },
+    addButton: {
+      width: '100%',
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addButtonEnabled: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    addButtonDisabled: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-800/50
+    },
+    addButtonText: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+    addButtonTextDisabled: {
+      color: '#6EE7B7', // emerald-300
+    },
+  });
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -182,6 +338,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           onPress={handleAddBounty}
         >
           <Text className="text-white font-medium text-center">Add</Text>
+
         </TouchableOpacity>
       </View>
     </View>
