@@ -2,10 +2,10 @@
 
 import type React from "react"
 import { View, Text, TouchableOpacity, TextInput } from "react-native"
-
+import { Text as RNText } from 'react-native';
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
+import { View, TouchableOpacity, TextInput } from "react-native"
 import { cn } from "lib/utils"
 
 interface AddCardModalProps {

@@ -1,26 +1,22 @@
 "use client"
 
 import type React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
+import { View, Text, TouchableOpacity, TextInput, ActivityIndicator } from "react-native"
 
 import { Alert, AlertDescription } from "components/ui/alert"
-import { Button } from "components/ui/button"
-import { Input } from "components/ui/input"
-import { Label } from "components/ui/label"
 import { MaterialIcons } from "@expo/vector-icons"
-import { useRouter } from "next/navigation"
+import { useNavigation } from "@react-navigation/native"
 import { useState } from "react"
 
 export function SignInForm() {
-  const router = useRouter()
+  const navigation = useNavigation<any>()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [authError, setAuthError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async () => {
     setErrors({})
     setAuthError(null)
 
@@ -51,8 +47,10 @@ export function SignInForm() {
       // Your backend should return a token (e.g., JWT) to store.
       // AsyncStorage.setItem('authToken', data.token);
 
-      router.push("/dashboard")
-      router.refresh()
+  // Navigate to Dashboard screen (adjust route name to your navigator)
+  // @ts-ignore
+  navigation.navigate("Dashboard")
+      
     } catch (err) {
       setAuthError("An unexpected error occurred")
       console.error(err)
@@ -66,67 +64,63 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <View className="space-y-4">
       {authError && (
         <Alert variant="destructive">
           <AlertDescription>{authError}</AlertDescription>
         </Alert>
       )}
-
       <View className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
+        <Text nativeID="email-label" className="text-sm">Email</Text>
+        <TextInput
+          nativeID="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChangeText={setEmail}
           placeholder="you@example.com"
-          aria-invalid={!!getFieldError("email")}
-          disabled={isLoading}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          editable={!isLoading}
+          className="w-full bg-white/5 rounded p-3 text-white"
         />
         {getFieldError("email") && <Text className="text-sm text-red-500">{getFieldError("email")}</Text>}
       </View>
 
       <View className="space-y-2">
         <View className="flex items-center justify-between">
-          <Label htmlFor="password">Password</Label>
-          <Button
-            variant="link"
-            className="p-0 h-auto text-xs"
-            onPress={() => router.push("/reset-password")}
-            type="button"
-          >
-            Forgot password?
-          </Button>
+          <Text nativeID="password-label">Password</Text>
+          <TouchableOpacity onPress={() => { /* adjust to navigate to reset screen */ navigation.navigate('ResetPassword') }}>
+            <Text className="p-0 h-auto text-xs">Forgot password?</Text>
+          </TouchableOpacity>
         </View>
-        <Input
-          id="password"
-          type="password"
+        <TextInput
+          nativeID="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={!!getFieldError("password")}
-          disabled={isLoading}
+          onChangeText={setPassword}
+          placeholder="Password"
+          secureTextEntry
+          editable={!isLoading}
+          className="w-full bg-white/5 rounded p-3 text-white"
         />
         {getFieldError("password") && <Text className="text-sm text-red-500">{getFieldError("password")}</Text>}
       </View>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded p-3 items-center">
         {isLoading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Signing in...
-          </>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+            <Text className="text-white">Signing in...</Text>
+          </View>
         ) : (
-          "Sign In"
+          <Text className="text-white">Sign In</Text>
         )}
-      </Button>
+      </TouchableOpacity>
 
-      <Text className="text-center text-sm">
-        Don't have an account?{" "}
-        <Button variant="link" className="p-0 h-auto" onPress={() => router.push("/sign-up")} type="button">
-          Sign up
-        </Button>
-      </Text>
-    </form>
+      <View className="items-center">
+        <Text className="text-center text-sm">Don't have an account? </Text>
+        <TouchableOpacity onPress={() => { navigation.navigate('SignUp') }}>
+          <Text className="text-emerald-400">Sign up</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
