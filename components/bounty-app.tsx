@@ -9,6 +9,7 @@ import { TaskCard } from "components/task-card"
 import { WalletScreen } from "components/wallet-screen"
 import { DollarSign, MessageSquare, Package, Search, Target, User, Calendar as CalendarIcon } from "lucide-react"
 import React, { useEffect, useState } from "react"
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Pressable } from 'react-native';
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
   id: string
@@ -20,6 +21,117 @@ type Bounty = {
 }
 
 import { Calendar } from "components/ui/calendar"
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  dashboardContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  header: {
+    paddingTop: 40,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  targetIcon: {
+    marginRight: 8,
+    color: 'white',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+    letterSpacing: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  balanceContainer: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  balanceAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  bountiesContainer: {
+    paddingBottom: 100, // Space for bottom navigation
+  },
+  loadingText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  errorText: {
+    color: '#FCA5A5', // red-300
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 20,
+  },
+  calendarContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomNavigation: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+    backgroundColor: 'rgba(6, 95, 70, 0.8)', // emerald-800 with opacity
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 8, // Safe area inset
+  },
+  navButton: {
+    padding: 12,
+  },
+  centerNavButton: {
+    height: 56,
+    width: 56,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'white',
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -20,
+  },
+});
 
 export function  BountyApp() {
   const [activeCategory, setActiveCategory] = useState("local")
@@ -109,107 +221,61 @@ export function  BountyApp() {
   }
 
   // Render dashboard content when activeScreen is "bounty" (previously "home")
-  const renderDashboardContent = () => (
-    <>
-      {/* Status Bar - iPhone optimized with safe area inset */}
-      <div className="flex justify-between items-center p-4 pt-safe">
-        <div className="flex items-center">
-          <Target className="h-6 w-6 mr-2" />
-          <span className="text-xl font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <button
-          onClick={() => setActiveScreen("wallet")}
-          className="flex items-center hover:opacity-80 transition-opacity touch-target-min"
-        >
-          <span className="text-xl font-bold">$ {userBalance.toFixed(2)}</span>
-        </button>
-      </div>
+  const renderDashboardContent = () => {
+    return (
+      <ScrollView style={styles.dashboardContainer}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Target style={styles.targetIcon} />
+            <Text style={styles.headerTitle}>BOUNTY</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Find bounties near you</Text>
+        </View>
 
-      {/* Error Display */}
-      {error && (
-        <div className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
-          <p className="font-medium">Error:</p>
-          <p>{error}</p>
-        </div>
-      )}
+        <View style={styles.balanceContainer}>
+          <Text style={styles.balanceLabel}>Your Balance</Text>
+          <Text style={styles.balanceAmount}>${userBalance.toFixed(2)}</Text>
+        </View>
 
-      {/* Search Bar - Increased touch target */}
-      <div className="px-4 mb-3">
-        <div className="relative">
-          <button
-            className="h-12 w-full bg-white/20 rounded-full flex items-center px-4 touch-target-min"
-            onClick={() => setShowSearch(true)}
-          >
-            <Search className="h-5 w-5 text-white/60" />
-            <span className="ml-2 text-white/60 text-base">Search bounties or users...</span>
-          </button>
-        </div>
-      </div>
+        <View style={styles.categoriesContainer}>
+          {categories.map((category) => (
+            <CategoryFilter
+              key={category.id}
+              label={category.label}
+              icon={category.icon}
+              isActive={activeCategory === category.id}
+              onClick={() => setActiveCategory(category.id)}
+            />
+          ))}
+        </View>
 
-      {/* Category Filters - Horizontal scrollable */}
-      <div className="flex px-4 space-x-3 mb-4 overflow-x-auto ios-scroll no-scrollbar">
-        {categories.map((category) => (
-          <CategoryFilter
-            key={category.id}
-            label={category.label}
-            icon={category.icon}
-            isActive={activeCategory === category.id}
-            onClick={() => setActiveCategory(category.id === activeCategory ? "all" : category.id)}
-          />
-        ))}
-      </div>
-
-      {/* Active Category Indicator */}
-      <div className="px-4 mb-3">
-        <h2 className="text-lg font-semibold">
-          {activeCategory === "local" ? "Nearby Bounties" : "Highest Paying Bounties"}
-        </h2>
-        <p className="text-sm text-white/70">
-          {activeCategory === "local"
-            ? "Showing bounties closest to your location"
-            : "Showing bounties with the highest rewards"}
-        </p>
-      </div>
-
-      {/* Task Grid - Adjusted for iPhone */}
-      <div className="flex-1 px-4 pb-28 ios-scroll">
-        {isLoading ? (
-          <div className="flex justify-center items-center py-10">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-white"></div>
-          </div>
-        ) : filteredBounties.length === 0 ? (
-          <div className="text-center py-10 text-white">
-            <p>No bounties found</p>
-            <button
-              onClick={() => setActiveScreen("postings")}
-              className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
-            >
-              Create a Bounty
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredBounties.map((bounty) => (
+        <View style={styles.bountiesContainer}>
+          {isLoading ? (
+            <Text style={styles.loadingText}>Loading bounties...</Text>
+          ) : error ? (
+            <Text style={styles.errorText}>Error: {error}</Text>
+          ) : filteredBounties.length === 0 ? (
+            <Text style={styles.emptyText}>No bounties available</Text>
+          ) : (
+            filteredBounties.map((bounty) => (
               <TaskCard
                 key={bounty.id}
                 id={Number(bounty.id)}
-                username={bounty.user_id === "00000000-0000-0000-0000-000000000001" ? "@Jon_Doe" : "@User"}
+                username={bounty.user_id}
                 title={bounty.title}
                 price={Number(bounty.amount)}
                 distance={calculateDistance(bounty.location || "")}
-                icon={<DollarSign className="h-4 w-4" />}
                 description={bounty.description}
-                highlight={activeCategory === "highpaying" ? "price" : "distance"}
               />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  )
+            ))
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-700 text-white">
+    <View style={styles.container}>
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -221,37 +287,36 @@ export function  BountyApp() {
       ) : activeScreen === "create" ? (
         <MessengerScreen />
       ) : activeScreen === "calendar" ? (
-        <div className="flex justify-center items-center h-screen">
+        <View style={styles.calendarContainer}>
           <Calendar
             mode="single"
             selected={date}
             onSelect={setDate}
-            className="rounded-md border"
           />
-        </div>
+        </View>
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
-      <div className="fixed bottom-0 left-0 right-0 h-16 bg-emerald-800/80 backdrop-blur-sm flex justify-around items-center px-6 pb-safe z-20 shadow-lg">
-        <button onClick={() => setActiveScreen("create")} className="p-3 touch-target-min">
-          <MessageSquare className={`h-6 w-6 ${activeScreen === "create" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("wallet")} className="p-3 touch-target-min">
-          <DollarSign className={`h-6 w-6 ${activeScreen === "wallet" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <div
-          className="h-14 w-14 bg-transparent border-2 border-white rounded-full flex items-center justify-center -mt-5 cursor-pointer touch-target-min"
-          onClick={() => setActiveScreen("bounty")}
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity onPress={() => setActiveScreen("create")} style={styles.navButton}>
+          <MessageSquare color={activeScreen === "create" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("wallet")} style={styles.navButton}>
+          <DollarSign color={activeScreen === "wallet" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <Pressable
+          style={styles.centerNavButton}
+          onPress={() => setActiveScreen("bounty")}
         >
-          <Target className={`h-7 w-7 ${activeScreen === "bounty" ? "text-white" : "text-white/70"}`} />
-        </div>
-        <button onClick={() => setActiveScreen("postings")} className="p-3 touch-target-min">
-          <Search className={`h-6 w-6 ${activeScreen === "postings" ? "text-white" : "text-white/70"}`} />
-        </button>
-        <button onClick={() => setActiveScreen("calendar")} className="p-3 touch-target-min">
-          <CalendarIcon className={`h-6 w-6 ${activeScreen === "calendar" ? "text-white" : "text-white/70"}`} />
-        </button>
-      </div>
-    </div>
+          <Target color={activeScreen === "bounty" ? "white" : "rgba(255,255,255,0.7)"} size={28} />
+        </Pressable>
+        <TouchableOpacity onPress={() => setActiveScreen("postings")} style={styles.navButton}>
+          <Search color={activeScreen === "postings" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveScreen("calendar")} style={styles.navButton}>
+          <CalendarIcon color={activeScreen === "calendar" ? "white" : "rgba(255,255,255,0.7)"} size={24} />
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
