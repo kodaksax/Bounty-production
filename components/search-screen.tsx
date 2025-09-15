@@ -179,6 +179,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             isInputFocused ? "ring-2 ring-white/30" : "",
           )}
         >
+
           <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
           <TextInput
             ref={inputRef}
@@ -223,6 +224,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                         <Text className="text-white">{search}</Text>
                       </View>
                       <TouchableOpacity
+
                         onPress={(e) => {
                           e.stopPropagation()
                           setRecentSearches((prev) => prev.filter((_, i) => i !== index))

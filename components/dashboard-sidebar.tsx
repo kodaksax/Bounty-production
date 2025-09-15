@@ -1,6 +1,6 @@
 "use client"
 
-import { BarChart3, Users, Package, Settings, HelpCircle, LogOut, Home } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import {
   Sidebar,
@@ -22,7 +22,7 @@ export function DashboardSidebar() {
       <SidebarHeader className="flex items-center px-4 py-2">
         <View className="flex items-center gap-2">
           <View className="rounded-md bg-primary p-1">
-            <Package className="h-6 w-6 text-primary-foreground" />
+            <MaterialIcons name="local-shipping" size={24} color="#000000" />
           </View>
           <Text className="text-lg font-bold">Acme Inc</Text>
         </View>
@@ -35,7 +35,7 @@ export function DashboardSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton isActive tooltip="Dashboard">
-                  <Home className="h-4 w-4" />
+                  <MaterialIcons name="home" size={24} color="#000000" />
                   <Text>Dashboard</Text>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -56,13 +56,13 @@ export function DashboardSidebar() {
         </SidebarGroup>
         <SidebarSeparator />
         <SidebarGroup>
-          <SidebarGroupLabel>Settings</SidebarGroupLabel>
+          <SidebarGroupLabel>MaterialIcons</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Settings">
-                  <Settings className="h-4 w-4" />
-                  <Text>Settings</Text>
+                <SidebarMenuButton tooltip="MaterialIcons">
+                  <MaterialIcons name="settings" size={24} color="#000000" />
+                  <Text>MaterialIcons</Text>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>

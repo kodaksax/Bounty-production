@@ -1,7 +1,7 @@
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import { Slot } from "@radix-ui/react-slot"
-import { ChevronRight, MoreHorizontal } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 
@@ -62,12 +62,12 @@ const BreadcrumbPage = React.forwardRef<
   HTMLSpanElement,
   React.ComponentPropsWithoutRef<"span">
 >(({ className, ...props }, ref) => (
-  <span
+  <Text
     ref={ref}
     role="link"
     aria-disabled="true"
     aria-current="page"
-    className={cn("font-normal text-foreground", className)}
+    style={cn("font-normal text-foreground", className)}
     {...props}
   />
 ))
@@ -84,7 +84,7 @@ const BreadcrumbSeparator = ({
     className={cn("[&>svg]:w-3.5 [&>svg]:h-3.5", className)}
     {...props}
   >
-    {children ?? <ChevronRight />}
+    {children ?? <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />}
   </li>
 )
 BreadcrumbSeparator.displayName = "BreadcrumbSeparator"
@@ -93,13 +93,13 @@ const BreadcrumbEllipsis = ({
   className,
   ...props
 }: React.ComponentProps<"span">) => (
-  <span
+  <Text
     role="presentation"
     aria-hidden="true"
-    className={cn("flex h-9 w-9 items-center justify-center", className)}
+    style={cn("flex h-9 w-9 items-center justify-center", className)}
     {...props}
   >
-    <MoreHorizontal className="h-4 w-4" />
+    <MaterialIcons name="more-horiz" size={24} color="#000000" />
     <Text className="sr-only">More</Text>
   </Text>
 )

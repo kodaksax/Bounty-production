@@ -2,8 +2,8 @@
 
 import { type ReactNode, useState } from "react"
 import { View, Text, TouchableOpacity } from "react-native"
-import { MoreVertical } from "lucide-react"
-import { BountyDetailModal } from "./bounty-detail-modal"
+import { MaterialIcons } from "@expo/vector-icons"
+import { BountyDetailModal } from "./bountydetailmodal"
 
 interface TaskCardProps {
   id: number
@@ -41,8 +41,8 @@ export function TaskCard({
               <View className="h-6 w-6 rounded-full bg-gray-700 flex items-center justify-center mr-2">{icon}</View>
               <Text className="text-sm text-gray-300">{username}</Text>
             </View>
-            <TouchableOpacity className="p-2 touch-target-min">
-              <MoreVertical className="h-5 w-5 text-gray-400" />
+            <TouchableOpacity style={{ padding: 8 }}>
+              <MaterialIcons name="more-vert" size={20} color="#9ca3af" />
             </TouchableOpacity>
           </View>
 

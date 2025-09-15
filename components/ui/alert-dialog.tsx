@@ -150,6 +150,7 @@ const AlertDialogHeader = React.forwardRef<View, AlertDialogHeaderProps>(
       )}
       {...props}
     />
+
   )
 );
 AlertDialogHeader.displayName = "AlertDialogHeader";
@@ -287,6 +288,7 @@ const AlertDialogCancel = React.forwardRef<TouchableOpacity, AlertDialogCancelPr
   }
 );
 AlertDialogCancel.displayName = "AlertDialogCancel";
+
 
 export {
   AlertDialog,

@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { MaterialIcons } from "@expo/vector-icons"
+
 import { View, Text, TouchableOpacity } from "react-native"
 
 interface BountyRequestNotificationProps {
@@ -39,7 +40,9 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
             onPress={onReject}
             className="h-8 w-8 rounded-full bg-red-500/70 flex items-center justify-center hover:bg-red-400/70 transition-colors"
           >
+
             <MaterialIcons name="close" size={20} color="white" />
+
           </TouchableOpacity>
         </View>
       </View>

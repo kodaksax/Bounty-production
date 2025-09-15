@@ -98,7 +98,9 @@ export function MessengerScreen() {
       <View className="p-4 pt-8 pb-2">
         <View className="flex justify-between items-center">
           <View className="flex items-center">
+
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
+
             <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
           </View>
           <Text className="text-lg font-bold">$ 40.00</Text>
@@ -193,6 +195,7 @@ function ConversationItem({ conversation, onClick }: ConversationItemProps) {
               {conversation.unread}
             </View>
           ) : conversation.isRead ? (
+
             <MaterialIcons name="check" size={16} color="#10b981" />
           ) : null}
         </View>

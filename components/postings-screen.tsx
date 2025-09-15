@@ -279,10 +279,10 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
           <View className="flex items-center gap-3">
             {onBack && (
               <TouchableOpacity onPress={onBack} className="mr-1 p-2 touch-target-min">
-                <ArrowLeft className="h-5 w-5 text-white" />
+                <MaterialIcons name="arrow-back" size={24} color="#000000" />
               </TouchableOpacity>
             )}
-            <Target className="h-5 w-5 text-white" />
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
             <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
           <View className="flex items-center gap-4">
@@ -404,7 +404,6 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
           ) : activeTab === "new" ? (
             <View className="space-y-6">
               {/* New bounty form - iPhone optimized */}
-              <View className="space-y-3">
                 <Text className="text-emerald-100/90 text-base">Title</Text>
                 <TextInput
                   value={formData.title}
@@ -436,6 +435,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                   placeholder="A location where the task can begin"
                   className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
                   placeholderTextColor="#6ee7b7"
+
                 />
               </View>
 
@@ -468,6 +468,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
               </View>
 
               <View className="space-y-3">
+
                 <Text className="text-emerald-100/90 text-base">Skills Required</Text>
                 <TextInput
                   value={formData.skills}
@@ -498,7 +499,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                 myBounties.map((bounty) => (
                   <View
                     key={bounty.id}
-                    className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
+                    style="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
                   >
                     <View className="p-4">
                       <View className="flex justify-between items-center mb-2">

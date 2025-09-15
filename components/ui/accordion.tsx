@@ -100,6 +100,7 @@ const AccordionItem = React.forwardRef<View, AccordionItemProps>(
       className={cn("border-b border-gray-200", className)}
       {...props}
     >
+
       {React.Children.map(children, child => 
         React.isValidElement(child) 
           ? React.cloneElement(child, { value } as any)
@@ -183,5 +184,6 @@ const AccordionContent = React.forwardRef<View, AccordionContentProps>(
   }
 );
 AccordionContent.displayName = "AccordionContent";
+
 
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }

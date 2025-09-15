@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 
+
 interface CheckboxProps extends Omit<TouchableOpacity['props'], 'onPress'> {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
@@ -54,5 +55,6 @@ const Checkbox = React.forwardRef<TouchableOpacity, CheckboxProps>(
   }
 );
 Checkbox.displayName = "Checkbox";
+
 
 export { Checkbox }

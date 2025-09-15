@@ -1,6 +1,8 @@
+
 import React, { useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Home, Plus, Target } from "lucide-react";
+import { MaterialIcons } from "@expo/vector-icons";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from "react-native";
+
 
 interface WithdrawScreenProps {
   onBack?: () => void;
@@ -23,55 +25,251 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       id: "bank-of-america",
       name: "Bank Of America",
       details: "Checking XXXXXX23",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "apple-pay",
       name: "Apple Pay",
       details: "ending in 1138",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "chase-bank",
       name: "Chase Bank",
       details: "Checking XXXXXX45",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "wells-fargo",
       name: "Wells Fargo",
       details: "Savings XXXXXX78",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "venmo",
       name: "Venmo",
       details: "@username",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "paypal",
       name: "PayPal",
       details: "user@example.com",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
     {
       id: "cash-app",
       name: "Cash App",
       details: "$username",
-      icon: <Home color="#fff" size={20} />,
+      icon: <MaterialIcons name="home" size={20} color="#fff" />,
     },
   ];
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669', // emerald-600
+    },
+    header: {
+      backgroundColor: '#059669',
+      paddingTop: 32,
+      zIndex: 10,
+    },
+    headerTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    backButton: {
+      marginRight: 12,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    targetIcon: {
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    titleContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    balanceContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    balanceRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    balanceLabel: {
+      fontSize: 14,
+      color: '#A7F3D0', // emerald-200
+    },
+    progressContainer: {
+      height: 8,
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+      borderRadius: 4,
+      overflow: 'hidden',
+      marginBottom: 4,
+    },
+    progressBar: {
+      height: '100%',
+      backgroundColor: '#10B981', // emerald-400
+    },
+    progressLabel: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    amountContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    amountLabel: {
+      fontSize: 14,
+      color: '#A7F3D0', // emerald-200
+      marginBottom: 4,
+    },
+    amountInput: {
+      width: '100%',
+      backgroundColor: 'rgba(6, 95, 70, 0.3)', // emerald-700/30
+      borderWidth: 1,
+      borderColor: 'rgba(16, 185, 129, 0.3)', // emerald-500/30
+      borderRadius: 8,
+      padding: 8,
+      color: 'white',
+      fontSize: 16,
+    },
+    scrollContent: {
+      flex: 1,
+    },
+    scrollContentContainer: {
+      paddingBottom: 96, // Space for fixed button
+    },
+    paymentMethodsContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    paymentMethodsTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: 'white',
+      marginBottom: 12,
+    },
+    methodsList: {
+      gap: 12,
+    },
+    methodItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+      borderRadius: 8,
+    },
+    methodItemSelected: {
+      backgroundColor: '#047857', // emerald-700
+    },
+    methodItemUnselected: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+    },
+    methodContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    methodIcon: {
+      height: 32,
+      width: 32,
+      borderRadius: 16,
+      backgroundColor: '#065F46', // emerald-800
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    methodInfo: {
+      flex: 1,
+    },
+    methodName: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+    methodDetails: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    radioContainer: {
+      height: 20,
+      width: 20,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#10B981', // emerald-400
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addNewAccount: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+      borderRadius: 8,
+    },
+    buttonContainer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: 16,
+      backgroundColor: '#059669', // emerald-600
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(16, 185, 129, 0.3)', // emerald-500/30
+      zIndex: 10,
+    },
+    withdrawButton: {
+      width: '100%',
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    withdrawButtonEnabled: {
+      backgroundColor: '#10B981', // emerald-500
+    },
+    withdrawButtonDisabled: {
+      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-700/50
+    },
+    withdrawButtonText: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+  });
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <ArrowLeft color="#fff" size={20} />
+          <MaterialIcons name="arrow-back" size={20} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
-          <Target color="#fff" size={20} style={{ marginRight: 8 }} />
+          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
       </View>
@@ -123,18 +321,18 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
                 {method.details ? <Text style={styles.methodDetails}>{method.details}</Text> : null}
               </View>
               <View style={styles.methodCheckCircle}>
-                {selectedMethod === method.id && <Check color="#34d399" size={16} />}
+                {selectedMethod === method.id && <MaterialIcons name="check" size={16} color="#34d399" />}
               </View>
             </TouchableOpacity>
           ))}
           {/* Add New Bank Account */}
           <View style={styles.methodRowInactive}>
-            <View style={styles.methodIconCircle}><Plus color="#fff" size={20} /></View>
+            <View style={styles.methodIconCircle}><MaterialIcons name="add" size={20} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.methodName}>New Bank Account</Text>
               <Text style={styles.methodDetails}>Menu description</Text>
             </View>
-            <ChevronRight color="#34d399" size={20} />
+            <MaterialIcons name="keyboard-arrow-right" size={20} color="#34d399" />
           </View>
         </View>
       </ScrollView>
@@ -151,6 +349,7 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       </View>
     </View>
   );
+
 }
 
 const styles = StyleSheet.create({

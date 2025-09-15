@@ -1,5 +1,7 @@
 import * as React from "react"
+
 import { View, Text, TouchableOpacity, Modal, ViewProps } from "react-native"
+
 import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
@@ -193,6 +195,7 @@ const DialogTitle = React.forwardRef<View, DialogTitleProps>(
       )}
       {...props}
     >
+      
       {typeof children === 'string' ? (
         <Text className="text-lg font-semibold">{children}</Text>
       ) : (
@@ -245,6 +248,7 @@ const DialogClose = React.forwardRef<TouchableOpacity, TouchableOpacity['props']
   }
 );
 DialogClose.displayName = "DialogClose";
+
 
 export {
   Dialog,
