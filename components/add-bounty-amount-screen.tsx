@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { View, Text, TouchableOpacity } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
-import { cn } from "lib/utils"
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -232,112 +230,156 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     addButtonTextDisabled: {
       color: '#6EE7B7', // emerald-300
     },
+    // Style aliases to match JSX usage
+    toggle: {
+      width: 48,
+      height: 24,
+      borderRadius: 12,
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    toggleActive: {
+      backgroundColor: '#10B981', // emerald-400
+    },
+    toggleInactive: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    toggleSlider: {
+      position: 'absolute',
+      top: 4,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: 'white',
+    },
+    toggleSliderActive: {
+      right: 4,
+    },
+    toggleSliderInactive: {
+      left: 4,
+    },
+    honorTextContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+    },
+    honorText: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    bottomButtonContainer: {
+      padding: 16,
+      paddingBottom: 32,
+    },
+    bottomButton: {
+      width: '100%',
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
   });
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View style={styles.container}>
       {/* Header */}
-      <View className="flex justify-between items-center p-4 pt-8">
-        <TouchableOpacity onPress={onBack} className="p-1">
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.headerButton}>
           <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
-        <View className="flex items-center">
+        <View style={styles.headerContent}>
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+          <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
-        <View className="w-6" /> {/* Empty view for spacing */}
+        <View style={{ width: 24 }} /> {/* Empty view for spacing */}
       </View>
 
       {/* Title */}
-      <View className="px-4 py-2">
-        <Text className="text-xl font-medium text-white">Add Bounty Amount</Text>
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>Add Bounty Amount</Text>
       </View>
 
       {/* Amount Display */}
-      <View className="flex justify-center items-center py-6">
-        <Text
-          className={cn(
-            "text-5xl font-bold transition-transform duration-300 text-white",
-            animateAmount ? "scale-110" : "scale-100",
-          )}
-        >
+      <View style={styles.amountContainer}>
+        <Text style={styles.amountText}>
           ${formattedAmount()}
         </Text>
       </View>
 
       {/* For Honor Toggle */}
-      <View className="px-4 py-2 flex items-center justify-between">
-        <Text className="text-sm font-medium text-white">For Honor</Text>
+      <View style={styles.toggleContainer}>
+        <Text style={styles.toggleLabel}>For Honor</Text>
         <TouchableOpacity
           onPress={() => setIsForHonor(!isForHonor)}
-          className={cn(
-            "w-12 h-6 rounded-full relative transition-colors",
-            isForHonor ? "bg-emerald-400" : "bg-emerald-800",
-          )}
+          style={[
+            styles.toggle,
+            isForHonor ? styles.toggleActive : styles.toggleInactive,
+          ]}
         >
-          <View
-            className={cn(
-              "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
-              isForHonor ? "translate-x-7" : "translate-x-1",
-            )}
+          <View 
+            style={[
+              styles.toggleSlider,
+              isForHonor ? styles.toggleSliderActive : styles.toggleSliderInactive,
+            ]}
           />
         </TouchableOpacity>
       </View>
 
       {isForHonor && (
-        <View className="px-4 py-1">
-          <Text className="text-xs text-emerald-300">
+        <View style={styles.honorTextContainer}>
+          <Text style={styles.honorText}>
             This bounty will be posted without monetary reward. People will complete it for honor and reputation.
           </Text>
         </View>
       )}
 
       {/* Keypad */}
-      <View className="flex-1 px-4 mt-4">
-        <View className="grid grid-cols-3 gap-4">
+      <View style={styles.keypadContainer}>
+        <View style={styles.keypadGrid}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <TouchableOpacity
               key={num}
-              className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
+              style={styles.keypadButton}
               onPress={() => handleNumberPress(num)}
             >
-              <Text className="text-2xl font-medium text-white">{num}</Text>
+              <Text style={styles.keypadButtonText}>{num}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
+            style={styles.keypadButton}
             onPress={handleDecimalPress}
           >
-            <Text className="text-2xl font-medium text-white">.</Text>
+            <Text style={styles.keypadButtonText}>.</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
+            style={styles.keypadButton}
             onPress={() => handleNumberPress(0)}
           >
-            <Text className="text-2xl font-medium text-white">0</Text>
+            <Text style={styles.keypadButtonText}>0</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 active:bg-emerald-700/70 transition-colors"
+            style={styles.keypadButton}
             onPress={handleDeletePress}
           >
-            <Text className="text-2xl font-medium text-white">&lt;</Text>
+            <Text style={styles.keypadButtonText}>&lt;</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Add Button */}
-      <View className="p-4 pb-8">
+      <View style={styles.bottomButtonContainer}>
         <TouchableOpacity
-          className={cn(
-            "w-full py-4 rounded-lg font-medium text-center",
+          style={[
+            styles.bottomButton,
             Number.parseFloat(amount) > 0 || isForHonor
-              ? "bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 transition-colors"
-              : "bg-emerald-800/50 text-emerald-300 cursor-not-allowed",
-          )}
+              ? styles.addButtonEnabled
+              : styles.addButtonDisabled,
+          ]}
           disabled={!(Number.parseFloat(amount) > 0 || isForHonor)}
           onPress={handleAddBounty}
         >
-          <Text className="text-white font-medium text-center">Add</Text>
+          <Text style={[
+            styles.addButtonText,
+            !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
+          ]}>Add</Text>
 
         </TouchableOpacity>
       </View>
