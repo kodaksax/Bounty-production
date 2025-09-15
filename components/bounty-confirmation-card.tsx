@@ -1,10 +1,14 @@
-"use client"
-
-import { motion, useAnimation, type PanInfo } from "framer-motion"
-import { cn } from "lib/utils"
-import { ChevronUp, Target } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { Dimensions } from "react-native"
+import React, { useEffect, useRef, useState } from "react"
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  Animated, 
+  PanGestureHandler,
+  Dimensions,
+  StyleSheet 
+} from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
 
 interface BountyConfirmationCardProps {
   bountyData: {
