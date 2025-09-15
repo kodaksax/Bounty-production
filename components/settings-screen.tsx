@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useState } from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import { EditProfileScreen } from "./edit-profile-screen"
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -55,7 +56,120 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
     )
   }
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669', // emerald-600
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      paddingTop: 32,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerIcon: {
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+      letterSpacing: 2,
+    },
+    balanceText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: 'white',
+    },
+    backContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    backButton: {
+      marginRight: 8,
+    },
+    titleText: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: 'white',
+    },
+    profileSection: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: 'rgba(6, 95, 70, 0.3)', // emerald-700/30
+    },
+    profileContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    profileInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    avatarContainer: {
+      marginRight: 12,
+    },
+    profileName: {
+      fontWeight: '500',
+      color: 'white',
+      fontSize: 16,
+    },
+    profileAbout: {
+      fontSize: 12,
+      color: '#A7F3D0', // emerald-200
+    },
+    settingsContainer: {
+      flex: 1,
+    },
+    settingsContent: {
+      paddingVertical: 8,
+    },
+    navigationIndicator: {
+      marginTop: 'auto',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingBottom: 24,
+    },
+    indicator: {
+      height: 4,
+      width: 4,
+      borderRadius: 2,
+      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+      marginHorizontal: 4,
+    },
+    settingsItem: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    settingsItemContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    settingsItemIcon: {
+      marginRight: 12,
+    },
+    settingsItemLabel: {
+      color: 'white',
+      fontSize: 16,
+    },
+  });
+
   return (
+
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
@@ -112,6 +226,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
         <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
         <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
         <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+
       </View>
     </View>
   )
@@ -124,6 +239,29 @@ interface SettingsItemProps {
 }
 
 function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
+  const styles = StyleSheet.create({
+    settingsItem: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    settingsItemContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    settingsItemIcon: {
+      marginRight: 12,
+    },
+    settingsItemLabel: {
+      color: 'white',
+      fontSize: 16,
+    },
+  });
+
   return (
     <button
       className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700/30 transition-colors"
@@ -134,6 +272,7 @@ function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
         <Text className="ml-3">{label}</Text>
       </View>
       <ChevronRight className="h-5 w-5 text-emerald-300" />
+
     </TouchableOpacity>
   )
 }
