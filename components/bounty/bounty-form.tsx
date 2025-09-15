@@ -10,7 +10,7 @@ import { Input } from "components/ui/input";
 import { Label } from "components/ui/label";
 import { Textarea } from "components/ui/textarea";
 import type { BountyFormValues } from "lib/types"; // Assuming you move types here
-import { Loader2 } from "lucide-react";
+import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { z } from "zod";

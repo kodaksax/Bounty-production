@@ -1,131 +1,294 @@
-"use client"
-
 import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
+import { View, Text, TouchableOpacity, Modal, ViewProps } from "react-native"
 
 import { cn } from "lib/utils"
 import { buttonVariants } from "components/ui/button"
 
-const AlertDialog = AlertDialogPrimitive.Root
+interface AlertDialogContextValue {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
-const AlertDialogTrigger = AlertDialogPrimitive.Trigger
+const AlertDialogContext = React.createContext<AlertDialogContextValue | null>(null);
 
-const AlertDialogPortal = AlertDialogPrimitive.Portal
+interface AlertDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: React.ReactNode;
+}
 
-const AlertDialogOverlay = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Overlay
-    className={cn(
-      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      className
-    )}
-    {...props}
-    ref={ref}
-  />
-))
-AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
+const AlertDialog: React.FC<AlertDialogProps> = ({ open = false, onOpenChange, children }) => {
+  const [internalOpen, setInternalOpen] = React.useState(open);
+  
+  const isControlled = onOpenChange !== undefined;
+  const isOpen = isControlled ? open : internalOpen;
+  
+  const handleOpenChange = React.useCallback((newOpen: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(newOpen);
+    } else {
+      setInternalOpen(newOpen);
+    }
+  }, [isControlled, onOpenChange]);
 
-const AlertDialogContent = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <AlertDialogPortal>
-    <AlertDialogOverlay />
-    <AlertDialogPrimitive.Content
+  React.useEffect(() => {
+    if (isControlled) {
+      setInternalOpen(open);
+    }
+  }, [open, isControlled]);
+
+  const contextValue = React.useMemo(() => ({
+    open: isOpen,
+    onOpenChange: handleOpenChange
+  }), [isOpen, handleOpenChange]);
+
+  return (
+    <AlertDialogContext.Provider value={contextValue}>
+      {children}
+    </AlertDialogContext.Provider>
+  );
+};
+
+interface AlertDialogTriggerProps extends TouchableOpacity['props'] {
+  asChild?: boolean;
+}
+
+const AlertDialogTrigger = React.forwardRef<TouchableOpacity, AlertDialogTriggerProps>(
+  ({ children, onPress, ...props }, ref) => {
+    const context = React.useContext(AlertDialogContext);
+    
+    if (!context) {
+      throw new Error("AlertDialogTrigger must be used within an AlertDialog");
+    }
+
+    const handlePress = (event: any) => {
+      context.onOpenChange(true);
+      onPress?.(event);
+    };
+
+    return (
+      <TouchableOpacity ref={ref} onPress={handlePress} {...props}>
+        {children}
+      </TouchableOpacity>
+    );
+  }
+);
+AlertDialogTrigger.displayName = "AlertDialogTrigger";
+
+const AlertDialogPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return <>{children}</>;
+};
+
+interface AlertDialogOverlayProps extends ViewProps {
+  className?: string;
+}
+
+const AlertDialogOverlay = React.forwardRef<View, AlertDialogOverlayProps>(
+  ({ className, ...props }, ref) => (
+    <View
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         className
       )}
       {...props}
     />
-  </AlertDialogPortal>
-))
-AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
+  )
+);
+AlertDialogOverlay.displayName = "AlertDialogOverlay";
 
-const AlertDialogHeader = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-  <div
-    className={cn(
-      "flex flex-col space-y-2 text-center sm:text-left",
-      className
-    )}
-    {...props}
-  />
-)
-AlertDialogHeader.displayName = "AlertDialogHeader"
+interface AlertDialogContentProps extends ViewProps {
+  className?: string;
+}
 
-const AlertDialogFooter = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-  <div
-    className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
-      className
-    )}
-    {...props}
-  />
-)
-AlertDialogFooter.displayName = "AlertDialogFooter"
+const AlertDialogContent = React.forwardRef<View, AlertDialogContentProps>(
+  ({ className, children, ...props }, ref) => {
+    const context = React.useContext(AlertDialogContext);
+    
+    if (!context) {
+      throw new Error("AlertDialogContent must be used within an AlertDialog");
+    }
 
-const AlertDialogTitle = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Title>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Title
-    ref={ref}
-    className={cn("text-lg font-semibold", className)}
-    {...props}
-  />
-))
-AlertDialogTitle.displayName = AlertDialogPrimitive.Title.displayName
+    const { open, onOpenChange } = context;
 
-const AlertDialogDescription = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Description>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Description
-    ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-))
-AlertDialogDescription.displayName =
-  AlertDialogPrimitive.Description.displayName
+    return (
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => onOpenChange(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-black/80">
+          <View
+            ref={ref}
+            className={cn(
+              "bg-white rounded-lg p-6 mx-4 max-w-lg w-full shadow-lg",
+              className
+            )}
+            {...props}
+          >
+            {children}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+);
+AlertDialogContent.displayName = "AlertDialogContent";
 
-const AlertDialogAction = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Action>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Action
-    ref={ref}
-    className={cn(buttonVariants(), className)}
-    {...props}
-  />
-))
-AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
+interface AlertDialogHeaderProps extends ViewProps {
+  className?: string;
+}
 
-const AlertDialogCancel = React.forwardRef<
-  React.ElementRef<typeof AlertDialogPrimitive.Cancel>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>
->(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Cancel
-    ref={ref}
-    className={cn(
-      buttonVariants({ variant: "outline" }),
-      "mt-2 sm:mt-0",
-      className
-    )}
-    {...props}
-  />
-))
-AlertDialogCancel.displayName = AlertDialogPrimitive.Cancel.displayName
+const AlertDialogHeader = React.forwardRef<View, AlertDialogHeaderProps>(
+  ({ className, ...props }, ref) => (
+    <View
+      ref={ref}
+      className={cn(
+        "flex flex-col space-y-2 text-center sm:text-left",
+        className
+      )}
+      {...props}
+    />
+
+  )
+);
+AlertDialogHeader.displayName = "AlertDialogHeader";
+
+interface AlertDialogFooterProps extends ViewProps {
+  className?: string;
+}
+
+const AlertDialogFooter = React.forwardRef<View, AlertDialogFooterProps>(
+  ({ className, ...props }, ref) => (
+    <View
+      ref={ref}
+      className={cn(
+        "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+AlertDialogFooter.displayName = "AlertDialogFooter";
+
+interface AlertDialogTitleProps extends ViewProps {
+  className?: string;
+}
+
+const AlertDialogTitle = React.forwardRef<View, AlertDialogTitleProps>(
+  ({ className, children, ...props }, ref) => (
+    <View
+      ref={ref}
+      className={cn("text-lg font-semibold", className)}
+      {...props}
+    >
+      {typeof children === 'string' ? (
+        <Text className="text-lg font-semibold">{children}</Text>
+      ) : (
+        children
+      )}
+    </View>
+  )
+);
+AlertDialogTitle.displayName = "AlertDialogTitle";
+
+interface AlertDialogDescriptionProps extends ViewProps {
+  className?: string;
+}
+
+const AlertDialogDescription = React.forwardRef<View, AlertDialogDescriptionProps>(
+  ({ className, children, ...props }, ref) => (
+    <View
+      ref={ref}
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    >
+      {typeof children === 'string' ? (
+        <Text className="text-sm text-gray-600">{children}</Text>
+      ) : (
+        children
+      )}
+    </View>
+  )
+);
+AlertDialogDescription.displayName = "AlertDialogDescription";
+
+interface AlertDialogActionProps extends TouchableOpacity['props'] {
+  className?: string;
+}
+
+const AlertDialogAction = React.forwardRef<TouchableOpacity, AlertDialogActionProps>(
+  ({ className, children, onPress, ...props }, ref) => {
+    const context = React.useContext(AlertDialogContext);
+    
+    if (!context) {
+      throw new Error("AlertDialogAction must be used within an AlertDialog");
+    }
+
+    const handlePress = (event: any) => {
+      onPress?.(event);
+      context.onOpenChange(false);
+    };
+
+    return (
+      <TouchableOpacity
+        ref={ref}
+        className={cn(buttonVariants(), className)}
+        onPress={handlePress}
+        {...props}
+      >
+        {typeof children === 'string' ? (
+          <Text className="text-inherit font-inherit">{children}</Text>
+        ) : (
+          children
+        )}
+      </TouchableOpacity>
+    );
+  }
+);
+AlertDialogAction.displayName = "AlertDialogAction";
+
+interface AlertDialogCancelProps extends TouchableOpacity['props'] {
+  className?: string;
+}
+
+const AlertDialogCancel = React.forwardRef<TouchableOpacity, AlertDialogCancelProps>(
+  ({ className, children, onPress, ...props }, ref) => {
+    const context = React.useContext(AlertDialogContext);
+    
+    if (!context) {
+      throw new Error("AlertDialogCancel must be used within an AlertDialog");
+    }
+
+    const handlePress = (event: any) => {
+      onPress?.(event);
+      context.onOpenChange(false);
+    };
+
+    return (
+      <TouchableOpacity
+        ref={ref}
+        className={cn(
+          buttonVariants({ variant: "outline" }),
+          "mt-2 sm:mt-0",
+          className
+        )}
+        onPress={handlePress}
+        {...props}
+      >
+        {typeof children === 'string' ? (
+          <Text className="text-inherit font-inherit">{children}</Text>
+        ) : (
+          children
+        )}
+      </TouchableOpacity>
+    );
+  }
+);
+AlertDialogCancel.displayName = "AlertDialogCancel";
+
 
 export {
   AlertDialog,

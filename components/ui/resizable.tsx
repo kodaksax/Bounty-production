@@ -1,6 +1,6 @@
 "use client"
 
-import { GripVertical } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import * as ResizablePrimitive from "react-resizable-panels"
 
 import { cn } from "lib/utils"

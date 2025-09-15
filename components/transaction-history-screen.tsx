@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { View, Text, TouchableOpacity, ScrollView } from "react-native"
-import { ArrowLeft, ArrowDown, ArrowUp, Target, CreditCard, CheckCircle } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { format } from "date-fns"
 import { TransactionDetailModal } from "./transaction-detail-modal"
@@ -136,11 +136,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const getTransactionIcon = (type: Transaction["type"]) => {
     switch (type) {
       case "deposit":
-        return <ArrowDown className="h-5 w-5 text-emerald-400" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
       case "withdrawal":
-        return <ArrowUp className="h-5 w-5 text-red-400" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
       case "bounty_posted":
-        return <Target className="h-5 w-5 text-yellow-400" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
         return <CheckCircle className="h-5 w-5 text-blue-400" />
       case "bounty_received":
@@ -170,9 +170,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       <View className="flex justify-between items-center p-4 pt-safe">
         <View className="flex items-center">
           <TouchableOpacity onPress={onBack} className="mr-3 p-2 touch-target-min">
-            <ArrowLeft className="h-5 w-5" />
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
-          <Target className="h-5 w-5 mr-2" />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
         </View>
       </View>
@@ -185,8 +185,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {/* Filters */}
       <View className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
         <View className="flex space-x-3">
-          <button
-            className={cn(
+          <TouchableOpacity
+            style={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "all"
                 ? "bg-emerald-700 text-white"
@@ -196,8 +196,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           >
             All Transactions
           </TouchableOpacity>
-          <button
-            className={cn(
+          <TouchableOpacity
+            style={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "deposits"
                 ? "bg-emerald-700 text-white"
@@ -207,8 +207,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           >
             Deposits
           </TouchableOpacity>
-          <button
-            className={cn(
+          <TouchableOpacity
+            style={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "withdrawals"
                 ? "bg-emerald-700 text-white"
@@ -218,8 +218,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           >
             Withdrawals
           </TouchableOpacity>
-          <button
-            className={cn(
+          <TouchableOpacity
+            style={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "bounties"
                 ? "bg-emerald-700 text-white"
@@ -270,9 +270,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
                 <View className="space-y-3">
                   {group.transactions.map((transaction) => (
-                    <div
+                    <View
                       key={transaction.id}
-                      className="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
+                      style="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
                       onPress={() => setSelectedTransaction(transaction)}
                     >
                       <View className="flex items-center gap-3">
@@ -285,8 +285,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                             <Text className="text-sm font-medium text-white truncate">
                               {getTransactionTitle(transaction)}
                             </Text>
-                            <p
-                              className={cn(
+                            <Text
+                              style={cn(
                                 "text-sm font-bold",
                                 transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
                               )}
@@ -297,8 +297,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                           <View className="flex justify-between items-center mt-1">
                             <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
                             {transaction.details.status && (
-                              <p
-                                className={cn(
+                              <Text
+                                style={cn(
                                   "text-xs",
                                   transaction.details.status === "Completed" ? "text-emerald-300" : "text-yellow-300",
                                 )}

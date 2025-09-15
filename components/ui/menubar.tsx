@@ -3,7 +3,7 @@
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import * as MenubarPrimitive from "@radix-ui/react-menubar"
-import { Check, ChevronRight, Circle } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 
@@ -63,7 +63,7 @@ const MenubarSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto h-4 w-4" />
+    <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
   </MenubarPrimitive.SubTrigger>
 ))
 MenubarSubTrigger.displayName = MenubarPrimitive.SubTrigger.displayName
@@ -141,7 +141,7 @@ const MenubarCheckboxItem = React.forwardRef<
   >
     <Text className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <MenubarPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <MaterialIcons name="check" size={24} color="#000000" />
       </MenubarPrimitive.ItemIndicator>
     </Text>
     {children}
@@ -206,8 +206,8 @@ const MenubarShortcut = ({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
-    <span
-      className={cn(
+    <Text
+      style={cn(
         "ml-auto text-xs tracking-widest text-muted-foreground",
         className
       )}

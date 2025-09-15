@@ -2,7 +2,7 @@
 
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { MoreVertical } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 interface ArchivedBountyCardProps {
   id: string
@@ -66,7 +66,7 @@ export function ArchivedBountyCard({
             <Text className="text-xs text-emerald-200">{username}</Text>
           </View>
           <TouchableOpacity onPress={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
-            <MoreVertical className="h-5 w-5" />
+            <MaterialIcons name="more-vert" size={24} color="#000000" />
           </TouchableOpacity>
         </View>
 

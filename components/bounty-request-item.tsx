@@ -1,7 +1,7 @@
 "use client"
 
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { MoreVertical } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 interface BountyRequestItemProps {
   username: string
@@ -44,7 +44,7 @@ export function BountyRequestItem({
               <View className="flex items-center gap-2">
                 <Text className="text-xs text-emerald-300">{timeAgo}</Text>
                 <TouchableOpacity onPress={onMenuClick} className="text-emerald-300">
-                  <MoreVertical className="h-4 w-4" />
+                  <MaterialIcons name="more-vert" size={24} color="#000000" />
                 </TouchableOpacity>
               </View>
             </View>
