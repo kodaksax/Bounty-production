@@ -1,11 +1,12 @@
-"use client"
-
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
 import { WalletScreen } from "components/wallet-screen"
-import { Calendar as CalendarIcon, DollarSign, MessageSquare, Package, Search, Target } from "lucide-react"
+import { 
+  MaterialIcons,
+  Ionicons 
+} from "@expo/vector-icons"
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
@@ -32,8 +33,8 @@ export function  BountyApp() {
 
   // Define categories
   const categories = [
-    { id: "local", label: "Local", icon: <Package className="h-4 w-4" /> },
-    { id: "highpaying", label: "High Paying", icon: <DollarSign className="h-4 w-4" /> },
+    { id: "local", label: "Local", icon: <MaterialIcons name="local-shipping" size={16} color="#374151" /> },
+    { id: "highpaying", label: "High Paying", icon: <MaterialIcons name="attach-money" size={16} color="#374151" /> },
   ]
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
@@ -146,28 +147,28 @@ export function  BountyApp() {
         <TouchableOpacity onPress={() => setActiveScreen("create")}
           style={styles.navButton}
         >
-          <MessageSquare color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setActiveScreen("wallet")}
           style={styles.navButton}
         >
-          <DollarSign color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.centerButton}
           onPress={() => setActiveScreen("bounty")}
         >
-          <Target color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
+          <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setActiveScreen("postings")}
           style={styles.navButton}
         >
-          <Search color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setActiveScreen("calendar")}
           style={styles.navButton}
         >
-          <CalendarIcon color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
       </View>
     </View>
