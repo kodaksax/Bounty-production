@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 // Make sure to install NetInfo: expo install @react-native-community/netinfo
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo'
 import { cn } from "lib/utils"
-import { Wifi, WifiOff } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 export function ConnectionStatus() {
   const [isOnline, setIsOnline] = useState(true)
@@ -32,8 +32,8 @@ export function ConnectionStatus() {
   if (!showStatus) return null
 
   return (
-    <div
-      className={cn(
+    <View
+      style={cn(
         "fixed top-safe z-50 left-0 right-0 flex items-center justify-center transition-all duration-300",
         isOnline ? "bg-green-500" : "bg-red-500",
       )}

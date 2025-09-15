@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 
 import { useState, useRef, useEffect } from "react"
 import { View, Text, TouchableOpacity, ScrollView } from "react-native"
-import { ArrowLeft, Phone, Video, Plus, Camera, Mic, Pause, Send, Target } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import type { Conversation } from "./messenger-screen"
@@ -145,7 +145,7 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
       <View className="p-4 pt-8 pb-2">
         <View className="flex justify-between items-center">
           <View className="flex items-center">
-            <Target className="h-5 w-5 mr-2" />
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
             <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
           </View>
           <Text className="text-lg font-bold">$ 40.00</Text>
@@ -157,7 +157,7 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
       <View className="px-4 py-2 flex items-center justify-between">
         <View className="flex items-center">
           <TouchableOpacity onPress={onBack} className="mr-2">
-            <ArrowLeft className="h-5 w-5" />
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
           <Avatar className="h-10 w-10 mr-2">
             <AvatarImage src={conversation.avatar} alt={conversation.name} />
@@ -172,7 +172,7 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
         </View>
         <View className="flex gap-3">
           <TouchableOpacity className="text-white">
-            <Phone className="h-5 w-5" />
+            <MaterialIcons name="phone" size={24} color="#000000" />
           </TouchableOpacity>
           <TouchableOpacity className="text-white">
             <Video className="h-5 w-5" />
@@ -186,8 +186,8 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
           <View key={message.id} className={cn("mb-3 max-w-[80%]", message.isUser ? "ml-auto" : "mr-auto")}>
             {message.isAudio ? (
               <View className="bg-blue-600 rounded-2xl p-2 flex items-center">
-                <button
-                  className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-2"
+                <TouchableOpacity
+                  style="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-2"
                   onPress={() => setIsAudioPlaying(!isAudioPlaying)}
                 >
                   {isAudioPlaying ? (
@@ -202,8 +202,8 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
                 <Text className="text-xs text-white ml-2">{message.audioDuration}</Text>
               </View>
             ) : (
-              <div
-                className={cn(
+              <View
+                style={cn(
                   "p-3 rounded-2xl",
                   message.isUser ? "bg-white text-gray-800 rounded-br-none" : "bg-blue-600 text-white rounded-bl-none",
                 )}
@@ -223,13 +223,13 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
       <View className="p-4 bg-emerald-700/30">
         <View className="flex items-center gap-2">
           <TouchableOpacity className="h-10 w-10 rounded-full bg-emerald-700/50 flex items-center justify-center">
-            <Plus className="h-5 w-5 text-white" />
+            <MaterialIcons name="add" size={24} color="#000000" />
           </TouchableOpacity>
           <View className="flex-1 bg-emerald-700/50 rounded-full flex items-center px-4">
-            <input
-              type="text"
+            <TextInput
+              
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChangeText={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSendMessage()
               }}
@@ -237,11 +237,11 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
               className="flex-1 bg-transparent border-none py-2 text-white placeholder:text-emerald-300/70 focus:outline-none"
             />
             {newMessage ? (
-              <button
+              <TouchableOpacity
                 onPress={handleSendMessage}
-                className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
+                style="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
               >
-                <Send className="h-4 w-4 text-white" />
+                <MaterialIcons name="send" size={24} color="#000000" />
               </TouchableOpacity>
             ) : (
               <>
@@ -290,9 +290,9 @@ function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
         const animationDelay = `${i * 0.05}s`
 
         return (
-          <div
+          <View
             key={i}
-            className={cn("w-1 bg-blue-300 rounded-full transition-all duration-300", isPlaying ? "animate-pulse" : "")}
+            style={cn("w-1 bg-blue-300 rounded-full transition-all duration-300", isPlaying ? "animate-pulse" : "")}
             style={{
               height: `${height}%`,
               animationDelay,

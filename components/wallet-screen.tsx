@@ -1,7 +1,7 @@
 "use client"
 
 
-import { ArrowDown, ArrowLeft, CreditCard, Plus, Target } from "lucide-react";
+import { MaterialIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "./add-money-screen";
@@ -230,12 +230,12 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <Target color="#fff" size={20} style={{ marginRight: 8 }} />
+          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
         {onBack && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <ArrowLeft color="#fff" size={20} />
+            <MaterialIcons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
         )}
       </View>
@@ -249,11 +249,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </View>
             <View style={styles.balanceActionsRow}>
               <TouchableOpacity style={styles.actionButton} onPress={() => setShowAddMoney(true)}>
-                <Plus color="#fff" size={20} style={{ marginRight: 8 }} />
+                <MaterialIcons name="add" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>Add Money</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={() => setShowWithdraw(true)}>
-                <ArrowDown color="#fff" size={20} style={{ marginRight: 8 }} />
+                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>Withdraw</Text>
               </TouchableOpacity>
             </View>

@@ -1,6 +1,6 @@
 "use client"
 
-import { Code, Globe, Heart, Plus, Target, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { View, Text, TouchableOpacity, TextInput } from "react-native"
 
@@ -30,9 +30,9 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       case "code":
         return <Code className="h-5 w-5 text-red-500" />
       case "target":
-        return <Target className="h-5 w-5 text-blue-500" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "heart":
-        return <Heart className="h-5 w-5 text-pink-500" />
+        return <MaterialIcons name="favorite" size={24} color="#000000" />
       case "globe":
         return <Globe className="h-5 w-5 text-blue-500" />
       default:
@@ -70,7 +70,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
         <View className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
         </View>
         <Text className="text-lg font-bold">$ 40.00</Text>
@@ -79,11 +79,11 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       {/* Title with actions */}
       <View className="px-4 py-4 flex justify-between items-center">
         <TouchableOpacity onPress={onBack} className="p-1">
-          <X className="h-6 w-6" />
+          <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <Text className="text-xl font-bold">Skillsets:</Text>
         <TouchableOpacity onPress={addNewSkill} className="p-1">
-          <Plus className="h-6 w-6" />
+          <MaterialIcons name="add" size={24} color="#000000" />
         </TouchableOpacity>
       </View>
 
@@ -91,9 +91,9 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       <View className="px-4 py-2 flex-1">
         <View className="space-y-4">
           {skills.map((skill) => (
-            <div
+            <View
               key={skill.id}
-              className={`flex items-center bg-emerald-700/50 rounded-lg p-2 ${
+              style={`flex items-center bg-emerald-700/50 rounded-lg p-2 ${
                 selectedSkill === skill.id ? "border-2 border-purple-500" : ""
               }`}
               onPress={() => setSelectedSkill(skill.id)}
@@ -106,10 +106,10 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                   <Text className="text-xs text-emerald-300">Icon:</Text>
                   <Text className="text-xs text-emerald-300">Skillset:</Text>
                 </View>
-                <input
-                  type="text"
+                <TextInput
+                  
                   value={skill.text}
-                  onChange={(e) => handleSkillChange(skill.id, e.target.value)}
+                  onChangeText={(e) => handleSkillChange(skill.id, e.target.value)}
                   placeholder="Enter your skill"
                   className="w-full bg-transparent border-none focus:outline-none text-white placeholder:text-emerald-300/50"
                 />

@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import { Award, CheckCircle, Code, FileText, Globe, Heart, Settings, Target } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useState } from "react"
 import { SettingsScreen } from "./settings-screen"
 import { SkillsetEditScreen } from "./skillset-edit-screen"
@@ -110,9 +110,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       case "code":
         return <Code className="h-4 w-4 text-emerald-300" />
       case "target":
-        return <Target className="h-4 w-4 text-emerald-300" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "heart":
-        return <Heart className="h-4 w-4 text-emerald-300" />
+        return <MaterialIcons name="favorite" size={24} color="#000000" />
       case "globe":
         return <Globe className="h-4 w-4 text-emerald-300" />
       default:
@@ -212,10 +212,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       {/* Header */}
       <View className="flex justify-between items-center p-4 pt-8">
         <TouchableOpacity className="p-2" onPress={onBack}>
-          <FileText className="h-5 w-5" />
+          <MaterialIcons name="description" size={24} color="#000000" />
         </TouchableOpacity>
         <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
-          <Settings className="h-5 w-5" />
+          <MaterialIcons name="settings" size={24} color="#000000" />
         </TouchableOpacity>
       </View>
 
@@ -224,7 +224,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View className="flex items-center gap-4">
           <View className="relative">
             <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
-              <Target className="h-8 w-8" />
+              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
             </View>
             <View className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
               lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
@@ -272,8 +272,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View className="px-4 py-2">
           <View className="flex justify-between items-center mb-2">
             <Text className="text-sm font-medium">Skillsets:</Text>
-            <button
-              className="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
+            <TouchableOpacity
+              style="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
               onPress={() => setIsEditing(true)}
             >
               Edit
@@ -298,7 +298,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                 <View key={i} className="bg-emerald-700/30 rounded-lg p-3">
                   <View className="flex justify-between items-center mb-1">
                     <Text className="text-sm font-medium flex items-center gap-1">
-                      {activity.type === "bounty_posted" && <Target className="h-3 w-3" />}
+                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#000000" />}
                       {activity.type === "job_accepted" && <CheckCircle className="h-3 w-3" />}
                       {activity.type === "badge_earned" && <Award className="h-3 w-3 text-yellow-400" />}
                       {activity.type === "bounty_posted"
@@ -326,19 +326,19 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             {Array.from({ length: 6 }).map((_, i) => {
               const isEarned = i < stats.badgesEarned
               return (
-                <div
+                <View
                   key={i}
-                  className={`bg-emerald-700/30 rounded-lg p-3 flex flex-col items-center justify-center aspect-square ${
+                  style={`bg-emerald-700/30 rounded-lg p-3 flex flex-col items-center justify-center aspect-square ${
                     isEarned ? "border border-yellow-400" : "opacity-50"
                   }`}
                 >
-                  <div
-                    className={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
+                  <View
+                    style={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
                   >
                     {i % 3 === 0 ? (
-                      <Target className={`h-5 w-5 ${isEarned ? "text-yellow-400" : "text-emerald-300"}`} />
+                      <MaterialIcons name="gps-fixed" size={24} color="#000000" />
                     ) : i % 3 === 1 ? (
-                      <Heart className={`h-5 w-5 ${isEarned ? "text-yellow-400" : "text-emerald-300"}`} />
+                      <MaterialIcons name="favorite" size={24} color="#000000" />
                     ) : (
                       <Globe className={`h-5 w-5 ${isEarned ? "text-yellow-400" : "text-emerald-300"}`} />
                     )}

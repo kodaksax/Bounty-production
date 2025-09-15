@@ -2,7 +2,7 @@
 
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import * as React from "react"
 
 import { Button } from "components/ui/button"
@@ -122,7 +122,7 @@ const SidebarProvider = React.forwardRef<
     return (
       <SidebarContext.Provider value={contextValue}>
         <TooltipProvider delayDuration={0}>
-          <div
+          <View
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH,
@@ -130,7 +130,7 @@ const SidebarProvider = React.forwardRef<
                 ...style,
               } as React.CSSProperties
             }
-            className={cn(
+            style={cn(
               "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
               className
             )}
@@ -138,7 +138,7 @@ const SidebarProvider = React.forwardRef<
             {...props}
           >
             {children}
-          </div>
+          </View>
         </TooltipProvider>
       </SidebarContext.Provider>
     )
@@ -169,8 +169,8 @@ const Sidebar = React.forwardRef<
 
     if (collapsible === "none") {
       return (
-        <div
-          className={cn(
+        <View
+          style={cn(
             "flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground",
             className
           )}
@@ -178,7 +178,7 @@ const Sidebar = React.forwardRef<
           {...props}
         >
           {children}
-        </div>
+        </View>
       )
     }
 
@@ -196,24 +196,24 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <View style="flex h-full w-full flex-col">{children}</View>
           </SheetContent>
         </Sheet>
       )
     }
 
     return (
-      <div
+      <View
         ref={ref}
-        className="group peer hidden md:block text-sidebar-foreground"
+        style="group peer hidden md:block text-sidebar-foreground"
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
       >
         {/* This is what handles the sidebar gap on desktop */}
-        <div
-          className={cn(
+        <View
+          style={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
@@ -222,8 +222,8 @@ const Sidebar = React.forwardRef<
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
           )}
         />
-        <div
-          className={cn(
+        <View
+          style={cn(
             "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -236,14 +236,14 @@ const Sidebar = React.forwardRef<
           )}
           {...props}
         >
-          <div
+          <View
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
+            style="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
           >
             {children}
-          </div>
-        </div>
-      </div>
+          </View>
+        </View>
+      </View>
     )
   }
 )
@@ -256,21 +256,21 @@ const SidebarTrigger = React.forwardRef<
   const { toggleSidebar } = useSidebar()
 
   return (
-    <Button
+    <TouchableOpacity
       ref={ref}
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)}
-      onClick={(event) => {
+      style={cn("h-7 w-7", className)}
+      onPress={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
       <PanelLeft />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+      <Text style="sr-only">Toggle Sidebar</Text>
+    </TouchableOpacity>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -282,14 +282,14 @@ const SidebarRail = React.forwardRef<
   const { toggleSidebar } = useSidebar()
 
   return (
-    <button
+    <TouchableOpacity
       ref={ref}
       data-sidebar="rail"
       aria-label="Toggle Sidebar"
       tabIndex={-1}
-      onClick={toggleSidebar}
+      onPress={toggleSidebar}
       title="Toggle Sidebar"
-      className={cn(
+      style={cn(
         "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
         "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
@@ -327,10 +327,10 @@ const SidebarInput = React.forwardRef<
   React.ComponentProps<typeof Input>
 >(({ className, ...props }, ref) => {
   return (
-    <Input
+    <TextInput
       ref={ref}
       data-sidebar="input"
-      className={cn(
+      style={cn(
         "h-8 w-full bg-background shadow-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
         className
       )}
@@ -345,10 +345,10 @@ const SidebarHeader = React.forwardRef<
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
   return (
-    <div
+    <View
       ref={ref}
       data-sidebar="header"
-      className={cn("flex flex-col gap-2 p-2", className)}
+      style={cn("flex flex-col gap-2 p-2", className)}
       {...props}
     />
   )
@@ -360,10 +360,10 @@ const SidebarFooter = React.forwardRef<
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
   return (
-    <div
+    <View
       ref={ref}
       data-sidebar="footer"
-      className={cn("flex flex-col gap-2 p-2", className)}
+      style={cn("flex flex-col gap-2 p-2", className)}
       {...props}
     />
   )
@@ -390,10 +390,10 @@ const SidebarContent = React.forwardRef<
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
   return (
-    <div
+    <View
       ref={ref}
       data-sidebar="content"
-      className={cn(
+      style={cn(
         "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
@@ -408,10 +408,10 @@ const SidebarGroup = React.forwardRef<
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
   return (
-    <div
+    <View
       ref={ref}
       data-sidebar="group"
-      className={cn("relative flex w-full min-w-0 flex-col p-2", className)}
+      style={cn("relative flex w-full min-w-0 flex-col p-2", className)}
       {...props}
     />
   )
@@ -466,10 +466,10 @@ const SidebarGroupContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
-  <div
+  <View
     ref={ref}
     data-sidebar="group-content"
-    className={cn("w-full text-sm", className)}
+    style={cn("w-full text-sm", className)}
     {...props}
   />
 ))
@@ -617,10 +617,10 @@ const SidebarMenuBadge = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
-  <div
+  <View
     ref={ref}
     data-sidebar="menu-badge"
-    className={cn(
+    style={cn(
       "absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground select-none pointer-events-none",
       "peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground",
       "peer-data-[size=sm]/menu-button:top-1",
@@ -646,10 +646,10 @@ const SidebarMenuSkeleton = React.forwardRef<
   }, [])
 
   return (
-    <div
+    <View
       ref={ref}
       data-sidebar="menu-skeleton"
-      className={cn("rounded-md h-8 flex gap-2 px-2 items-center", className)}
+      style={cn("rounded-md h-8 flex gap-2 px-2 items-center", className)}
       {...props}
     >
       {showIcon && (
@@ -667,7 +667,7 @@ const SidebarMenuSkeleton = React.forwardRef<
           } as React.CSSProperties
         }
       />
-    </div>
+    </View>
   )
 })
 SidebarMenuSkeleton.displayName = "SidebarMenuSkeleton"

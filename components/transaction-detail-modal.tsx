@@ -2,7 +2,7 @@
 
 import { format } from "date-fns"
 import { cn } from "lib/utils"
-import { ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, CreditCard, Info, Target, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
 import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
@@ -39,11 +39,11 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   const getTransactionIcon = () => {
     switch (transaction.type) {
       case "deposit":
-        return <ArrowDown className="h-6 w-6 text-emerald-400" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
       case "withdrawal":
-        return <ArrowUp className="h-6 w-6 text-red-400" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
       case "bounty_posted":
-        return <Target className="h-6 w-6 text-yellow-400" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
         return <CheckCircle className="h-6 w-6 text-blue-400" />
       case "bounty_received":
@@ -85,9 +85,9 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
   return (
     <View className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div
+      <View
         ref={modalRef}
-        className={cn(
+        style={cn(
           "relative w-full max-w-md mx-auto bg-emerald-600 rounded-xl overflow-hidden transition-all duration-300 transform",
           isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100",
         )}
@@ -96,7 +96,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         <View className="flex items-center justify-between p-4 bg-emerald-700">
           <Text className="text-lg font-bold text-white">Transaction Details</Text>
           <TouchableOpacity onPress={handleClose} className="text-white p-2 touch-target-min">
-            <X className="h-5 w-5" />
+            <MaterialIcons name="close" size={24} color="#000000" />
           </TouchableOpacity>
         </View>
 
@@ -115,8 +115,8 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
           </View>
 
           <View className="bg-emerald-700/50 rounded-lg p-4 mb-4">
-            <p
-              className={cn(
+            <Text
+              style={cn(
                 "text-2xl font-bold text-center",
                 transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
               )}
@@ -145,7 +145,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
             <View className="flex items-center">
               <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                <Calendar className="h-4 w-4 text-emerald-300" />
+                <MaterialIcons name="calendar-today" size={24} color="#000000" />
               </View>
               <View className="flex-1">
                 <Text className="text-xs text-emerald-300">Date</Text>
@@ -190,7 +190,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
             {transaction.details.counterparty && (
               <View className="flex items-center">
                 <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                  <Target className="h-4 w-4 text-emerald-300" />
+                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs text-emerald-300">
@@ -205,9 +205,9 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
         {/* Action Button */}
         <View className="p-5 pt-0">
-          <button
+          <TouchableOpacity
             onPress={handleClose}
-            className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium"
+            style="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium"
           >
             Close
           </TouchableOpacity>

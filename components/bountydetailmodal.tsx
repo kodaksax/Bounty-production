@@ -1,9 +1,25 @@
-"use client"
-
+import React, { useEffect, useRef, useState } from "react"
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  TextInput, 
+  ScrollView, 
+  Modal,
+  StyleSheet,
+  Dimensions 
+} from "react-native"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
-import { ArrowLeft, FileText, ImageIcon, Paperclip, Send, Target, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { 
+  ArrowLeft, 
+  FileText, 
+  Image as ImageIcon, 
+  Paperclip, 
+  Send, 
+  Target, 
+  X 
+} from "@expo/vector-icons/MaterialIcons"
 
 interface BountyDetailModalProps {
   bounty: {
@@ -34,8 +50,8 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const modalRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<ScrollView>(null)
+  const modalRef = useRef<View>(null)
 
   // Sample description if not provided
   const description =
@@ -58,7 +74,7 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
 
   // Scroll to bottom of messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    messagesEndRef.current?.scrollToEnd({ animated: true })
   }, [messages])
 
   // Handle click outside to close
@@ -90,160 +106,409 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
     }, 1000)
   }
 
+  const { width, height } = Dimensions.get('window')
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div
-        ref={modalRef}
-        className={cn(
-          "relative w-full h-[90vh] flex flex-col bg-emerald-600 rounded-t-3xl rounded-b-3xl overflow-hidden transition-all duration-300 transform",
-          isClosing ? "translate-y-full opacity-0" : "translate-y-0 opacity-100",
-        )}
-      >
+    <Modal
+      visible={true}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      <View style={[styles.container, { width, height: height * 0.9 }]}>
         {/* Header - iPhone optimized */}
-        <div className="flex items-center justify-between p-4 pt-safe bg-emerald-700">
-          <div className="flex items-center">
-            <Target className="h-5 w-5 mr-2 text-white" />
-            <span className="text-lg font-bold tracking-wider text-white">BOUNTY</span>
-          </div>
-          <button onClick={handleClose} className="text-white p-2 touch-target-min">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Target name="gps-fixed" size={20} color="white" />
+            <Text style={styles.headerTitle}>BOUNTY</Text>
+          </View>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <X name="close" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
 
         {/* Bounty Details - Scrollable content */}
-        <div className="flex-1 overflow-y-auto ios-scroll p-4 bg-emerald-600">
-          <div className="bg-emerald-700/80 rounded-xl overflow-hidden mb-4">
-            <div className="p-4">
+        <ScrollView
+          ref={messagesEndRef}
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.bountyCard}>
+            <View style={styles.cardContent}>
               {/* User info */}
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar className="h-10 w-10 border border-emerald-400/30">
+              <View style={styles.userInfo}>
+                <Avatar style={styles.avatar}>
                   <AvatarImage src="/placeholder.svg?height=40&width=40" alt={bounty.username} />
-                  <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
-                    {bounty.username.substring(1, 3).toUpperCase()}
+                  <AvatarFallback style={styles.avatarFallback}>
+                    <Text style={styles.avatarText}>
+                      {bounty.username.substring(1, 3).toUpperCase()}
+                    </Text>
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <div className="text-sm text-emerald-100">{bounty.username}</div>
-                  <div className="text-xs text-emerald-300">Posted 2h ago</div>
-                </div>
-              </div>
+                <View>
+                  <Text style={styles.username}>{bounty.username}</Text>
+                  <Text style={styles.postTime}>Posted 2h ago</Text>
+                </View>
+              </View>
 
               {/* Title */}
-              <h2 className="text-xl font-bold text-white mb-3">{bounty.title}</h2>
+              <Text style={styles.title}>{bounty.title}</Text>
 
               {/* Price and distance */}
-              <div className="flex justify-between items-center mb-4">
-                <div className="bg-emerald-900/50 px-3 py-1.5 rounded-lg text-emerald-400 font-bold">
-                  ${bounty.price}
-                </div>
-                <div className="text-sm text-emerald-200">{bounty.distance} mi away</div>
-              </div>
+              <View style={styles.priceDistanceContainer}>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.priceText}>${bounty.price}</Text>
+                </View>
+                <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
+              </View>
 
               {/* Description */}
-              <div className="mb-4">
-                <h3 className="text-sm font-medium text-emerald-200 mb-1">Description</h3>
-                <p className="text-white text-sm">{description}</p>
-              </div>
+              <View style={styles.descriptionContainer}>
+                <Text style={styles.sectionHeader}>Description</Text>
+                <Text style={styles.descriptionText}>{description}</Text>
+              </View>
 
               {/* Attachments */}
               {attachments.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-emerald-200 mb-2">Attachments</h3>
-                  <div className="space-y-2">
+                <View>
+                  <Text style={styles.sectionHeader}>Attachments</Text>
+                  <View style={styles.attachmentsContainer}>
                     {attachments.map((attachment) => (
-                      <div key={attachment.id} className="flex items-center bg-emerald-800/50 p-3 rounded-lg">
-                        <div className="h-10 w-10 rounded-md bg-emerald-900 flex items-center justify-center mr-3">
+                      <View key={attachment.id} style={styles.attachmentItem}>
+                        <View style={styles.attachmentIcon}>
                           {attachment.type === "image" ? (
-                            <ImageIcon className="h-5 w-5 text-emerald-300" />
+                            <ImageIcon name="image" size={20} color="#a7f3d0" />
                           ) : (
-                            <FileText className="h-5 w-5 text-emerald-300" />
+                            <FileText name="description" size={20} color="#a7f3d0" />
                           )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm text-white">{attachment.name}</div>
-                          <div className="text-xs text-emerald-300">{attachment.size}</div>
-                        </div>
-                        <button className="text-emerald-300 hover:text-white transition-colors p-2 touch-target-min">
-                          <ArrowLeft className="h-4 w-4 rotate-180" />
-                        </button>
-                      </div>
+                        </View>
+                        <View style={styles.attachmentInfo}>
+                          <Text style={styles.attachmentName}>{attachment.name}</Text>
+                          <Text style={styles.attachmentSize}>{attachment.size}</Text>
+                        </View>
+                        <TouchableOpacity style={styles.downloadButton}>
+                          <ArrowLeft name="arrow-forward" size={16} color="#a7f3d0" />
+                        </TouchableOpacity>
+                      </View>
                     ))}
-                  </div>
-                </div>
+                  </View>
+                </View>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
 
           {/* Messages */}
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-emerald-200 mb-2">Messages</h3>
+          <View style={styles.messagesContainer}>
+            <Text style={styles.sectionHeader}>Messages</Text>
 
             {messages.length === 0 ? (
-              <div className="text-center py-6 text-emerald-300 text-sm">No messages yet. Start the conversation!</div>
+              <View style={styles.noMessagesContainer}>
+                <Text style={styles.noMessagesText}>No messages yet. Start the conversation!</Text>
+              </View>
             ) : (
-              <div className="space-y-3">
+              <View style={styles.messagesWrapper}>
                 {messages.map((message) => (
-                  <div
+                  <View
                     key={message.id}
-                    className={cn(
-                      "max-w-[80%] p-3 rounded-lg",
-                      message.sender === "user"
-                        ? "bg-emerald-500 text-white ml-auto rounded-br-none"
-                        : "bg-emerald-700 text-white rounded-bl-none",
-                    )}
+                    style={[
+                      styles.messageContainer,
+                      message.sender === "user" ? styles.userMessage : styles.otherMessage,
+                    ]}
                   >
-                    <p className="text-sm">{message.text}</p>
-                    <div className="text-right mt-1">
-                      <span className="text-xs opacity-70">
+                    <Text style={styles.messageText}>{message.text}</Text>
+                    <View style={styles.timestampContainer}>
+                      <Text style={styles.timestamp}>
                         {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  </div>
+                      </Text>
+                    </View>
+                  </View>
                 ))}
-                <div ref={messagesEndRef} />
-              </div>
+              </View>
             )}
-          </div>
-        </div>
+          </View>
+        </ScrollView>
 
         {/* Message Input - Fixed at bottom with safe area inset */}
-        <div className="p-3 bg-emerald-700 border-t border-emerald-600">
-          <div className="flex items-center gap-2">
-            <button className="text-emerald-300 hover:text-white transition-colors p-2 touch-target-min">
-              <Paperclip className="h-5 w-5" />
-            </button>
-            <input
-              type="text"
+        <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <TouchableOpacity style={styles.attachButton}>
+              <Paperclip name="attach-file" size={20} color="#a7f3d0" />
+            </TouchableOpacity>
+            <TextInput
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSendMessage()
-              }}
+              onChangeText={setNewMessage}
+              onSubmitEditing={handleSendMessage}
               placeholder="Message about this bounty..."
-              className="flex-1 bg-emerald-800/50 border-none rounded-full py-3 px-4 text-white placeholder:text-emerald-300/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              placeholderTextColor="#a7f3d0bb"
+              style={styles.textInput}
+              multiline={false}
+              returnKeyType="send"
             />
-            <button
-              onClick={handleSendMessage}
+            <TouchableOpacity
+              onPress={handleSendMessage}
               disabled={newMessage.trim() === ""}
-              className={cn(
-                "h-12 w-12 rounded-full flex items-center justify-center transition-colors touch-target-min",
-                newMessage.trim() === ""
-                  ? "bg-emerald-800/50 text-emerald-300/50"
-                  : "bg-emerald-500 text-white hover:bg-emerald-400",
-              )}
+              style={[
+                styles.sendButton,
+                newMessage.trim() === "" ? styles.sendButtonDisabled : styles.sendButtonActive,
+              ]}
             >
-              <Send className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
+              <Send name="send" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Accept Bounty Button - With safe area inset */}
-        <div className="p-3 pt-0 bg-emerald-700 pb-safe">
-          <button className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 transition-colors rounded-lg text-white font-medium touch-target-min">
-            Accept Bounty
-          </button>
-        </div>
-      </div>
-    </div>
+        <View style={styles.actionContainer}>
+          <TouchableOpacity style={styles.acceptButton}>
+            <Text style={styles.acceptButtonText}>Accept Bounty</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#047857', // emerald-700
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    marginLeft: 8,
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 1.6,
+    color: 'white',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  bountyCard: {
+    backgroundColor: '#047857cc', // emerald-700/80
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  cardContent: {
+    padding: 16,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#6ee7b780', // emerald-400/30
+  },
+  avatarFallback: {
+    backgroundColor: '#064e3b', // emerald-900
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#a7f3d0', // emerald-200
+    fontSize: 12,
+  },
+  username: {
+    fontSize: 14,
+    color: '#d1fae5', // emerald-100
+  },
+  postTime: {
+    fontSize: 12,
+    color: '#a7f3d0', // emerald-300
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 12,
+  },
+  priceDistanceContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  priceContainer: {
+    backgroundColor: '#064e3b80', // emerald-900/50
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  priceText: {
+    color: '#6ee7b7', // emerald-400
+    fontWeight: 'bold',
+  },
+  distanceText: {
+    fontSize: 14,
+    color: '#a7f3d0', // emerald-200
+  },
+  descriptionContainer: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#a7f3d0', // emerald-200
+    marginBottom: 4,
+  },
+  descriptionText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  attachmentsContainer: {
+    gap: 8,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#05543280', // emerald-800/50
+    padding: 12,
+    borderRadius: 8,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: '#064e3b', // emerald-900
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: 14,
+    color: 'white',
+  },
+  attachmentSize: {
+    fontSize: 12,
+    color: '#a7f3d0', // emerald-300
+  },
+  downloadButton: {
+    padding: 8,
+  },
+  messagesContainer: {
+    marginBottom: 16,
+  },
+  noMessagesContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  noMessagesText: {
+    color: '#a7f3d0', // emerald-300
+    fontSize: 14,
+  },
+  messagesWrapper: {
+    gap: 12,
+  },
+  messageContainer: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 8,
+  },
+  userMessage: {
+    backgroundColor: '#10b981', // emerald-500
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 0,
+  },
+  otherMessage: {
+    backgroundColor: '#047857', // emerald-700
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 0,
+  },
+  messageText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  timestampContainer: {
+    alignItems: 'flex-end',
+    marginTop: 4,
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#ffffffb3', // white with opacity
+  },
+  inputContainer: {
+    padding: 12,
+    backgroundColor: '#047857', // emerald-700
+    borderTopWidth: 1,
+    borderTopColor: '#059669', // emerald-600
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  attachButton: {
+    padding: 8,
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: '#05543280', // emerald-800/50
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    color: 'white',
+    fontSize: 16,
+  },
+  sendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#05543280', // emerald-800/50
+  },
+  sendButtonActive: {
+    backgroundColor: '#10b981', // emerald-500
+  },
+  actionContainer: {
+    padding: 12,
+    paddingTop: 0,
+    backgroundColor: '#047857', // emerald-700
+  },
+  acceptButton: {
+    width: '100%',
+    paddingVertical: 12,
+    backgroundColor: '#10b981', // emerald-500
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  acceptButtonText: {
+    color: 'white',
+    fontWeight: '500',
+    fontSize: 16,
+  },
+});

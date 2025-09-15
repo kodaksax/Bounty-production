@@ -3,7 +3,7 @@
 import * as React from "react"
 import { View, Text, TouchableOpacity } from "react-native"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { Check } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 
 import { cn } from "lib/utils"
 
@@ -22,7 +22,7 @@ const Checkbox = React.forwardRef<
     <CheckboxPrimitive.Indicator
       className={cn("flex items-center justify-center text-current")}
     >
-      <Check className="h-4 w-4" />
+      <MaterialIcons name="check" size={24} color="#000000" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ))

@@ -1,5 +1,5 @@
 "use client"
-import { BarChart3, Users, CreditCard, Activity } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "components/ui/card"
 import { Overview } from "components/overview"
 import { RecentSales } from "components/recent-sales"

@@ -1,51 +1,79 @@
-"use client"
-
 import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as AvatarPrimitive from "@radix-ui/react-avatar"
+import { View, Text, Image, StyleSheet } from "react-native"
 
-import { cn } from "lib/utils"
+interface AvatarProps {
+  style?: any
+  children?: React.ReactNode
+}
 
-const Avatar = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Root
-    ref={ref}
-    className={cn(
-      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
-      className
-    )}
-    {...props}
-  />
-))
-Avatar.displayName = AvatarPrimitive.Root.displayName
+interface AvatarImageProps {
+  src?: string
+  alt?: string
+  style?: any
+}
 
-const AvatarImage = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Image>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image
-    ref={ref}
-    className={cn("aspect-square h-full w-full", className)}
-    {...props}
-  />
-))
-AvatarImage.displayName = AvatarPrimitive.Image.displayName
+interface AvatarFallbackProps {
+  style?: any
+  children?: React.ReactNode
+}
 
-const AvatarFallback = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Fallback>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Fallback
-    ref={ref}
-    className={cn(
-      "flex h-full w-full items-center justify-center rounded-full bg-muted",
-      className
-    )}
-    {...props}
-  />
-))
-AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
+const Avatar = React.forwardRef<View, AvatarProps>(
+  ({ style, children, ...props }, ref) => (
+    <View
+      ref={ref}
+      style={[avatarStyles.avatar, style]}
+      {...props}
+    >
+      {children}
+    </View>
+  )
+)
+Avatar.displayName = "Avatar"
+
+const AvatarImage = React.forwardRef<Image, AvatarImageProps>(
+  ({ style, src, alt, ...props }, ref) => (
+    <Image
+      ref={ref}
+      source={{ uri: src || "/placeholder.svg?height=40&width=40" }}
+      style={[avatarStyles.image, style]}
+      accessibilityLabel={alt}
+      {...props}
+    />
+  )
+)
+AvatarImage.displayName = "AvatarImage"
+
+const AvatarFallback = React.forwardRef<View, AvatarFallbackProps>(
+  ({ style, children, ...props }, ref) => (
+    <View
+      ref={ref}
+      style={[avatarStyles.fallback, style]}
+      {...props}
+    >
+      {children}
+    </View>
+  )
+)
+AvatarFallback.displayName = "AvatarFallback"
+
+const avatarStyles = StyleSheet.create({
+  avatar: {
+    position: 'relative',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  fallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6', // muted
+  },
+})
 
 export { Avatar, AvatarImage, AvatarFallback }

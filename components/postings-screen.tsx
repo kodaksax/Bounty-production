@@ -10,7 +10,7 @@ import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import { ArrowLeft, Bookmark, Loader2, Share2, Target } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
 import { View, Text, TouchableOpacity, TextInput, ScrollView } from "react-native"
 import { AddBountyAmountScreen } from "./add-bounty-amount-screen"
@@ -281,10 +281,10 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
           <View className="flex items-center gap-3">
             {onBack && (
               <TouchableOpacity onPress={onBack} className="mr-1 p-2 touch-target-min">
-                <ArrowLeft className="h-5 w-5 text-white" />
+                <MaterialIcons name="arrow-back" size={24} color="#000000" />
               </TouchableOpacity>
             )}
-            <Target className="h-5 w-5 text-white" />
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
             <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
           <View className="flex items-center gap-4">
@@ -312,7 +312,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
         <View className="px-4 mb-4 bg-emerald-600">
           <View className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
             {tabs.map((tab) => (
-              <button
+              <TouchableOpacity
                 key={tab.id}
                 onPress={() => setActiveTab(tab.id)}
                 className={cn(
@@ -408,13 +408,13 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
               {/* New bounty form - iPhone optimized */}
               <View className="space-y-3">
                 <label className="text-emerald-100/90 text-base block">Title</label>
-                <input
-                  type="text"
+                <TextInput
+                  
                   name="title"
                   value={formData.title}
-                  onChange={handleInputChange}
+                  onChangeText={handleInputChange}
                   placeholder="A brief description of the job you need done"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
                 />
               </View>
 
@@ -431,19 +431,19 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
 
               <View className="space-y-3">
                 <label className="text-emerald-100/90 text-base block">Location</label>
-                <input
-                  type="text"
+                <TextInput
+                  
                   name="location"
                   value={formData.location}
-                  onChange={handleInputChange}
+                  onChangeText={handleInputChange}
                   placeholder="A location where the task can begin"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
                 />
               </View>
 
               <View className="space-y-3">
                 <label className="text-emerald-100/90 text-base block">Bounty Amount</label>
-                <button
+                <TouchableOpacity
                   onPress={() => setShowAddBountyAmount(true)}
                   className="w-full bg-emerald-700/50 rounded-lg p-4 text-left text-white focus:ring-1 focus:ring-white text-base flex justify-between items-center touch-target-min"
                 >
@@ -460,25 +460,25 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
 
               <View className="space-y-3">
                 <label className="text-emerald-100/90 text-base block">Timeline</label>
-                <input
-                  type="text"
+                <TextInput
+                  
                   name="timeline"
                   value={formData.timeline}
-                  onChange={handleInputChange}
+                  onChangeText={handleInputChange}
                   placeholder="When does this need to be completed by?"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
                 />
               </View>
 
               <View className="space-y-3">
                 <label className="text-emerald-100/90 text-base block">Skills Required</label>
-                <input
-                  type="text"
+                <TextInput
+                  
                   name="skills"
                   value={formData.skills}
-                  onChange={handleInputChange}
+                  onChangeText={handleInputChange}
                   placeholder="What skills are needed for this bounty?"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                  style="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
                 />
               </View>
             </View>
@@ -491,7 +491,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
               ) : myBounties.length === 0 ? (
                 <View className="text-center py-10 text-emerald-200">
                   <Text>You haven't posted any bounties yet</Text>
-                  <button
+                  <TouchableOpacity
                     onPress={() => setActiveTab("new")}
                     className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
                   >
@@ -500,9 +500,9 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                 </View>
               ) : (
                 myBounties.map((bounty) => (
-                  <div
+                  <View
                     key={bounty.id}
-                    className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
+                    style="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
                   >
                     <View className="p-4">
                       <View className="flex justify-between items-center mb-2">
