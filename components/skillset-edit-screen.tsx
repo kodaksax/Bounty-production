@@ -107,9 +107,8 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                   <Text className="text-xs text-emerald-300">Skillset:</Text>
                 </View>
                 <TextInput
-                  
                   value={skill.text}
-                  onChangeText={(e) => handleSkillChange(skill.id, e.target.value)}
+                  onChangeText={(text) => handleSkillChange(skill.id, text)}
                   placeholder="Enter your skill"
                   className="w-full bg-transparent border-none focus:outline-none text-white placeholder:text-emerald-300/50"
                 />
