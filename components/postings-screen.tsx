@@ -404,6 +404,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
           ) : activeTab === "new" ? (
             <View className="space-y-6">
               {/* New bounty form - iPhone optimized */}
+              <View className="space-y-3">
                 <Text className="text-emerald-100/90 text-base">Title</Text>
                 <TextInput
                   value={formData.title}

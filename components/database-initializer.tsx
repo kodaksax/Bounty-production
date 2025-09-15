@@ -42,7 +42,7 @@ export function DatabaseInitializer({ onInitialized }: { onInitialized: () => vo
           <Text className="text-emerald-100 mb-2">Please run the following SQL to create the necessary tables:</Text>
 
           <View className="bg-black/30 rounded-md p-3 text-emerald-100 max-h-60 overflow-y-auto text-xs">
-            <Textre>{`
+            <Text>{`
 -- Create profiles table
 CREATE TABLE IF NOT EXISTS profiles (
  id UUID PRIMARY KEY,
@@ -133,7 +133,7 @@ SELECT
 FROM bounties b
 WHERE b.title IN ('Mow My lawn!!!', 'Delivering a Package', 'Find my fathers murderer', 'Help setting up crypto wallet')
 ON CONFLICT DO NOTHING;
-            `}</pre>
+            `}</Text>
           </View>
         </View>
 

@@ -1,8 +1,8 @@
 
+import "../global.css"
 import { ThemeProvider } from "components/theme-provider";
 import type React from "react";
 import { StyleSheet, View } from 'react-native';
-//import "app/globals.css"
 
 export const metadata = {
   title: "Bounty App",

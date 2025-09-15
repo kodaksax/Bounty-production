@@ -1,8 +1,9 @@
 "use client"
 
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
-import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { MaterialIcons } from "@expo/vector-icons"
+import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { LinearGradient } from 'expo-linear-gradient'
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 interface ArchivedBountyCardProps {
   id: string
@@ -23,35 +24,46 @@ export function ArchivedBountyCard({
   avatarSrc,
   onMenuClick,
 }: ArchivedBountyCardProps) {
-  // Generate a unique gradient based on the bounty ID
-  const getGradient = (id: string) => {
+  // Generate two RGBA colors for a gradient based on the bounty ID
+  const getGradientColors = (id: string): [string, string] => {
     const hash = id.split("").reduce((acc, char) => {
       return char.charCodeAt(0) + ((acc << 5) - acc)
     }, 0)
 
-    const hue1 = hash % 360
+    const hue1 = Math.abs(hash) % 360
     const hue2 = (hue1 + 40) % 360
 
-    return `linear-gradient(135deg, hsla(${hue1}, 80%, 40%, 0.1), hsla(${hue2}, 90%, 30%, 0.2))`
+    // Return two semi-transparent HSL colors compatible with RN gradients
+    const c1 = `hsla(${hue1}, 80%, 40%, 0.12)`
+    const c2 = `hsla(${hue2}, 90%, 30%, 0.18)`
+
+    return [c1, c2]
   }
 
+  const styles = StyleSheet.create({
+    container: {
+      borderRadius: 12,
+      marginBottom: 16,
+    },
+  })
+
   return (
-    <View
-      className="relative mb-4 rounded-xl overflow-hidden"
-      style={{ background: "linear-gradient(to bottom, rgba(75, 85, 99, 0.9), rgba(55, 65, 81, 0.95))" }}
+    <LinearGradient
+      colors={["rgba(75,85,99,0.9)", "rgba(55,65,81,0.95)"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={[styles.container, { overflow: 'hidden' }]}
     >
-      {/* Animated gradient overlay */}
-      <View
-        className="absolute inset-0 opacity-60"
-        style={{
-          background: getGradient(id),
-          backgroundSize: "200% 200%",
-          animation: "gradientShift 8s ease infinite",
-        }}
+      {/* Gradient overlay based on id - using another LinearGradient for layered effect */}
+      <LinearGradient
+        colors={getGradientColors(id)}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}
       />
 
       {/* Content */}
-      <View className="relative p-4">
+  <View className="relative p-4">
         {/* Username and menu */}
         <View className="flex justify-between items-center mb-2">
           <View className="flex items-center gap-2">
@@ -91,6 +103,6 @@ export function ArchivedBountyCard({
           </View>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   )
 }
