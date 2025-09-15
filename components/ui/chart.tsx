@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "lib/utils"
@@ -61,7 +62,7 @@ const ChartContainer = React.forwardRef<
         <RechartsPrimitive.ResponsiveContainer>
           {children}
         </RechartsPrimitive.ResponsiveContainer>
-      </div>
+      </View>
     </ChartContext.Provider>
   )
 })
@@ -158,9 +159,9 @@ const ChartTooltipContent = React.forwardRef<
 
       if (labelFormatter) {
         return (
-          <div className={cn("font-medium", labelClassName)}>
+          <View className={cn("font-medium", labelClassName)}>
             {labelFormatter(value)}
-          </div>
+          </View>
         )
       }
 
@@ -168,7 +169,7 @@ const ChartTooltipContent = React.forwardRef<
         return null
       }
 
-      return <div className={cn("font-medium", labelClassName)}>{value}</div>
+      return <View className={cn("font-medium", labelClassName)}>{value}</View>
     }, [
       label,
       labelFormatter,
@@ -194,7 +195,7 @@ const ChartTooltipContent = React.forwardRef<
         )}
       >
         {!nestLabel ? tooltipLabel : null}
-        <div className="grid gap-1.5">
+        <View className="grid gap-1.5">
           {payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
@@ -242,25 +243,25 @@ const ChartTooltipContent = React.forwardRef<
                         nestLabel ? "items-end" : "items-center"
                       )}
                     >
-                      <div className="grid gap-1.5">
+                      <View className="grid gap-1.5">
                         {nestLabel ? tooltipLabel : null}
-                        <span className="text-muted-foreground">
+                        <Text className="text-muted-foreground">
                           {itemConfig?.label || item.name}
-                        </span>
-                      </div>
+                        </Text>
+                      </View>
                       {item.value && (
-                        <span className="font-mono font-medium tabular-nums text-foreground">
+                        <Text className="font-mono font-medium tabular-nums text-foreground">
                           {item.value.toLocaleString()}
-                        </span>
+                        </Text>
                       )}
-                    </div>
+                    </View>
                   </>
                 )}
-              </div>
+              </View>
             )
           })}
-        </div>
-      </div>
+        </View>
+      </View>
     )
   }
 )
@@ -318,10 +319,10 @@ const ChartLegendContent = React.forwardRef<
                 />
               )}
               {itemConfig?.label}
-            </div>
+            </View>
           )
         })}
-      </div>
+      </View>
     )
   }
 )

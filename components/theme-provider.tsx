@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import {
   ThemeProvider as NextThemesProvider,
   type ThemeProviderProps,

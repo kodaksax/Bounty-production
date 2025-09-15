@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react";
+import { View, Text, TouchableOpacity } from "react-native"
 
 import { Alert, AlertDescription } from "components/ui/alert";
 import { Button } from "components/ui/button";
@@ -135,7 +136,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
         </Alert>
       )}
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="title">Title</Label>
         <Input
           id="title"
@@ -146,10 +147,10 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           aria-invalid={!!getFieldError("title")}
           disabled={isSubmitting}
         />
-        {getFieldError("title") && <p className="text-sm text-red-500">{getFieldError("title")}</p>}
-      </div>
+        {getFieldError("title") && <Text className="text-sm text-red-500">{getFieldError("title")}</Text>}
+      </View>
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="description">Bounty Description</Label>
         <Textarea
           id="description"
@@ -161,10 +162,10 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           aria-invalid={!!getFieldError("description")}
           disabled={isSubmitting}
         />
-        {getFieldError("description") && <p className="text-sm text-red-500">{getFieldError("description")}</p>}
-      </div>
+        {getFieldError("description") && <Text className="text-sm text-red-500">{getFieldError("description")}</Text>}
+      </View>
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="location">Location</Label>
         <Input
           id="location"
@@ -175,11 +176,11 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           aria-invalid={!!getFieldError("location")}
           disabled={isSubmitting}
         />
-        {getFieldError("location") && <p className="text-sm text-red-500">{getFieldError("location")}</p>}
-      </div>
+        {getFieldError("location") && <Text className="text-sm text-red-500">{getFieldError("location")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
+      <View className="space-y-2">
+        <View className="flex items-center gap-2">
           <Checkbox
             id="is_for_honor"
             checked={formData.is_for_honor}
@@ -187,11 +188,11 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
             disabled={isSubmitting}
           />
           <Label htmlFor="is_for_honor">For Honor (No monetary reward)</Label>
-        </div>
-      </div>
+        </View>
+      </View>
 
       {!formData.is_for_honor && (
-        <div className="space-y-2">
+        <View className="space-y-2">
           <Label htmlFor="amount">Bounty Amount ($)</Label>
           <Input
             id="amount"
@@ -204,11 +205,11 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
             aria-invalid={!!getFieldError("amount")}
             disabled={isSubmitting}
           />
-          {getFieldError("amount") && <p className="text-sm text-red-500">{getFieldError("amount")}</p>}
-        </div>
+          {getFieldError("amount") && <Text className="text-sm text-red-500">{getFieldError("amount")}</Text>}
+        </View>
       )}
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="timeline">Timeline</Label>
         <Input
           id="timeline"
@@ -219,10 +220,10 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           aria-invalid={!!getFieldError("timeline")}
           disabled={isSubmitting}
         />
-        {getFieldError("timeline") && <p className="text-sm text-red-500">{getFieldError("timeline")}</p>}
-      </div>
+        {getFieldError("timeline") && <Text className="text-sm text-red-500">{getFieldError("timeline")}</Text>}
+      </View>
 
-      <div className="space-y-2">
+      <View className="space-y-2">
         <Label htmlFor="skills_required">Skills Required</Label>
         <Input
           id="skills_required"
@@ -233,8 +234,8 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           aria-invalid={!!getFieldError("skills_required")}
           disabled={isSubmitting}
         />
-        {getFieldError("skills_required") && <p className="text-sm text-red-500">{getFieldError("skills_required")}</p>}
-      </div>
+        {getFieldError("skills_required") && <Text className="text-sm text-red-500">{getFieldError("skills_required")}</Text>}
+      </View>
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? (

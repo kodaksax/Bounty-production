@@ -3,6 +3,7 @@
 import { ArrowLeft, Target } from "lucide-react"
 import { ArchivedBountyCard } from "./archived-bounty-card"
 import { useState } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 
 interface ArchivedBountiesScreenProps {
   onBack?: () => void
@@ -41,30 +42,30 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
   ])
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600">
+    <View className="flex flex-col min-h-screen bg-emerald-600">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <div className="flex items-center gap-3">
+      <View className="flex justify-between items-center p-4 pt-8">
+        <View className="flex items-center gap-3">
           <Target className="h-5 w-5 text-white" />
-          <span className="text-lg font-bold tracking-wider text-white">BOUNTY</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-white font-medium">$ 40.00</span>
-        </div>
-      </div>
+          <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+        </View>
+        <View className="flex items-center gap-4">
+          <Text className="text-white font-medium">$ 40.00</Text>
+        </View>
+      </View>
 
       {/* Title with back button */}
-      <div className="px-4 py-2 flex items-center">
-        <button onClick={onBack} className="mr-3 text-white">
+      <View className="px-4 py-2 flex items-center">
+        <TouchableOpacity onPress={onBack} className="mr-3 text-white">
           <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="text-white text-xl font-bold tracking-wide uppercase text-center flex-1 mr-5">
+        </TouchableOpacity>
+        <Text className="text-white text-xl font-bold tracking-wide uppercase text-center flex-1 mr-5">
           Archived Bounty
-        </h1>
-      </div>
+        </Text>
+      </View>
 
       {/* NFT Collection */}
-      <div className="flex-1 px-4 py-4 overflow-y-auto">
+      <View className="flex-1 px-4 py-4 overflow-y-auto">
         {archivedBounties.map((bounty) => (
           <ArchivedBountyCard
             key={bounty.id}
@@ -76,16 +77,16 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
             onMenuClick={() => console.log(`Menu clicked for ${bounty.id}`)}
           />
         ))}
-      </div>
+      </View>
 
       {/* Bottom Navigation Indicator */}
-      <div className="flex justify-center pb-6">
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-        <div className="h-1 w-1 rounded-full bg-white/50 mx-1"></div>
-      </div>
-    </div>
+      <View className="flex justify-center pb-6">
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+      </View>
+    </View>
   )
 }

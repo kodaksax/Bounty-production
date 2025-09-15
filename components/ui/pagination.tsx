@@ -1,4 +1,5 @@
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "lib/utils"
@@ -70,7 +71,7 @@ const PaginationPrevious = ({
     {...props}
   >
     <ChevronLeft className="h-4 w-4" />
-    <span>Previous</span>
+    <Text>Previous</Text>
   </PaginationLink>
 )
 PaginationPrevious.displayName = "PaginationPrevious"
@@ -85,7 +86,7 @@ const PaginationNext = ({
     className={cn("gap-1 pr-2.5", className)}
     {...props}
   >
-    <span>Next</span>
+    <Text>Next</Text>
     <ChevronRight className="h-4 w-4" />
   </PaginationLink>
 )
@@ -101,8 +102,8 @@ const PaginationEllipsis = ({
     {...props}
   >
     <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More pages</span>
-  </span>
+    <Text className="sr-only">More pages</Text>
+  </Text>
 )
 PaginationEllipsis.displayName = "PaginationEllipsis"
 

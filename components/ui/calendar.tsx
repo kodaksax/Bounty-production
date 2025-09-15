@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import  { DayPicker }from "react-day-picker"
 

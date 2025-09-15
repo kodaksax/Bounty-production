@@ -6,6 +6,7 @@ import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { ArrowLeft, Mic, SearchIcon, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 
 interface SearchScreenProps {
   onBack: () => void
@@ -124,9 +125,9 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
 
     return parts.map((part, i) =>
       regex.test(part) ? (
-        <span key={i} className="bg-yellow-300/30 text-white font-medium">
+        <Text key={i} className="bg-yellow-300/30 text-white font-medium">
           {part}
-        </span>
+        </Text>
       ) : (
         part
       ),
@@ -159,20 +160,20 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600">
+    <View className="flex flex-col min-h-screen bg-emerald-600">
       {/* Search Header */}
-      <div className="p-4 pt-8">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-white">
+      <View className="p-4 pt-8">
+        <View className="flex items-center gap-3">
+          <TouchableOpacity onPress={onBack} className="text-white">
             <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-xl font-bold text-white">Search</h1>
-        </div>
-      </div>
+          </TouchableOpacity>
+          <Text className="text-xl font-bold text-white">Search</Text>
+        </View>
+      </View>
 
       {/* Search Input */}
-      <div className="px-4 mb-4">
-        <div
+      <View className="px-4 mb-4">
+        <View
           className={cn(
             "relative flex items-center bg-emerald-700/50 rounded-full transition-all",
             isInputFocused ? "ring-2 ring-white/30" : "",
@@ -190,113 +191,113 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-emerald-300/70 focus:outline-none"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-3 text-emerald-300">
+            <TouchableOpacity onPress={() => setSearchQuery("")} className="absolute right-3 text-emerald-300">
               <X className="h-4 w-4" />
-            </button>
+            </TouchableOpacity>
           )}
-        </div>
-      </div>
+        </View>
+      </View>
 
       {/* Search Results or Recent Searches */}
-      <div className="flex-1 px-4 overflow-y-auto">
+      <View className="flex-1 px-4 overflow-y-auto">
         {searchQuery.trim() === "" ? (
           <>
             {recentSearches.length > 0 && (
-              <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-sm font-medium text-emerald-200">Recent searches</h2>
-                  <button onClick={() => setRecentSearches([])} className="text-xs text-emerald-300">
+              <View className="mb-4">
+                <View className="flex justify-between items-center mb-2">
+                  <Text className="text-sm font-medium text-emerald-200">Recent searches</Text>
+                  <TouchableOpacity onPress={() => setRecentSearches([])} className="text-xs text-emerald-300">
                     Clear all
-                  </button>
-                </div>
-                <div className="space-y-2">
+                  </TouchableOpacity>
+                </View>
+                <View className="space-y-2">
                   {recentSearches.map((search, index) => (
                     <button
                       key={index}
-                      onClick={() => handleSearch(search)}
+                      onPress={() => handleSearch(search)}
                       className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                     >
-                      <div className="flex items-center">
+                      <View className="flex items-center">
                         <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
-                        <span className="text-white">{search}</span>
-                      </div>
+                        <Text className="text-white">{search}</Text>
+                      </View>
                       <X
                         className="h-4 w-4 text-emerald-300 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
+                        onPress={(e) => {
                           e.stopPropagation()
                           setRecentSearches((prev) => prev.filter((_, i) => i !== index))
                         }}
                       />
-                    </button>
+                    </TouchableOpacity>
                   ))}
-                </div>
-              </div>
+                </View>
+              </View>
             )}
-            <div>
-              <h2 className="text-sm font-medium text-emerald-200 mb-2">Suggested searches</h2>
-              <div className="space-y-2">
+            <View>
+              <Text className="text-sm font-medium text-emerald-200 mb-2">Suggested searches</Text>
+              <View className="space-y-2">
                 <button
-                  onClick={() => handleSearch("@Jon_Doe")}
+                  onPress={() => handleSearch("@Jon_Doe")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
                   <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
-                  <span className="text-white">@Jon_Doe</span>
-                </button>
+                  <Text className="text-white">@Jon_Doe</Text>
+                </TouchableOpacity>
                 <button
-                  onClick={() => handleSearch("package")}
+                  onPress={() => handleSearch("package")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
                   <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
-                  <span className="text-white">package delivery</span>
-                </button>
-              </div>
-            </div>
+                  <Text className="text-white">package delivery</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </>
         ) : searchResults.length > 0 ? (
-          <div className="space-y-3">
+          <View className="space-y-3">
             {searchResults.map((bounty) => (
-              <div key={bounty.id} className="bg-emerald-700/40 rounded-lg p-3">
-                <div className="flex items-center gap-3 mb-2">
+              <View key={bounty.id} className="bg-emerald-700/40 rounded-lg p-3">
+                <View className="flex items-center gap-3 mb-2">
                   <Avatar className="h-8 w-8 border border-emerald-400/30">
                     <AvatarImage src={`/placeholder.svg?height=32&width=32`} alt={bounty.username} />
                     <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
                       {bounty.username.substring(1, 3).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <div className="text-sm text-emerald-100">{highlightMatch(bounty.username, searchQuery)}</div>
-                    <div className="text-xs text-emerald-300">{bounty.timeAgo}</div>
-                  </div>
-                </div>
-                <div className="font-medium text-white mb-2">{highlightMatch(bounty.title, searchQuery)}</div>
-                <div className="flex justify-between items-center">
-                  <div className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">
+                  <View>
+                    <View className="text-sm text-emerald-100">{highlightMatch(bounty.username, searchQuery)}</View>
+                    <View className="text-xs text-emerald-300">{bounty.timeAgo}</View>
+                  </View>
+                </View>
+                <View className="font-medium text-white mb-2">{highlightMatch(bounty.title, searchQuery)}</View>
+                <View className="flex justify-between items-center">
+                  <View className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">
                     ${bounty.amount}
-                  </div>
-                  <div className="text-sm text-emerald-200">{bounty.distance} mi</div>
-                </div>
-              </div>
+                  </View>
+                  <View className="text-sm text-emerald-200">{bounty.distance} mi</View>
+                </View>
+              </View>
             ))}
-          </div>
+          </View>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-emerald-200 text-center">
-            <p className="mb-2">No Results Found</p>
-            <p className="text-sm text-emerald-300/70">Try a different search term</p>
-          </div>
+          <View className="flex flex-col items-center justify-center h-full text-emerald-200 text-center">
+            <Text className="mb-2">No Results Found</Text>
+            <Text className="text-sm text-emerald-300/70">Try a different search term</Text>
+          </View>
         )}
-      </div>
+      </View>
 
       {/* Search Bar at Bottom */}
-      <div className="p-4 mt-auto">
-        <div className="flex items-center justify-between bg-white/20 backdrop-blur-sm rounded-full p-1">
-          <button className="h-10 w-10 rounded-full flex items-center justify-center text-white">
+      <View className="p-4 mt-auto">
+        <View className="flex items-center justify-between bg-white/20 backdrop-blur-sm rounded-full p-1">
+          <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
             <SearchIcon className="h-5 w-5" />
-          </button>
-          <button className="h-10 w-10 rounded-full flex items-center justify-center text-white">
+          </TouchableOpacity>
+          <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
             <Mic className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-    </div>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   )
 }

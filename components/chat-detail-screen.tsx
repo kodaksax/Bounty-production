@@ -1,8 +1,10 @@
 "use client"
 
 import type React from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 
 import { useState, useRef, useEffect } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { ArrowLeft, Phone, Video, Plus, Camera, Mic, Pause, Send, Target } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
@@ -138,67 +140,67 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
   }
 
   return (
-    <div className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="p-4 pt-8 pb-2">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center">
+      <View className="p-4 pt-8 pb-2">
+        <View className="flex justify-between items-center">
+          <View className="flex items-center">
             <Target className="h-5 w-5 mr-2" />
-            <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-          </div>
-          <span className="text-lg font-bold">$ 40.00</span>
-        </div>
-        <div className="h-px bg-emerald-500/50 my-2"></div>
-      </div>
+            <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+          </View>
+          <Text className="text-lg font-bold">$ 40.00</Text>
+        </View>
+        <View className="h-px bg-emerald-500/50 my-2"></View>
+      </View>
 
       {/* Chat Header */}
-      <div className="px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center">
-          <button onClick={onBack} className="mr-2">
+      <View className="px-4 py-2 flex items-center justify-between">
+        <View className="flex items-center">
+          <TouchableOpacity onPress={onBack} className="mr-2">
             <ArrowLeft className="h-5 w-5" />
-          </button>
+          </TouchableOpacity>
           <Avatar className="h-10 w-10 mr-2">
             <AvatarImage src={conversation.avatar} alt={conversation.name} />
             <AvatarFallback className="bg-emerald-700 text-emerald-200">
               {conversation.name.substring(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <div className="font-medium">{conversation.name}</div>
-            <div className="text-xs text-emerald-300">{conversation.status}</div>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button className="text-white">
+          <View>
+            <View className="font-medium">{conversation.name}</View>
+            <View className="text-xs text-emerald-300">{conversation.status}</View>
+          </View>
+        </View>
+        <View className="flex gap-3">
+          <TouchableOpacity className="text-white">
             <Phone className="h-5 w-5" />
-          </button>
-          <button className="text-white">
+          </TouchableOpacity>
+          <TouchableOpacity className="text-white">
             <Video className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-y-auto">
+      <View className="flex-1 p-4 overflow-y-auto">
         {messages.map((message) => (
-          <div key={message.id} className={cn("mb-3 max-w-[80%]", message.isUser ? "ml-auto" : "mr-auto")}>
+          <View key={message.id} className={cn("mb-3 max-w-[80%]", message.isUser ? "ml-auto" : "mr-auto")}>
             {message.isAudio ? (
-              <div className="bg-blue-600 rounded-2xl p-2 flex items-center">
+              <View className="bg-blue-600 rounded-2xl p-2 flex items-center">
                 <button
                   className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-2"
-                  onClick={() => setIsAudioPlaying(!isAudioPlaying)}
+                  onPress={() => setIsAudioPlaying(!isAudioPlaying)}
                 >
                   {isAudioPlaying ? (
                     <Pause className="h-4 w-4 text-blue-600" />
                   ) : (
                     <Play className="h-4 w-4 text-blue-600 ml-0.5" />
                   )}
-                </button>
-                <div className="flex-1 h-6">
+                </TouchableOpacity>
+                <View className="flex-1 h-6">
                   <AudioWaveform isPlaying={isAudioPlaying} />
-                </div>
-                <span className="text-xs text-white ml-2">{message.audioDuration}</span>
-              </div>
+                </View>
+                <Text className="text-xs text-white ml-2">{message.audioDuration}</Text>
+              </View>
             ) : (
               <div
                 className={cn(
@@ -206,24 +208,24 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
                   message.isUser ? "bg-white text-gray-800 rounded-br-none" : "bg-blue-600 text-white rounded-bl-none",
                 )}
               >
-                <p className="text-sm">{message.text}</p>
-                <div className={cn("text-right mt-1", message.isUser ? "text-gray-500" : "text-blue-200")}>
-                  <span className="text-xs">{message.time}</span>
-                </div>
-              </div>
+                <Text className="text-sm">{message.text}</Text>
+                <View className={cn("text-right mt-1", message.isUser ? "text-gray-500" : "text-blue-200")}>
+                  <Text className="text-xs">{message.time}</Text>
+                </View>
+              </View>
             )}
-          </div>
+          </View>
         ))}
-        <div ref={messagesEndRef} />
-      </div>
+        <View ref={messagesEndRef} />
+      </View>
 
       {/* Input Area */}
-      <div className="p-4 bg-emerald-700/30">
-        <div className="flex items-center gap-2">
-          <button className="h-10 w-10 rounded-full bg-emerald-700/50 flex items-center justify-center">
+      <View className="p-4 bg-emerald-700/30">
+        <View className="flex items-center gap-2">
+          <TouchableOpacity className="h-10 w-10 rounded-full bg-emerald-700/50 flex items-center justify-center">
             <Plus className="h-5 w-5 text-white" />
-          </button>
-          <div className="flex-1 bg-emerald-700/50 rounded-full flex items-center px-4">
+          </TouchableOpacity>
+          <View className="flex-1 bg-emerald-700/50 rounded-full flex items-center px-4">
             <input
               type="text"
               value={newMessage}
@@ -236,25 +238,25 @@ export function ChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps
             />
             {newMessage ? (
               <button
-                onClick={handleSendMessage}
+                onPress={handleSendMessage}
                 className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
               >
                 <Send className="h-4 w-4 text-white" />
-              </button>
+              </TouchableOpacity>
             ) : (
               <>
-                <button className="p-2 text-emerald-300">
+                <TouchableOpacity className="p-2 text-emerald-300">
                   <Camera className="h-5 w-5" />
-                </button>
-                <button className="p-2 text-emerald-300">
+                </TouchableOpacity>
+                <TouchableOpacity className="p-2 text-emerald-300">
                   <Mic className="h-5 w-5" />
-                </button>
+                </TouchableOpacity>
               </>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </View>
+        </View>
+      </View>
+    </View>
   )
 }
 
@@ -273,7 +275,7 @@ function Play(props: React.SVGProps<SVGSVGElement>) {
       strokeLinejoin="round"
       {...props}
     >
-      <polygon points="5 3 19 12 5 21 5 3" />
+      <Textolygon points="5 3 19 12 5 21 5 3" />
     </svg>
   )
 }
@@ -281,7 +283,7 @@ function Play(props: React.SVGProps<SVGSVGElement>) {
 // Audio waveform visualization
 function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
   return (
-    <div className="flex items-center justify-between h-full w-full">
+    <View className="flex items-center justify-between h-full w-full">
       {Array.from({ length: 20 }).map((_, i) => {
         // Generate random heights for the bars
         const height = Math.random() * 100
@@ -299,6 +301,6 @@ function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
           />
         )
       })}
-    </div>
+    </View>
   )
 }

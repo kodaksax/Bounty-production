@@ -83,8 +83,11 @@ const SidebarProvider = React.forwardRef<
           _setOpen(openState)
         }
 
-        // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+  // In React Native, document.cookie is not available. Persist sidebar state with AsyncStorage if needed.
+  // Example (uncomment and install @react-native-async-storage/async-storage if you want persistence):
+  // import AsyncStorage from '@react-native-async-storage/async-storage';
+  // AsyncStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState));
+  // For now, this is a no-op in React Native/Expo.
       },
       [setOpenProp, open]
     )

@@ -1,5 +1,6 @@
 "use client"
 
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { MoreVertical } from "lucide-react"
 
@@ -35,12 +36,12 @@ export function ArchivedBountyCard({
   }
 
   return (
-    <div
+    <View
       className="relative mb-4 rounded-xl overflow-hidden"
       style={{ background: "linear-gradient(to bottom, rgba(75, 85, 99, 0.9), rgba(55, 65, 81, 0.95))" }}
     >
       {/* Animated gradient overlay */}
-      <div
+      <View
         className="absolute inset-0 opacity-60"
         style={{
           background: getGradient(id),
@@ -50,46 +51,46 @@ export function ArchivedBountyCard({
       />
 
       {/* Content */}
-      <div className="relative p-4">
+      <View className="relative p-4">
         {/* Username and menu */}
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
+        <View className="flex justify-between items-center mb-2">
+          <View className="flex items-center gap-2">
+            <View className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
               <Avatar className="h-5 w-5">
                 <AvatarImage src={avatarSrc || "/placeholder.svg?height=20&width=20"} alt={username} />
                 <AvatarFallback className="bg-emerald-700 text-emerald-200 text-[8px]">
                   {username.substring(1, 3).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-            </div>
-            <span className="text-xs text-emerald-200">{username}</span>
-          </div>
-          <button onClick={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
+            </View>
+            <Text className="text-xs text-emerald-200">{username}</Text>
+          </View>
+          <TouchableOpacity onPress={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
             <MoreVertical className="h-5 w-5" />
-          </button>
-        </div>
+          </TouchableOpacity>
+        </View>
 
         {/* Title */}
-        <h3 className="text-white font-medium mb-6">{title}</h3>
+        <Text className="text-white font-medium mb-6">{title}</Text>
 
         {/* Watermark */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-          <div className="text-4xl font-bold tracking-widest text-white rotate-12">BOUNTY</div>
-        </div>
+        <View className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+          <Text className="text-4xl font-bold tracking-widest text-white rotate-12">BOUNTY</Text>
+        </View>
 
         {/* NFT details */}
-        <div className="flex justify-between items-center mt-2">
-          <div className="text-yellow-500 font-bold text-lg">${amount.toLocaleString()}</div>
-          <div className="text-sm text-gray-300">{distance} mi</div>
-        </div>
+        <View className="flex justify-between items-center mt-2">
+          <Text className="text-yellow-500 font-bold text-lg">${amount.toLocaleString()}</Text>
+          <Text className="text-sm text-gray-300">{distance} mi</Text>
+        </View>
 
         {/* NFT badge */}
-        <div className="absolute top-2 right-2">
-          <div className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/50">
-            NFT #{id.substring(0, 6)}
-          </div>
-        </div>
-      </div>
-    </div>
+        <View className="absolute top-2 right-2">
+          <View className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/50">
+            <Text className="text-xs text-emerald-300">NFT #{id.substring(0, 6)}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
   )
 }
