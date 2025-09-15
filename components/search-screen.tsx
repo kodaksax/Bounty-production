@@ -4,9 +4,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { ArrowLeft, Mic, SearchIcon, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity, ScrollView, TextInput } from "react-native"
 
 interface SearchScreenProps {
   onBack: () => void
@@ -165,7 +165,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       <View className="p-4 pt-8">
         <View className="flex items-center gap-3">
           <TouchableOpacity onPress={onBack} className="text-white">
-            <ArrowLeft className="h-5 w-5" />
+            <MaterialIcons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
           <Text className="text-xl font-bold text-white">Search</Text>
         </View>
@@ -179,20 +179,21 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             isInputFocused ? "ring-2 ring-white/30" : "",
           )}
         >
-          <SearchIcon className="absolute left-3 h-4 w-4 text-emerald-300" />
-          <input
+          <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
+          <TextInput
             ref={inputRef}
-            type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChangeText={setSearchQuery}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
             placeholder="Search bounties or users..."
             className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-emerald-300/70 focus:outline-none"
+            placeholderTextColor="#6ee7b7"
+            style={{ paddingLeft: 40, paddingRight: 40 }}
           />
           {searchQuery && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} className="absolute right-3 text-emerald-300">
-              <X className="h-4 w-4" />
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ position: 'absolute', right: 12 }}>
+              <MaterialIcons name="close" size={16} color="#6ee7b7" />
             </TouchableOpacity>
           )}
         </View>
@@ -212,22 +213,23 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                 </View>
                 <View className="space-y-2">
                   {recentSearches.map((search, index) => (
-                    <button
+                    <TouchableOpacity
                       key={index}
                       onPress={() => handleSearch(search)}
                       className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                     >
                       <View className="flex items-center">
-                        <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
+                        <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                         <Text className="text-white">{search}</Text>
                       </View>
-                      <X
-                        className="h-4 w-4 text-emerald-300 opacity-0 group-hover:opacity-100"
+                      <TouchableOpacity
                         onPress={(e) => {
                           e.stopPropagation()
                           setRecentSearches((prev) => prev.filter((_, i) => i !== index))
                         }}
-                      />
+                      >
+                        <MaterialIcons name="close" size={16} color="#6ee7b7" />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -236,18 +238,18 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             <View>
               <Text className="text-sm font-medium text-emerald-200 mb-2">Suggested searches</Text>
               <View className="space-y-2">
-                <button
+                <TouchableOpacity
                   onPress={() => handleSearch("@Jon_Doe")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
-                  <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
+                  <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                   <Text className="text-white">@Jon_Doe</Text>
                 </TouchableOpacity>
-                <button
+                <TouchableOpacity
                   onPress={() => handleSearch("package")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
-                  <SearchIcon className="h-4 w-4 text-emerald-300 mr-3" />
+                  <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                   <Text className="text-white">package delivery</Text>
                 </TouchableOpacity>
               </View>
@@ -294,7 +296,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             <SearchIcon className="h-5 w-5" />
           </TouchableOpacity>
           <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
-            <Mic className="h-5 w-5" />
+            <MaterialIcons name="mic" size={20} color="white" />
           </TouchableOpacity>
         </View>
       </View>

@@ -78,31 +78,31 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       <View className="flex-1 px-4 pb-40">
         <View className="grid grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
+            <TouchableOpacity
               key={num}
               className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
               onPress={() => handleNumberPress(num)}
             >
-              {num}
+              <Text className="text-2xl font-medium text-white">{num}</Text>
             </TouchableOpacity>
           ))}
-          <button
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={handleDecimalPress}
           >
-            .
+            <Text className="text-2xl font-medium text-white">.</Text>
           </TouchableOpacity>
-          <button
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={() => handleNumberPress(0)}
           >
-            0
+            <Text className="text-2xl font-medium text-white">0</Text>
           </TouchableOpacity>
-          <button
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
             onPress={handleDeletePress}
           >
-            &lt;
+            <Text className="text-2xl font-medium text-white">{"<"}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -110,7 +110,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       {/* Add Button - Fixed at bottom with safe area padding, moved up by 50px */}
       <View className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: "50px" }}>
         <View className="p-4 pb-8">
-          <button
+          <TouchableOpacity
             className={cn(
               "w-full py-4 rounded-lg font-medium text-center",
               Number.parseFloat(amount) > 0
@@ -120,7 +120,10 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             disabled={Number.parseFloat(amount) <= 0}
             onPress={handleAddMoney}
           >
-            Add
+            <Text className={cn(
+              "font-medium text-center",
+              Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+            )}>Add</Text>
           </TouchableOpacity>
         </View>
       </View>
