@@ -1,10 +1,8 @@
 "use client"
 
 import type React from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
-
-import { useState, useRef } from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native"
+import { useState } from "react"
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 
@@ -29,7 +27,6 @@ export function EditProfileScreen({
   const [about, setAbout] = useState(initialAbout)
   const [phone, setPhone] = useState(initialPhone)
   const [avatar, setAvatar] = useState(initialAvatar)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSave = () => {
     onSave({
@@ -40,18 +37,13 @@ export function EditProfileScreen({
   }
 
   const handleAvatarClick = () => {
-    fileInputRef.current?.click()
+    // In React Native, we would use react-native-image-picker
+    // For now, this is a placeholder
+    console.log("Avatar click - would open image picker")
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // In a real app, you would upload the file to a server
-      // For now, we'll just create a local URL
-      const url = URL.createObjectURL(file)
-      setAvatar(url)
-    }
-  }
+  // Removed handleFileChange as it's not applicable in React Native
+  // In React Native, use react-native-image-picker for file selection
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -103,9 +95,9 @@ export function EditProfileScreen({
               style="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
               onPress={handleAvatarClick}
             >
-              <Camera className="h-4 w-4 text-white" />
+              <MaterialIcons name="camera-alt" size={16} color="white" />
             </TouchableOpacity>
-            <TextInput type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} / />
+            {/* Removed HTML file input - not applicable in React Native */}
           </View>
           <Text className="text-xs text-center text-gray-300 max-w-[200px]">
             Enter your name and add an optional profile picture
@@ -116,9 +108,9 @@ export function EditProfileScreen({
         {/* Name Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <TextInput
-            
             value={name}
-            onChangeText={(e) => setName(e.target.value)}
+            onChangeText={setName}
+            placeholder="Enter your name"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
@@ -126,9 +118,10 @@ export function EditProfileScreen({
         {/* Phone Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <TextInput
-            
             value={phone}
-            onChangeText={(e) => setPhone(e.target.value)}
+            onChangeText={setPhone}
+            placeholder="Enter phone number"
+            keyboardType="phone-pad"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
@@ -136,57 +129,56 @@ export function EditProfileScreen({
         {/* About Field */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
           <TextInput
-            
             value={about}
-            onChangeText={(e) => setAbout(e.target.value)}
+            onChangeText={setAbout}
             placeholder="About"
+            multiline
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         {/* Additional Fields for Scrolling */}
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Email</label>
+          <Text className="text-xs text-emerald-300 block mb-1">Email</Text>
           <TextInput
-            type="email"
             placeholder="your.email@example.com"
-            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Location</label>
+          <Text className="text-xs text-emerald-300 block mb-1">Location</Text>
           <TextInput
-            
             placeholder="City, Country"
-            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Website</label>
+          <Text className="text-xs text-emerald-300 block mb-1">Website</Text>
           <TextInput
-            type="url"
             placeholder="https://yourwebsite.com"
-            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            keyboardType="url"
+            autoCapitalize="none"
+            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Birthday</label>
+          <Text className="text-xs text-emerald-300 block mb-1">Birthday</Text>
           <TextInput
-            
             placeholder="MM/DD/YYYY"
-            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
         <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Languages</label>
+          <Text className="text-xs text-emerald-300 block mb-1">Languages</Text>
           <TextInput
-            
             placeholder="English, Spanish, etc."
-            style="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
         </View>
 
