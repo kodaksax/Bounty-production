@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group"
+import { TouchableOpacity, View } from "react-native"
+// Replace Radix ToggleGroup with RN-friendly wrapper
 import { type VariantProps } from "class-variance-authority"
 
-import { cn } from "lib/utils"
 import { toggleVariants } from "components/ui/toggle"
 
 const ToggleGroupContext = React.createContext<
@@ -15,48 +14,27 @@ const ToggleGroupContext = React.createContext<
   variant: "default",
 })
 
-const ToggleGroup = React.forwardRef<
-  React.ElementRef<typeof ToggleGroupPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root> &
-    VariantProps<typeof toggleVariants>
->(({ className, variant, size, children, ...props }, ref) => (
-  <ToggleGroupPrimitive.Root
-    ref={ref}
-    className={cn("flex items-center justify-center gap-1", className)}
-    {...props}
-  >
+const ToggleGroup = React.forwardRef<any, React.PropsWithChildren<any>>(({ className, variant, size, children, ...props }, ref) => (
+  <View ref={ref} style={{ flexDirection: 'row', gap: 4 }} {...(props as any)}>
     <ToggleGroupContext.Provider value={{ variant, size }}>
       {children}
     </ToggleGroupContext.Provider>
-  </ToggleGroupPrimitive.Root>
+  </View>
 ))
 
-ToggleGroup.displayName = ToggleGroupPrimitive.Root.displayName
+ToggleGroup.displayName = "ToggleGroup"
 
-const ToggleGroupItem = React.forwardRef<
-  React.ElementRef<typeof ToggleGroupPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Item> &
-    VariantProps<typeof toggleVariants>
->(({ className, children, variant, size, ...props }, ref) => {
+const ToggleGroupItem = React.forwardRef<any, React.PropsWithChildren<any>>(({ className, children, variant, size, ...props }, ref) => {
   const context = React.useContext(ToggleGroupContext)
 
   return (
-    <ToggleGroupPrimitive.Item
-      ref={ref}
-      className={cn(
-        toggleVariants({
-          variant: context.variant || variant,
-          size: context.size || size,
-        }),
-        className
-      )}
-      {...props}
-    >
+    <TouchableOpacity ref={ref as any} {...(props as any)}>
       {children}
-    </ToggleGroupPrimitive.Item>
+    </TouchableOpacity>
   )
 })
 
-ToggleGroupItem.displayName = ToggleGroupPrimitive.Item.displayName
+ToggleGroupItem.displayName = "ToggleGroupItem"
 
 export { ToggleGroup, ToggleGroupItem }
+

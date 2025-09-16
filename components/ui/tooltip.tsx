@@ -1,31 +1,31 @@
 "use client"
 
 import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { TouchableOpacity, View } from "react-native"
 
-import { cn } from "lib/utils"
+// Minimal RN Tooltip primitives — these do not implement hover/toolip behavior
+// as in web. They provide a simple API so call sites compile and can opt-in to
+// an RN tooltip implementation later.
 
-const TooltipProvider = TooltipPrimitive.Provider
+const TooltipProvider: React.FC<any> = ({ children }) => <>{children}</>
 
-const Tooltip = TooltipPrimitive.Root
+const Tooltip: React.FC<any> = ({ children }) => <>{children}</>
 
-const TooltipTrigger = TooltipPrimitive.Trigger
+const TooltipTrigger = ({ asChild = false, children, ...props }: any) => {
+  if (asChild && React.isValidElement(children)) {
+    // Clone the child and merge props so call sites that pass asChild work.
+    return React.cloneElement(children as React.ReactElement, { ...(props as any) })
+  }
 
-const TooltipContent = React.forwardRef<
-  React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <TooltipPrimitive.Content
-    ref={ref}
-    sideOffset={sideOffset}
-    className={cn(
-      "z-50 overflow-hidden rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-      className
-    )}
-    {...props}
-  />
+  return <TouchableOpacity {...(props as any)}>{children}</TouchableOpacity>
+}
+
+const TooltipContent = React.forwardRef<View, any>(({ children, ...props }, ref) => (
+  <View ref={ref} {...(props as any)}>
+    {children}
+  </View>
 ))
-TooltipContent.displayName = TooltipPrimitive.Content.displayName
+TooltipContent.displayName = "TooltipContent"
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+

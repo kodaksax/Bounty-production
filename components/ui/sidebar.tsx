@@ -1,9 +1,9 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { Slot } from "@radix-ui/react-slot"
 import * as React from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import Slot from "../../stubs/radix-slot"
 
 import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
