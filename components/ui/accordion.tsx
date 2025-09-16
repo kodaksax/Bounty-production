@@ -1,7 +1,8 @@
-import * as React from "react"
-import { View, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager, ViewProps, TextProps } from "react-native"
-import { MaterialIcons } from "@expo/vector-icons"
-import { cn } from "lib/utils"
+import { MaterialIcons } from "@expo/vector-icons";
+import { cn } from "lib/utils";
+import * as React from "react";
+import { LayoutAnimation, Platform, Text, TouchableOpacity, UIManager, View, ViewProps } from "react-native";
+
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -111,12 +112,13 @@ const AccordionItem = React.forwardRef<View, AccordionItemProps>(
 );
 AccordionItem.displayName = "AccordionItem";
 
-interface AccordionTriggerProps extends Omit<TouchableOpacity['props'], 'onPress'> {
+// Derive props (including ref) from TouchableOpacity component to get correct types
+interface AccordionTriggerProps extends Omit<React.ComponentPropsWithRef<typeof TouchableOpacity>, 'onPress'> {
   value?: string;
   className?: string;
 }
 
-const AccordionTrigger = React.forwardRef<TouchableOpacity, AccordionTriggerProps>(
+const AccordionTrigger = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, AccordionTriggerProps>(
   ({ className, children, value, ...props }, ref) => {
     const context = React.useContext(AccordionContext);
     
@@ -186,4 +188,5 @@ const AccordionContent = React.forwardRef<View, AccordionContentProps>(
 AccordionContent.displayName = "AccordionContent";
 
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
+export { Accordion, AccordionContent, AccordionItem, AccordionTrigger };
+

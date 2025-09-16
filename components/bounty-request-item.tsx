@@ -1,7 +1,9 @@
 "use client"
 
+import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { MaterialIcons } from "@expo/vector-icons"
+import React from 'react'
+import { Text, TouchableOpacity, View } from 'react-native'
 
 interface BountyRequestItemProps {
   username: string

@@ -1,12 +1,14 @@
 "use client"
+import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { bountyRequestService } from "lib/services/bounty-request-service"
-import { bountyService } from "lib/services/bounty-service"
-import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import { MaterialIcons } from "@expo/vector-icons"
-import { useEffect, useState } from "react"
-import { SettingsScreen } from "./settings-screen"
-import { SkillsetEditScreen } from "./skillset-edit-screen"
+import { bountyRequestService } from "lib/services/bounty-request-service";
+import { bountyService } from "lib/services/bounty-service";
+import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import * as React from "react";
+import { useEffect, useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
+import { SettingsScreen } from "./settings-screen";
+import { SkillsetEditScreen } from "./skillset-edit-screen";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -108,15 +110,15 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
       case "code":
-        return <Code className="h-4 w-4 text-emerald-300" />
+        return <MaterialIcons name="code" size={16} color="#34d399" />
       case "target":
-        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+        return <MaterialIcons name="gps-fixed" size={16} color="#34d399" />
       case "heart":
-        return <MaterialIcons name="favorite" size={24} color="#000000" />
+        return <MaterialIcons name="favorite" size={16} color="#34d399" />
       case "globe":
-        return <Globe className="h-4 w-4 text-emerald-300" />
+        return <MaterialIcons name="public" size={16} color="#34d399" />
       default:
-        return <Code className="h-4 w-4 text-emerald-300" />
+        return <MaterialIcons name="code" size={16} color="#34d399" />
     }
   }
 
@@ -301,8 +303,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                   <View className="flex justify-between items-center mb-1">
                     <Text className="text-sm font-medium flex items-center gap-1">
                       {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#000000" />}
-                      {activity.type === "job_accepted" && <CheckCircle className="h-3 w-3" />}
-                      {activity.type === "badge_earned" && <Award className="h-3 w-3 text-yellow-400" />}
+                      {activity.type === "job_accepted" && <MaterialIcons name="check-circle" size={14} color="#ffffff" />}
+                      {activity.type === "badge_earned" && <MaterialIcons name="emoji-events" size={14} color="#f59e0b" />}
                       {activity.type === "bounty_posted"
                         ? "Bounty Posted"
                         : activity.type === "job_accepted"
@@ -330,19 +332,19 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               return (
                 <View
                   key={i}
-                  style={`bg-emerald-700/30 rounded-lg p-3 flex flex-col items-center justify-center aspect-square ${
+                  className={`bg-emerald-700/30 rounded-lg p-3 flex flex-col items-center justify-center aspect-square ${
                     isEarned ? "border border-yellow-400" : "opacity-50"
                   }`}
                 >
                   <View
-                    style={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
+                    className={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
                   >
                     {i % 3 === 0 ? (
-                      <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                      <MaterialIcons name="gps-fixed" size={20} color="#000000" />
                     ) : i % 3 === 1 ? (
-                      <MaterialIcons name="favorite" size={24} color="#000000" />
+                      <MaterialIcons name="favorite" size={20} color="#000000" />
                     ) : (
-                      <Globe className={`h-5 w-5 ${isEarned ? "text-yellow-400" : "text-emerald-300"}`} />
+                      <MaterialIcons name="public" size={20} color={isEarned ? "#f59e0b" : "#34d399"} />
                     )}
                   </View>
                   <Text className="text-xs text-center">

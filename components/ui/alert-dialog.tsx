@@ -49,18 +49,18 @@ const AlertDialog: React.FC<AlertDialogProps> = ({ open = false, onOpenChange, c
   );
 };
 
-interface AlertDialogTriggerProps extends TouchableOpacity['props'] {
+interface AlertDialogTriggerProps extends Omit<React.ComponentPropsWithRef<typeof TouchableOpacity>, 'onPress'> {
+  onPress?: React.ComponentPropsWithRef<typeof TouchableOpacity>['onPress'];
   asChild?: boolean;
 }
 
-const AlertDialogTrigger = React.forwardRef<TouchableOpacity, AlertDialogTriggerProps>(
+const AlertDialogTrigger = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, AlertDialogTriggerProps>(
   ({ children, onPress, ...props }, ref) => {
-    const context = React.useContext(AlertDialogContext);
-    
-    if (!context) {
-      throw new Error("AlertDialogTrigger must be used within an AlertDialog");
-    }
-
+     const context = React.useContext(AlertDialogContext);
+     
+     if (!context) {
+       throw new Error("AlertDialogTrigger must be used within an AlertDialog");
+     }
     const handlePress = (event: any) => {
       context.onOpenChange(true);
       onPress?.(event);
@@ -215,11 +215,11 @@ const AlertDialogDescription = React.forwardRef<View, AlertDialogDescriptionProp
 );
 AlertDialogDescription.displayName = "AlertDialogDescription";
 
-interface AlertDialogActionProps extends TouchableOpacity['props'] {
+interface AlertDialogActionProps extends React.ComponentPropsWithRef<typeof TouchableOpacity> {
   className?: string;
 }
 
-const AlertDialogAction = React.forwardRef<TouchableOpacity, AlertDialogActionProps>(
+const AlertDialogAction = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, AlertDialogActionProps>(
   ({ className, children, onPress, ...props }, ref) => {
     const context = React.useContext(AlertDialogContext);
     
@@ -250,17 +250,17 @@ const AlertDialogAction = React.forwardRef<TouchableOpacity, AlertDialogActionPr
 );
 AlertDialogAction.displayName = "AlertDialogAction";
 
-interface AlertDialogCancelProps extends TouchableOpacity['props'] {
+interface AlertDialogCancelProps extends React.ComponentPropsWithRef<typeof TouchableOpacity> {
   className?: string;
 }
 
-const AlertDialogCancel = React.forwardRef<TouchableOpacity, AlertDialogCancelProps>(
+const AlertDialogCancel = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, AlertDialogCancelProps>(
   ({ className, children, onPress, ...props }, ref) => {
-    const context = React.useContext(AlertDialogContext);
-    
-    if (!context) {
-      throw new Error("AlertDialogCancel must be used within an AlertDialog");
-    }
+     const context = React.useContext(AlertDialogContext);
+     
+     if (!context) {
+       throw new Error("AlertDialogCancel must be used within an AlertDialog");
+     }
 
     const handlePress = (event: any) => {
       onPress?.(event);

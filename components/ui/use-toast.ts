@@ -3,20 +3,21 @@
 // Inspired by react-hot-toast library
 import * as React from "react"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "components/ui/toast"
+// Local tolerant toast types to avoid coupling with web-only toast implementations
+type ToastActionElement = any
+type ToastProps = {
+  id?: string
+  open?: boolean
+  title?: React.ReactNode
+  description?: React.ReactNode
+  onOpenChange?: (open: boolean) => void
+  action?: ToastActionElement
+}
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
-type ToasterToast = ToastProps & {
-  id: string
-  title?: React.ReactNode
-  description?: React.ReactNode
-  action?: ToastActionElement
-}
+type ToasterToast = ToastProps & { id: string }
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -191,4 +192,5 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { toast, useToast }
+

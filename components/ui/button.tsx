@@ -2,8 +2,9 @@ import * as React from "react"
 import { TouchableOpacity, TouchableOpacityProps, Text } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "lib/utils"
+import { StyleSheet, ViewStyle, TextStyle } from "react-native";
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
@@ -39,27 +40,31 @@ export interface ButtonProps
   children?: React.ReactNode;
 }
 
-const Button = React.forwardRef<TouchableOpacity, ButtonProps>(
+const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
   ({ className, variant, size, disabled, onPress, children, ...props }, ref) => {
     return (
       <TouchableOpacity
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        style={buttonStyle}
+        style={[
+          buttonStyles.base,
+          buttonStyles[variant ?? "default"],
+          buttonStyles[size ?? "default"],
+          disabled && buttonStyles.disabled,
+        ]}
         disabled={disabled}
         onPress={onPress}
         {...props}
       >
-        {typeof children === 'string' ? (
+        {typeof children === "string" ? (
           <Text className="text-inherit font-inherit">{children}</Text>
         ) : (
           children
         )}
-
       </TouchableOpacity>
-    )
+    );
   }
-)
+);
 Button.displayName = "Button"
 
 const buttonStyles = StyleSheet.create({

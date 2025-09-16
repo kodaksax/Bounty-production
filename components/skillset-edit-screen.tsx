@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -28,15 +28,15 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
       case "code":
-        return <Code className="h-5 w-5 text-red-500" />
+        return <MaterialIcons name="code" size={20} color="#ef4444" />
       case "target":
-        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+        return <MaterialIcons name="gps-fixed" size={20} color="#000" />
       case "heart":
-        return <MaterialIcons name="favorite" size={24} color="#000000" />
+        return <MaterialIcons name="favorite" size={20} color="#000" />
       case "globe":
-        return <Globe className="h-5 w-5 text-blue-500" />
+        return <MaterialIcons name="public" size={20} color="#3b82f6" />
       default:
-        return <Code className="h-5 w-5" />
+        return <MaterialIcons name="code" size={20} color="#000" />
     }
   }
 
@@ -91,9 +91,9 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
       <View className="px-4 py-2 flex-1">
         <View className="space-y-4">
           {skills.map((skill) => (
-            <View
+            <TouchableOpacity
               key={skill.id}
-              style={`flex items-center bg-emerald-700/50 rounded-lg p-2 ${
+              className={`flex items-center bg-emerald-700/50 rounded-lg p-2 ${
                 selectedSkill === skill.id ? "border-2 border-purple-500" : ""
               }`}
               onPress={() => setSelectedSkill(skill.id)}
@@ -113,7 +113,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
                   className="w-full bg-transparent border-none focus:outline-none text-white placeholder:text-emerald-300/50"
                 />
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </View>

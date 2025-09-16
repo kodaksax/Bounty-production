@@ -1,10 +1,8 @@
 "use client"
 
-import type React from "react"
-
-import { MaterialIcons } from "@expo/vector-icons"
-import { useRef, useState } from "react"
-import { Dimensions, PanResponder, View } from "react-native"
+import MaterialIcons from '@expo/vector-icons/MaterialIcons'
+import React, { useRef, useState } from "react"
+import { Dimensions, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { AddCardModal } from "./add-card-modal"
 
 

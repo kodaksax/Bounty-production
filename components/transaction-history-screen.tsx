@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
-import { cn } from "lib/utils"
 import { format } from "date-fns"
-import { TransactionDetailModal } from "./transaction-detail-modal"
 import { transactionService } from "lib/services/transaction-service"
+import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Text, TouchableOpacity, View } from "react-native"
+import { TransactionDetailModal } from "./transaction-detail-modal"
 
 export interface Transaction {
   id: string
@@ -31,7 +31,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const [activeFilter, setActiveFilter] = useState<"all" | "deposits" | "withdrawals" | "bounties">("all")
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const loadingRef = useRef<HTMLDivElement>(null)
+  const loadingRef = useRef<any>(null)
 
   // Use intersection observer for infinite scrolling
   useEffect(() => {
@@ -142,9 +142,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "bounty_posted":
         return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
-        return <CheckCircle className="h-5 w-5 text-blue-400" />
+        return <MaterialIcons name="check-circle" size={20} color="#60a5fa" />
       case "bounty_received":
-        return <CreditCard className="h-5 w-5 text-purple-400" />
+        return <MaterialIcons name="credit-card" size={20} color="#a78bfa" />
     }
   }
 
@@ -186,7 +186,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       <View className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
         <View className="flex space-x-3">
           <TouchableOpacity
-            style={cn(
+            className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "all"
                 ? "bg-emerald-700 text-white"
@@ -197,7 +197,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             All Transactions
           </TouchableOpacity>
           <TouchableOpacity
-            style={cn(
+            className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "deposits"
                 ? "bg-emerald-700 text-white"
@@ -208,7 +208,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             Deposits
           </TouchableOpacity>
           <TouchableOpacity
-            style={cn(
+            className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "withdrawals"
                 ? "bg-emerald-700 text-white"
@@ -219,7 +219,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             Withdrawals
           </TouchableOpacity>
           <TouchableOpacity
-            style={cn(
+            className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "bounties"
                 ? "bg-emerald-700 text-white"
@@ -251,7 +251,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         ) : transactions.length === 0 ? (
           <View className="flex flex-col items-center justify-center py-10 text-center">
             <View className="h-16 w-16 rounded-full bg-emerald-700/50 flex items-center justify-center mb-4">
-              <CreditCard className="h-8 w-8 text-emerald-300" />
+              <MaterialIcons name="credit-card" size={32} color="#86efac" />
             </View>
             <Text className="text-emerald-200 mb-2">No transactions found</Text>
             <Text className="text-sm text-emerald-300">
@@ -270,9 +270,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
                 <View className="space-y-3">
                   {group.transactions.map((transaction) => (
-                    <View
+                    <TouchableOpacity
                       key={transaction.id}
-                      style="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
+                      className="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
                       onPress={() => setSelectedTransaction(transaction)}
                     >
                       <View className="flex items-center gap-3">
@@ -286,7 +286,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                               {getTransactionTitle(transaction)}
                             </Text>
                             <Text
-                              style={cn(
+                              className={cn(
                                 "text-sm font-bold",
                                 transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
                               )}
@@ -298,7 +298,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                             <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
                             {transaction.details.status && (
                               <Text
-                                style={cn(
+                                className={cn(
                                   "text-xs",
                                   transaction.details.status === "Completed" ? "text-emerald-300" : "text-yellow-300",
                                 )}
@@ -309,7 +309,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                           </View>
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               </View>

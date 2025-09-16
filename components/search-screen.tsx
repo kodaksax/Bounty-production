@@ -1,12 +1,12 @@
 "use client"
 
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from "react-native"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface SearchScreenProps {
   onBack: () => void
@@ -28,7 +28,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [allBounties, setAllBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<TextInput | null>(null)
 
   // Fetch all bounties when the component mounts
   useEffect(() => {
@@ -295,7 +295,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       <View className="p-4 mt-auto">
         <View className="flex items-center justify-between bg-white/20 backdrop-blur-sm rounded-full p-1">
           <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
-            <SearchIcon className="h-5 w-5" />
+            <MaterialIcons name="search" size={20} color="white" />
           </TouchableOpacity>
           <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
             <MaterialIcons name="mic" size={20} color="white" />

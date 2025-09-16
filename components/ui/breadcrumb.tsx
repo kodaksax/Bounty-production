@@ -58,20 +58,23 @@ const BreadcrumbLink = React.forwardRef<
 })
 BreadcrumbLink.displayName = "BreadcrumbLink"
 
-const BreadcrumbPage = React.forwardRef<
-  HTMLSpanElement,
-  React.ComponentPropsWithoutRef<"span">
->(({ className, ...props }, ref) => (
+const BreadcrumbText = React.forwardRef<
+  React.ComponentRef<typeof Text>,
+  React.ComponentPropsWithRef<typeof Text> & { className?: string }
+>(({ className, accessibilityRole, accessibilityLabel, style, ...props }, ref) => (
   <Text
     ref={ref}
-    role="link"
-    aria-disabled="true"
-    aria-current="page"
-    style={cn("font-normal text-foreground", className)}
+    // use accessibilityRole instead of role (React Native)
+    accessibilityRole={accessibilityRole ?? "text"}
+    accessibilityLabel={accessibilityLabel}
+    // If you use nativewind/tailwind on RN, prefer className; otherwise pass a StyleProp<TextStyle>
+    className={className}
+    // merge any style objects (don't pass a plain string)
+    style={Array.isArray(style) ? style : [style]}
     {...props}
   />
 ))
-BreadcrumbPage.displayName = "BreadcrumbPage"
+ BreadcrumbText.displayName = "BreadcrumbText"
 
 const BreadcrumbSeparator = ({
   children,
@@ -89,28 +92,13 @@ const BreadcrumbSeparator = ({
 )
 BreadcrumbSeparator.displayName = "BreadcrumbSeparator"
 
-const BreadcrumbEllipsis = ({
-  className,
-  ...props
-}: React.ComponentProps<"span">) => (
-  <Text
-    role="presentation"
-    aria-hidden="true"
-    style={cn("flex h-9 w-9 items-center justify-center", className)}
-    {...props}
-  >
-    <MaterialIcons name="more-horiz" size={24} color="#000000" />
-    <Text className="sr-only">More</Text>
-  </Text>
-)
-BreadcrumbEllipsis.displayName = "BreadcrumbElipssis"
+
 
 export {
   Breadcrumb,
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
-  BreadcrumbPage,
   BreadcrumbSeparator,
-  BreadcrumbEllipsis,
+
 }

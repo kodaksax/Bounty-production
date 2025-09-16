@@ -1,9 +1,9 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { cn } from "lib/utils"
+import { useState } from "react"
+import { Text, TouchableOpacity, View } from "react-native"
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -80,7 +80,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <TouchableOpacity
               key={num}
-              style="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+              className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
               onPress={() => handleNumberPress(num)}
             >
               <Text className="text-2xl font-medium text-white">{num}</Text>
@@ -108,10 +108,10 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       </View>
 
       {/* Add Button - Fixed at bottom with safe area padding, moved up by 50px */}
-      <View className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: "50px" }}>
+  <View className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: 50 } as any}>
         <View className="p-4 pb-8">
           <TouchableOpacity
-            style={cn(
+            className={cn(
               "w-full py-4 rounded-lg font-medium text-center",
               Number.parseFloat(amount) > 0
                 ? "bg-gray-700 hover:bg-gray-600 transition-colors"

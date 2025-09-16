@@ -5,14 +5,14 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 
 
-interface CheckboxProps extends Omit<TouchableOpacity['props'], 'onPress'> {
+interface CheckboxProps extends Omit<React.ComponentPropsWithRef<typeof TouchableOpacity>, 'onPress'> {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   disabled?: boolean;
   className?: string;
 }
 
-const Checkbox = React.forwardRef<TouchableOpacity, CheckboxProps>(
+const Checkbox = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, CheckboxProps>(
   ({ className, checked = false, onCheckedChange, disabled = false, ...props }, ref) => {
     const handlePress = () => {
       if (!disabled && onCheckedChange) {

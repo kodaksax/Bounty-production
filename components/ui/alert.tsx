@@ -21,37 +21,37 @@ const alertVariants = cva(
 )
 
 const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
+  React.ComponentRef<typeof View>,
+  React.ComponentPropsWithRef<typeof View> & VariantProps<typeof alertVariants>
 >(({ className, variant, ...props }, ref) => (
   <View
     ref={ref}
-    role="alert"
-    style={cn(alertVariants({ variant }), className)}
+    accessibilityRole="alert"
+    className={cn(alertVariants({ variant }), className)}
     {...props}
   />
 ))
 Alert.displayName = "Alert"
 
 const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
+  React.ComponentRef<typeof Text>,
+  React.ComponentPropsWithRef<typeof Text> & { className?: string }
 >(({ className, ...props }, ref) => (
   <Text
     ref={ref}
-    style={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
     {...props}
   />
 ))
-AlertTitle.displayName = "AlertTitle"
+ AlertTitle.displayName = "AlertTitle"
 
 const AlertDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  React.ComponentRef<typeof Text>,
+  React.ComponentPropsWithRef<typeof Text> & { className?: string }
 >(({ className, ...props }, ref) => (
-  <View
+  <Text
     ref={ref}
-    style={cn("text-sm [&_p]:leading-relaxed", className)}
+    className={cn("text-sm opacity-90", className)}
     {...props}
   />
 ))

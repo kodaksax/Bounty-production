@@ -1,10 +1,10 @@
 "use client"
 
-import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
-import { MaterialIcons } from "@expo/vector-icons"
+import * as React from "react"
+import { Text, View } from "react-native"
 
 import { cn } from "lib/utils"
 
@@ -75,30 +75,24 @@ const SheetContent = React.forwardRef<
 ))
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
-const SheetHeader = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+const SheetHeader = ({ className, ...props }: any) => (
   <View
-    style={cn(
+    className={cn(
       "flex flex-col space-y-2 text-center sm:text-left",
       className
     )}
-    {...props}
+    {...(props as any)}
   />
 )
 SheetHeader.displayName = "SheetHeader"
 
-const SheetFooter = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+const SheetFooter = ({ className, ...props }: any) => (
   <View
-    style={cn(
+    className={cn(
       "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
       className
     )}
-    {...props}
+    {...(props as any)}
   />
 )
 SheetFooter.displayName = "SheetFooter"
@@ -128,14 +122,7 @@ const SheetDescription = React.forwardRef<
 SheetDescription.displayName = SheetPrimitive.Description.displayName
 
 export {
-  Sheet,
-  SheetPortal,
-  SheetOverlay,
-  SheetTrigger,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
+  Sheet, SheetClose,
+  SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetOverlay, SheetPortal, SheetTitle, SheetTrigger
 }
+

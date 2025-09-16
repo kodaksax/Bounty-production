@@ -1,16 +1,17 @@
-import * as React from "react"
-import { TouchableOpacity, Animated, ViewProps } from "react-native"
+import * as React from "react";
+import type { TouchableOpacityProps } from "react-native";
+import { Animated, TouchableOpacity } from "react-native";
 
-import { cn } from "lib/utils"
+import { cn } from "lib/utils";
 
-interface SwitchProps extends Omit<TouchableOpacity['props'], 'onPress'> {
+interface SwitchProps extends Omit<TouchableOpacityProps, 'onPress'> {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   disabled?: boolean;
   className?: string;
 }
 
-const Switch = React.forwardRef<TouchableOpacity, SwitchProps>(
+const Switch = React.forwardRef<any, SwitchProps>(
   ({ className, checked = false, onCheckedChange, disabled = false, ...props }, ref) => {
     const animatedValue = React.useRef(new Animated.Value(checked ? 1 : 0)).current;
 
@@ -89,4 +90,5 @@ const Switch = React.forwardRef<TouchableOpacity, SwitchProps>(
 );
 Switch.displayName = "Switch";
 
-export { Switch }
+export { Switch };
+

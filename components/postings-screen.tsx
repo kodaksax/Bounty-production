@@ -1,8 +1,8 @@
 "use client"
 
-import type React from "react"
-import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
+import * as React from "react"
+import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native"
 
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
@@ -48,7 +48,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [postSuccess, setPostSuccess] = useState(false)
-  const postButtonRef = useRef<HTMLButtonElement>(null)
+  const postButtonRef = useRef<any>(null)
 
   const tabs = [
     { id: "new", label: "New" },
@@ -114,7 +114,8 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
   // like WebSockets or Server-Sent Events (SSE) with your Hostinger backend.
   // The component now fetches data when it loads or after a new bounty is posted.
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // Accept a simple object shape coming from RN TextInput onChangeText handlers
+  const handleInputChange = (e: { target: { name: string; value: string } }) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -302,7 +303,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                   : "Bounty Posting"}
           </Text>
           <TouchableOpacity className="text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
-            <Bookmark className="h-5 w-5" />
+            <MaterialIcons name="bookmark" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
@@ -500,7 +501,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
                 myBounties.map((bounty) => (
                   <View
                     key={bounty.id}
-                    style="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
+                    className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
                   >
                     <View className="p-4">
                       <View className="flex justify-between items-center mb-2">

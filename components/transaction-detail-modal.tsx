@@ -1,10 +1,10 @@
 "use client"
 
+import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { cn } from "lib/utils"
-import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useRef, useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
+import { Text, TouchableOpacity, View } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
 
 interface TransactionDetailModalProps {
@@ -45,9 +45,9 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
       case "bounty_posted":
         return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
-        return <CheckCircle className="h-6 w-6 text-blue-400" />
+        return <MaterialIcons name="check-circle" size={24} color="#60a5fa" />
       case "bounty_received":
-        return <CreditCard className="h-6 w-6 text-purple-400" />
+        return <MaterialIcons name="credit-card" size={24} color="#a78bfa" />
     }
   }
 
@@ -86,8 +86,8 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   return (
     <View className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <View
-        ref={modalRef}
-        style={cn(
+        ref={modalRef as any}
+        className={cn(
           "relative w-full max-w-md mx-auto bg-emerald-600 rounded-xl overflow-hidden transition-all duration-300 transform",
           isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100",
         )}
@@ -116,7 +116,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
           <View className="bg-emerald-700/50 rounded-lg p-4 mb-4">
             <Text
-              style={cn(
+              className={cn(
                 "text-2xl font-bold text-center",
                 transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
               )}
@@ -135,7 +135,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
           <View className="space-y-4">
             <View className="flex items-center">
               <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                <Info className="h-4 w-4 text-emerald-300" />
+                <MaterialIcons name="info" size={16} color="#86efac" />
               </View>
               <View className="flex-1">
                 <Text className="text-xs text-emerald-300">Transaction ID</Text>
@@ -155,7 +155,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
             <View className="flex items-center">
               <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                <Clock className="h-4 w-4 text-emerald-300" />
+                <MaterialIcons name="schedule" size={16} color="#86efac" />
               </View>
               <View className="flex-1">
                 <Text className="text-xs text-emerald-300">Time</Text>
@@ -166,7 +166,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
             {transaction.details.status && (
               <View className="flex items-center">
                 <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                  <CheckCircle className="h-4 w-4 text-emerald-300" />
+                  <MaterialIcons name="check-circle" size={16} color="#86efac" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs text-emerald-300">Status</Text>
@@ -178,7 +178,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
             {transaction.details.method && (
               <View className="flex items-center">
                 <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                  <CreditCard className="h-4 w-4 text-emerald-300" />
+                  <MaterialIcons name="credit-card" size={16} color="#86efac" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs text-emerald-300">Method</Text>
@@ -205,11 +205,8 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
         {/* Action Button */}
         <View className="p-5 pt-0">
-          <TouchableOpacity
-            onPress={handleClose}
-            style="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium"
-          >
-            Close
+          <TouchableOpacity onPress={handleClose} className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium">
+            <Text className="text-center text-white">Close</Text>
           </TouchableOpacity>
         </View>
       </View>

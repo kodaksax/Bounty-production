@@ -1,32 +1,20 @@
 "use client"
 
-import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as SeparatorPrimitive from "@radix-ui/react-separator"
+import * as React from 'react';
+import { View } from 'react-native';
 
-import { cn } from "lib/utils"
-
-const Separator = React.forwardRef<
-  React.ElementRef<typeof SeparatorPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>
->(
-  (
-    { className, orientation = "horizontal", decorative = true, ...props },
-    ref
-  ) => (
-    <SeparatorPrimitive.Root
-      ref={ref}
-      decorative={decorative}
-      orientation={orientation}
-      className={cn(
-        "shrink-0 bg-border",
-        orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]",
-        className
-      )}
-      {...props}
-    />
-  )
-)
-Separator.displayName = SeparatorPrimitive.Root.displayName
-
-export { Separator }
+// Simple RN separator that forwards ref to the underlying View
+export const Separator = React.forwardRef<
+  React.ElementRef<typeof View>,
+  React.ComponentProps<typeof View> & { orientation?: 'horizontal' | 'vertical' }
+>(({ orientation = 'horizontal', style, ...props }: React.ComponentProps<typeof View> & { orientation?: 'horizontal' | 'vertical' }, ref) => (
+  <View
+    ref={ref}
+    style={
+      orientation === 'horizontal'
+        ? [ { height: 1, width: '100%', backgroundColor: '#e5e7eb' }, style ]
+        : [ { width: 1, height: '100%', backgroundColor: '#e5e7eb' }, style ]
+    }
+    {...props}
+  />
+))

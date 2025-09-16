@@ -1,30 +1,59 @@
-"use client"
 
-import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as HoverCardPrimitive from "@radix-ui/react-hover-card"
+import * as React from "react";
+import { GestureResponderEvent, StyleSheet, TouchableOpacity, View, Text } from "react-native";
+import { Tooltip } from "react-native-paper";
 
-import { cn } from "lib/utils"
+type HoverCardProps = {
+  title: React.ReactNode; // Accepts string or JSX
+  // ...other props...
+};
 
-const HoverCard = HoverCardPrimitive.Root
-
-const HoverCardTrigger = HoverCardPrimitive.Trigger
-
-const HoverCardContent = React.forwardRef<
-  React.ElementRef<typeof HoverCardPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof HoverCardPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
-  <HoverCardPrimitive.Content
-    ref={ref}
-    align={align}
-    sideOffset={sideOffset}
-    className={cn(
-      "z-50 w-64 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-      className
+const HoverCard: React.FC<HoverCardProps> = ({ title, ...props }) => (
+  <View>
+    {/* Render title */}
+    {typeof title === "string" ? (
+      <Text>{title}</Text>
+    ) : (
+      title
     )}
-    {...props}
-  />
-))
-HoverCardContent.displayName = HoverCardPrimitive.Content.displayName
+    {/* ...other content... */}
+  </View>
+);
 
-export { HoverCard, HoverCardTrigger, HoverCardContent }
+
+type HoverCardTriggerProps = {
+  children: React.ReactNode;
+  onPress?: (event: GestureResponderEvent) => void;
+  style?: any;
+};
+const HoverCardTrigger = React.forwardRef<View, HoverCardTriggerProps>(
+  ({ children, ...props }, ref) => (
+    <TouchableOpacity ref={ref as React.RefObject<View>} {...props}>
+      {children}
+    </TouchableOpacity>
+  )
+);
+HoverCardTrigger.displayName = "HoverCardTrigger";
+
+type HoverCardContentProps = {
+  children: React.ReactNode;
+  style?: any;
+};
+const HoverCardContent = ({ children, style }: HoverCardContentProps) => (
+  <View style={[styles.content, style]}>
+    {children}
+  </View>
+);
+HoverCardContent.displayName = "HoverCardContent";
+
+const styles = StyleSheet.create({
+  content: {
+    width: 256,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    padding: 16,
+  },
+});
+
+export { HoverCard, HoverCardContent, HoverCardTrigger };
+

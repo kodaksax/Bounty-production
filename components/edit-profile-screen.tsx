@@ -1,10 +1,10 @@
 "use client"
 
-import type React from "react"
-import { View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native"
-import { useState } from "react"
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import type React from "react"
+import { useState } from "react"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -92,7 +92,7 @@ export function EditProfileScreen({
               </AvatarFallback>
             </Avatar>
             <TouchableOpacity
-              style="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
+              style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
               onPress={handleAvatarClick}
             >
               <MaterialIcons name="camera-alt" size={16} color="white" />

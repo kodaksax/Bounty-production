@@ -1,4 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import * as React from "react"
+import { Text, View } from "react-native"
 
 export function RecentSales() {
   return (

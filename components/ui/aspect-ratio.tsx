@@ -1,7 +1,19 @@
-"use client"
+import React from "react"
+import { View, ViewProps, ViewStyle, StyleProp } from "react-native"
 
-import * as AspectRatioPrimitive from "@radix-ui/react-aspect-ratio"
+interface AspectRatioProps extends Omit<ViewProps, "style"> {
+  ratio?: number // width / height (e.g., 16/9 => 16/9)
+  style?: StyleProp<ViewStyle>
+  children?: React.ReactNode
+}
 
-const AspectRatio = AspectRatioPrimitive.Root
-
-export { AspectRatio }
+export const AspectRatio = React.forwardRef<React.ComponentRef<typeof View>, AspectRatioProps>(
+  ({ ratio = 1, style, children, ...props }, ref) => {
+    return (
+      <View ref={ref} style={[{ aspectRatio: ratio }, style]} {...props}>
+        {children}
+      </View>
+    )
+  }
+)
+AspectRatio.displayName = "AspectRatio"

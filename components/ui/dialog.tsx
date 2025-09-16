@@ -51,16 +51,18 @@ const Dialog: React.FC<DialogProps> = ({ open = false, onOpenChange, children })
   );
 };
 
-interface DialogTriggerProps extends TouchableOpacity['props'] {
+interface DialogTriggerProps extends React.ComponentPropsWithRef<typeof TouchableOpacity> {
   asChild?: boolean;
+  // add any custom props here
 }
 
-const DialogTrigger = React.forwardRef<TouchableOpacity, DialogTriggerProps>(
-  ({ children, onPress, ...props }, ref) => {
+// Usage:
+const DialogTrigger = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, DialogTriggerProps>(
+  ({ asChild, onPress, children, ...props }, ref) => {
     const context = React.useContext(DialogContext);
-    
+
     if (!context) {
-      throw new Error("DialogTrigger must be used within a Dialog");
+      throw new Error("DialogTrigger must be used within a DialogProvider");
     }
 
     const handlePress = (event: any) => {
@@ -75,6 +77,7 @@ const DialogTrigger = React.forwardRef<TouchableOpacity, DialogTriggerProps>(
     );
   }
 );
+
 DialogTrigger.displayName = "DialogTrigger";
 
 const DialogPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -227,17 +230,20 @@ const DialogDescription = React.forwardRef<View, DialogDescriptionProps>(
 );
 DialogDescription.displayName = "DialogDescription";
 
-const DialogClose = React.forwardRef<TouchableOpacity, TouchableOpacity['props']>(
+const DialogClose = React.forwardRef<
+  React.ComponentRef<typeof TouchableOpacity>,
+  React.ComponentPropsWithRef<typeof TouchableOpacity>
+>(
   ({ children, onPress, ...props }, ref) => {
     const context = React.useContext(DialogContext);
-    
+
     if (!context) {
       throw new Error("DialogClose must be used within a Dialog");
     }
 
     const handlePress = (event: any) => {
       context.onOpenChange(false);
-      onPress?.(event);
+      if (onPress) onPress(event);
     };
 
     return (

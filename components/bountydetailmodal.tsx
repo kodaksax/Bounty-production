@@ -1,25 +1,16 @@
-import React, { useEffect, useRef, useState } from "react"
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  TextInput, 
-  ScrollView, 
-  Modal,
-  StyleSheet,
-  Dimensions 
-} from "react-native"
+import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { cn } from "lib/utils"
-import { 
-  ArrowLeft, 
-  FileText, 
-  Image as ImageIcon, 
-  Paperclip, 
-  Send, 
-  Target, 
-  X 
-} from "@expo/vector-icons/MaterialIcons"
+import React, { useEffect, useRef, useState } from "react"
+import {
+    Dimensions,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from "react-native"
 
 interface BountyDetailModalProps {
   bounty: {
@@ -119,11 +110,11 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
         {/* Header - iPhone optimized */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Target name="gps-fixed" size={20} color="white" />
+            <MaterialIcons name="place" size={20} color="white" />
             <Text style={styles.headerTitle}>BOUNTY</Text>
           </View>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <X name="close" size={20} color="white" />
+            <MaterialIcons name="close" size={20} color="white" />
           </TouchableOpacity>
         </View>
 
@@ -177,9 +168,9 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
                       <View key={attachment.id} style={styles.attachmentItem}>
                         <View style={styles.attachmentIcon}>
                           {attachment.type === "image" ? (
-                            <ImageIcon name="image" size={20} color="#a7f3d0" />
+                            <MaterialIcons name="image" size={20} color="#a7f3d0" />
                           ) : (
-                            <FileText name="description" size={20} color="#a7f3d0" />
+                            <MaterialIcons name="description" size={20} color="#a7f3d0" />
                           )}
                         </View>
                         <View style={styles.attachmentInfo}>
@@ -187,7 +178,7 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
                           <Text style={styles.attachmentSize}>{attachment.size}</Text>
                         </View>
                         <TouchableOpacity style={styles.downloadButton}>
-                          <ArrowLeft name="arrow-forward" size={16} color="#a7f3d0" />
+                          <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -232,7 +223,7 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
         <View style={styles.inputContainer}>
           <View style={styles.inputWrapper}>
             <TouchableOpacity style={styles.attachButton}>
-              <Paperclip name="attach-file" size={20} color="#a7f3d0" />
+              <MaterialIcons name="attach-file" size={20} color="#a7f3d0" />
             </TouchableOpacity>
             <TextInput
               value={newMessage}
@@ -252,7 +243,7 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
                 newMessage.trim() === "" ? styles.sendButtonDisabled : styles.sendButtonActive,
               ]}
             >
-              <Send name="send" size={20} color="white" />
+              <MaterialIcons name="send" size={20} color="white" />
             </TouchableOpacity>
           </View>
         </View>

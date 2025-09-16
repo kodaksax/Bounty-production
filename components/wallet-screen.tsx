@@ -1,7 +1,7 @@
 "use client"
 
 
-import { MaterialIcons } from "@expo/vector-icons";
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "./add-money-screen";
@@ -36,194 +36,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     return <TransactionHistoryScreen onBack={() => setShowTransactionHistory(false)} />;
   }
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#059669', // emerald-600
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: 16,
-      paddingTop: 44, // Safe area inset for iPhone
-    },
-    headerContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    headerIcon: {
-      marginRight: 8,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: 'white',
-      letterSpacing: 2,
-    },
-    backButton: {
-      padding: 8,
-    },
-    balanceContainer: {
-      paddingHorizontal: 16,
-      marginBottom: 24,
-    },
-    balanceCard: {
-      backgroundColor: '#047857', // emerald-700
-      borderRadius: 12,
-      padding: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-      elevation: 8,
-    },
-    balanceTextContainer: {
-      alignItems: 'center',
-      marginBottom: 16,
-    },
-    balanceLabel: {
-      fontSize: 14,
-      color: '#6EE7B7', // emerald-300
-      fontWeight: '500',
-      textTransform: 'uppercase',
-    },
-    balanceAmount: {
-      fontSize: 36,
-      fontWeight: 'bold',
-      color: 'white',
-      marginTop: 4,
-    },
-    buttonContainer: {
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 16,
-    },
-    actionButton: {
-      flex: 1,
-      backgroundColor: '#065F46', // emerald-800
-      paddingVertical: 12,
-      borderRadius: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    actionButtonIcon: {
-      marginRight: 8,
-    },
-    actionButtonText: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'white',
-    },
-    sectionContainer: {
-      paddingHorizontal: 16,
-      marginBottom: 16,
-    },
-    sectionHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'white',
-    },
-    manageButton: {
-      padding: 8,
-    },
-    manageButtonText: {
-      fontSize: 14,
-      color: '#6EE7B7', // emerald-300
-    },
-    accountCard: {
-      backgroundColor: 'rgba(6, 95, 70, 0.8)', // emerald-700/80
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
-    },
-    accountContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    accountIconContainer: {
-      height: 48,
-      width: 48,
-      backgroundColor: '#065F46', // emerald-800
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-    },
-    accountInfo: {
-      flex: 1,
-    },
-    accountName: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'white',
-    },
-    accountDetails: {
-      fontSize: 14,
-      color: '#6EE7B7', // emerald-300
-    },
-    scrollContainer: {
-      flex: 1,
-      paddingHorizontal: 16,
-      marginBottom: 16,
-    },
-    bountyCard: {
-      backgroundColor: 'rgba(6, 95, 70, 0.8)', // emerald-700/80
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
-    },
-    bountyContent: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    bountyLabel: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'white',
-    },
-    bountyAmount: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: 'white',
-    },
-    navigationIndicator: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      paddingVertical: 16,
-      paddingBottom: 32, // Safe area inset
-    },
-    indicator: {
-      height: 4,
-      width: 4,
-      borderRadius: 2,
-      marginHorizontal: 4,
-    },
-    indicatorActive: {
-      backgroundColor: 'white',
-    },
-    indicatorInactive: {
-      backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    },
-  });
+  
 
   return (
     <View style={styles.container}>
@@ -239,7 +52,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
         {/* Balance Card */}
         <View style={styles.sectionPad}>
           <View style={styles.balanceCard}>
@@ -268,14 +81,14 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </TouchableOpacity>
           </View>
           <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><CreditCard color="#fff" size={24} /></View>
+            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.accountName}>VISA **** **** 3456</Text>
               <Text style={styles.accountSub}>Default Payment Method</Text>
             </View>
           </View>
           <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><CreditCard color="#fff" size={24} /></View>
+            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.accountName}>AMEX **** **** 7890</Text>
               <Text style={styles.accountSub}>Added 02/15/2025</Text>

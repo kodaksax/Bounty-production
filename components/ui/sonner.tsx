@@ -1,7 +1,7 @@
 "use client"
 
-import { useTheme } from "next-themes"
-import { Toaster as Sonner } from "sonner"
+import { useTheme } from "../../stubs/next-themes"
+import { Toaster as Sonner } from "../../stubs/sonner"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
@@ -10,6 +10,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
 
   return (
     <Sonner
+      // Simple passthrough to the stubbed Toaster (no visual toast implementation in this stub)
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       toastOptions={{
@@ -29,3 +30,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
 }
 
 export { Toaster }
+

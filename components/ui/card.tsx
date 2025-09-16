@@ -1,35 +1,52 @@
 import * as React from "react"
-import { View, ViewProps, Text, StyleSheet } from "react-native"
+import { StyleProp, StyleSheet, Text, TextProps, TextStyle, View, ViewProps, ViewStyle } from "react-native"
 
 interface CardProps extends ViewProps {
   variant?: "default" | "elevated"
-}
-
-interface CardTextProps extends ViewProps {
+  className?: string
   children?: React.ReactNode
 }
 
-const Card = React.forwardRef<View, CardProps>(
-  ({ variant = "default", style, ...props }, ref) => (
-    <View
-      ref={ref}
-      style={[cardStyles.base, cardStyles[variant], style]}
-      {...props}
-    />
-  )
+type CardVariant = "default" | "elevated";
+
+// Narrow the variant map to only the view-style keys we expect
+const cardVariantMap: Record<CardVariant, 'base' | 'elevated'> = {
+  default: "base",
+  elevated: "elevated",
+};
+
+const Card = ({ variant = "default", style, children, ...props }: CardProps) => (
+  <View
+    style={[cardStyles[cardVariantMap[variant]], style]}
+    {...props}
+  >
+    {children}
+  </View>
 )
 Card.displayName = "Card"
 
-const CardHeader = React.forwardRef<View, CardTextProps>(
-  ({ style, ...props }, ref) => (
+interface CardHeaderProps extends ViewProps {
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}
+
+const CardHeader = React.forwardRef<View, CardHeaderProps>(
+  ({ style, children, ...props }, ref) => (
     <View
       ref={ref}
       style={[cardStyles.header, style]}
       {...props}
-    />
+    >
+      {children}
+    </View>
   )
 )
 CardHeader.displayName = "CardHeader"
+
+interface CardTextProps extends TextProps {
+  style?: StyleProp<TextStyle>;
+  children?: React.ReactNode;
+}
 
 const CardTitle = React.forwardRef<Text, CardTextProps>(
   ({ style, children, ...props }, ref) => (
@@ -57,25 +74,49 @@ const CardDescription = React.forwardRef<Text, CardTextProps>(
 )
 CardDescription.displayName = "CardDescription"
 
-const CardContent = React.forwardRef<View, CardTextProps>(
-  ({ style, ...props }, ref) => (
-    <View ref={ref} style={[cardStyles.content, style]} {...props} />
+interface CardContentProps extends ViewProps {
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}
+
+const CardContent = React.forwardRef<View, CardContentProps>(
+  ({ style, children, ...props }, ref) => (
+    <View ref={ref} style={[cardStyles.content, style]} {...props}>
+      {children}
+    </View>
   )
 )
 CardContent.displayName = "CardContent"
 
-const CardFooter = React.forwardRef<View, CardTextProps>(
-  ({ style, ...props }, ref) => (
+interface CardFooterProps extends ViewProps {
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}
+
+const CardFooter = React.forwardRef<View, CardFooterProps>(
+  ({ style, children, ...props }, ref) => (
     <View
       ref={ref}
       style={[cardStyles.footer, style]}
       {...props}
-    />
+    >
+      {children}
+    </View>
   )
 )
 CardFooter.displayName = "CardFooter"
 
-const cardStyles = StyleSheet.create({
+interface CardStyles {
+  base: ViewStyle
+  elevated: ViewStyle
+  header: ViewStyle
+  title: TextStyle
+  description: TextStyle
+  content: ViewStyle
+  footer: ViewStyle
+}
+
+const cardStyles = StyleSheet.create<CardStyles>({
   base: {
     borderRadius: 8,
     backgroundColor: '#ffffff',
@@ -126,4 +167,5 @@ const cardStyles = StyleSheet.create({
   },
 })
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
+

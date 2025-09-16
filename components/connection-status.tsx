@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Text, View } from "react-native"
 // Make sure to install NetInfo: expo install @react-native-community/netinfo
+import { MaterialIcons } from "@expo/vector-icons"
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo'
 import { cn } from "lib/utils"
-import { MaterialIcons } from "@expo/vector-icons"
 
 export function ConnectionStatus() {
   const [isOnline, setIsOnline] = useState(true)
@@ -32,21 +33,19 @@ export function ConnectionStatus() {
   if (!showStatus) return null
 
   return (
-    <View
-      style={cn(
-        "fixed top-safe z-50 left-0 right-0 flex items-center justify-center transition-all duration-300",
-        isOnline ? "bg-green-500" : "bg-red-500",
-      )}
-    >
+    <View className={cn(
+      "fixed top-safe z-50 left-0 right-0 flex items-center justify-center transition-all duration-300",
+      isOnline ? "bg-green-500" : "bg-red-500",
+    )}>
       <View className="flex items-center py-2 px-4">
         {isOnline ? (
           <>
-            <Wifi className="h-4 w-4 text-white mr-2" />
+            <MaterialIcons name="wifi" size={16} color="#fff" />
             <Text className="text-white text-sm font-medium">Back online</Text>
           </>
         ) : (
           <>
-            <WifiOff className="h-4 w-4 text-white mr-2" />
+            <MaterialIcons name="wifi-off" size={16} color="#fff" />
             <Text className="text-white text-sm font-medium">You're offline</Text>
           </>
         )}

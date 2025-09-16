@@ -1,29 +1,39 @@
 "use client"
 
 import * as React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-import * as ProgressPrimitive from "@radix-ui/react-progress"
+import { View } from "react-native"
 
 import { cn } from "lib/utils"
 
-const Progress = React.forwardRef<
-  React.ElementRef<typeof ProgressPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>
->(({ className, value, ...props }, ref) => (
-  <ProgressPrimitive.Root
-    ref={ref}
-    className={cn(
-      "relative h-4 w-full overflow-hidden rounded-full bg-secondary",
-      className
-    )}
-    {...props}
-  >
-    <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-primary transition-all"
-      style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
-    />
-  </ProgressPrimitive.Root>
-))
-Progress.displayName = ProgressPrimitive.Root.displayName
+type ProgressProps = {
+  value?: number
+  className?: string
+  style?: any
+  children?: React.ReactNode
+}
 
-export { Progress }
+export const Progress = ({ value = 0, className, style, children }: ProgressProps) => {
+  return (
+    <View
+      style={[{ height: 8, backgroundColor: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }, style]}
+      // Preserve className prop for NativeWind usage elsewhere
+      // @ts-ignore: className is valid for NativeWind on RN primitives
+      className={cn(className)}
+    >
+      {children}
+    </View>
+  )
+}
+
+export const ProgressIndicator = ({ value = 0, className, style }: ProgressProps) => {
+  const width = Math.max(0, Math.min(100, value))
+  return (
+    <View
+      style={[{ height: '100%', backgroundColor: '#10B981', width: `${width}%` }, style]}
+      // @ts-ignore
+      className={cn(className)}
+    />
+  )
+}
+
+export default Progress

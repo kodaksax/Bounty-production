@@ -1,14 +1,10 @@
 "use client"
 
-import type React from "react"
-import { View, Text, TouchableOpacity } from "react-native"
-
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { useState } from "react"
-import { View, Text, TouchableOpacity } from "react-native"
+import React, { useState } from "react"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { EditProfileScreen } from "./edit-profile-screen"
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -178,8 +174,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
 
       {/* Profile section */}
       <View className="px-4 py-3 bg-emerald-700/30">
-        <View className="flex items-center justify-between" onPress={() => setShowEditProfile(true)}>
-          <View className="flex items-center">
+        <TouchableOpacity className="flex-row items-center justify-between" onPress={() => setShowEditProfile(true)}>
+          <View className="flex-row items-center">
             <Avatar className="h-12 w-12 mr-3 border-2 border-white">
               <AvatarImage src={profileData.avatar} alt={profileData.name} />
               <AvatarFallback>JD</AvatarFallback>
@@ -190,19 +186,19 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             </View>
           </View>
           <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Settings options */}
       <View className="flex-1">
         <View className="py-2">
           <SettingsItem icon={<MaterialIcons name="star" size={24} color="#000000" />} label="Starred Messages" />
-          <SettingsItem icon={<Laptop className="h-5 w-5 text-teal-400" />} label="WhatsApp Web/Desktop" />
+          <SettingsItem icon={<MaterialIcons name="laptop" size={24} color="#14b8a6" />} label="WhatsApp Web/Desktop" />
           <SettingsItem icon={<MaterialIcons name="person" size={24} color="#000000" />} label="Account" />
           <SettingsItem icon={<MaterialIcons name="chat" size={24} color="#000000" />} label="Chats" />
           <SettingsItem icon={<MaterialIcons name="notifications" size={24} color="#000000" />} label="Notifications" />
-          <SettingsItem icon={<Database className="h-5 w-5 text-purple-400" />} label="Data and Storage Usage" />
-          <SettingsItem icon={<HelpCircle className="h-5 w-5 text-blue-400" />} label="Help" />
+          <SettingsItem icon={<MaterialIcons name="storage" size={24} color="#8b5cf6" />} label="Data and Storage Usage" />
+          <SettingsItem icon={<MaterialIcons name="help" size={24} color="#3b82f6" />} label="Help" />
           <SettingsItem icon={<MaterialIcons name="favorite" size={24} color="#000000" />} label="Tell a Friend" />
         </View>
       </View>
@@ -252,10 +248,10 @@ function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
 
   return (
     <TouchableOpacity
-      style="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-700/30 transition-colors"
+      className="w-full flex-row items-center justify-between px-4 py-3"
       onPress={onClick}
     >
-      <View className="flex items-center">
+      <View className="flex-row items-center">
         {icon}
         <Text className="ml-3">{label}</Text>
       </View>

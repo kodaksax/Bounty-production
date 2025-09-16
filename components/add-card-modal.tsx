@@ -1,10 +1,10 @@
 "use client"
 
-import type React from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
-import { useState } from "react"
 import { cn } from "lib/utils"
+import type React from "react"
+import { useState } from "react"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface AddCardModalProps {
   onBack: () => void
@@ -81,11 +81,7 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
 
       {/* Instructions */}
       <View className="px-4 py-2">
-        <Text className="text-sm text-emerald-200">
-          Start typing to add your credit card details.
-          <br />
-          Everything will update according to your data.
-        </Text>
+        <Text className="text-sm text-emerald-200">{`Start typing to add your credit card details.\nEverything will update according to your data.`}</Text>
       </View>
 
       {/* Card Preview */}
@@ -174,11 +170,11 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
         <TouchableOpacity
           onPress={handleSave}
           disabled={!isFormValid}
-          style={cn(
+          className={cn(
             "w-full py-3 rounded-full text-center font-medium",
             isFormValid
               ? "bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              : "bg-gray-700/50 text-gray-300 cursor-not-allowed",
+              : "bg-gray-700/50 text-gray-300 cursor-not-allowed"
           )}
         >
           <Text className={cn(

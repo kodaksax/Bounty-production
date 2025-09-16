@@ -3,18 +3,20 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
-  SidebarSeparator,
+    Sidebar,
+    SidebarContent,
+    SidebarFooter,
+    SidebarGroup,
+    SidebarGroupContent,
+    SidebarGroupLabel,
+    SidebarHeader,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+    SidebarSeparator,
 } from "components/ui/sidebar"
+import * as React from "react"
+import { Text, TouchableOpacity, View } from "react-native"
 
 export function DashboardSidebar() {
   return (
@@ -41,13 +43,13 @@ export function DashboardSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Analytics">
-                  <BarChart3 className="h-4 w-4" />
+                  <MaterialIcons name="bar-chart" size={18} color="#000000" />
                   <Text>Analytics</Text>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Customers">
-                  <Users className="h-4 w-4" />
+                  <MaterialIcons name="people" size={18} color="#000000" />
                   <Text>Customers</Text>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -67,7 +69,7 @@ export function DashboardSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Help">
-                  <HelpCircle className="h-4 w-4" />
+                  <MaterialIcons name="help" size={18} color="#000000" />
                   <Text>Help & Support</Text>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -88,8 +90,8 @@ export function DashboardSidebar() {
             </View>
           </View>
           <TouchableOpacity className="rounded-md p-1 hover:bg-accent">
-            <LogOut className="h-4 w-4" />
-            <Text className="sr-only">Log out</Text>
+            <MaterialIcons name="logout" size={18} color="#000000" />
+            <Text style={{ position: 'absolute', left: -9999 }}>Log out</Text>
           </TouchableOpacity>
         </View>
       </SidebarFooter>
