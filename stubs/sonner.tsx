@@ -18,13 +18,18 @@ export const Toaster: React.FC<{
   className?: string
   toastOptions?: any
   children?: React.ReactNode
-}> = ({ children }) => {
+}> = ({ children, theme }) => {
   return <View>{children}</View>
 }
 
+let warnedRealToast = false
 export function toast(message: string | ToasterToast) {
-  // noop stub: in RN you might use a different toast implementation
-  console.log('toast:', message)
+  if (__DEV__ && !warnedRealToast) {
+    console.warn('[sonner stub] Using toast() stub. Replace with a real RN toast implementation for production UI.')
+    warnedRealToast = true
+  }
+  console.log('[toast]', message)
 }
 
+Object.defineProperty(exports, '__esModule', { value: true })
 export default Toaster
