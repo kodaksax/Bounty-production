@@ -1,12 +1,11 @@
+import {
+  MaterialIcons
+} from "@expo/vector-icons"
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
 import { WalletScreen } from "components/wallet-screen"
-import { 
-  MaterialIcons,
-  Ionicons 
-} from "@expo/vector-icons"
 import React, { useEffect, useState } from "react"
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -115,13 +114,13 @@ export function  BountyApp() {
   // Render dashboard content when activeScreen is "bounty" (previously "home")
 
   function renderDashboardContent() {
-    return (
-      <View style={styles.dashboardContainer}>
-        <Text style={styles.dashboardTitle}>Dashboard</Text>
-        {/* Add your dashboard components here */}
-      </View>
-    );
-  }
+      return (
+        <View style={styles.dashboardContainer}>
+          <Text style={styles.dashboardTitle}>Dashboard</Text>
+          {/* components/ui/command.tsx Add your dashboard components here */}
+        </View>
+      );
+    }
 
 
   return (
@@ -131,11 +130,11 @@ export function  BountyApp() {
       ) : activeScreen === "wallet" ? (
         <WalletScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "postings" ? (
-        <PostingsScreen onBack={() => setActiveScreen("bounty")} />
+        <PostingsScreen onBack={() => setActiveScreen("bounty")} activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (
-        <MessengerScreen />
+        <MessengerScreen activeScreen={activeScreen} onNavigate={setActiveScreen} />
       ) : activeScreen === "calendar" ? (
         <View style={styles.calendarContainer}>
           <Calendar
@@ -207,13 +206,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: 64,
+    height: 65,
     backgroundColor: '#065f46', // emerald-800
     paddingHorizontal: 24,
     paddingBottom: 8,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    elevation: 10,
+    elevation: 5,
   },
   navButton: {
     padding: 12,

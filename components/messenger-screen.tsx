@@ -4,8 +4,9 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import React, { useState } from "react"
-import { Text, TouchableOpacity, View } from "react-native"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import ChatDetailScreen from "./chat-detail-screen"
+
 
 export interface Conversation {
   id: string
@@ -20,7 +21,13 @@ export interface Conversation {
   status?: string
 }
 
-export function MessengerScreen() {
+export function MessengerScreen({
+  activeScreen,
+  onNavigate,
+}: {
+  activeScreen: string
+  onNavigate: (screen: string) => void
+}) {
   const [conversations, setConversations] = useState<Conversation[]>([
     {
       id: "1",
@@ -54,13 +61,88 @@ export function MessengerScreen() {
   ])
 
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
-
+  // activeScreen is received from props (lifted state)
   const handleConversationClick = (id: string) => {
     setConversations((prev) => prev.map((conv) => (conv.id === id ? { ...conv, unread: 0, isRead: true } : conv)))
     setActiveConversation(id)
   }
 
   const handleBackToInbox = () => setActiveConversation(null)
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 16,
+  },
+  header: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  messageList: {
+    flex: 1,
+  },messageItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#111',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },input: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginRight: 8,
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 150,
+    backgroundColor: '#065f46', // emerald-800
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    elevation: 10,
+  },
+  navButton: {
+    padding: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerButton: {
+    height: 56,
+    width: 56,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#fff',
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -20,
+},  bottomNavContainer: { // <-- added style
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 64,
+    backgroundColor: '#065f46', // emerald-800
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    elevation: 10,
+  },
+});
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
@@ -91,37 +173,47 @@ export function MessengerScreen() {
         </View>
       </View>
 
-      <View className="flex-1 px-2">
-        {conversations.map((conversation) => (
-          <ConversationItem key={conversation.id} conversation={conversation} onPress={() => handleConversationClick(conversation.id)} />
-        ))}
-      </View>
+      <View className="flex-1 px-2 pb-24">
+         {conversations.map((conversation) => (
+           <ConversationItem key={conversation.id} conversation={conversation} onPress={() => handleConversationClick(conversation.id)} />
+         ))}
+       </View>
 
-      <View className="flex-row justify-around items-center p-4 bg-emerald-700/50">
-        <TouchableOpacity className="flex flex-col items-center">
-          <MaterialIcons name="message" size={24} color="#10b981" />
-          <Text className="text-xs mt-1">Chats</Text>
-        </TouchableOpacity>
-        <TouchableOpacity className="flex flex-col items-center">
-          <MaterialIcons name="phone" size={24} color="#10b981" />
-          <Text className="text-xs mt-1">Calls</Text>
-        </TouchableOpacity>
-        <TouchableOpacity className="flex flex-col items-center">
-          <MaterialIcons name="camera-alt" size={24} color="#10b981" />
-          <Text className="text-xs mt-1">Camera</Text>
-        </TouchableOpacity>
-        <TouchableOpacity className="flex flex-col items-center">
-          <MaterialIcons name="search" size={24} color="#10b981" />
-          <Text className="text-xs mt-1">Search</Text>
-        </TouchableOpacity>
-        <TouchableOpacity className="flex flex-col items-center">
-          <MaterialIcons name="person" size={24} color="#10b981" />
-          <Text className="text-xs mt-1">Profile</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* Bottom Navigation - iPhone optimized with safe area inset */}
+            <View style={styles.bottomNav}>
+              <TouchableOpacity onPress={() => onNavigate("create")}
+                style={styles.navButton}
+              >
+                <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onNavigate("wallet")}
+                style={styles.navButton}
+              >
+                <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.centerButton}
+                onPress={() => onNavigate("bounty")}
+              >
+                <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onNavigate("postings")}
+                style={styles.navButton}
+              >
+                <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onNavigate("calendar")}
+                style={styles.navButton}
+              >
+                <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
+              </TouchableOpacity>
+            </View>
+          </View>
   )
 }
+      
+        
+  
 
 interface ConversationItemProps {
   conversation: Conversation
@@ -188,3 +280,4 @@ function GroupAvatar() {
     </View>
   )
 }
+

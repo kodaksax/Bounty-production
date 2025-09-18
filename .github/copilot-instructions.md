@@ -8,7 +8,7 @@
 ## Key Patterns & Conventions
 - **File-based routing**: Pages/screens are defined in `app/` (e.g., `app/index.tsx`, `app/_layout.tsx`).
 - **Component structure**: UI and logic are split into small, reusable components in `components/`, with domain-specific subfolders.
-- **State & data**: Use React hooks for state and side effects. Shared logic lives in `hooks/` and `lib/utils.ts`.
+- **State & data**: Use React Native hooks for state and side effects. Shared logic lives in `hooks/` and `lib/utils.ts`.
 - **Styling**: Uses global CSS (`app/global.css`) and component-level styles. Follow existing patterns for theming and layout.
 - **Type safety**: All code should use TypeScript types, especially for props and API responses. See `lib/types.ts` for shared types.
 
