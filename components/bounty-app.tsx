@@ -1,15 +1,12 @@
-import {
-  MaterialIcons
-} from "@expo/vector-icons"
+import { MaterialIcons } from "@expo/vector-icons"
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
-import { WalletScreen } from "components/wallet-screen"
-import React, { useEffect, useState } from "react"
-import { Search } from "lucide-react-native";
 import { BottomNav } from 'components/ui/bottom-nav'
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native'
+import { WalletScreen } from "components/wallet-screen"
+import React, { useEffect, useMemo, useState } from "react"
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -24,20 +21,21 @@ type Bounty = {
 }
 
 
-export function  BountyApp() {
-  const [activeCategory, setActiveCategory] = useState("local")
-  const [activeScreen, setActiveScreen] = useState("bounty") // Changed default to "bounty"
+export function BountyApp() {
+  const [activeCategory, setActiveCategory] = useState<string | "all">("all")
+  const [activeScreen, setActiveScreen] = useState("bounty")
   const [showSearch, setShowSearch] = useState(false)
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [userBalance, setUserBalance] = useState(40)
+  const [userBalance] = useState(40)
   const [error, setError] = useState<string | null>(null)
-  const [date, setDate] = React.useState<Date | undefined>(new Date())
 
-  // Define categories
+  // Filter chips per design
   const categories = [
-    { id: "local", label: "Local", icon: <MaterialIcons name="local-shipping" size={16} color="#374151" /> },
-    { id: "highpaying", label: "High Paying", icon: <MaterialIcons name="attach-money" size={16} color="#374151" /> },
+    { id: "crypto", label: "Crypto", icon: "attach-money" as const },
+    { id: "remote", label: "Remote", icon: "inventory" as const },
+    { id: "highpaying", label: "High Paying", icon: "payments" as const },
+    { id: "forkids", label: "For Kids", icon: "child-care" as const },
   ]
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
@@ -54,56 +52,45 @@ export function  BountyApp() {
   }
 
   // Filter and sort bounties by category
-  const filteredBounties = React.useMemo(() => {
-    let sortedBounties = [...bounties]
-
-    if (activeCategory === "local") {
-      // Sort by proximity (distance)
-      sortedBounties = sortedBounties.sort((a, b) => {
-        const distanceA = calculateDistance(a.location || "")
-        const distanceB = calculateDistance(b.location || "")
-        return distanceA - distanceB // Ascending order (closest first)
-      })
-    } else if (activeCategory === "highpaying") {
-      // Sort by highest amount
-      sortedBounties = sortedBounties.sort((a, b) => {
-        return Number(b.amount) - Number(a.amount) // Descending order (highest first)
-      })
+  const filteredBounties = useMemo(() => {
+    let list = [...bounties]
+    if (activeCategory !== "all") {
+      // simple contains filter on title/description to simulate
+      list = list.filter((b) =>
+        (b.title + " " + (b.description || "")).toLowerCase().includes(activeCategory.replace(/_/g, " ")),
+      )
     }
-
-    return sortedBounties
+    // High paying sorts by amount when selected
+    if (activeCategory === "highpaying") {
+      list.sort((a, b) => Number(b.amount) - Number(a.amount))
+    } else {
+      // default by proximity
+      list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
+    }
+    return list
   }, [bounties, activeCategory])
 
-  // Fetch bounties from your new Hostinger backend
+  // Placeholder data until backend is connected
   useEffect(() => {
-    const fetchBounties = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        // TODO: Replace with your Hostinger backend API endpoint for fetching bounties
-        const response = await fetch("https://your-hostinger-api.com/bounties")
-        if (!response.ok) {
-          throw new Error("Failed to fetch bounties from the server.")
-        }
-        const data = await response.json()
-        setBounties(data)
-      } catch (err: any) {
-        console.error("Error fetching bounties:", err)
-        setError(err.message || "An unknown error occurred.")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchBounties()
+    const placeholders: Bounty[] = [
+      { id: "1", user_id: "u1", title: "Mow My lawn!!!", amount: 60, location: "Downtown" },
+      { id: "2", user_id: "u2", title: "Delivering a Package", amount: 60, location: "Midtown" },
+      { id: "3", user_id: "u3", title: "Find my fathers murderer", amount: 500, location: "Uptown" },
+      { id: "4", user_id: "u4", title: "Help setting up crypto wallet", amount: 45, location: "Westside" },
+      { id: "5", user_id: "u5", title: "Coffee delivery service", amount: 15, location: "Eastside" },
+      { id: "6", user_id: "u6", title: "Birthday party helper", amount: 80, location: "Riverside" },
+      { id: "7", user_id: "u7", title: "Yard cleanup", amount: 55, location: "Lakeside" },
+      { id: "8", user_id: "u8", title: "Assemble furniture", amount: 70, location: "Heights" },
+    ]
+    setBounties(placeholders)
+    setIsLoading(false)
   }, [])
 
-  // Ensure activeCategory is valid when categories change
+  // Ensure activeCategory matches available filters
   useEffect(() => {
-    // If the current activeCategory is not in the available categories, reset to "local"
-    const categoryIds = categories.map((cat) => cat.id)
-    if (!categoryIds.includes(activeCategory)) {
-      setActiveCategory("local")
+    const ids = categories.map((c) => c.id)
+    if (activeCategory !== "all" && !ids.includes(String(activeCategory))) {
+      setActiveCategory("all")
     }
   }, [categories, activeCategory])
 
@@ -112,29 +99,91 @@ export function  BountyApp() {
   }
 
 
-  // Render dashboard content when activeScreen is "bounty" (previously "home")
+  // Render dashboard content when activeScreen is "bounty"
+  const renderDashboardContent = () => (
+    <View style={styles.dashboardArea}>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text style={styles.headerTitle}>BOUNTY</Text>
+        </View>
+        <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
+          <Text style={styles.headerBalance}>$ 40.00</Text>
+        </TouchableOpacity>
+      </View>
 
-  function renderDashboardContent() {
-      return (
-  <View style={styles.dashboardContainer}>
-    {/* Search Bar */}
-    <View style={styles.searchWrapper}>
-      <TouchableOpacity
-        accessibilityRole="button"
-        onPress={() => setShowSearch(true)}
-        style={styles.searchButton}
-      >
-        <Search size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
-        <Text style={styles.searchText}>Search bounties or users...</Text>
-      </TouchableOpacity>
+      {/* Search Bar */}
+      <View style={styles.searchWrapper}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
+          <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
+          <Text style={styles.searchText}>Search bounties or users...</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Chips */}
+      <View style={styles.filtersRow}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={categories}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+          renderItem={({ item }) => {
+            const isActive = activeCategory === item.id
+            return (
+              <TouchableOpacity
+                onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
+                style={[styles.chip, isActive && styles.chipActive]}
+              >
+                <MaterialIcons
+                  name={item.icon}
+                  size={16}
+                  color={isActive ? '#052e1b' : '#d1fae5'}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
+              </TouchableOpacity>
+            )
+          }}
+        />
+      </View>
+
+      {/* Bounty Grid */}
+      <FlatList
+        data={filteredBounties}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingBottom: 140, paddingTop: 8 }}
+        renderItem={({ item }) => {
+          const distance = calculateDistance(item.location || '')
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderLeft}>
+                  <MaterialIcons name="paid" size={16} color="#a7f3d0" />
+                  <Text style={styles.cardUsername}>@Jon_Doe</Text>
+                </View>
+                <MaterialIcons name="more-vert" size={18} color="#a7f3d0" />
+              </View>
+              <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+              <View style={styles.cardFooterRow}>
+                <View>
+                  <Text style={styles.cardMetaLabel}>Total Bounty</Text>
+                  <Text style={styles.cardAmount}>${String(item.amount)}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.cardMetaLabel}>Approx. Distance</Text>
+                  <Text style={styles.cardDistance}>{distance} mi</Text>
+                </View>
+              </View>
+            </View>
+          )
+        }}
+      />
     </View>
-    {/* Search Bar End*/}
-    <Text style={styles.dashboardTitle}>Dashboard</Text>
-    {/* components/ui/command.tsx Add your dashboard components here */}
-    {/* ...existing code... */}
-  </View>
-);
-    }
+  )
 
 
   return (
@@ -165,22 +214,32 @@ const styles = StyleSheet.create({
     position: 'relative',
     paddingBottom: 100, // space for BottomNav height
   },
-  dashboardContainer: {
+  dashboardArea: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
   },
-  dashboardTitle: {
-    fontSize: 28,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 32,
+    paddingBottom: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    marginLeft: 8,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
+    color: '#ffffff',
+    letterSpacing: 1,
   },
-  calendarContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  headerBalance: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
   centerButton: {
     height: 56,
@@ -202,19 +261,13 @@ const styles = StyleSheet.create({
   },
   // Search bar controls
   searchWrapper: {
-    width: '100%',
-    alignItems: 'center', // centers the search bar horizontally
-    marginBottom: 12,
-    // Uncomment to absolute-position the search bar near the top:
-     position: 'absolute',
-     top: 128,
-    // left: 16,
-    // right: 16,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
   },
   searchButton: {
-    width: '92%',         // change to fixed number (e.g., 320) for exact width
-    maxWidth: 640,
-    height: 50,           // adjust height
+    width: '100%',
+    height: 44,
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 999,
     flexDirection: 'row',
@@ -227,5 +280,75 @@ const styles = StyleSheet.create({
   searchText: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 14,
+  },
+  filtersRow: {
+    marginBottom: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(5,46,27,0.2)',
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 999,
+    marginRight: 8,
+  },
+  chipActive: {
+    backgroundColor: '#a7f3d0',
+  },
+  chipLabel: {
+    color: '#d1fae5',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  chipLabelActive: {
+    color: '#052e1b',
+  },
+  card: {
+    backgroundColor: 'rgba(2,44,34,0.6)',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+    width: '48%',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardUsername: {
+    marginLeft: 6,
+    color: '#a7f3d0',
+  },
+  cardTitle: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  cardMetaLabel: {
+    color: '#a7f3d0',
+    fontSize: 12,
+  },
+  cardAmount: {
+    color: '#fcd34d',
+    fontWeight: '800',
+    fontSize: 16,
+    marginTop: 4,
+  },
+  cardDistance: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginTop: 4,
   },
 });
