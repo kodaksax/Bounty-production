@@ -1,6 +1,5 @@
 import { ThemeProvider } from "components/theme-provider";
-import { BountyApp } from "components/bounty-app";
-import { NavigationMenu } from "components/ui/navigation-menu";
+import { Slot } from "expo-router";
 import type React from "react";
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -54,8 +53,8 @@ export default function RootLayout({
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <View style={styles.inner}>{children}
-          <BountyApp />
+          <View style={styles.inner}>
+            <Slot />
           </View>
         </ThemeProvider>
       </SafeAreaView>

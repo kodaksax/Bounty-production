@@ -103,45 +103,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     marginRight: 8,
   },
-  bottomNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    height: 150,
-    backgroundColor: '#065f46', // emerald-800
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    elevation: 10,
-  },
-  navButton: {
-    padding: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerButton: {
-    height: 56,
-    width: 56,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -20,
-},  bottomNavContainer: { // <-- added style
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    height: 64,
-    backgroundColor: '#065f46', // emerald-800
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    elevation: 10,
-  },
+  // bottom nav styles removed in favor of shared component
 });
 
   if (activeConversation) {
@@ -179,36 +141,8 @@ const styles = StyleSheet.create({
          ))}
        </View>
 
-      {/* Bottom Navigation - iPhone optimized with safe area inset */}
-            <View style={styles.bottomNav}>
-              <TouchableOpacity onPress={() => onNavigate("create")}
-                style={styles.navButton}
-              >
-                <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onNavigate("wallet")}
-                style={styles.navButton}
-              >
-                <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.centerButton}
-                onPress={() => onNavigate("bounty")}
-              >
-                <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onNavigate("postings")}
-                style={styles.navButton}
-              >
-                <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onNavigate("calendar")}
-                style={styles.navButton}
-              >
-                <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
-              </TouchableOpacity>
-            </View>
-          </View>
+      {/* Bottom navigation is provided by the app container (BountyApp) */}
+    </View>
   )
 }
       

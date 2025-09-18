@@ -8,7 +8,8 @@ import { SearchScreen } from "components/search-screen"
 import { WalletScreen } from "components/wallet-screen"
 import React, { useEffect, useState } from "react"
 
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { BottomNav } from 'components/ui/bottom-nav'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { Calendar } from "components/ui/calendar"
 
@@ -147,34 +148,7 @@ export function  BountyApp() {
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity onPress={() => setActiveScreen("create")}
-          style={styles.navButton}
-        >
-          <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveScreen("wallet")}
-          style={styles.navButton}
-        >
-          <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.centerButton}
-          onPress={() => setActiveScreen("bounty")}
-        >
-          <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveScreen("postings")}
-          style={styles.navButton}
-        >
-          <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveScreen("calendar")}
-          style={styles.navButton}
-        >
-          <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
-        </TouchableOpacity>
-      </View>
+          <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen}/>
     </View>
   );
 
@@ -183,7 +157,9 @@ export function  BountyApp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#059669',
+    position: 'relative',
+    paddingBottom: 100, // space for BottomNav height
   },
   dashboardContainer: {
     flex: 1,
@@ -202,21 +178,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    height: 65,
-    backgroundColor: '#065f46', // emerald-800
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    elevation: 5,
-  },
-  navButton: {
-    padding: 12,
-  },
   centerButton: {
     height: 56,
     width: 56,
@@ -227,5 +188,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -20,
+  },
+  bottomNavContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 100,
+    paddingBottom: 0,
   },
 });

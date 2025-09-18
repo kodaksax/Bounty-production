@@ -38,39 +38,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomNavContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 30,
-    paddingBottom: 0, // Safe area can be handled by pb-safe in tailwindish classes above if needed
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    height: 120,
-    backgroundColor: '#065f46', // emerald-800
-    paddingHorizontal: 28,
-    paddingBottom: 8,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    elevation: 30,
-  },
-  navButton: {
-    padding: 12,
-  },
-  centerButton: {
-    height: 56,
-    width: 56,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -20,
-  },
+  // bottom nav styles removed; using shared BottomNav component
 });
 
 
@@ -629,26 +597,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
         </View>
       )}
 
-      {/* Bottom Navigation - affixed to bottom */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.bottomNav}>
-          <TouchableOpacity onPress={() => setActiveScreen("create")} style={styles.navButton}>
-            <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveScreen("wallet")} style={styles.navButton}>
-            <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.centerButton} onPress={() => setActiveScreen("bounty")}>
-            <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveScreen("postings")} style={styles.navButton}>
-            <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveScreen("calendar")} style={styles.navButton}>
-            <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
-          </TouchableOpacity>
-        </View>
-      </View>
+  {/* Bottom navigation is provided by the app container (BountyApp) */}
 
       {/* Confirmation Card */}
       {showConfirmationCard && (

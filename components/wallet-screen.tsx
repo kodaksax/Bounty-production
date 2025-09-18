@@ -52,7 +52,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </TouchableOpacity>
         )}
       </View>
-  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 160 }}>
         {/* Balance Card */}
         <View style={styles.sectionPad}>
           <View style={styles.balanceCard}>
@@ -113,14 +113,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </View>
         </View>
       </ScrollView>
-      {/* Bottom Navigation Indicator */}
-      <View style={styles.bottomNavRow}>
-        <View style={styles.bottomNavDotActive} />
-        <View style={styles.bottomNavDot} />
-        <View style={styles.bottomNavDot} />
-        <View style={styles.bottomNavDot} />
-        <View style={styles.bottomNavDot} />
-      </View>
+      {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
       <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
     </View>
   );
@@ -270,26 +263,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  bottomNavRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 16,
-    paddingTop: 8,
-  },
-  bottomNavDotActive: {
-    height: 8,
-    width: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
-    marginHorizontal: 4,
-  },
-  bottomNavDot: {
-    height: 8,
-    width: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff6',
-    marginHorizontal: 4,
-  },
+  // bottom nav indicator removed; using shared BottomNav at app level
 });
 

@@ -239,7 +239,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         </View>
       </View>
 
-      <View className="flex-1 overflow-y-auto pb-4 hide-scrollbar">
+  <View className="flex-1 overflow-y-auto pb-40 hide-scrollbar">
         {/* Stats */}
         <View className="px-4 py-4">
           <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
@@ -357,14 +357,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         </View>
       </View>
 
-      {/* Bottom Navigation Indicator */}
-      <View className="mt-auto flex justify-center pb-6">
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-      </View>
+      {/* Bottom navigation is now provided at app level; this spacer ensures content isn't obscured */}
     </View>
   )
 }
