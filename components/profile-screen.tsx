@@ -6,7 +6,7 @@ import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View, ScrollView } from "react-native";
 import { SettingsScreen } from "./settings-screen";
 import { SkillsetEditScreen } from "./skillset-edit-screen";
 
@@ -211,38 +211,39 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">
-      {/* Header */}
-      <View className="flex justify-between items-center p-4 pt-8">
-        <TouchableOpacity className="p-2" onPress={onBack}>
-          <MaterialIcons name="description" size={24} color="#000000" />
-        </TouchableOpacity>
-        <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
-          <MaterialIcons name="settings" size={24} color="#000000" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Profile Info */}
-      <View className="px-4 py-2">
-        <View className="flex items-center gap-4">
-          <View className="relative">
-            <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
-              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-            </View>
-            <View className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
-              lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
-            </View>
-          </View>
-          <View>
-            <Text className="text-lg font-bold">{profileData.name}</Text>
-            <Text className="text-sm text-emerald-200">{profileData.about}</Text>
-          </View>
+      {/* Header — icons side-by-side on the right */}
+      <View className="flex-row items-center justify-between p-4 pt-8">
+        <View /> {/* placeholder to keep header balanced */}
+        <View className="flex-row items-center space-x-3">
+          <TouchableOpacity className="p-2" onPress={onBack}>
+            <MaterialIcons name="description" size={24} color="#000000" />
+          </TouchableOpacity>
+          <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
+            <MaterialIcons name="settings" size={24} color="#000000" />
+          </TouchableOpacity>
         </View>
       </View>
 
-  <View className="flex-1 overflow-y-auto pb-40 hide-scrollbar">
-        {/* Stats */}
+      <View className="flex-1 overflow-y-auto pb-40 hide-scrollbar">
+        {/* Stats + Profile Info (profile moved inside the stats card) */}
         <View className="px-4 py-4">
           <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
+            {/* Profile header inside the stats card */}
+            <View className="flex-row items-center mb-4">
+              <View className="relative">
+                <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
+                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                </View>
+                <View className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+                  lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
+                </View>
+              </View>
+              <View className="ml-4">
+                <Text className="text-lg font-bold">{profileData.name}</Text>
+                <Text className="text-sm text-emerald-200">{profileData.about}</Text>
+              </View>
+            </View>
+
             <View className="grid grid-cols-3 gap-4 text-center">
               <View className="transition-all duration-300 transform hover:scale-105">
                 <Text className="text-2xl font-bold animate-pulse">{stats.jobsAccepted}</Text>
@@ -272,26 +273,28 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
         {/* Skills */}
         <View className="px-4 py-2">
-          <View className="flex justify-between items-center mb-2">
-            <Text className="text-sm font-medium">Skillsets:</Text>
+          {/* Header: title left, edit button right */}
+          <View className="flex-row justify-between items-center mb-2">
+            <Text className="text-sm font-medium">Skillsets</Text>
             <TouchableOpacity
-
-              className="text-xs text-emerald-200 px-2 py-1 border border-emerald-500 rounded"
-
+              className="px-2 py-1 border border-emerald-500 rounded"
               onPress={() => setIsEditing(true)}
             >
               <Text className="text-xs text-emerald-200">Edit</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Skill items: text left, icon right */}
+          <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{ paddingBottom: 10 }}>
           <View className="space-y-3">
             {skills.map((skill) => (
-              <View key={skill.id} className="flex items-center gap-2">
-                {getIconComponent(skill.icon)}
-                <Text className="text-sm">{skill.text}</Text>
+              <View key={skill.id} className="flex-row justify-between items-center bg-emerald-700/20 rounded-lg p-3">
+                <Text className="text-sm text-emerald-100">{skill.text}</Text>
+                <View className="ml-2">{getIconComponent(skill.icon)}</View>
               </View>
             ))}
           </View>
+          </ScrollView>
         </View>
 
         <View className="px-4 py-4">

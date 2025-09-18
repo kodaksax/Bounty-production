@@ -305,22 +305,24 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
         {/* Fixed Header - iPhone optimized with safe area inset */}
         <View className="sticky top-0 z-10 bg-emerald-600">
           {/* Header */}
-          <View className="flex justify-between items-center p-4 pt-safe">
-            <View className="flex items-center gap-3">
-              {onBack && (
-                <TouchableOpacity onPress={onBack} className="mr-1 p-2 touch-target-min">
-                  <MaterialIcons name="arrow-back" size={24} color="#000000" />
-                </TouchableOpacity>
-              )}
+          <View className="flex-row justify-between items-center p-4 pt-safe">
+            {/* Left: icon + title aligned like messenger (no back icon) */}
+            <View className="flex-row items-center gap-3">
               <MaterialIcons name="gps-fixed" size={24} color="#000000" />
               <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
             </View>
-            <View className="flex items-center gap-4">
+
+            {/* Right: $40 placeholder and bookmark below it */}
+            <View className="flex items-end">
               <Text className="text-white font-medium">$ 40.00</Text>
+              <TouchableOpacity className="mt-1 text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
+                <MaterialIcons name="bookmark" size={20} color="#ffffff" />
+              </TouchableOpacity>
             </View>
           </View>
-          {/* Title and Bookmark */}
-          <View className="px-4 py-2 flex justify-between items-center">
+
+          {/* Title (centered below header) */}
+          <View className="px-4 py-2">
             <Text className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
@@ -330,9 +332,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                     ? "My Postings"
                     : "Bounty Posting"}
             </Text>
-            <TouchableOpacity className="text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
-              <MaterialIcons name="bookmark" size={20} color="#ffffff" />
-            </TouchableOpacity>
           </View>
 
 

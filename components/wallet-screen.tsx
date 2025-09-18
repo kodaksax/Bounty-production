@@ -52,7 +52,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </TouchableOpacity>
         )}
       </View>
-  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 160 }}>
+  
         {/* Balance Card */}
         <View style={styles.sectionPad}>
           <View style={styles.balanceCard}>
@@ -72,6 +72,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </View>
           </View>
         </View>
+
+
         {/* Linked Accounts Section */}
         <View style={styles.sectionPad}>
           <View style={styles.sectionHeaderRow}>
@@ -80,22 +82,34 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <Text style={styles.sectionManage}>Manage</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>VISA **** **** 3456</Text>
-              <Text style={styles.accountSub}>Default Payment Method</Text>
+
+          {/* Only the account cards scroll; header remains fixed */}
+          <ScrollView
+            style={{ maxHeight: 180 }}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.accountCard}>
+              <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accountName}>VISA **** **** 3456</Text>
+                <Text style={styles.accountSub}>Default Payment Method</Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>AMEX **** **** 7890</Text>
-              <Text style={styles.accountSub}>Added 02/15/2025</Text>
+            <View style={styles.accountCard}>
+              <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accountName}>AMEX **** **** 7890</Text>
+                <Text style={styles.accountSub}>Added 02/15/2025</Text>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
+          
+
+
         {/* Bounty Postings Section */}
+        
         <View style={[styles.sectionPad, { flex: 1 }]}> 
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Bounty Postings</Text>
@@ -103,6 +117,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <Text style={styles.sectionManage}>View All</Text>
             </TouchableOpacity>
           </View>
+          
+          <ScrollView style={{ flex: 1 }}>
           <View style={styles.bountyCard}>
             <Text style={styles.bountyName}>Bounty</Text>
             <Text style={styles.bountyAmount}>$15.00</Text>
@@ -111,8 +127,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             <Text style={styles.bountyName}>Bounty</Text>
             <Text style={styles.bountyAmount}>$25.00</Text>
           </View>
+          </ScrollView>
         </View>
-      </ScrollView>
+        
       {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
       <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
     </View>

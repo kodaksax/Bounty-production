@@ -7,11 +7,11 @@ import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
 import { WalletScreen } from "components/wallet-screen"
 import React, { useEffect, useState } from "react"
-
+import { Search } from "lucide-react-native";
 import { BottomNav } from 'components/ui/bottom-nav'
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native'
 
-import { Calendar } from "components/ui/calendar"
+// Calendar removed in favor of Profile as the last tab
 
 // Define the Bounty type here if not exported from data-utils
 type Bounty = {
@@ -116,11 +116,24 @@ export function  BountyApp() {
 
   function renderDashboardContent() {
       return (
-        <View style={styles.dashboardContainer}>
-          <Text style={styles.dashboardTitle}>Dashboard</Text>
-          {/* components/ui/command.tsx Add your dashboard components here */}
-        </View>
-      );
+  <View style={styles.dashboardContainer}>
+    {/* Search Bar */}
+    <View style={styles.searchWrapper}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        onPress={() => setShowSearch(true)}
+        style={styles.searchButton}
+      >
+        <Search size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
+        <Text style={styles.searchText}>Search bounties or users...</Text>
+      </TouchableOpacity>
+    </View>
+    {/* Search Bar End*/}
+    <Text style={styles.dashboardTitle}>Dashboard</Text>
+    {/* components/ui/command.tsx Add your dashboard components here */}
+    {/* ...existing code... */}
+  </View>
+);
     }
 
 
@@ -136,15 +149,6 @@ export function  BountyApp() {
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (
         <MessengerScreen activeScreen={activeScreen} onNavigate={setActiveScreen} />
-      ) : activeScreen === "calendar" ? (
-        <View style={styles.calendarContainer}>
-          <Calendar
-            mode="single"
-            selected={date}
-            onSelect={setDate}
-            // className="rounded-md border" // Not used in RN
-          />
-        </View>
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
@@ -195,5 +199,33 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 100,
     paddingBottom: 0,
+  },
+  // Search bar controls
+  searchWrapper: {
+    width: '100%',
+    alignItems: 'center', // centers the search bar horizontally
+    marginBottom: 12,
+    // Uncomment to absolute-position the search bar near the top:
+     position: 'absolute',
+     top: 128,
+    // left: 16,
+    // right: 16,
+  },
+  searchButton: {
+    width: '92%',         // change to fixed number (e.g., 320) for exact width
+    maxWidth: 640,
+    height: 50,           // adjust height
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
   },
 });

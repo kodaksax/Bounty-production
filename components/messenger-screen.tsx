@@ -4,8 +4,8 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import React, { useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import ChatDetailScreen from "./chat-detail-screen"
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ChatDetailScreen } from "./chat-detail-screen"
 
 
 export interface Conversation {
@@ -134,12 +134,12 @@ const styles = StyleSheet.create({
           </TouchableOpacity>
         </View>
       </View>
-
-      <View className="flex-1 px-2 pb-24">
+    
+      <ScrollView className="flex-1 px-2 pb-24">
          {conversations.map((conversation) => (
            <ConversationItem key={conversation.id} conversation={conversation} onPress={() => handleConversationClick(conversation.id)} />
          ))}
-       </View>
+       </ScrollView>
 
       {/* Bottom navigation is provided by the app container (BountyApp) */}
     </View>
