@@ -5,8 +5,10 @@ import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
 import { WalletScreen } from "components/wallet-screen"
-import React, { useEffect, useMemo, useState } from "react"
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from "react"
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
+import { TaskCard } from 'components/task-card'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -29,6 +31,9 @@ export function BountyApp() {
   const [isLoading, setIsLoading] = useState(true)
   const [userBalance] = useState(40)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const { width } = useWindowDimensions()
+  const numColumns = width > 360 ? 2 : 1
 
   // Filter chips per design
   const categories = [
@@ -84,6 +89,35 @@ export function BountyApp() {
     ]
     setBounties(placeholders)
     setIsLoading(false)
+  }, [])
+
+  // Restore last-selected chip on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('BE:lastFilter')
+        if (saved) setActiveCategory(saved as any)
+      } catch {}
+    })()
+  }, [])
+
+  // Persist chip selection
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem('BE:lastFilter', String(activeCategory))
+      } catch {}
+    })()
+  }, [activeCategory])
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(() => {
+    setRefreshing(true)
+    // Simulate network refresh; replace with real fetch later
+    setTimeout(() => {
+      // e.g., you could reshuffle placeholder order here
+      setRefreshing(false)
+    }, 800)
   }, [])
 
   // Ensure activeCategory matches available filters
@@ -153,32 +187,32 @@ export function BountyApp() {
       <FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
-        contentContainerStyle={{ paddingBottom: 140, paddingTop: 8 }}
+        numColumns={numColumns}
+        columnWrapperStyle={numColumns > 1 ? { justifyContent: 'space-between', paddingHorizontal: 16 } : undefined}
+        contentContainerStyle={{ paddingBottom: 140, paddingTop: 8, paddingHorizontal: numColumns === 1 ? 16 : 0 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+        ListEmptyComponent={() => (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
+            <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+            <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+              <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
+          // Ensure numeric id for TaskCard modal contract
+          const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
-                  <MaterialIcons name="paid" size={16} color="#a7f3d0" />
-                  <Text style={styles.cardUsername}>@Jon_Doe</Text>
-                </View>
-                <MaterialIcons name="more-vert" size={18} color="#a7f3d0" />
-              </View>
-              <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-              <View style={styles.cardFooterRow}>
-                <View>
-                  <Text style={styles.cardMetaLabel}>Total Bounty</Text>
-                  <Text style={styles.cardAmount}>${String(item.amount)}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.cardMetaLabel}>Approx. Distance</Text>
-                  <Text style={styles.cardDistance}>{distance} mi</Text>
-                </View>
-              </View>
-            </View>
+            <TaskCard
+              id={numericId}
+              username="@Jon_Doe"
+              title={item.title}
+              price={Number(item.amount)}
+              distance={distance}
+              icon={<MaterialIcons name="paid" size={16} color="#a7f3d0" />}
+              containerStyle={{ width: numColumns === 2 ? '48%' : '100%' }}
+            />
           )
         }}
       />
@@ -303,52 +337,5 @@ const styles = StyleSheet.create({
   },
   chipLabelActive: {
     color: '#052e1b',
-  },
-  card: {
-    backgroundColor: 'rgba(2,44,34,0.6)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-    width: '48%',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardUsername: {
-    marginLeft: 6,
-    color: '#a7f3d0',
-  },
-  cardTitle: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  cardFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  cardMetaLabel: {
-    color: '#a7f3d0',
-    fontSize: 12,
-  },
-  cardAmount: {
-    color: '#fcd34d',
-    fontWeight: '800',
-    fontSize: 16,
-    marginTop: 4,
-  },
-  cardDistance: {
-    color: '#ffffff',
-    fontSize: 16,
-    marginTop: 4,
   },
 });

@@ -1,11 +1,12 @@
 "use client"
 
-import { type ReactNode, useState } from "react"
-import { View, Text, TouchableOpacity } from "react-native"
+import React, { useState } from "react"
+import type { ReactNode } from "react"
+import { View, Text, TouchableOpacity, type StyleProp, type ViewStyle } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import { BountyDetailModal } from "./bountydetailmodal"
 
-interface TaskCardProps {
+export interface TaskCardProps {
   id: number
   username: string
   title: string
@@ -13,7 +14,8 @@ interface TaskCardProps {
   distance: number
   icon?: ReactNode
   description?: string
-  highlight?: "price" | "distance" // New prop to highlight either price or distance
+  highlight?: "price" | "distance"
+  containerStyle?: StyleProp<ViewStyle>
 }
 
 export function TaskCard({
@@ -25,6 +27,7 @@ export function TaskCard({
   icon,
   description,
   highlight = "distance",
+  containerStyle,
 }: TaskCardProps) {
   const [showDetail, setShowDetail] = useState(false)
 
@@ -33,6 +36,7 @@ export function TaskCard({
       <TouchableOpacity
         className="bg-black/30 backdrop-blur-sm rounded-xl overflow-hidden cursor-pointer transition-transform active:scale-[0.98] touch-target-min shadow-md"
         onPress={() => setShowDetail(true)}
+        style={containerStyle}
       >
         <View className="p-4">
           {/* Header */}
