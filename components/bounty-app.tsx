@@ -1,14 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons"
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
+import { TaskCard } from 'components/task-card'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { WalletScreen } from "components/wallet-screen"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
-import { TaskCard } from 'components/task-card'
 
 // Calendar removed in favor of Profile as the last tab
 

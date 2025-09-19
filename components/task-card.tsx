@@ -1,9 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
-import type { ReactNode } from "react"
-import { View, Text, TouchableOpacity, type StyleProp, type ViewStyle } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
+import type { ReactNode } from "react"
+import React, { useState } from "react"
+import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native"
 import { BountyDetailModal } from "./bountydetailmodal"
 
 export interface TaskCardProps {
