@@ -301,11 +301,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
 
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-      <View className="flex-1 flex flex-col min-h-screen bg-emerald-600">
+      <View className="flex-1 bg-emerald-600">
         {/* Fixed Header - iPhone optimized with safe area inset */}
         <View className="sticky top-0 z-10 bg-emerald-600">
           {/* Header */}
-          <View className="flex-row justify-between items-center p-4 pt-safe">
+          <View className="flex-row justify-between items-center px-4 pt-safe pb-1" style={{ transform: [{ translateY: -8 }] }}>
             {/* Left: icon + title aligned like messenger (no back icon) */}
             <View className="flex-row items-center gap-3">
               <MaterialIcons name="gps-fixed" size={24} color="#000000" />
@@ -322,7 +322,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           </View>
 
           {/* Title (centered below header) */}
-          <View className="px-4 py-2">
+          <View className="px-4 py-1" style={{ transform: [{ translateY: -20 }] }}>
             <Text className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
@@ -336,7 +336,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
 
 
           {/* Tabs - Scrollable for iPhone */}
-          <View className="px-4 mb-4 bg-emerald-600">
+          <View className="px-4 mb-2 bg-emerald-600" style={{ transform: [{ translateY: -20 }] }}>
             <View className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
               {tabs.map((tab) => (
                 <TouchableOpacity

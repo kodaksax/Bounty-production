@@ -1,14 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { BountyListItem } from 'components/bounty-list-item'
 import { MessengerScreen } from "components/messenger-screen"
 import { PostingsScreen } from "components/postings-screen"
 import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
-import { TaskCard } from 'components/task-card'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { WalletScreen } from "components/wallet-screen"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -32,8 +32,7 @@ export function BountyApp() {
   const [userBalance] = useState(40)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const { width } = useWindowDimensions()
-  const numColumns = width > 360 ? 2 : 1
+  // list layout (single column)
 
   // Filter chips per design
   const categories = [
@@ -183,13 +182,12 @@ export function BountyApp() {
         />
       </View>
 
-      {/* Bounty Grid */}
+      {/* Bounty List */}
       <FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-        numColumns={numColumns}
-        columnWrapperStyle={numColumns > 1 ? { justifyContent: 'space-between', paddingHorizontal: 16 } : undefined}
-        contentContainerStyle={{ paddingBottom: 140, paddingTop: 8, paddingHorizontal: numColumns === 1 ? 16 : 0 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 }}
+        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
@@ -201,17 +199,14 @@ export function BountyApp() {
         )}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
-          // Ensure numeric id for TaskCard modal contract
           const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
-            <TaskCard
+            <BountyListItem
               id={numericId}
-              username="@Jon_Doe"
               title={item.title}
+              username="@Jon_Doe"
               price={Number(item.amount)}
               distance={distance}
-              icon={<MaterialIcons name="paid" size={16} color="#a7f3d0" />}
-              containerStyle={{ width: numColumns === 2 ? '48%' : '100%' }}
             />
           )
         }}
