@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import React, { useState } from "react"
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { ChatDetailScreen } from "./chat-detail-screen"
+import { ChatDetailScreen } from "../../components/chat-detail-screen"
 
 
 export interface Conversation {

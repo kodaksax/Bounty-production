@@ -1,12 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { MessengerScreen } from "app/tabs/messenger-screen"
+import { PostingsScreen } from "app/tabs/postings-screen"
+import { ProfileScreen } from "app/tabs/profile-screen"
+import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
-import { MessengerScreen } from "components/messenger-screen"
-import { PostingsScreen } from "components/postings-screen"
-import { ProfileScreen } from "components/profile-screen"
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
-import { WalletScreen } from "components/wallet-screen"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
@@ -39,7 +39,7 @@ export function BountyApp() {
     { id: "crypto", label: "Crypto", icon: "attach-money" as const },
     { id: "remote", label: "Remote", icon: "inventory" as const },
     { id: "highpaying", label: "High Paying", icon: "payments" as const },
-    { id: "forkids", label: "For Kids", icon: "child-care" as const },
+    { id: "forkids", label: "For Honor", icon: "favorite" as const },
   ]
 
   // Calculate distance (mock function - in a real app, this would use geolocation)

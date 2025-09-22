@@ -51,77 +51,86 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white overflow-y-auto">
-      {/* Header - Fixed at top */}
-      <View className="sticky top-0 z-10 bg-emerald-600 flex justify-between items-center p-4 pt-8">
-        <TouchableOpacity onPress={onBack} className="p-1">
-          <MaterialIcons name="close" size={24} color="#000000" />
-        </TouchableOpacity>
-        <View className="flex items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+    <View className="flex-1 bg-emerald-600">
+      {/* Header */}
+      <View className="sticky top-0 z-10 bg-emerald-600 px-4 pt-safe pb-2">
+        <View className="flex-row items-center justify-between">
+          <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
+            <MaterialIcons name="close" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <MaterialIcons name="gps-fixed" size={22} color="#ffffff" />
+            <Text className="text-white font-bold tracking-wider">BOUNTY</Text>
+          </View>
+          <View style={{ width: 40 }} />
         </View>
-        <View className="w-6"></View> {/* Empty div for spacing */}
-      </View>
-
-      {/* Title */}
-      <View className="px-4 py-2">
-        <Text className="text-xl font-medium">Add Cash</Text>
+        <Text className="text-white text-base text-center mt-1">Add Cash</Text>
       </View>
 
       {/* Amount Display */}
-      <View className="flex justify-center items-center py-6">
-        <View className="text-5xl font-bold">${amount}</View>
+      <View className="items-center justify-center py-6">
+        <Text className="text-white" style={{ fontSize: 56, fontWeight: '800' }}>${amount}</Text>
       </View>
 
-      {/* Keypad - Scrollable content */}
-      <View className="flex-1 px-4 pb-40">
-        <View className="grid grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <TouchableOpacity
-              key={num}
-              className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
-              onPress={() => handleNumberPress(num)}
-            >
-              <Text className="text-2xl font-medium text-white">{num}</Text>
-            </TouchableOpacity>
-          ))}
+      {/* Keypad */}
+      <View className="flex-1 px-8 pb-40">
+        {[ [1,2,3], [4,5,6], [7,8,9] ].map((row, idx) => (
+          <View key={idx} className="flex-row justify-between mb-4">
+            {row.map((num) => (
+              <TouchableOpacity
+                key={num}
+                className="rounded-full items-center justify-center"
+                style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
+                onPress={() => handleNumberPress(num)}
+                activeOpacity={0.7}
+              >
+                <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>{num}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+        <View className="flex-row justify-between">
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="rounded-full items-center justify-center"
+            style={{ width: 64, height: 64 }}
             onPress={handleDecimalPress}
+            activeOpacity={0.7}
           >
-            <Text className="text-2xl font-medium text-white">.</Text>
+            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>.</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="rounded-full items-center justify-center"
+            style={{ width: 64, height: 64 }}
             onPress={() => handleNumberPress(0)}
+            activeOpacity={0.7}
           >
-            <Text className="text-2xl font-medium text-white">0</Text>
+            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>0</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
+            className="rounded-full items-center justify-center"
+            style={{ width: 64, height: 64 }}
             onPress={handleDeletePress}
+            activeOpacity={0.7}
           >
-            <Text className="text-2xl font-medium text-white">{"<"}</Text>
+            <MaterialIcons name="backspace" size={26} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Add Button - Fixed at bottom with safe area padding, moved up by 50px */}
-  <View className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: 50 } as any}>
-        <View className="p-4 pb-8">
+      {/* Add Button - fixed above home indicator */}
+      <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 16 }}>
+        <View className="px-4">
           <TouchableOpacity
             className={cn(
-              "w-full py-4 rounded-lg font-medium text-center",
-              Number.parseFloat(amount) > 0
-                ? "bg-gray-700 hover:bg-gray-600 transition-colors"
-                : "bg-gray-700/50 text-gray-300 cursor-not-allowed",
+              "w-full py-4 rounded-full",
+              Number.parseFloat(amount) > 0 ? "bg-gray-700" : "bg-gray-700/50"
             )}
             disabled={Number.parseFloat(amount) <= 0}
             onPress={handleAddMoney}
+            activeOpacity={0.8}
           >
             <Text className={cn(
-              "font-medium text-center",
+              "text-center text-base font-medium",
               Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
             )}>Add</Text>
           </TouchableOpacity>

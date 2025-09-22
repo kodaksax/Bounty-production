@@ -2,14 +2,14 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import React, { useEffect, useRef, useState } from "react"
 import {
-    Dimensions,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native"
 
 interface BountyDetailModalProps {
@@ -103,19 +103,37 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
     <Modal
       visible={true}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="overFullScreen"
+      transparent
       onRequestClose={handleClose}
     >
-      <View style={[styles.container, { width, height: height * 0.9 }]}>
+      <View style={styles.overlay}>
+        {/* Shadow wrapper (no overflow) */}
+        <View
+          style={[
+            styles.cardShadow,
+            { width: width - 35, maxWidth: 560, height: Math.min(height * 0.9, 760) }
+          ]}
+        >
+          {/* Rounded card (clips children) */}
+          <View style={styles.card}>
         {/* Header - iPhone optimized */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <MaterialIcons name="place" size={20} color="white" />
             <Text style={styles.headerTitle}>BOUNTY</Text>
           </View>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <MaterialIcons name="close" size={20} color="white" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
+              <MaterialIcons name="share" size={20} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
+              <MaterialIcons name="report" size={20} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+              <MaterialIcons name="close" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Bounty Details - Scrollable content */}
@@ -251,8 +269,10 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
         {/* Accept Bounty Button - With safe area inset */}
         <View style={styles.actionContainer}>
           <TouchableOpacity style={styles.acceptButton}>
-            <Text style={styles.acceptButtonText}>Accept Bounty</Text>
+            <Text style={styles.acceptButtonText}>Apply for Bounty</Text>
           </TouchableOpacity>
+        </View>
+          </View>
         </View>
       </View>
     </Modal>
@@ -260,13 +280,28 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  // Outer shadow wrapper (no overflow so shadow isn't clipped)
+  cardShadow: {
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+    backgroundColor: 'transparent',
+  },
+  // Inner rounded card
+  card: {
     flex: 1,
     backgroundColor: '#059669', // emerald-600
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   header: {
@@ -275,10 +310,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     backgroundColor: '#047857', // emerald-700
+    // Optional: ensure the darker header follows the rounded top
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    padding: 8,
+    marginRight: 4,
   },
   headerTitle: {
     marginLeft: 8,

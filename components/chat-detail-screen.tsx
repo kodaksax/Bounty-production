@@ -6,7 +6,7 @@ import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-nativ
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
-import type { Conversation } from "./messenger-screen"
+import type { Conversation } from "../app/tabs/messenger-screen"
 
 interface Message {
   id: string

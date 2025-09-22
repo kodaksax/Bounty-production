@@ -4,10 +4,10 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { AddMoneyScreen } from "./add-money-screen";
-import { PaymentMethodsModal } from "./payment-methods-modal";
-import { TransactionHistoryScreen } from "./transaction-history-screen";
-import { WithdrawScreen } from "./withdraw-screen";
+import { AddMoneyScreen } from "../../components/add-money-screen";
+import { PaymentMethodsModal } from "../../components/payment-methods-modal";
+import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
+import { WithdrawScreen } from "../../components/withdraw-screen";
 
 
 interface WalletScreenProps {

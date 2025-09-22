@@ -6,9 +6,9 @@ import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { Text, TouchableOpacity, View, ScrollView } from "react-native";
-import { SettingsScreen } from "./settings-screen";
-import { SkillsetEditScreen } from "./skillset-edit-screen";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { SettingsScreen } from "../../components/settings-screen";
+import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -211,12 +211,15 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">
-      {/* Header — icons side-by-side on the right */}
+      {/* Header — left: BOUNTY brand, right: back + settings */}
       <View className="flex-row items-center justify-between p-4 pt-8">
-        <View /> {/* placeholder to keep header balanced */}
+        <View className="flex-row items-center">
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
+        </View>
         <View className="flex-row items-center space-x-3">
           <TouchableOpacity className="p-2" onPress={onBack}>
-            <MaterialIcons name="description" size={24} color="#000000" />
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
           </TouchableOpacity>
           <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
             <MaterialIcons name="settings" size={24} color="#000000" />
