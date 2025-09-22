@@ -1,11 +1,9 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useConfirmPayment } from '@stripe/stripe-react-native'
 import { cn } from "lib/utils"
-import { stripeService } from "lib/services/stripe-service"
 import { useState } from "react"
-import { Alert, Text, TouchableOpacity, View } from "react-native"
+import { Alert, Text, TouchableOpacity, View, Platform } from "react-native"
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -15,7 +13,6 @@ interface AddMoneyScreenProps {
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
   const [isProcessing, setIsProcessing] = useState(false)
-  const { confirmPayment } = useConfirmPayment()
 
   // Mock customer ID - in a real app, this would come from your user authentication
   const customerId = "cus_mock_customer_id"
@@ -57,9 +54,37 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       return
     }
 
+    // For now, show mock success on all platforms since we need backend integration
+    Alert.alert('Success', `Successfully added $${numAmount.toFixed(2)} to your wallet!`)
+    if (onAddMoney) {
+      onAddMoney(numAmount)
+    }
+    return
+
+    // TODO: Uncomment this section when backend is ready and remove the mock above
+    /*
+    // If on web, show mock success
+    if (Platform.OS === 'web') {
+      Alert.alert('Success', `Mock: Successfully added $${numAmount.toFixed(2)} to your wallet!`)
+      if (onAddMoney) {
+        onAddMoney(numAmount)
+      }
+      return
+    }
+
+    // For native platforms, use Stripe
     setIsProcessing(true)
 
     try {
+      // Dynamically import Stripe hooks only on native platforms
+      const { useConfirmPayment } = await import('../lib/services/stripe-service')
+      const confirmPayment = useConfirmPayment?.()?.confirmPayment
+
+      if (!confirmPayment) {
+        Alert.alert('Error', 'Payment service not available')
+        return
+      }
+
       // Step 1: Create payment intent from your backend
       const { paymentIntent, error: intentError } = await stripeService.createPaymentIntent(
         numAmount,
@@ -101,6 +126,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     } finally {
       setIsProcessing(false)
     }
+    */
   }
 
   return (

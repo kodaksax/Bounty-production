@@ -1,12 +1,12 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { CardField, useStripe } from '@stripe/stripe-react-native'
+import { CardField, useStripe } from '../lib/services/stripe-service'
 import { cn } from "lib/utils"
 import { stripeService } from "lib/services/stripe-service"
 import type React from "react"
 import { useState } from "react"
-import { Alert, Text, TouchableOpacity, View } from "react-native"
+import { Alert, Text, TouchableOpacity, View, Platform } from "react-native"
 
 interface StripeAddCardModalProps {
   onBack: () => void
@@ -15,9 +15,46 @@ interface StripeAddCardModalProps {
 }
 
 export function StripeAddCardModal({ onBack, onSave, customerId }: StripeAddCardModalProps) {
-  const { confirmSetupIntent } = useStripe()
+  const { confirmSetupIntent } = useStripe() || {}
   const [cardDetails, setCardDetails] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  // If on web or Stripe not available, show fallback
+  if (Platform.OS === 'web' || !CardField) {
+    return (
+      <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+        <View className="flex items-center justify-between p-4 pt-8">
+          <TouchableOpacity onPress={onBack} className="p-1">
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
+          </TouchableOpacity>
+          <View className="flex items-center">
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+          </View>
+          <View className="w-6"></View>
+        </View>
+        
+        <View className="px-4 py-6 flex-1 justify-center items-center">
+          <MaterialIcons name="credit-card" size={64} color="#6ee7b7" />
+          <Text className="text-white text-xl mt-4 text-center">
+            Stripe payment integration is only available on mobile devices
+          </Text>
+          <Text className="text-green-300 text-sm mt-2 text-center">
+            Please use the mobile app to add payment methods
+          </Text>
+        </View>
+        
+        <View className="px-4 pb-8">
+          <TouchableOpacity
+            className="w-full py-4 rounded-lg bg-gray-700"
+            onPress={onBack}
+          >
+            <Text className="font-medium text-center text-white">Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
 
   const handleAddCard = async () => {
     if (!cardDetails?.complete) {
@@ -108,7 +145,7 @@ export function StripeAddCardModal({ onBack, onSave, customerId }: StripeAddCard
               height: 50,
               marginVertical: 8,
             }}
-            onCardChange={(cardDetails) => {
+            onCardChange={(cardDetails: any) => {
               setCardDetails(cardDetails)
             }}
           />

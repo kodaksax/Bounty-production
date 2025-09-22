@@ -2,8 +2,8 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useState, useEffect } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from "react-native";
 import { AddMoneyScreen } from "./add-money-screen";
 import { PaymentMethodsModal } from "./payment-methods-modal";
 import { TransactionHistoryScreen } from "./transaction-history-screen";
@@ -14,12 +14,44 @@ interface WalletScreenProps {
   onBack?: () => void
 }
 
+interface PaymentMethodData {
+  id: string;
+  type: 'card';
+  card: {
+    brand: string;
+    last4: string;
+    exp_month: number;
+    exp_year: number;
+  };
+  billing_details?: {
+    name?: string;
+    email?: string;
+  };
+  created: number;
+}
+
 export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showWithdraw, setShowWithdraw] = useState(false)
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const [balance, setBalance] = useState(40)
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodData[]>([])
+  const [isLoadingPaymentMethods, setIsLoadingPaymentMethods] = useState(false)
+
+  // Mock customer ID - in a real app, this would come from your user authentication
+  const customerId = "cus_mock_customer_id"
+
+  // Load payment methods when component mounts
+  useEffect(() => {
+    loadPaymentMethods()
+  }, [])
+
+  const loadPaymentMethods = async () => {
+    // Mock: Skip loading payment methods for now
+    // TODO: Implement when backend is ready
+    setIsLoadingPaymentMethods(false)
+  }
 
   const handleAddMoney = (amount: number) => {
     setBalance((prev) => prev + amount)
@@ -80,20 +112,37 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <Text style={styles.sectionManage}>Manage</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>VISA **** **** 3456</Text>
-              <Text style={styles.accountSub}>Default Payment Method</Text>
+          {isLoadingPaymentMethods ? (
+            <View style={styles.accountCard}>
+              <Text style={styles.accountName}>Loading payment methods...</Text>
             </View>
-          </View>
-          <View style={styles.accountCard}>
-            <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>AMEX **** **** 7890</Text>
-              <Text style={styles.accountSub}>Added 02/15/2025</Text>
+          ) : paymentMethods.length > 0 ? (
+            paymentMethods.slice(0, 2).map((paymentMethod) => (
+              <View key={paymentMethod.id} style={styles.accountCard}>
+                <View style={styles.accountIcon}>
+                  <MaterialIcons name="credit-card" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountName}>
+                    {paymentMethod.card.brand.toUpperCase()} •••• •••• •••• {paymentMethod.card.last4}
+                  </Text>
+                  <Text style={styles.accountSub}>
+                    Expires {paymentMethod.card.exp_month}/{paymentMethod.card.exp_year}
+                  </Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.accountCard}>
+              <View style={styles.accountIcon}>
+                <MaterialIcons name="add" size={24} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accountName}>No payment methods</Text>
+                <Text style={styles.accountSub}>Add a card to get started</Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
         {/* Bounty Postings Section */}
         <View style={[styles.sectionPad, { flex: 1 }]}> 

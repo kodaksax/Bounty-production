@@ -1,11 +1,37 @@
-import { initStripe, useStripe, useConfirmPayment, PaymentSheet } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
 import { logger } from 'lib/utils/error-logger';
+
+// Conditionally import Stripe components only for native platforms
+let initStripe: any;
+let useStripe: any;
+let useConfirmPayment: any;
+let PaymentSheet: any;
+let StripeProvider: any;
+let CardField: any;
+
+if (Platform.OS !== 'web') {
+  try {
+    const stripe = require('@stripe/stripe-react-native');
+    initStripe = stripe.initStripe;
+    useStripe = stripe.useStripe;
+    useConfirmPayment = stripe.useConfirmPayment;
+    PaymentSheet = stripe.PaymentSheet;
+    StripeProvider = stripe.StripeProvider;
+    CardField = stripe.CardField;
+  } catch (error) {
+    console.warn('Stripe React Native not available:', error);
+  }
+}
 
 // Stripe Configuration
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_key_here';
 
 // Initialize Stripe
 export const initializeStripe = async () => {
+  if (Platform.OS === 'web') {
+    return { success: true, error: null }; // Skip initialization on web
+  }
+  
   try {
     await initStripe({
       publishableKey: STRIPE_PUBLISHABLE_KEY,
@@ -207,5 +233,5 @@ export const stripeService = {
   },
 };
 
-// Export hooks for easy use in components
-export { useStripe, useConfirmPayment, PaymentSheet };
+// Export hooks for easy use in components (with web safety)
+export { useStripe, useConfirmPayment, PaymentSheet, StripeProvider, CardField };
