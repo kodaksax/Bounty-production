@@ -1,9 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Target, X } from "lucide-react"
-import { cn } from "lib/utils"
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -231,6 +230,52 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     addButtonTextDisabled: {
       color: '#6EE7B7', // emerald-300
     },
+    // Style aliases to match JSX usage
+    toggle: {
+      width: 48,
+      height: 24,
+      borderRadius: 12,
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    toggleActive: {
+      backgroundColor: '#10B981', // emerald-400
+    },
+    toggleInactive: {
+      backgroundColor: '#065F46', // emerald-800
+    },
+    toggleSlider: {
+      position: 'absolute',
+      top: 4,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: 'white',
+    },
+    toggleSliderActive: {
+      right: 4,
+    },
+    toggleSliderInactive: {
+      left: 4,
+    },
+    honorTextContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+    },
+    honorText: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    bottomButtonContainer: {
+      padding: 16,
+      paddingBottom: 32,
+    },
+    bottomButton: {
+      width: '100%',
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
   });
 
   return (
@@ -238,13 +283,13 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.headerButton}>
-          <X color="white" size={24} />
+          <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Target color="white" size={20} style={styles.headerIcon} />
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
-        <View style={styles.spacer} />
+        <View style={{ width: 24 }} /> {/* Empty view for spacing */}
       </View>
 
       {/* Title */}
@@ -254,14 +299,9 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Amount Display */}
       <View style={styles.amountContainer}>
-        <Animated.Text
-          style={[
-            styles.amountText,
-            { transform: [{ scale: animateAmount }] }
-          ]}
-        >
+        <Text style={styles.amountText}>
           ${formattedAmount()}
-        </Animated.Text>
+        </Text>
       </View>
 
       {/* For Honor Toggle */}
@@ -270,22 +310,22 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
         <TouchableOpacity
           onPress={() => setIsForHonor(!isForHonor)}
           style={[
-            styles.toggleButton,
-            isForHonor ? styles.toggleButtonActive : styles.toggleButtonInactive,
+            styles.toggle,
+            isForHonor ? styles.toggleActive : styles.toggleInactive,
           ]}
         >
-          <View
+          <View 
             style={[
-              styles.toggleCircle,
-              isForHonor ? styles.toggleCircleActive : styles.toggleCircleInactive,
+              styles.toggleSlider,
+              isForHonor ? styles.toggleSliderActive : styles.toggleSliderInactive,
             ]}
           />
         </TouchableOpacity>
       </View>
 
       {isForHonor && (
-        <View style={styles.honorDescription}>
-          <Text style={styles.honorDescriptionText}>
+        <View style={styles.honorTextContainer}>
+          <Text style={styles.honorText}>
             This bounty will be posted without monetary reward. People will complete it for honor and reputation.
           </Text>
         </View>
@@ -299,7 +339,6 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               key={num}
               style={styles.keypadButton}
               onPress={() => handleNumberPress(num)}
-              activeOpacity={0.7}
             >
               <Text style={styles.keypadButtonText}>{num}</Text>
             </TouchableOpacity>
@@ -307,33 +346,32 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           <TouchableOpacity
             style={styles.keypadButton}
             onPress={handleDecimalPress}
-            activeOpacity={0.7}
           >
             <Text style={styles.keypadButtonText}>.</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.keypadButton}
             onPress={() => handleNumberPress(0)}
-            activeOpacity={0.7}
           >
             <Text style={styles.keypadButtonText}>0</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.keypadButton}
             onPress={handleDeletePress}
-            activeOpacity={0.7}
           >
-            <Text style={styles.keypadButtonText}>⌫</Text>
+            <Text style={styles.keypadButtonText}>&lt;</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Add Button */}
-      <View style={styles.addButtonContainer}>
+      <View style={styles.bottomButtonContainer}>
         <TouchableOpacity
           style={[
-            styles.addButton,
-            (Number.parseFloat(amount) > 0 || isForHonor) ? styles.addButtonEnabled : styles.addButtonDisabled,
+            styles.bottomButton,
+            Number.parseFloat(amount) > 0 || isForHonor
+              ? styles.addButtonEnabled
+              : styles.addButtonDisabled,
           ]}
           disabled={!(Number.parseFloat(amount) > 0 || isForHonor)}
           onPress={handleAddBounty}
@@ -341,9 +379,8 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           <Text style={[
             styles.addButtonText,
             !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
-          ]}>
-            Add
-          </Text>
+          ]}>Add</Text>
+
         </TouchableOpacity>
       </View>
     </View>

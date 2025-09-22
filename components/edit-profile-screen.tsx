@@ -1,10 +1,10 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useRef } from "react"
-import { ArrowLeft, Target, Camera } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import type React from "react"
+import { useState } from "react"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -27,7 +27,6 @@ export function EditProfileScreen({
   const [about, setAbout] = useState(initialAbout)
   const [phone, setPhone] = useState(initialPhone)
   const [avatar, setAvatar] = useState(initialAvatar)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSave = () => {
     onSave({
@@ -38,184 +37,179 @@ export function EditProfileScreen({
   }
 
   const handleAvatarClick = () => {
-    fileInputRef.current?.click()
+    // In React Native, we would use react-native-image-picker
+    // For now, this is a placeholder
+    console.log("Avatar click - would open image picker")
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // In a real app, you would upload the file to a server
-      // For now, we'll just create a local URL
-      const url = URL.createObjectURL(file)
-      setAvatar(url)
-    }
-  }
+  // Removed handleFileChange as it's not applicable in React Native
+  // In React Native, use react-native-image-picker for file selection
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Fixed Header */}
-      <div className="sticky top-0 z-10 bg-emerald-600">
+      <View className="sticky top-0 z-10 bg-emerald-600">
         {/* Header */}
-        <div className="p-4 pt-8 pb-2">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <Target className="h-5 w-5 mr-2" />
-              <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-            </div>
-            <span className="text-lg font-bold">$ 40.00</span>
-          </div>
-          <div className="h-px bg-emerald-500/50 my-2"></div>
-        </div>
+        <View className="p-4 pt-8 pb-2">
+          <View className="flex justify-between items-center">
+            <View className="flex items-center">
+              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+              <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+            </View>
+            <Text className="text-lg font-bold">$ 40.00</Text>
+          </View>
+          <View className="h-px bg-emerald-500/50 my-2"></View>
+        </View>
 
         {/* Settings Header */}
-        <div className="px-4 py-2 flex items-center justify-between bg-emerald-700/30">
-          <div className="flex items-center">
-            <button onClick={onBack} className="mr-2">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <span className="text-lg">Settings</span>
-          </div>
-          <button className="text-sm font-medium bg-emerald-700/50 px-3 py-1 rounded-md" onClick={handleSave}>
+        <View className="px-4 py-2 flex items-center justify-between bg-emerald-700/30">
+          <View className="flex items-center">
+            <TouchableOpacity onPress={onBack} className="mr-2">
+              <MaterialIcons name="arrow-back" size={24} color="#000000" />
+            </TouchableOpacity>
+            <Text className="text-lg">Settings</Text>
+          </View>
+          <TouchableOpacity className="text-sm font-medium bg-emerald-700/50 px-3 py-1 rounded-md" onPress={handleSave}>
             Save
-          </button>
-        </div>
+          </TouchableOpacity>
+        </View>
 
         {/* Edit Profile Title */}
-        <div className="px-4 py-3 bg-emerald-700/30">
-          <h1 className="text-xl font-bold">Edit Profile</h1>
-        </div>
-      </div>
+        <View className="px-4 py-3 bg-emerald-700/30">
+          <Text className="text-xl font-bold">Edit Profile</Text>
+        </View>
+      </View>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto pb-20">
+      <View className="flex-1 overflow-y-auto pb-20">
         {/* Profile Picture */}
-        <div className="px-4 py-6 bg-gray-700/80 flex flex-col items-center">
-          <div className="relative mb-2">
+        <View className="px-4 py-6 bg-gray-700/80 flex flex-col items-center">
+          <View className="relative mb-2">
             <Avatar className="h-20 w-20 border-2 border-emerald-500">
               <AvatarImage src={avatar} alt="Profile" />
               <AvatarFallback className="bg-emerald-800 text-emerald-200">
                 {initialName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <button
-              className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center"
-              onClick={handleAvatarClick}
+            <TouchableOpacity
+              style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
+              onPress={handleAvatarClick}
             >
-              <Camera className="h-4 w-4 text-white" />
-            </button>
-            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-          </div>
-          <p className="text-xs text-center text-gray-300 max-w-[200px]">
+              <MaterialIcons name="camera-alt" size={16} color="white" />
+            </TouchableOpacity>
+            {/* Removed HTML file input - not applicable in React Native */}
+          </View>
+          <Text className="text-xs text-center text-gray-300 max-w-[200px]">
             Enter your name and add an optional profile picture
-          </p>
-          <button className="mt-2 text-emerald-300 text-sm">Edit</button>
-        </div>
+          </Text>
+          <TouchableOpacity className="mt-2 text-emerald-300 text-sm">Edit</TouchableOpacity>
+        </View>
 
         {/* Name Field */}
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <TextInput
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChangeText={setName}
+            placeholder="Enter your name"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
         {/* Phone Field */}
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <TextInput
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChangeText={setPhone}
+            placeholder="Enter phone number"
+            keyboardType="phone-pad"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
         {/* About Field */}
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <TextInput
             value={about}
-            onChange={(e) => setAbout(e.target.value)}
+            onChangeText={setAbout}
             placeholder="About"
+            multiline
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
         {/* Additional Fields for Scrolling */}
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Email</label>
-          <input
-            type="email"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <Text className="text-xs text-emerald-300 block mb-1">Email</Text>
+          <TextInput
             placeholder="your.email@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Location</label>
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <Text className="text-xs text-emerald-300 block mb-1">Location</Text>
+          <TextInput
             placeholder="City, Country"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Website</label>
-          <input
-            type="url"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <Text className="text-xs text-emerald-300 block mb-1">Website</Text>
+          <TextInput
             placeholder="https://yourwebsite.com"
+            keyboardType="url"
+            autoCapitalize="none"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Birthday</label>
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <Text className="text-xs text-emerald-300 block mb-1">Birthday</Text>
+          <TextInput
             placeholder="MM/DD/YYYY"
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-1">Languages</label>
-          <input
-            type="text"
+        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+          <Text className="text-xs text-emerald-300 block mb-1">Languages</Text>
+          <TextInput
             placeholder="English, Spanish, etc."
             className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
           />
-        </div>
+        </View>
 
-        <div className="px-4 py-6 bg-gray-700/80 mt-1">
+        <View className="px-4 py-6 bg-gray-700/80 mt-1">
           <label className="text-xs text-emerald-300 block mb-2">Bio</label>
           <textarea
             placeholder="Tell us more about yourself..."
             rows={4}
             className="w-full bg-emerald-700/50 border-none rounded-md p-3 text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 resize-none"
           ></textarea>
-        </div>
+        </View>
 
         {/* Privacy Section */}
-        <div className="px-4 py-3 bg-emerald-700/30 mt-1">
-          <h2 className="text-lg font-medium">Privacy</h2>
-        </div>
+        <View className="px-4 py-3 bg-emerald-700/30 mt-1">
+          <Text className="text-lg font-medium">Privacy</Text>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
-          <span>Show phone number</span>
-          <div className="h-6 w-10 bg-emerald-700 rounded-full p-1 flex items-center">
-            <div className="h-4 w-4 bg-white rounded-full"></div>
-          </div>
-        </div>
+        <View className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
+          <Text>Show phone number</Text>
+          <View className="h-6 w-10 bg-emerald-700 rounded-full p-1 flex items-center">
+            <View className="h-4 w-4 bg-white rounded-full"></View>
+          </View>
+        </View>
 
-        <div className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
-          <span>Show profile photo</span>
-          <div className="h-6 w-10 bg-emerald-500 rounded-full p-1 flex justify-end items-center">
-            <div className="h-4 w-4 bg-white rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <View className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
+          <Text>Show profile photo</Text>
+          <View className="h-6 w-10 bg-emerald-500 rounded-full p-1 flex justify-end items-center">
+            <View className="h-4 w-4 bg-white rounded-full"></View>
+          </View>
+        </View>
+      </View>
+    </View>
   )
 }

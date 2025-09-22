@@ -1,7 +1,10 @@
 "use client"
 
 import type React from "react";
+import { Text, View } from "react-native";
 
+import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { Alert, AlertDescription } from "components/ui/alert";
 import { Button } from "components/ui/button";
 import { Checkbox } from "components/ui/checkbox";
@@ -9,8 +12,6 @@ import { Input } from "components/ui/input";
 import { Label } from "components/ui/label";
 import { Textarea } from "components/ui/textarea";
 import type { BountyFormValues } from "lib/types"; // Assuming you move types here
-import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { z } from "zod";
 
@@ -35,7 +36,7 @@ interface BountyFormProps {
 }
 
 export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bountyId }: BountyFormProps) {
-  const router = useRouter()
+  const navigation = useNavigation()
   // TODO: Replace with your own auth state management (e.g., a React Context)
   // const { user } = useAuth();
 
@@ -54,17 +55,11 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
   const [errors, setErrors] = useState<z.ZodIssue[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
   const handleCheckboxChange = (name: string, checked: boolean) => {
     setFormData((prev) => ({ ...prev, [name]: checked }))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async () => {
     setErrors([])
     setSubmitError(null)
 
@@ -111,8 +106,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       if (onSuccess) {
         onSuccess(result)
       } else {
-        router.push("/dashboard")
-        router.refresh()
+        ;(navigation as any).navigate("Dashboard")
       }
     } catch (err) {
       setSubmitError("An unexpected error occurred")
@@ -128,118 +122,100 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <View className="space-y-6">
       {submitError && (
         <Alert variant="destructive">
           <AlertDescription>{submitError}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="title">Title</Label>
+      <View className="space-y-2">
+        <Label>Title</Label>
         <Input
-          id="title"
-          name="title"
           value={formData.title}
-          onChange={handleChange}
+          onChangeText={(text: string) => setFormData((prev) => ({ ...prev, title: text }))}
           placeholder="A brief description of the job you need done"
-          aria-invalid={!!getFieldError("title")}
-          disabled={isSubmitting}
+          editable={!isSubmitting}
         />
-        {getFieldError("title") && <p className="text-sm text-red-500">{getFieldError("title")}</p>}
-      </div>
+        {getFieldError("title") && <Text className="text-sm text-red-500">{getFieldError("title")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">Bounty Description</Label>
+      <View className="space-y-2">
+        <Label>Bounty Description</Label>
         <Textarea
-          id="description"
-          name="description"
           value={formData.description}
-          onChange={handleChange}
+          onChangeText={(text: string) => setFormData((prev) => ({ ...prev, description: text }))}
           placeholder="Detailed description of the task"
-          rows={4}
-          aria-invalid={!!getFieldError("description")}
-          disabled={isSubmitting}
+          numberOfLines={4}
+          editable={!isSubmitting}
         />
-        {getFieldError("description") && <p className="text-sm text-red-500">{getFieldError("description")}</p>}
-      </div>
+        {getFieldError("description") && <Text className="text-sm text-red-500">{getFieldError("description")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <Label htmlFor="location">Location</Label>
+      <View className="space-y-2">
+        <Label>Location</Label>
         <Input
-          id="location"
-          name="location"
           value={formData.location}
-          onChange={handleChange}
+          onChangeText={(text: string) => setFormData((prev) => ({ ...prev, location: text }))}
           placeholder="Where the task should be performed"
-          aria-invalid={!!getFieldError("location")}
-          disabled={isSubmitting}
+          editable={!isSubmitting}
         />
-        {getFieldError("location") && <p className="text-sm text-red-500">{getFieldError("location")}</p>}
-      </div>
+        {getFieldError("location") && <Text className="text-sm text-red-500">{getFieldError("location")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
+      <View className="space-y-2">
+        <View className="flex items-center gap-2">
           <Checkbox
             id="is_for_honor"
             checked={formData.is_for_honor}
-            onCheckedChange={(checked) => handleCheckboxChange("is_for_honor", !!checked)}
+            onCheckedChange={(checked: boolean | 'indeterminate' | undefined) =>
+              handleCheckboxChange("is_for_honor", !!checked)
+            }
             disabled={isSubmitting}
           />
-          <Label htmlFor="is_for_honor">For Honor (No monetary reward)</Label>
-        </div>
-      </div>
+          <Label>For Honor (No monetary reward)</Label>
+        </View>
+      </View>
 
       {!formData.is_for_honor && (
-        <div className="space-y-2">
-          <Label htmlFor="amount">Bounty Amount ($)</Label>
+        <View className="space-y-2">
+          <Label>Bounty Amount ($)</Label>
           <Input
-            id="amount"
-            name="amount"
-            type="number"
             value={formData.amount.toString()}
-            onChange={(e) => setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))}
-            min="0"
-            step="0.01"
-            aria-invalid={!!getFieldError("amount")}
-            disabled={isSubmitting}
+            onChangeText={(text: string) => setFormData((prev) => ({ ...prev, amount: Number.parseFloat(text) || 0 }))}
+            keyboardType="numeric"
+            editable={!isSubmitting}
           />
-          {getFieldError("amount") && <p className="text-sm text-red-500">{getFieldError("amount")}</p>}
-        </div>
+          {getFieldError("amount") && <Text className="text-sm text-red-500">{getFieldError("amount")}</Text>}
+        </View>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="timeline">Timeline</Label>
+      <View className="space-y-2">
+        <Label>Timeline</Label>
         <Input
-          id="timeline"
-          name="timeline"
           value={formData.timeline}
-          onChange={handleChange}
+          onChangeText={(text: string) => setFormData((prev) => ({ ...prev, timeline: text }))}
           placeholder="When does this need to be completed by?"
-          aria-invalid={!!getFieldError("timeline")}
-          disabled={isSubmitting}
+          editable={!isSubmitting}
         />
-        {getFieldError("timeline") && <p className="text-sm text-red-500">{getFieldError("timeline")}</p>}
-      </div>
+        {getFieldError("timeline") && <Text className="text-sm text-red-500">{getFieldError("timeline")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <Label htmlFor="skills_required">Skills Required</Label>
+      <View className="space-y-2">
+        <Label>Skills Required</Label>
         <Input
-          id="skills_required"
-          name="skills_required"
           value={formData.skills_required}
-          onChange={handleChange}
+          onChangeText={(text: string) => setFormData((prev) => ({ ...prev, skills_required: text }))}
           placeholder="What skills are needed for this bounty?"
-          aria-invalid={!!getFieldError("skills_required")}
-          disabled={isSubmitting}
+          editable={!isSubmitting}
         />
-        {getFieldError("skills_required") && <p className="text-sm text-red-500">{getFieldError("skills_required")}</p>}
-      </div>
+        {getFieldError("skills_required") && <Text className="text-sm text-red-500">{getFieldError("skills_required")}</Text>}
+      </View>
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
+      <Button onPress={handleSubmit} className="w-full" disabled={isSubmitting}>
         {isSubmitting ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <MaterialIcons name="hourglass-top" size={16} style={{ marginRight: 8 }} />
             {isEditMode ? "Updating..." : "Posting..."}
           </>
         ) : isEditMode ? (
@@ -248,6 +224,6 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           "Post Bounty"
         )}
       </Button>
-    </form>
+    </View>
   )
 }

@@ -1,7 +1,8 @@
 "use client"
 
-import type { ReactNode } from "react"
 import { cn } from "lib/utils"
+import type { ReactNode } from "react"
+import { Text, TouchableOpacity, View } from "react-native"
 
 interface CategoryFilterProps {
   label: string
@@ -12,15 +13,15 @@ interface CategoryFilterProps {
 
 export function CategoryFilter({ label, icon, isActive = false, onClick }: CategoryFilterProps) {
   return (
-    <button
-      onClick={onClick}
+    <TouchableOpacity
+      onPress={onClick}
       className={cn(
         "flex items-center space-x-2 px-5 py-2.5 rounded-full whitespace-nowrap touch-target-min shadow-sm",
         isActive ? "bg-emerald-800/80 text-white" : "bg-white/20 text-white/90",
       )}
     >
-      {icon && <span className="text-lg">{icon}</span>}
-      <span className="text-base font-medium">{label}</span>
-    </button>
+      {icon && <View className="text-lg">{icon}</View>}
+      <Text className="text-base font-medium">{label}</Text>
+    </TouchableOpacity>
   )
 }

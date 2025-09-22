@@ -1,17 +1,18 @@
 "use client"
 
-import type React from "react"
+import React from "react"
+import { Text, View } from "react-native"
 
+import { MaterialIcons } from "@expo/vector-icons"
+import { useNavigation } from "@react-navigation/native"
 import { Alert, AlertDescription } from "components/ui/alert"
 import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
 import { Label } from "components/ui/label"
-import { Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 
-export function SignUpForm() {
-  const router = useRouter()
+export function SignUpForm(): React.ReactElement {
+  const navigation = useNavigation()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [username, setUsername] = useState("")
@@ -20,8 +21,7 @@ export function SignUpForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async () => {
     setErrors({})
     setAuthError(null)
     setSuccess(false)
@@ -69,72 +69,65 @@ export function SignUpForm() {
 
   if (success) {
     return (
-      <div className="space-y-4">
+      <View style={{ gap: 12 }}>
         <Alert>
           <AlertDescription>
             Check your email for a confirmation link. You'll need to confirm your email before signing in.
           </AlertDescription>
         </Alert>
-        <Button onClick={() => router.push("/sign-in")} className="w-full">
+        <Button onPress={() => (navigation as any).navigate("SignIn")} className="w-full">
           Go to Sign In
         </Button>
-      </div>
+      </View>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <View style={{ gap: 12 }}>
       {authError && (
         <Alert variant="destructive">
           <AlertDescription>{authError}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+      <View>
+        <Label>Email</Label>
         <Input
-          id="email"
-          type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChangeText={(text: string) => setEmail(text)}
           placeholder="you@example.com"
-          aria-invalid={!!getFieldError("email")}
-          disabled={isLoading}
+          editable={!isLoading}
         />
-        {getFieldError("email") && <p className="text-sm text-red-500">{getFieldError("email")}</p>}
-      </div>
+        {getFieldError("email") && <Text style={{ color: "#ef4444", fontSize: 12 }}>{getFieldError("email")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <Label htmlFor="username">Username</Label>
+      <View>
+        <Label>Username</Label>
         <Input
-          id="username"
-          type="text"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChangeText={(text: string) => setUsername(text)}
           placeholder="@username"
-          aria-invalid={!!getFieldError("username")}
-          disabled={isLoading}
+          editable={!isLoading}
         />
-        {getFieldError("username") && <p className="text-sm text-red-500">{getFieldError("username")}</p>}
-      </div>
+        {getFieldError("username") && <Text style={{ color: "#ef4444", fontSize: 12 }}>{getFieldError("username")}</Text>}
+      </View>
 
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+      <View>
+        <Label>Password</Label>
         <Input
-          id="password"
-          type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={!!getFieldError("password")}
-          disabled={isLoading}
+          onChangeText={(text: string) => setPassword(text)}
+          placeholder="Password"
+          secureTextEntry
+          editable={!isLoading}
         />
-        {getFieldError("password") && <p className="text-sm text-red-500">{getFieldError("password")}</p>}
-      </div>
+        {getFieldError("password") && <Text style={{ color: "#ef4444", fontSize: 12 }}>{getFieldError("password")}</Text>}
+      </View>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <Button onPress={handleSubmit} className="w-full" disabled={isLoading}>
         {isLoading ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <MaterialIcons name="hourglass-top" size={16} style={{ marginRight: 8 }} />
             Creating account...
           </>
         ) : (
@@ -142,12 +135,12 @@ export function SignUpForm() {
         )}
       </Button>
 
-      <p className="text-center text-sm">
-        Already have an account?{" "}
-        <Button variant="link" className="p-0 h-auto" onClick={() => router.push("/sign-in")} type="button">
+      <Text style={{ textAlign: "center", fontSize: 14 }}>
+        Already have an account?{' '}
+        <Button variant="link" className="p-0 h-auto" onPress={() => (navigation as any).navigate('SignIn')}>
           Sign in
         </Button>
-      </p>
-    </form>
+      </Text>
+    </View>
   )
 }

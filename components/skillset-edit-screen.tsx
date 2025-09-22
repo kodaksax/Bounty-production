@@ -1,7 +1,8 @@
 "use client"
 
-import { Code, Globe, Heart, Plus, Target, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
+import { Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -27,15 +28,15 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
       case "code":
-        return <Code className="h-5 w-5 text-red-500" />
+        return <MaterialIcons name="code" size={20} color="#ef4444" />
       case "target":
-        return <Target className="h-5 w-5 text-blue-500" />
+        return <MaterialIcons name="gps-fixed" size={20} color="#000" />
       case "heart":
-        return <Heart className="h-5 w-5 text-pink-500" />
+        return <MaterialIcons name="favorite" size={20} color="#000" />
       case "globe":
-        return <Globe className="h-5 w-5 text-blue-500" />
+        return <MaterialIcons name="public" size={20} color="#3b82f6" />
       default:
-        return <Code className="h-5 w-5" />
+        return <MaterialIcons name="code" size={20} color="#000" />
     }
   }
 
@@ -65,68 +66,67 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-8">
-        <div className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <span className="text-lg font-bold">$ 40.00</span>
-      </div>
+      <View className="flex justify-between items-center p-4 pt-8">
+        <View className="flex items-center">
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+        </View>
+        <Text className="text-lg font-bold">$ 40.00</Text>
+      </View>
 
       {/* Title with actions */}
-      <div className="px-4 py-4 flex justify-between items-center">
-        <button onClick={onBack} className="p-1">
-          <X className="h-6 w-6" />
-        </button>
-        <h1 className="text-xl font-bold">Skillsets:</h1>
-        <button onClick={addNewSkill} className="p-1">
-          <Plus className="h-6 w-6" />
-        </button>
-      </div>
+      <View className="px-4 py-4 flex justify-between items-center">
+        <TouchableOpacity onPress={onBack} className="p-1">
+          <MaterialIcons name="close" size={24} color="#000000" />
+        </TouchableOpacity>
+        <Text className="text-xl font-bold">Skillsets:</Text>
+        <TouchableOpacity onPress={addNewSkill} className="p-1">
+          <MaterialIcons name="add" size={24} color="#000000" />
+        </TouchableOpacity>
+      </View>
 
       {/* Skills list */}
-      <div className="px-4 py-2 flex-1">
-        <div className="space-y-4">
+      <View className="px-4 py-2 flex-1">
+        <View className="space-y-4">
           {skills.map((skill) => (
-            <div
+            <TouchableOpacity
               key={skill.id}
               className={`flex items-center bg-emerald-700/50 rounded-lg p-2 ${
                 selectedSkill === skill.id ? "border-2 border-purple-500" : ""
               }`}
-              onClick={() => setSelectedSkill(skill.id)}
+              onPress={() => setSelectedSkill(skill.id)}
             >
-              <div className="h-10 w-10 rounded-full bg-emerald-800 flex items-center justify-center mr-3">
+              <View className="h-10 w-10 rounded-full bg-emerald-800 flex items-center justify-center mr-3">
                 {getIconComponent(skill.icon)}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-emerald-300">Icon:</span>
-                  <span className="text-xs text-emerald-300">Skillset:</span>
-                </div>
-                <input
-                  type="text"
+              </View>
+              <View className="flex-1">
+                <View className="flex justify-between items-center">
+                  <Text className="text-xs text-emerald-300">Icon:</Text>
+                  <Text className="text-xs text-emerald-300">Skillset:</Text>
+                </View>
+                <TextInput
                   value={skill.text}
-                  onChange={(e) => handleSkillChange(skill.id, e.target.value)}
+                  onChangeText={(text) => handleSkillChange(skill.id, text)}
                   placeholder="Enter your skill"
                   className="w-full bg-transparent border-none focus:outline-none text-white placeholder:text-emerald-300/50"
                 />
-              </div>
-            </div>
+              </View>
+            </TouchableOpacity>
           ))}
-        </div>
-      </div>
+        </View>
+      </View>
 
       {/* Bottom actions */}
-      <div className="p-4 flex justify-between">
-        <button onClick={() => removeSkill(selectedSkill)} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg">
+      <View className="p-4 flex justify-between">
+        <TouchableOpacity onPress={() => removeSkill(selectedSkill)} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg">
           Remove
-        </button>
-        <button onClick={handleSave} className="px-4 py-2 bg-emerald-700 text-white rounded-lg">
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleSave} className="px-4 py-2 bg-emerald-700 text-white rounded-lg">
           Save
-        </button>
-      </div>
-    </div>
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }

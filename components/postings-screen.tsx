@@ -1,27 +1,55 @@
 "use client"
 
-import type React from "react"
-
-import { motion } from "framer-motion"
+import { MaterialIcons } from "@expo/vector-icons"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import { ArrowLeft, Bookmark, Loader2, Share2, Target } from "lucide-react"
+import * as React from "react"
 import { useEffect, useRef, useState } from "react"
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { AddBountyAmountScreen } from "./add-bounty-amount-screen"
 import { ArchivedBountiesScreen } from "./archived-bounties-screen"
 import { BountyConfirmationCard } from "./bounty-confirmation-card"
 import { BountyRequestItem } from "./bounty-request-item"
 import { InProgressBountyItem } from "./in-progress-bounty-item"
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  dashboardContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  dashboardTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  calendarContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // bottom nav styles removed; using shared BottomNav component
+});
+
+
+
 interface PostingsScreenProps {
   onBack?: () => void
+  activeScreen: string
+  setActiveScreen: (screen: string) => void
 }
 
-export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
+export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: PostingsScreenProps) {
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
@@ -48,7 +76,7 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [postSuccess, setPostSuccess] = useState(false)
-  const postButtonRef = useRef<HTMLButtonElement>(null)
+  const postButtonRef = useRef<any>(null)
 
   const tabs = [
     { id: "new", label: "New" },
@@ -114,7 +142,8 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
   // like WebSockets or Server-Sent Events (SSE) with your Hostinger backend.
   // The component now fetches data when it loads or after a new bounty is posted.
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // Accept a simple object shape coming from RN TextInput onChangeText handlers
+  const handleInputChange = (e: { target: { name: string; value: string } }) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -271,312 +300,308 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600">
-      {/* Fixed Header - iPhone optimized with safe area inset */}
-      <div className="sticky top-0 z-10 bg-emerald-600">
-        {/* Header */}
-        <div className="flex justify-between items-center p-4 pt-safe">
-          <div className="flex items-center gap-3">
-            {onBack && (
-              <button onClick={onBack} className="mr-1 p-2 touch-target-min">
-                <ArrowLeft className="h-5 w-5 text-white" />
-              </button>
-            )}
-            <Target className="h-5 w-5 text-white" />
-            <span className="text-lg font-bold tracking-wider text-white">BOUNTY</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-white font-medium">$ 40.00</span>
-          </div>
-        </div>
-
-        {/* Title and Bookmark */}
-        <div className="px-4 py-2 flex justify-between items-center">
-          <h1 className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
-            {activeTab === "inProgress"
-              ? "In Progress"
-              : activeTab === "requests"
-                ? "Bounty Requests"
-                : activeTab === "myPostings"
-                  ? "My Postings"
-                  : "Bounty Posting"}
-          </h1>
-          <button className="text-white p-2 touch-target-min" onClick={() => setShowArchivedBounties(true)}>
-            <Bookmark className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Tabs - Scrollable for iPhone */}
-        <div className="px-4 mb-4 bg-emerald-600">
-          <div className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "py-2 px-1 text-base font-medium transition-colors whitespace-nowrap touch-target-min",
-                  activeTab === tab.id ? "text-white border-b-2 border-white" : "text-emerald-200/70",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Error message */}
-      {error && (
-        <div className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
-          {error}
-          <button className="float-right text-white p-2 touch-target-min" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Success message */}
-      {postSuccess && (
-        <motion.div
-          className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg text-white text-sm"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-        >
-          Bounty posted successfully!
-        </motion.div>
-      )}
-
-      {/* Scrollable Content Area - iPhone optimized */}
-      <div className="flex-1 overflow-y-auto ios-scroll pb-28">
-        <div className="px-4">
-          {activeTab === "inProgress" ? (
-            <div className="space-y-3">
-              {isLoading.inProgress ? (
-                <div className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
-                </div>
-              ) : inProgressBounties.length === 0 ? (
-                <div className="text-center py-10 text-emerald-200">
-                  <p>No bounties in progress</p>
-                </div>
-              ) : (
-                inProgressBounties.map((bounty) => (
-                  <InProgressBountyItem
-                    key={bounty.id}
-                    username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
-                    title={bounty.title}
-                    amount={Number(bounty.amount)}
-                    distance={calculateDistance(bounty.location || "")}
-                    timeAgo={formatTimeAgo(bounty.created_at)}
-                  />
-                ))
+    <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+      <View className="flex-1 flex flex-col min-h-screen bg-emerald-600">
+        {/* Fixed Header - iPhone optimized with safe area inset */}
+        <View className="sticky top-0 z-10 bg-emerald-600">
+          {/* Header */}
+          <View className="flex justify-between items-center p-4 pt-safe">
+            <View className="flex items-center gap-3">
+              {onBack && (
+                <TouchableOpacity onPress={onBack} className="mr-1 p-2 touch-target-min">
+                  <MaterialIcons name="arrow-back" size={24} color="#000000" />
+                </TouchableOpacity>
               )}
-            </div>
-          ) : activeTab === "requests" ? (
-            <div className="space-y-3">
-              {isLoading.requests ? (
-                <div className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
-                </div>
-              ) : bountyRequests.length === 0 ? (
-                <div className="text-center py-10 text-emerald-200">
-                  <p>No bounty requests</p>
-                </div>
-              ) : (
-                bountyRequests.map((request) =>
-                    <BountyRequestItem
-                      key={request.id}
-                      username={request.profile.username}
-                      title={request.bounty.title}
-                      amount={Number(request.bounty.amount)}
-                      distance={calculateDistance(request.bounty.location || "")}
-                      timeAgo={formatTimeAgo(request.created_at)}
-                      avatarSrc={request.profile.avatar_url || undefined}
-                      onMenuClick={() => console.log(`Menu clicked for request ${request.id}`)}
-                      onAccept={() => handleAcceptRequest(request.id)}
-                      onReject={() => handleRejectRequest(request.id)}
-                      status={request.status}
-                    />
-                )
-              )}
-            </div>
-          ) : activeTab === "new" ? (
-            <div className="space-y-6">
-              {/* New bounty form - iPhone optimized */}
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Title</label>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  placeholder="A brief description of the job you need done"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                />
-              </div>
+              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+              <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+            </View>
+            <View className="flex items-center gap-4">
+              <Text className="text-white font-medium">$ 40.00</Text>
+            </View>
+          </View>
+          {/* Title and Bookmark */}
+          <View className="px-4 py-2 flex justify-between items-center">
+            <Text className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
+              {activeTab === "inProgress"
+                ? "In Progress"
+                : activeTab === "requests"
+                  ? "Bounty Requests"
+                  : activeTab === "myPostings"
+                    ? "My Postings"
+                    : "Bounty Posting"}
+            </Text>
+            <TouchableOpacity className="text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
+              <MaterialIcons name="bookmark" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
 
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Bounty description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="This is the long form description of the task and this can be anything from commissioning an art design to having something delivered to hunting down your fathers killer"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base min-h-[150px] resize-none touch-target-min"
-                />
-              </div>
 
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Location</label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  placeholder="A location where the task can begin"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Bounty Amount</label>
-                <button
-                  onClick={() => setShowAddBountyAmount(true)}
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-left text-white focus:ring-1 focus:ring-white text-base flex justify-between items-center touch-target-min"
+          {/* Tabs - Scrollable for iPhone */}
+          <View className="px-4 mb-4 bg-emerald-600">
+            <View className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
+              {tabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.id}
+                  onPress={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "py-2 px-1 text-base font-medium transition-colors whitespace-nowrap touch-target-min",
+                    activeTab === tab.id ? "text-white border-b-2 border-white" : "text-emerald-200/70",
+                  )}
                 >
-                  <span>
-                    {formData.isForHonor
-                      ? "For Honor (No monetary reward)"
-                      : formData.amount > 0
-                        ? `$${formData.amount.toLocaleString()}`
-                        : "Tap to set amount"}
-                  </span>
-                  <span className="text-emerald-300 text-sm">Tap to change</span>
-                </button>
-              </div>
+                  <Text className={cn(
+                    "text-base font-medium",
+                    activeTab === tab.id ? "text-white" : "text-emerald-200/70",
+                  )}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
 
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Timeline</label>
-                <input
-                  type="text"
-                  name="timeline"
-                  value={formData.timeline}
-                  onChange={handleInputChange}
-                  placeholder="When does this need to be completed by?"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                />
-              </div>
+        {/* Error message */}
+        {error && (
+          <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
+            {error}
+            <TouchableOpacity className="float-right text-white p-2 touch-target-min" onPress={() => setError(null)}>
+              ✕
+            </TouchableOpacity>
+          </View>
+        )}
 
-              <div className="space-y-3">
-                <label className="text-emerald-100/90 text-base block">Skills Required</label>
-                <input
-                  type="text"
-                  name="skills"
-                  value={formData.skills}
-                  onChange={handleInputChange}
-                  placeholder="What skills are needed for this bounty?"
-                  className="w-full bg-emerald-700/50 rounded-lg p-4 text-white placeholder:text-emerald-300 border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                />
-              </div>
-            </div>
-          ) : activeTab === "myPostings" ? (
-            <div className="space-y-3">
+        {/* Success message */}
+        {postSuccess && (
+          <View className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg">
+            <Text className="text-white text-sm">Bounty posted successfully!</Text>
+          </View>
+        )}
+
+        {/* Scrollable Content Area - iPhone optimized */}
+        <View className="flex-1 overflow-y-auto ios-scroll pb-28">
+          <View className="px-4">
+            {activeTab === "inProgress" ? (
+              <View className="space-y-3">
+                {isLoading.inProgress ? (
+                  <View className="flex justify-center items-center py-10">
+                    <ActivityIndicator size="large" color="white" />
+                  </View>
+                ) : inProgressBounties.length === 0 ? (
+                  <View className="text-center py-10 text-emerald-200">
+                    <Text>No bounties in progress</Text>
+                  </View>
+                ) : (
+                  inProgressBounties.map((bounty) => (
+                    <InProgressBountyItem
+                      key={bounty.id}
+                      username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
+                      title={bounty.title}
+                      amount={Number(bounty.amount)}
+                      distance={calculateDistance(bounty.location || "")}
+                      timeAgo={formatTimeAgo(bounty.created_at)}
+                    />
+                  ))
+                )}
+              </View>
+            ) : activeTab === "requests" ? (
+              <View className="space-y-3">
+                {isLoading.requests ? (
+                  <View className="flex justify-center items-center py-10">
+                    <ActivityIndicator size="large" color="white" />
+                  </View>
+                ) : bountyRequests.length === 0 ? (
+                  <View className="text-center py-10 text-emerald-200">
+                    <Text>No bounty requests</Text>
+                  </View>
+                ) : (
+                  bountyRequests.map((request) =>
+                      <BountyRequestItem
+                        key={request.id}
+                        username={request.profile.username}
+                        title={request.bounty.title}
+                        amount={Number(request.bounty.amount)}
+                        distance={calculateDistance(request.bounty.location || "")}
+                        timeAgo={formatTimeAgo(request.created_at)}
+                        avatarSrc={request.profile.avatar_url || undefined}
+                        onMenuClick={() => console.log(`Menu clicked for request ${request.id}`)}
+                        onAccept={() => handleAcceptRequest(request.id)}
+                        onReject={() => handleRejectRequest(request.id)}
+                        status={request.status}
+                      />
+                  )
+                )}
+              </View>
+            ) : activeTab === "new" ? (
+              <View className="space-y-6">
+                {/* New bounty form - iPhone optimized */}
+                <ScrollView keyboardShouldPersistTaps="handled" className="flex-2 px-3 pb-24">
+                <View className="space-y-3">
+                  <Text className="text-emerald-100/90 text-base">Title</Text>
+                  <TextInput
+                    value={formData.title}
+                    onChangeText={(text) => handleInputChange({ target: { name: 'title', value: text } })}
+                    placeholder="A brief description of the job you need done"
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                    placeholderTextColor="#6ee7b7"
+                  />
+                </View>
+
+                <View className="space-y-3">
+                  <Text className="text-emerald-100/90 text-base">Bounty description</Text>
+                  <TextInput
+                    value={formData.description}
+                    onChangeText={(text) => handleInputChange({ target: { name: 'description', value: text } })}
+                    placeholder="This is the long form description of the task and this can be anything from commissioning an art design to having something delivered to hunting down your fathers killer"
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base min-h-[150px] touch-target-min"
+                    placeholderTextColor="#6ee7b7"
+                    multiline
+                    numberOfLines={6}
+                  />
+                </View>
+
+                <View className="space-y-3">
+                  <Text className="text-emerald-100/90 text-base">Location</Text>
+                  <TextInput
+                    value={formData.location}
+                    onChangeText={(text) => handleInputChange({ target: { name: 'location', value: text } })}
+                    placeholder="A location where the task can begin"
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                    placeholderTextColor="#6ee7b7"
+
+                  />
+                </View>
+
+                <View className="space-y-3">
+                  <Text className="text-emerald-100/90 text-base">Bounty Amount</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAddBountyAmount(true)}
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-left text-white focus:ring-1 focus:ring-white text-base flex justify-between items-center touch-target-min"
+                  >
+                    <Text>
+                      {formData.isForHonor
+                        ? "For Honor (No monetary reward)"
+                        : formData.amount > 0
+                          ? `$${formData.amount.toLocaleString()}`
+                          : "Tap to set amount"}
+                    </Text>
+                    <Text className="text-emerald-300 text-sm">Tap to change</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="space-y-3">
+                  <Text className="text-emerald-100/90 text-base">Timeline</Text>
+                  <TextInput
+                    value={formData.timeline}
+                    onChangeText={(text) => handleInputChange({ target: { name: 'timeline', value: text } })}
+                    placeholder="When does this need to be completed by?"
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                    placeholderTextColor="#6ee7b7"
+                  />
+                </View>
+
+                <View className="space-y-3">
+
+                  <Text className="text-emerald-100/90 text-base">Skills Required</Text>
+                  <TextInput
+                    value={formData.skills}
+                    onChangeText={(text) => handleInputChange({ target: { name: 'skills', value: text } })}
+                    placeholder="What skills are needed for this bounty?"
+                    className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                    placeholderTextColor="#6ee7b7"
+                  />
+                </View>
+                </ScrollView>
+              </View>
+  ) :
+           activeTab === "myPostings" ? (
+            <View className="space-y-3">
               {isLoading.myBounties ? (
-                <div className="flex justify-center items-center py-10">
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
-                </div>
+                <View className="flex justify-center items-center py-10">
+                  <ActivityIndicator size="large" color="white" />
+                </View>
               ) : myBounties.length === 0 ? (
-                <div className="text-center py-10 text-emerald-200">
-                  <p>You haven't posted any bounties yet</p>
-                  <button
-                    onClick={() => setActiveTab("new")}
+                <View className="text-center py-10 text-emerald-200">
+                  <Text>You haven't posted any bounties yet</Text>
+                  <TouchableOpacity
+                    onPress={() => setActiveTab("new")}
                     className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
                   >
-                    Create Your First Bounty
-                  </button>
-                </div>
+                    <Text className="text-white text-base">Create Your First Bounty</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
                 myBounties.map((bounty) => (
-                  <div
+                  <View
                     key={bounty.id}
                     className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
                   >
-                    <div className="p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-base font-medium text-emerald-100">
+                    <View className="p-4">
+                      <View className="flex justify-between items-center mb-2">
+                        <Text className="text-base font-medium text-emerald-100">
                           Bounty #{bounty.id}
                           {bounty.status !== "open" && (
-                            <span className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
+                            <Text className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
                               {bounty.status}
-                            </span>
+                            </Text>
                           )}
-                        </span>
-                        <span className="text-sm text-emerald-300">{formatTimeAgo(bounty.created_at)}</span>
-                      </div>
-                      <p className="text-white font-medium mt-0.5 text-base">{bounty.title}</p>
-                      <div className="flex justify-between items-center mt-3">
-                        <div className="bg-emerald-900/50 px-3 py-1.5 rounded text-emerald-400 font-bold text-base">
+                        </Text>
+                        <Text className="text-sm text-emerald-300">{formatTimeAgo(bounty.created_at)}</Text>
+                      </View>
+                      <Text className="text-white font-medium mt-0.5 text-base">{bounty.title}</Text>
+                      <View className="flex justify-between items-center mt-3">
+                        <View className="bg-emerald-900/50 px-3 py-1.5 rounded text-emerald-400 font-bold text-base">
                           {bounty.is_for_honor ? "For Honor" : `$${Number(bounty.amount).toLocaleString()}`}
-                        </div>
-                        <div className="text-base text-emerald-200">{calculateDistance(bounty.location || "")} mi</div>
-                      </div>
-                    </div>
-                  </div>
+                        </View>
+                        <View className="text-base text-emerald-200">{calculateDistance(bounty.location || "")} mi</View>
+                      </View>
+                    </View>
+                  </View>
                 ))
               )}
-            </div>
+            </View>
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-emerald-200 text-center">Content will appear here</p>
-            </div>
+            <View className="flex items-center justify-center h-full">
+              <Text className="text-emerald-200 text-center">Content will appear here</Text>
+            </View>
           )}
-        </div>
-      </div>
+        </View>
+      </View>
 
       {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
       {activeTab === "new" && (
-        <div className="fixed bottom-16 left-0 right-0 p-4 flex justify-between items-center bg-emerald-600 border-t border-emerald-500/30 pb-safe">
-          <button className="rounded-full p-3 bg-emerald-700/50 touch-target-min">
-            <Share2 className="h-6 w-6 text-white" />
-          </button>
-          <motion.button
+        <View
+          className="fixed bottom-16 left-0 right-0 p-4 bg-emerald-600 border-t border-emerald-500/30 pb-safe"
+          style={{ position: "relative" }} // make container the positioning context
+        >
+          <TouchableOpacity className="rounded-full p-3 bg-emerald-700/50 touch-target-min">
+            <MaterialIcons name="share" size={24} color="white" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             ref={postButtonRef}
-            onClick={handleShowConfirmation}
+            onPress={handleShowConfirmation}
             disabled={
               isSubmitting || !formData.title || !formData.description || (!formData.amount && !formData.isForHonor)
             }
             className={cn(
-              "px-8 py-3 rounded-full text-white font-medium shadow-lg flex items-center touch-target-min",
+              "px-8 py-3 rounded-full text-white font-medium shadow-lg touch-target-min",
               formData.title && formData.description && (formData.amount > 0 || formData.isForHonor) && !isSubmitting
                 ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600"
                 : "bg-emerald-500/50 cursor-not-allowed",
             )}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            initial={{ scale: 1 }}
-            animate={
-              postSuccess
-                ? {
-                    scale: [1, 1.1, 1],
-                    transition: {
-                      duration: 0.5,
-                      times: [0, 0.5, 1],
-                      ease: "easeInOut",
-                    },
-                  }
-                : { scale: 1 }
-            }
+            style={{ position: "absolute", right: 16, top: -55 }} // move right and up
           >
-            {isSubmitting && <Loader2 className="h-5 w-5 mr-2 animate-spin" />}
-            Post Bounty
-          </motion.button>
-        </div>
+            {isSubmitting && <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />}
+            <Text className="text-white font-medium">Post Bounty</Text>
+          </TouchableOpacity>
+        </View>
       )}
+
+  {/* Bottom navigation is provided by the app container (BountyApp) */}
 
       {/* Confirmation Card */}
       {showConfirmationCard && (
-        <div className="fixed inset-0 z-50">
+        <View className="fixed inset-0 z-50">
           <BountyConfirmationCard
             bountyData={{
               title: formData.title,
@@ -588,8 +613,9 @@ export function PostingsScreen({ onBack }: PostingsScreenProps = {}) {
             onConfirm={handlePostBounty}
             onCancel={() => setShowConfirmationCard(false)}
           />
-        </div>
+        </View>
       )}
-    </div>
+    </View>
+    </TouchableWithoutFeedback>
   )
 }

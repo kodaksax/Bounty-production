@@ -1,4 +1,4 @@
-# Bounty Expo App - React Native Mobile Application
+6# Bounty Expo App - React Native Mobile Application
 
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 

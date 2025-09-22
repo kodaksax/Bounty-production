@@ -1,10 +1,10 @@
-"use client"
-
-import { motion, useAnimation, type PanInfo } from "framer-motion"
-import { cn } from "lib/utils"
-import { ChevronUp, Target } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { Dimensions } from "react-native"
+import MaterialIcons from '@expo/vector-icons/MaterialIcons'
+import React, { useEffect, useRef, useState } from "react"
+import {
+    Dimensions,
+    Text,
+    View
+} from "react-native"
 
 interface BountyConfirmationCardProps {
   bountyData: {
@@ -22,8 +22,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
   const [isDragging, setIsDragging] = useState(false)
   const [dragProgress, setDragProgress] = useState(0)
   const [isConfirming, setIsConfirming] = useState(false)
-  const cardControls = useAnimation()
-  const dragConstraintsRef = useRef<HTMLDivElement>(null)
+  const dragConstraintsRef = useRef(null)
   const [windowHeight, setWindowHeight] = useState(Dimensions.get("window").height)
 
   // Get window dimensions on mount and listen for changes
@@ -38,42 +37,23 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
   }, [])
 
   // Handle drag end
-  const handleDragEnd = async (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const handleDragEnd = async (event: any, info: any) => {
     setIsDragging(false)
 
     // If dragged up more than 40% of the height, confirm the bounty
     if (dragProgress > 0.4) {
       setIsConfirming(true)
-
-      // Animate to the top but keep centered
-      await cardControls.start({
-        y: -windowHeight * 0.3, // Move up but stay visible
-        scale: 0.98,
-        transition: {
-          duration: 0.5,
-          ease: [0.32, 0.72, 0, 1], // iOS-like easing
-        },
-      })
-
       // Call the confirm function
       await onConfirm()
     } else {
       // Reset position with spring animation
-      cardControls.start({
-        y: 0,
-        scale: 1,
-        transition: {
-          type: "spring",
-          stiffness: 400,
-          damping: 30,
-        },
-      })
+      setDragProgress(0)
       setDragProgress(0)
     }
   }
 
   // Handle drag
-  const handleDrag = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const handleDrag = (event: any, info: any) => {
     setIsDragging(true)
 
     // Calculate drag progress (negative because we're dragging upward)
@@ -86,120 +66,65 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
   // If you want to handle hardware back button on Android, use BackHandler from 'react-native'.
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
+    <View className="absolute inset-0 z-50 flex items-center justify-center bg-black/50" onTouchStart={onCancel}>
+      <View
         ref={dragConstraintsRef}
         className="flex items-center justify-center w-full h-full px-4"
-        onClick={(e) => e.stopPropagation()}
+        onStartShouldSetResponder={() => true}
       >
-        <motion.div
-          className="bg-emerald-600 rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto"
-          initial={{ y: windowHeight, opacity: 0 }}
-          animate={{
-            y: 0,
-            opacity: 1,
-            transition: {
-              type: "spring",
-              stiffness: 300,
-              damping: 30,
-              opacity: { duration: 0.2 },
-            },
-          }}
-          exit={{ y: windowHeight, opacity: 0 }}
-          drag="y"
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={0.1}
-          onDrag={handleDrag}
-          onDragEnd={handleDragEnd}
-          dragDirectionLock
-          style={{
-            maxHeight: `${windowHeight * 0.8}px`, // Limit height to 80% of viewport
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            marginTop: isConfirming ? "-10%" : "0", // Move up slightly when confirming
-          }}
-        >
+        <View className="bg-emerald-600 rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
           {/* Header */}
-          <div className="p-4 bg-emerald-700 flex items-center justify-center">
-            <Target className="h-5 w-5 mr-2 text-white" />
-            <span className="text-lg font-bold tracking-wider text-white">BOUNTY</span>
-          </div>
+          <View className="p-4 bg-emerald-700 flex items-center justify-center">
+            <MaterialIcons name="place" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+          </View>
 
           {/* Content */}
-          <div className="p-5 overflow-y-auto" style={{ maxHeight: `${windowHeight * 0.5}px` }}>
-            <h2 className="text-xl font-bold text-white mb-3">{bountyData.title}</h2>
-            <p className="text-emerald-100 mb-4 text-base line-clamp-3">{bountyData.description}</p>
+          <View className="p-5" style={{ maxHeight: windowHeight * 0.5 }}>
+            <Text className="text-xl font-bold text-white mb-3">{bountyData.title}</Text>
+            <Text className="text-emerald-100 mb-4 text-base line-clamp-3">{bountyData.description}</Text>
 
-            <div className="flex justify-between items-center mb-4">
-              <div className="bg-emerald-700/50 px-4 py-2 rounded-lg text-white font-bold text-lg">
+            <View className="flex justify-between items-center mb-4">
+              <View className="bg-emerald-700/50 px-4 py-2 rounded-lg text-white font-bold text-lg">
                 {bountyData.isForHonor ? "For Honor" : `$${bountyData.amount.toLocaleString()}`}
-              </div>
-              <div className="text-base text-emerald-200">{bountyData.location}</div>
-            </div>
+              </View>
+              <View className="text-base text-emerald-200">{bountyData.location}</View>
+            </View>
 
             {/* Swipe indicator */}
-            <div className="mt-8 flex flex-col items-center">
-              <div
-                className={cn(
-                  "text-center text-emerald-200 font-medium mb-3 transition-opacity",
-                  isConfirming ? "opacity-0" : "opacity-100",
-                )}
-              >
-                {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
-              </div>
+              <View className="mt-8 flex flex-col items-center">
+                <View style={{ opacity: isConfirming ? 0 : 1 }} className="text-center text-emerald-200 font-medium mb-3">
+                  <Text className="text-center text-emerald-200 font-medium">
+                    {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}
+                  </Text>
+                </View>
 
-              <div className="relative h-16 w-full flex justify-center">
-                {/* Progress bar background */}
-                <div className="absolute inset-0 bg-emerald-700/30 rounded-full max-w-48 mx-auto"></div>
+                <View className="relative h-16 w-full flex justify-center">
+                  {/* Progress bar background */}
+                  <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: 'rgba(4,120,87,0.3)', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
 
-                {/* Progress bar fill */}
-                <motion.div
-                  className="absolute inset-0 bg-emerald-500 rounded-full max-w-48 mx-auto origin-bottom"
-                  style={{ scaleY: dragProgress }}
-                  animate={{
-                    scaleY: isConfirming ? 1 : dragProgress,
-                  }}
-                />
+                  {/* Progress bar fill */}
+                  <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: '#10b981' }} />
 
-                {/* Chevron indicators */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
-                  <ChevronUp
-                    className={cn(
-                      "h-6 w-6 text-white transition-all",
-                      isDragging ? "opacity-0" : "opacity-100 animate-bounce",
-                    )}
-                  />
-                  <ChevronUp
-                    className={cn(
-                      "h-6 w-6 text-white transition-all",
-                      isDragging ? "opacity-0" : "opacity-70 animate-bounce animation-delay-100",
-                    )}
-                  />
-                  <ChevronUp
-                    className={cn(
-                      "h-6 w-6 text-white transition-all",
-                      isDragging ? "opacity-0" : "opacity-40 animate-bounce animation-delay-200",
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+                  {/* Chevron indicators */}
+                  <View className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
+                    <MaterialIcons name="keyboard-arrow-up" size={24} color="#ffffff" />
+                    <MaterialIcons name="keyboard-arrow-up" size={20} color="#ffffff" />
+                    <MaterialIcons name="keyboard-arrow-up" size={16} color="#ffffff" />
+                  </View>
+                </View>
+              </View>
+          </View>
 
           {/* Confirmation state */}
           {isConfirming && (
-            <div className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
-              <div className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></div>
-              <p className="text-white font-medium text-lg">Posting your bounty...</p>
-            </div>
+            <View className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
+              <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
+              <Text className="text-white font-medium text-lg">Posting your bounty...</Text>
+            </View>
           )}
-        </motion.div>
-      </div>
-    </div>
+  </View>
+      </View>
+    </View>
   )
 }

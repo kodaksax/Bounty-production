@@ -1,7 +1,9 @@
 "use client"
 
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { Check, X } from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
+
+import { View, Text, TouchableOpacity } from "react-native"
 
 interface BountyRequestNotificationProps {
   username: string
@@ -12,8 +14,8 @@ interface BountyRequestNotificationProps {
 
 export function BountyRequestNotification({ username, avatarSrc, onAccept, onReject }: BountyRequestNotificationProps) {
   return (
-    <div className="bg-emerald-700/40 backdrop-blur-sm rounded-lg overflow-hidden mb-3 p-3">
-      <div className="flex items-center gap-3">
+    <View className="bg-emerald-700/40 backdrop-blur-sm rounded-lg overflow-hidden mb-3 p-3">
+      <View className="flex items-center gap-3">
         <Avatar className="h-10 w-10 border border-emerald-400/30">
           <AvatarImage src={avatarSrc || "/placeholder.svg?height=40&width=40"} alt={username} />
           <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
@@ -21,27 +23,27 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
           </AvatarFallback>
         </Avatar>
 
-        <div className="flex-1">
-          <p className="text-white">
-            <span className="font-medium">{username}</span> has requested the privilege of your bounty
-          </p>
-        </div>
+        <View className="flex-1">
+          <Text className="text-white">
+            <Text className="font-medium">{username}</Text> has requested the privilege of your bounty
+          </Text>
+        </View>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onAccept}
+        <View className="flex items-center gap-2">
+          <TouchableOpacity
+            onPress={onAccept}
             className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center hover:bg-emerald-400 transition-colors"
           >
-            <Check className="h-5 w-5 text-white" />
-          </button>
-          <button
-            onClick={onReject}
+            <MaterialIcons name="check" size={20} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onReject}
             className="h-8 w-8 rounded-full bg-red-500/70 flex items-center justify-center hover:bg-red-400/70 transition-colors"
           >
-            <X className="h-5 w-5 text-white" />
-          </button>
-        </div>
-      </div>
-    </div>
+            <MaterialIcons name="close" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   )
 }

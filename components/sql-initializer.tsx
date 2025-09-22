@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { Button } from "components/ui/button"
 
 export function SqlInitializer({ onInitialized }: { onInitialized: () => void }) {
@@ -32,37 +33,37 @@ export function SqlInitializer({ onInitialized }: { onInitialized: () => void })
   }
 
   return (
-    <div className="fixed inset-0 bg-emerald-600 flex flex-col items-center justify-center p-6 z-50">
-      <div className="bg-emerald-700 rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold text-white mb-4">Database Setup Required</h2>
+    <View className="fixed inset-0 bg-emerald-600 flex flex-col items-center justify-center p-6 z-50">
+      <View className="bg-emerald-700 rounded-lg p-6 w-full max-w-md">
+        <Text className="text-xl font-bold text-white mb-4">Database Setup Required</Text>
 
-        <p className="text-emerald-100 mb-6">
+        <Text className="text-emerald-100 mb-6">
           The database tables required for this application don't exist yet. Let's create them using SQL.
-        </p>
+        </Text>
 
         {error && (
-          <div className="bg-red-500/20 border border-red-500 rounded-md p-3 mb-4 text-white">
-            <p className="font-medium">Error:</p>
-            <p className="text-sm">{error}</p>
-          </div>
+          <View className="bg-red-500/20 border border-red-500 rounded-md p-3 mb-4 text-white">
+            <Text className="font-medium">Error:</Text>
+            <Text className="text-sm">{error}</Text>
+          </View>
         )}
 
         {log.length > 0 && (
-          <div className="bg-black/30 rounded-md p-3 mb-4 text-emerald-100 max-h-40 overflow-y-auto">
-            <p className="font-medium mb-2">Log:</p>
+          <View className="bg-black/30 rounded-md p-3 mb-4 text-emerald-100 max-h-40 overflow-y-auto">
+            <Text className="font-medium mb-2">Log:</Text>
             {log.map((entry, index) => (
-              <p key={index} className="text-xs mb-1">
+              <Text key={index} className="text-xs mb-1">
                 {entry}
-              </p>
+              </Text>
             ))}
-          </div>
+          </View>
         )}
 
-        <div className="mb-4">
-          <p className="text-emerald-100 mb-2">Please run the following SQL to create the necessary tables:</p>
+        <View className="mb-4">
+          <Text className="text-emerald-100 mb-2">Please run the following SQL to create the necessary tables:</Text>
 
-          <div className="bg-black/30 rounded-md p-3 text-emerald-100 max-h-60 overflow-y-auto text-xs">
-            <pre>{`
+          <View className="bg-black/30 rounded-md p-3 text-emerald-100 max-h-60 overflow-y-auto text-xs">
+            <Text>{`
 -- Create profiles table
 CREATE TABLE IF NOT EXISTS profiles (
  id UUID PRIMARY KEY,
@@ -153,14 +154,14 @@ SELECT
 FROM bounties b
 WHERE b.title IN ('Mow My lawn!!!', 'Delivering a Package', 'Find my fathers murderer', 'Help setting up crypto wallet')
 ON CONFLICT DO NOTHING;
-            `}</pre>
-          </div>
-        </div>
+            `}</Text>
+          </View>
+        </View>
 
-        <Button onClick={onInitialized} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white">
+        <Button onPress={onInitialized} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white">
           I've Run the SQL
         </Button>
-      </div>
-    </div>
+      </View>
+    </View>
   )
 }

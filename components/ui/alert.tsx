@@ -1,4 +1,5 @@
 import * as React from "react"
+import { View, Text, TouchableOpacity } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "lib/utils"
@@ -20,12 +21,12 @@ const alertVariants = cva(
 )
 
 const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
+  React.ComponentRef<typeof View>,
+  React.ComponentPropsWithRef<typeof View> & VariantProps<typeof alertVariants>
 >(({ className, variant, ...props }, ref) => (
-  <div
+  <View
     ref={ref}
-    role="alert"
+    accessibilityRole="alert"
     className={cn(alertVariants({ variant }), className)}
     {...props}
   />
@@ -33,24 +34,24 @@ const Alert = React.forwardRef<
 Alert.displayName = "Alert"
 
 const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
+  React.ComponentRef<typeof Text>,
+  React.ComponentPropsWithRef<typeof Text> & { className?: string }
 >(({ className, ...props }, ref) => (
-  <h5
+  <Text
     ref={ref}
     className={cn("mb-1 font-medium leading-none tracking-tight", className)}
     {...props}
   />
 ))
-AlertTitle.displayName = "AlertTitle"
+ AlertTitle.displayName = "AlertTitle"
 
 const AlertDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  React.ComponentRef<typeof Text>,
+  React.ComponentPropsWithRef<typeof Text> & { className?: string }
 >(({ className, ...props }, ref) => (
-  <div
+  <Text
     ref={ref}
-    className={cn("text-sm [&_p]:leading-relaxed", className)}
+    className={cn("text-sm opacity-90", className)}
     {...props}
   />
 ))

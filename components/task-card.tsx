@@ -1,8 +1,9 @@
 "use client"
 
 import { type ReactNode, useState } from "react"
-import { MoreVertical } from "lucide-react"
-import { BountyDetailModal } from "./bounty-detail-modal"
+import { View, Text, TouchableOpacity } from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
+import { BountyDetailModal } from "./bountydetailmodal"
 
 interface TaskCardProps {
   id: number
@@ -29,42 +30,42 @@ export function TaskCard({
 
   return (
     <>
-      <div
+      <TouchableOpacity
         className="bg-black/30 backdrop-blur-sm rounded-xl overflow-hidden cursor-pointer transition-transform active:scale-[0.98] touch-target-min shadow-md"
-        onClick={() => setShowDetail(true)}
+        onPress={() => setShowDetail(true)}
       >
-        <div className="p-4">
+        <View className="p-4">
           {/* Header */}
-          <div className="flex justify-between items-center mb-2">
-            <div className="flex items-center">
-              <div className="h-6 w-6 rounded-full bg-gray-700 flex items-center justify-center mr-2">{icon}</div>
-              <span className="text-sm text-gray-300">{username}</span>
-            </div>
-            <button className="p-2 touch-target-min">
-              <MoreVertical className="h-5 w-5 text-gray-400" />
-            </button>
-          </div>
+          <View className="flex justify-between items-center mb-2">
+            <View className="flex items-center">
+              <View className="h-6 w-6 rounded-full bg-gray-700 flex items-center justify-center mr-2">{icon}</View>
+              <Text className="text-sm text-gray-300">{username}</Text>
+            </View>
+            <TouchableOpacity style={{ padding: 8 }}>
+              <MaterialIcons name="more-vert" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
 
           {/* Title */}
-          <h3 className="text-base font-medium mb-3 line-clamp-2">{title}</h3>
+          <Text className="text-base font-medium mb-3 line-clamp-2 text-white">{title}</Text>
 
           {/* Footer */}
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-xs text-gray-400">Total Bounty</div>
-              <div className={`font-bold ${highlight === "price" ? "text-yellow-400 text-lg" : "text-yellow-400"}`}>
+          <View className="flex justify-between items-center">
+            <View>
+              <Text className="text-xs text-gray-400">Total Bounty</Text>
+              <Text className={`font-bold ${highlight === "price" ? "text-yellow-400 text-lg" : "text-yellow-400"}`}>
                 ${price}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-gray-400">Approx. Distance</div>
-              <div className={`${highlight === "distance" ? "text-white font-bold" : "text-gray-300"}`}>
+              </Text>
+            </View>
+            <View className="text-right">
+              <Text className="text-xs text-gray-400">Approx. Distance</Text>
+              <Text className={`${highlight === "distance" ? "text-white font-bold" : "text-gray-300"}`}>
                 {distance} mi
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+              </Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {showDetail && (
         <BountyDetailModal

@@ -1,22 +1,41 @@
 import * as React from "react"
+import { TextInput, TextInputProps, StyleSheet } from "react-native"
 
-import { cn } from "lib/utils"
+interface InputProps extends TextInputProps {
+  variant?: "default" | "outline"
+}
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+const Input = React.forwardRef<TextInput, InputProps>(
+  ({ variant = "default", style, ...props }, ref) => {
     return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
+      <TextInput
+        style={[inputStyles.base, inputStyles[variant], style]}
         ref={ref}
+        placeholderTextColor="#9ca3af"
         {...props}
       />
     )
   }
 )
 Input.displayName = "Input"
+
+const inputStyles = StyleSheet.create({
+  base: {
+    height: 40,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    backgroundColor: '#ffffff',
+  },
+  default: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  outline: {
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+  },
+})
 
 export { Input }

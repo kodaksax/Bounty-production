@@ -1,8 +1,9 @@
 "use client"
 
-import { Target, X } from "lucide-react"
-import { useState } from "react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
+import { useState } from "react"
+import { Text, TouchableOpacity, View } from "react-native"
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -50,66 +51,66 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white overflow-y-auto">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white overflow-y-auto">
       {/* Header - Fixed at top */}
-      <div className="sticky top-0 z-10 bg-emerald-600 flex justify-between items-center p-4 pt-8">
-        <button onClick={onBack} className="p-1">
-          <X className="h-6 w-6" />
-        </button>
-        <div className="flex items-center">
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-        <div className="w-6"></div> {/* Empty div for spacing */}
-      </div>
+      <View className="sticky top-0 z-10 bg-emerald-600 flex justify-between items-center p-4 pt-8">
+        <TouchableOpacity onPress={onBack} className="p-1">
+          <MaterialIcons name="close" size={24} color="#000000" />
+        </TouchableOpacity>
+        <View className="flex items-center">
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+        </View>
+        <View className="w-6"></View> {/* Empty div for spacing */}
+      </View>
 
       {/* Title */}
-      <div className="px-4 py-2">
-        <h1 className="text-xl font-medium">Add Cash</h1>
-      </div>
+      <View className="px-4 py-2">
+        <Text className="text-xl font-medium">Add Cash</Text>
+      </View>
 
       {/* Amount Display */}
-      <div className="flex justify-center items-center py-6">
-        <div className="text-5xl font-bold">${amount}</div>
-      </div>
+      <View className="flex justify-center items-center py-6">
+        <View className="text-5xl font-bold">${amount}</View>
+      </View>
 
       {/* Keypad - Scrollable content */}
-      <div className="flex-1 px-4 pb-40">
-        <div className="grid grid-cols-3 gap-4">
+      <View className="flex-1 px-4 pb-40">
+        <View className="grid grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
+            <TouchableOpacity
               key={num}
               className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
-              onClick={() => handleNumberPress(num)}
+              onPress={() => handleNumberPress(num)}
             >
-              {num}
-            </button>
+              <Text className="text-2xl font-medium text-white">{num}</Text>
+            </TouchableOpacity>
           ))}
-          <button
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
-            onClick={handleDecimalPress}
+            onPress={handleDecimalPress}
           >
-            .
-          </button>
-          <button
+            <Text className="text-2xl font-medium text-white">.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
-            onClick={() => handleNumberPress(0)}
+            onPress={() => handleNumberPress(0)}
           >
-            0
-          </button>
-          <button
+            <Text className="text-2xl font-medium text-white">0</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             className="h-14 md:h-16 rounded-full flex items-center justify-center text-2xl font-medium hover:bg-emerald-700/50 transition-colors"
-            onClick={handleDeletePress}
+            onPress={handleDeletePress}
           >
-            &lt;
-          </button>
-        </div>
-      </div>
+            <Text className="text-2xl font-medium text-white">{"<"}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Add Button - Fixed at bottom with safe area padding, moved up by 50px */}
-      <div className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: "50px" }}>
-        <div className="p-4 pb-8">
-          <button
+  <View className="fixed bottom-0 left-0 right-0 bg-emerald-600 pb-safe" style={{ bottom: 50 } as any}>
+        <View className="p-4 pb-8">
+          <TouchableOpacity
             className={cn(
               "w-full py-4 rounded-lg font-medium text-center",
               Number.parseFloat(amount) > 0
@@ -117,12 +118,15 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
                 : "bg-gray-700/50 text-gray-300 cursor-not-allowed",
             )}
             disabled={Number.parseFloat(amount) <= 0}
-            onClick={handleAddMoney}
+            onPress={handleAddMoney}
           >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
+            <Text className={cn(
+              "font-medium text-center",
+              Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+            )}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   )
 }

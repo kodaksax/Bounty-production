@@ -1,24 +1,10 @@
 "use client"
 
-import type React from "react"
-
-import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
-  Database,
-  HelpCircle,
-  Heart,
-  MessageSquare,
-  Star,
-  Target,
-  User,
-  Laptop,
-} from "lucide-react"
+import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { useState } from "react"
+import React, { useState } from "react"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { EditProfileScreen } from "./edit-profile-screen"
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -167,64 +153,64 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
   });
 
   return (
-    <View style={styles.container}>
+
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Target color="white" size={20} style={styles.headerIcon} />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+      <View className="flex justify-between items-center p-4 pt-8">
+        <View className="flex items-center">
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
         </View>
-        <Text style={styles.balanceText}>$ 40.00</Text>
+        <Text className="text-lg font-bold">$ 40.00</Text>
       </View>
 
       {/* Back button and title */}
-      <View style={styles.backContainer}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <ArrowLeft color="white" size={20} />
+      <View className="px-4 py-2 flex items-center">
+        <TouchableOpacity onPress={onBack} className="mr-2">
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.titleText}>Settings</Text>
+        <Text className="text-xl font-medium">Settings</Text>
       </View>
 
       {/* Profile section */}
-      <TouchableOpacity style={styles.profileSection} onPress={() => setShowEditProfile(true)}>
-        <View style={styles.profileContent}>
-          <View style={styles.profileInfo}>
-            <View style={styles.avatarContainer}>
-              <Avatar>
-                <AvatarImage src={profileData.avatar} alt={profileData.name} />
-                <AvatarFallback>JD</AvatarFallback>
-              </Avatar>
-            </View>
+      <View className="px-4 py-3 bg-emerald-700/30">
+        <TouchableOpacity className="flex-row items-center justify-between" onPress={() => setShowEditProfile(true)}>
+          <View className="flex-row items-center">
+            <Avatar className="h-12 w-12 mr-3 border-2 border-white">
+              <AvatarImage src={profileData.avatar} alt={profileData.name} />
+              <AvatarFallback>JD</AvatarFallback>
+            </Avatar>
             <View>
-              <Text style={styles.profileName}>{profileData.name}</Text>
-              <Text style={styles.profileAbout}>{profileData.about}</Text>
+              <Text className="font-medium">{profileData.name}</Text>
+              <Text className="text-xs text-emerald-200">{profileData.about}</Text>
             </View>
           </View>
-          <ChevronRight color="#6EE7B7" size={20} />
-        </View>
-      </TouchableOpacity>
+          <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
+        </TouchableOpacity>
+      </View>
 
       {/* Settings options */}
-      <View style={styles.settingsContainer}>
-        <ScrollView style={styles.settingsContent}>
-          <SettingsItem icon={<Star color="#FCD34D" size={20} />} label="Starred Messages" />
-          <SettingsItem icon={<Laptop color="#14B8A6" size={20} />} label="WhatsApp Web/Desktop" />
-          <SettingsItem icon={<User color="#60A5FA" size={20} />} label="Account" />
-          <SettingsItem icon={<MessageSquare color="#34D399" size={20} />} label="Chats" />
-          <SettingsItem icon={<Bell color="#F87171" size={20} />} label="Notifications" />
-          <SettingsItem icon={<Database color="#A78BFA" size={20} />} label="Data and Storage Usage" />
-          <SettingsItem icon={<HelpCircle color="#60A5FA" size={20} />} label="Help" />
-          <SettingsItem icon={<Heart color="#F87171" size={20} />} label="Tell a Friend" />
-        </ScrollView>
+      <View className="flex-1">
+        <View className="py-2">
+          <SettingsItem icon={<MaterialIcons name="star" size={24} color="#000000" />} label="Starred Messages" />
+          <SettingsItem icon={<MaterialIcons name="laptop" size={24} color="#14b8a6" />} label="WhatsApp Web/Desktop" />
+          <SettingsItem icon={<MaterialIcons name="person" size={24} color="#000000" />} label="Account" />
+          <SettingsItem icon={<MaterialIcons name="chat" size={24} color="#000000" />} label="Chats" />
+          <SettingsItem icon={<MaterialIcons name="notifications" size={24} color="#000000" />} label="Notifications" />
+          <SettingsItem icon={<MaterialIcons name="storage" size={24} color="#8b5cf6" />} label="Data and Storage Usage" />
+          <SettingsItem icon={<MaterialIcons name="help" size={24} color="#3b82f6" />} label="Help" />
+          <SettingsItem icon={<MaterialIcons name="favorite" size={24} color="#000000" />} label="Tell a Friend" />
+        </View>
       </View>
 
       {/* Bottom Navigation Indicator */}
-      <View style={styles.navigationIndicator}>
-        <View style={styles.indicator} />
-        <View style={styles.indicator} />
-        <View style={styles.indicator} />
-        <View style={styles.indicator} />
-        <View style={styles.indicator} />
+      <View className="mt-auto flex justify-center pb-6">
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
+
       </View>
     </View>
   )
@@ -262,16 +248,14 @@ function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
 
   return (
     <TouchableOpacity
-      style={styles.settingsItem}
+      className="w-full flex-row items-center justify-between px-4 py-3"
       onPress={onClick}
     >
-      <View style={styles.settingsItemContent}>
-        <View style={styles.settingsItemIcon}>
-          {icon}
-        </View>
-        <Text style={styles.settingsItemLabel}>{label}</Text>
+      <View className="flex-row items-center">
+        {icon}
+        <Text className="ml-3">{label}</Text>
       </View>
-      <ChevronRight color="#6EE7B7" size={20} />
+      <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
     </TouchableOpacity>
   )
 }

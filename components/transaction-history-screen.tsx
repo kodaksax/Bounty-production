@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
-import { ArrowLeft, ArrowDown, ArrowUp, Target, CreditCard, CheckCircle } from "lucide-react"
-import { cn } from "lib/utils"
+import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
-import { TransactionDetailModal } from "./transaction-detail-modal"
 import { transactionService } from "lib/services/transaction-service"
+import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Text, TouchableOpacity, View } from "react-native"
+import { TransactionDetailModal } from "./transaction-detail-modal"
 
 export interface Transaction {
   id: string
@@ -30,7 +31,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const [activeFilter, setActiveFilter] = useState<"all" | "deposits" | "withdrawals" | "bounties">("all")
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const loadingRef = useRef<HTMLDivElement>(null)
+  const loadingRef = useRef<any>(null)
 
   // Use intersection observer for infinite scrolling
   useEffect(() => {
@@ -135,15 +136,15 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const getTransactionIcon = (type: Transaction["type"]) => {
     switch (type) {
       case "deposit":
-        return <ArrowDown className="h-5 w-5 text-emerald-400" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
       case "withdrawal":
-        return <ArrowUp className="h-5 w-5 text-red-400" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
       case "bounty_posted":
-        return <Target className="h-5 w-5 text-yellow-400" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
-        return <CheckCircle className="h-5 w-5 text-blue-400" />
+        return <MaterialIcons name="check-circle" size={20} color="#60a5fa" />
       case "bounty_received":
-        return <CreditCard className="h-5 w-5 text-purple-400" />
+        return <MaterialIcons name="credit-card" size={20} color="#a78bfa" />
     }
   }
 
@@ -164,178 +165,178 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 pt-safe">
-        <div className="flex items-center">
-          <button onClick={onBack} className="mr-3 p-2 touch-target-min">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <Target className="h-5 w-5 mr-2" />
-          <span className="text-lg font-bold tracking-wider">BOUNTY</span>
-        </div>
-      </div>
+      <View className="flex justify-between items-center p-4 pt-safe">
+        <View className="flex items-center">
+          <TouchableOpacity onPress={onBack} className="mr-3 p-2 touch-target-min">
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
+          </TouchableOpacity>
+          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+        </View>
+      </View>
 
       {/* Title */}
-      <div className="px-4 py-2">
-        <h1 className="text-xl font-bold">Transaction History</h1>
-      </div>
+      <View className="px-4 py-2">
+        <Text className="text-xl font-bold">Transaction History</Text>
+      </View>
 
       {/* Filters */}
-      <div className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
-        <div className="flex space-x-3">
-          <button
+      <View className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
+        <View className="flex space-x-3">
+          <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "all"
                 ? "bg-emerald-700 text-white"
                 : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
             )}
-            onClick={() => handleFilterChange("all")}
+            onPress={() => handleFilterChange("all")}
           >
             All Transactions
-          </button>
-          <button
+          </TouchableOpacity>
+          <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "deposits"
                 ? "bg-emerald-700 text-white"
                 : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
             )}
-            onClick={() => handleFilterChange("deposits")}
+            onPress={() => handleFilterChange("deposits")}
           >
             Deposits
-          </button>
-          <button
+          </TouchableOpacity>
+          <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "withdrawals"
                 ? "bg-emerald-700 text-white"
                 : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
             )}
-            onClick={() => handleFilterChange("withdrawals")}
+            onPress={() => handleFilterChange("withdrawals")}
           >
             Withdrawals
-          </button>
-          <button
+          </TouchableOpacity>
+          <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
               activeFilter === "bounties"
                 ? "bg-emerald-700 text-white"
                 : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
             )}
-            onClick={() => handleFilterChange("bounties")}
+            onPress={() => handleFilterChange("bounties")}
           >
             Bounties
-          </button>
-        </div>
-      </div>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Error message */}
       {error && (
-        <div className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
+        <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
           {error}
-          <button className="float-right text-white p-2 touch-target-min" onClick={() => setError(null)}>
+          <TouchableOpacity className="float-right text-white p-2 touch-target-min" onPress={() => setError(null)}>
             ✕
-          </button>
-        </div>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Transaction list */}
-      <div className="flex-1 px-4 pb-safe overflow-y-auto ios-scroll">
+      <View className="flex-1 px-4 pb-safe overflow-y-auto ios-scroll">
         {isLoading && currentPage === 1 ? (
-          <div className="flex justify-center items-center py-10">
-            <div className="h-8 w-8 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
-          </div>
+          <View className="flex justify-center items-center py-10">
+            <View className="h-8 w-8 rounded-full border-2 border-white border-t-transparent animate-spin"></View>
+          </View>
         ) : transactions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="h-16 w-16 rounded-full bg-emerald-700/50 flex items-center justify-center mb-4">
-              <CreditCard className="h-8 w-8 text-emerald-300" />
-            </div>
-            <p className="text-emerald-200 mb-2">No transactions found</p>
-            <p className="text-sm text-emerald-300">
+          <View className="flex flex-col items-center justify-center py-10 text-center">
+            <View className="h-16 w-16 rounded-full bg-emerald-700/50 flex items-center justify-center mb-4">
+              <MaterialIcons name="credit-card" size={32} color="#86efac" />
+            </View>
+            <Text className="text-emerald-200 mb-2">No transactions found</Text>
+            <Text className="text-sm text-emerald-300">
               {activeFilter === "all"
                 ? "Your transaction history will appear here"
                 : `No ${activeFilter.slice(0, -1)} transactions found`}
-            </p>
-          </div>
+            </Text>
+          </View>
         ) : (
           <>
             {groupedTransactions.map((group) => (
-              <div key={group.date.toISOString()} className="mb-6">
-                <div className="sticky top-0 bg-emerald-600 py-2 z-10">
-                  <h2 className="text-sm font-medium text-emerald-300">{format(group.date, "EEEE, MMMM d, yyyy")}</h2>
-                </div>
+              <View key={group.date.toISOString()} className="mb-6">
+                <View className="sticky top-0 bg-emerald-600 py-2 z-10">
+                  <Text className="text-sm font-medium text-emerald-300">{format(group.date, "EEEE, MMMM d, yyyy")}</Text>
+                </View>
 
-                <div className="space-y-3">
+                <View className="space-y-3">
                   {group.transactions.map((transaction) => (
-                    <div
+                    <TouchableOpacity
                       key={transaction.id}
                       className="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
-                      onClick={() => setSelectedTransaction(transaction)}
+                      onPress={() => setSelectedTransaction(transaction)}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-emerald-800/80 flex items-center justify-center">
+                      <View className="flex items-center gap-3">
+                        <View className="h-10 w-10 rounded-full bg-emerald-800/80 flex items-center justify-center">
                           {getTransactionIcon(transaction.type)}
-                        </div>
+                        </View>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium text-white truncate">
+                        <View className="flex-1 min-w-0">
+                          <View className="flex justify-between items-center">
+                            <Text className="text-sm font-medium text-white truncate">
                               {getTransactionTitle(transaction)}
-                            </p>
-                            <p
+                            </Text>
+                            <Text
                               className={cn(
                                 "text-sm font-bold",
                                 transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
                               )}
                             >
                               {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-                            </p>
-                          </div>
-                          <div className="flex justify-between items-center mt-1">
-                            <p className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</p>
+                            </Text>
+                          </View>
+                          <View className="flex justify-between items-center mt-1">
+                            <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
                             {transaction.details.status && (
-                              <p
+                              <Text
                                 className={cn(
                                   "text-xs",
                                   transaction.details.status === "Completed" ? "text-emerald-300" : "text-yellow-300",
                                 )}
                               >
                                 {transaction.details.status}
-                              </p>
+                              </Text>
                             )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                          </View>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
                   ))}
-                </div>
-              </div>
+                </View>
+              </View>
             ))}
 
             {/* Loading indicator for infinite scroll */}
             {hasMore && (
-              <div ref={loadingRef} className="py-4 flex justify-center">
+              <View ref={loadingRef} className="py-4 flex justify-center">
                 {isLoading && (
-                  <div className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                  <View className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin"></View>
                 )}
-              </div>
+              </View>
             )}
 
             {!hasMore && (
-              <div className="py-4 text-center text-sm text-emerald-300">
+              <View className="py-4 text-center text-sm text-emerald-300">
                 {transactions.length > 0 ? "No more transactions" : "No transactions found"}
-              </div>
+              </View>
             )}
           </>
         )}
-      </div>
+      </View>
 
       {/* Transaction Detail Modal */}
       {selectedTransaction && (
         <TransactionDetailModal transaction={selectedTransaction} onClose={() => setSelectedTransaction(null)} />
       )}
-    </div>
+    </View>
   )
 }

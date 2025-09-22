@@ -1,11 +1,28 @@
-"use client"
+import React, { useState } from "react";
+import { View, TouchableOpacity, Text } from "react-native";
+import Collapsible from "react-native-collapsible";
 
-import * as CollapsiblePrimitive from "@radix-ui/react-collapsible"
+export interface CollapsibleProps {
+  title: string;
+  children: React.ReactNode;
+  collapsed?: boolean;
+}
 
-const Collapsible = CollapsiblePrimitive.Root
+export const CollapsibleSection: React.FC<CollapsibleProps> = ({
+  title,
+  children,
+  collapsed: collapsedProp = true,
+}) => {
+  const [collapsed, setCollapsed] = useState(collapsedProp);
 
-const CollapsibleTrigger = CollapsiblePrimitive.CollapsibleTrigger
-
-const CollapsibleContent = CollapsiblePrimitive.CollapsibleContent
-
-export { Collapsible, CollapsibleTrigger, CollapsibleContent }
+  return (
+    <View>
+      <TouchableOpacity onPress={() => setCollapsed(!collapsed)}>
+        <Text>{title}</Text>
+      </TouchableOpacity>
+      <Collapsible collapsed={collapsed}>
+        <View>{children}</View>
+      </Collapsible>
+    </View>
+  );
+};

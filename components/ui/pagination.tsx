@@ -1,13 +1,16 @@
-import * as React from "react"
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
-
-import { cn } from "lib/utils"
+import { MaterialIcons } from "@expo/vector-icons"
 import { ButtonProps, buttonVariants } from "components/ui/button"
+import { cn } from "lib/utils"
+import * as React from "react"
+import { Text, TouchableOpacity, View } from "react-native"
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
-  <nav
-    role="navigation"
-    aria-label="pagination"
+interface PaginationProps {
+  // ...other props...
+}
+
+const Pagination = ({ className, ...props }: React.ComponentProps<typeof View>) => (
+  <View
+    accessibilityRole="toolbar"
     className={cn("mx-auto flex w-full justify-center", className)}
     {...props}
   />
@@ -15,10 +18,10 @@ const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
 Pagination.displayName = "Pagination"
 
 const PaginationContent = React.forwardRef<
-  HTMLUListElement,
-  React.ComponentProps<"ul">
+  View,
+  React.ComponentProps<typeof View>
 >(({ className, ...props }, ref) => (
-  <ul
+  <View
     ref={ref}
     className={cn("flex flex-row items-center gap-1", className)}
     {...props}
@@ -27,17 +30,17 @@ const PaginationContent = React.forwardRef<
 PaginationContent.displayName = "PaginationContent"
 
 const PaginationItem = React.forwardRef<
-  HTMLLIElement,
-  React.ComponentProps<"li">
+  View,
+  React.ComponentProps<typeof View>
 >(({ className, ...props }, ref) => (
-  <li ref={ref} className={cn("", className)} {...props} />
+  <View ref={ref} className={cn("", className)} {...props} />
 ))
 PaginationItem.displayName = "PaginationItem"
 
 type PaginationLinkProps = {
   isActive?: boolean
 } & Pick<ButtonProps, "size"> &
-  React.ComponentProps<"a">
+  React.ComponentProps<typeof TouchableOpacity>
 
 const PaginationLink = ({
   className,
@@ -45,7 +48,7 @@ const PaginationLink = ({
   size = "icon",
   ...props
 }: PaginationLinkProps) => (
-  <a
+  <TouchableOpacity
     aria-current={isActive ? "page" : undefined}
     className={cn(
       buttonVariants({
@@ -69,8 +72,8 @@ const PaginationPrevious = ({
     className={cn("gap-1 pl-2.5", className)}
     {...props}
   >
-    <ChevronLeft className="h-4 w-4" />
-    <span>Previous</span>
+    <MaterialIcons name="keyboard-arrow-left" size={24} color="#000000" />
+    <Text>Previous</Text>
   </PaginationLink>
 )
 PaginationPrevious.displayName = "PaginationPrevious"
@@ -85,8 +88,8 @@ const PaginationNext = ({
     className={cn("gap-1 pr-2.5", className)}
     {...props}
   >
-    <span>Next</span>
-    <ChevronRight className="h-4 w-4" />
+    <Text>Next</Text>
+    <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
   </PaginationLink>
 )
 PaginationNext.displayName = "PaginationNext"
@@ -94,15 +97,15 @@ PaginationNext.displayName = "PaginationNext"
 const PaginationEllipsis = ({
   className,
   ...props
-}: React.ComponentProps<"span">) => (
-  <span
-    aria-hidden
+}: React.ComponentProps<typeof Text>) => (
+  <Text
+    accessible={false}
+    accessibilityLabel="More pages"
     className={cn("flex h-9 w-9 items-center justify-center", className)}
     {...props}
   >
-    <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More pages</span>
-  </span>
+    <MaterialIcons name="more-horiz" size={24} color="#000000" />
+  </Text>
 )
 PaginationEllipsis.displayName = "PaginationEllipsis"
 
@@ -113,5 +116,6 @@ export {
   PaginationItem,
   PaginationLink,
   PaginationNext,
-  PaginationPrevious,
+  PaginationPrevious
 }
+
