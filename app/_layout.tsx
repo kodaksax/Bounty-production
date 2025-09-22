@@ -1,8 +1,10 @@
 import { ThemeProvider } from "components/theme-provider";
 import { Slot } from "expo-router";
 import type React from "react";
+import { useEffect } from "react";
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { initializeStripe } from "../lib/services/stripe-service";
 import "../global.css";
 
 export const metadata = {
@@ -31,6 +33,15 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Initialize Stripe on app start
+  useEffect(() => {
+    initializeStripe().then((result) => {
+      if (!result.success) {
+        console.warn('Failed to initialize Stripe:', result.error);
+      }
+    });
+  }, []);
+
   // Runtime instrumentation: log presence of critical stubs once (development only)
   if (__DEV__) {
     try {

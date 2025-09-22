@@ -1,9 +1,11 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { useConfirmPayment } from '@stripe/stripe-react-native'
 import { cn } from "lib/utils"
+import { stripeService } from "lib/services/stripe-service"
 import { useState } from "react"
-import { Text, TouchableOpacity, View } from "react-native"
+import { Alert, Text, TouchableOpacity, View } from "react-native"
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -12,6 +14,11 @@ interface AddMoneyScreenProps {
 
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const { confirmPayment } = useConfirmPayment()
+
+  // Mock customer ID - in a real app, this would come from your user authentication
+  const customerId = "cus_mock_customer_id"
 
   const handleNumberPress = (num: number) => {
     if (amount === "0") {
@@ -43,10 +50,56 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     }
   }
 
-  const handleAddMoney = () => {
+  const handleAddMoney = async () => {
     const numAmount = Number.parseFloat(amount)
-    if (onAddMoney && !isNaN(numAmount)) {
-      onAddMoney(numAmount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount')
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      // Step 1: Create payment intent from your backend
+      const { paymentIntent, error: intentError } = await stripeService.createPaymentIntent(
+        numAmount,
+        'usd',
+        customerId
+      )
+      
+      if (intentError || !paymentIntent) {
+        Alert.alert('Error', intentError?.message || 'Failed to prepare payment')
+        return
+      }
+
+      // Step 2: Confirm the payment with Stripe
+      const { paymentIntent: confirmedPayment, error: confirmError } = await confirmPayment(
+        paymentIntent.client_secret,
+        {
+          paymentMethodType: 'Card',
+        }
+      )
+
+      if (confirmError) {
+        Alert.alert('Payment Failed', confirmError.message || 'Failed to process payment')
+        return
+      }
+
+      if (confirmedPayment?.status === 'Succeeded') {
+        Alert.alert('Success', `Successfully added $${numAmount.toFixed(2)} to your wallet!`)
+        
+        // Update the balance in the parent component
+        if (onAddMoney) {
+          onAddMoney(numAmount)
+        }
+      } else {
+        Alert.alert('Payment Failed', 'Payment was not completed. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error)
+      Alert.alert('Error', 'An unexpected error occurred')
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -113,17 +166,19 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           <TouchableOpacity
             className={cn(
               "w-full py-4 rounded-lg font-medium text-center",
-              Number.parseFloat(amount) > 0
+              Number.parseFloat(amount) > 0 && !isProcessing
                 ? "bg-gray-700 hover:bg-gray-600 transition-colors"
                 : "bg-gray-700/50 text-gray-300 cursor-not-allowed",
             )}
-            disabled={Number.parseFloat(amount) <= 0}
+            disabled={Number.parseFloat(amount) <= 0 || isProcessing}
             onPress={handleAddMoney}
           >
             <Text className={cn(
               "font-medium text-center",
-              Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-            )}>Add</Text>
+              Number.parseFloat(amount) > 0 && !isProcessing ? "text-white" : "text-gray-300"
+            )}>
+              {isProcessing ? "Processing..." : "Add"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
