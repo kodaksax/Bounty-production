@@ -1,124 +1,134 @@
-6# Bounty Expo App - React Native Mobile Application
+# Copilot Instructions for BOUNTYExpo
 
-Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
+## Mission & Elevator Pitch
+- Purpose: Make it fast and safe for people to post small jobs (“bounties”), get matched, coordinate via chat, and settle funds.
+- Vision: A trustable, mobile-first marketplace with simple flows: Create → Match → Chat → Complete → Settle.
 
-## Working Effectively
+## Users & Value
+- Poster: Wants to quickly post a task, set budget/location, review applicants, and pay only on completion (escrow).
+- Hunter: Wants to discover nearby or relevant tasks, accept, message the poster, and get paid reliably.
+- Value props: Speed, transparency, escrow-backed trust, mobile-first simplicity.
 
-### Initial Setup & Installation
-Bootstrap, build, and test the repository:
-- `npm install` -- takes 1-2 minutes. Always run this first.
-- `npx expo start --web` -- takes 5-7 minutes for initial build. NEVER CANCEL. Set timeout to 10+ minutes.
-- `npm run lint` -- takes 30 seconds. Always run to check code quality.
+## Core Flows (happy paths)
+1) Create Bounty
+   - Postings > New > title, description, amount or honor, optional location > confirm > visible in “Postings”.
+2) Accept & Coordinate
+   - Hunter browses Postings > opens detail > applies/accepts > chat starts in Messenger.
+3) Complete & Settle
+   - Wallet escrows funds on accept > completion triggers release > both parties see history.
+4) Schedule
+   - Optional due date appears in Calendar (read-only summary for now).
 
-### Build & Development Commands
-- **Web Development**: `npx expo start --web` or `npm run web`
-  - NEVER CANCEL: Initial build takes 5-7 minutes for Metro bundler. Subsequent rebuilds are ~1 second.
-  - Access at http://localhost:8081
-  - Expected warnings: "Failed to load offline error log queue" and AsyncStorage errors - these are normal for web builds
-- **Mobile Development**: 
-  - Android: `npm run android` (requires Android Studio/emulator)
-  - iOS: `npm run ios` (requires Xcode/iOS Simulator on macOS)
-  - Universal: `npm start` then scan QR code with Expo Go app
+## Domain Glossary (be consistent)
+- Bounty: A task with title, description, amount|isForHonor, optional location.
+- Posting: A bounty in the public feed (open status).
+- Request: A proposal or acceptance state on a bounty.
+- Conversation: 1:1 or group chat tied to a bounty/request.
+- Wallet: Escrow + transactions.
+- Calendar: Dates tied to bounties (start/due).
 
-### Testing & Validation
-- **Linting**: `npm run lint` -- identifies code quality issues. Currently has 39 issues (12 errors, 27 warnings)
-- **Environment Check**: `npx expo-doctor` -- validates Expo environment (some network checks will fail offline)
-- **No unit tests**: This repository has no test suite configured. Focus on manual testing.
+## Data Contracts (authoritative shapes)
+```ts
+// lib/types.ts (source of truth)
+export type Money = number; // USD for now
 
-### Timing Expectations
-- `npm install`: 1-2 minutes
-- Initial `npx expo start --web`: 5-7 minutes (NEVER CANCEL)
-- Subsequent web rebuilds: 1-5 seconds
-- `npm run lint`: 30 seconds
-- Code changes trigger automatic rebuilds in ~1-3 seconds
+export interface Bounty {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  amount?: Money;
+  isForHonor?: boolean;
+  location?: string;
+  createdAt?: string;
+  status?: "open" | "in_progress" | "completed" | "archived";
+}
 
-## Validation Scenarios
+export interface Conversation {
+  id: string;
+  bountyId?: string;
+  isGroup: boolean;
+  name: string;
+  avatar?: string;
+  lastMessage?: string;
+  updatedAt?: string;
+}
 
-### CRITICAL: Always manually validate changes via complete user scenarios
-After making changes, ALWAYS test the following end-to-end scenarios:
-
-1. **Application Launch**: Navigate to http://localhost:8081 and verify the app loads with green emerald background
-2. **Basic Navigation**: Test that the mobile-style interface appears (even though some components may show as blank initially)
-3. **Component Rendering**: Verify that any UI components you modified render correctly without TypeScript errors
-4. **Build Verification**: Ensure `npm run lint` passes for the files you modified (ignore existing unrelated lint errors)
-
-### Known Issues & Workarounds
-- **Web UI appears blank**: This is expected during initial load. The app uses React Native components that may not fully render in web browser testing.
-- **AsyncStorage errors**: Normal for web builds. These don't affect functionality.
-- **Lint errors in existing code**: Focus only on linting your changes. Don't fix unrelated existing errors.
-- **Expo doctor network failures**: Expected in offline environments. Not a blocker.
-
-## Key Codebase Information
-
-### Project Structure
+export interface WalletTransaction {
+  id: string;
+  type: "escrow" | "release" | "refund";
+  amount: Money;
+  bountyId?: string;
+  createdAt: string;
+}
 ```
-/app                 # Expo Router pages (file-based routing)
-  /_layout.tsx       # Root layout with ThemeProvider
-  /index.tsx         # Home page that renders BountyApp component
-/components          # All UI components
-  /bounty-app.tsx    # Main app component
-  /ui/               # Reusable UI components (Radix-based)
-  /auth/             # Authentication components
-/lib                 # Utilities and services
-  /utils.ts          # Tailwind class utilities (cn function)
-/hooks               # Custom React hooks
+
+## Navigation & Layout (Expo Router + BottomNav)
+- Routing uses Expo Router (app/ file-based routes).
+- BottomNav is rendered ONCE at the root (BountyApp). Do not render nav inside screens.
+- Mapping:
+  - create → Messenger
+  - wallet → WalletScreen
+  - bounty → Dashboard/Home
+  - postings → PostingsScreen
+  - calendar → Calendar view
+- Positioning rules:
+  - BountyApp root View: position: 'relative'; flex: 1; paddingBottom to clear the nav.
+  - BottomNav container: position: 'absolute'; left: 0; right: 0; bottom: 0; zIndex high.
+  - If nav Y-position is adjusted, increase container paddingBottom equivalently.
+
+## UI/UX Principles
+- Mobile-first, emerald theme (emerald-600/700/800).
+- Keep actions within thumb reach; center “bounty” button looks primary.
+- Respect safe areas (iOS) and ensure content padding avoids nav overlap.
+- Empty states > spinners; show helpful copy and one primary action.
+
+## State & Data
+- Lift navigation state to BountyApp; pass down via props (activeScreen, onNavigate).
+- Avoid duplicating local “activeScreen” in child screens.
+- For async data, prefer hooks in hooks/ and services in lib/services/.
+
+## Error Handling & Empty States
+- Wrap network calls; show inline error banners with dismiss “✕”.
+- Don’t block render on fetch failures; show cached/empty UI with Retry.
+
+## Performance & Quality
+- Run typecheck before PRs: `npx tsc --noEmit`
+- Prefer FlatList for long lists; avoid heavy re-renders in chat/postings.
+- Use memoization where needed (React.memo/useMemo/useCallback).
+
+## Styling & Theming
+- Use existing tailwind-like className patterns + RN StyleSheet for tricky cases.
+- Ensure RN component capitalization (ScrollView, SafeAreaView, etc.).
+- Use StyleSheet from "react-native" (not `import type`), e.g., `import { StyleSheet } from "react-native"`.
+
+## AI Collaboration Guidelines (Do/Don’t)
+Do:
+- Use 4-backtick fenced code blocks and include filepath comments.
+- Provide patch-like edits with `// ...existing code...` markers.
+- Keep one source of truth for BottomNav in BountyApp.
+- Add bottom padding to screens so nav doesn’t cover content.
+
+Don’t:
+- Don’t render BottomNav inside screens.
+- Don’t introduce local `activeScreen` conflicting with app-level setter.
+- Don’t leave unmatched JSX tags; always close ScrollView, View, and wrappers.
+- Don’t import `type StyleSheet`; import the value from react-native.
+
+## Example: Using the shared BottomNav correctly
+- BountyApp:
+```tsx
+<BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} />
 ```
+- Screens (Messenger/Postings/Wallet/Profile): no BottomNav; add bottom padding if content scrolls.
 
-### Important Files to Know
-- `components/bounty-app.tsx` - Main application component with navigation
-- `app/_layout.tsx` - Root layout with styling and theme provider
-- `components/ui/` - Contains all reusable UI components (buttons, modals, etc.)
-- `lib/utils.ts` - Utility functions for styling (cn function for Tailwind)
-- `tsconfig.json` - TypeScript configuration with path aliases
-- `package.json` - Dependencies and npm scripts
+## Commands & Workflows
+- Install: `npm install`
+- Start: `npx expo start`
+- Reset Metro cache if layout glitches occur: `npx expo start --clear`
+- Typecheck: `npx tsc --noEmit`
 
-### Technology Stack
-- **Framework**: Expo (React Native for mobile + web)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS (via tailwind-merge and clsx)
-- **UI Components**: Radix UI primitives for web
-- **Navigation**: Expo Router (file-based routing)
-- **State Management**: React hooks (no global state library)
-
-### Dependencies & Architecture
-- Uses React Native 0.81.4 with Expo SDK 54.x
-- Heavy use of Radix UI components for accessible web UI
-- Custom styling system using Tailwind + custom component variants
-- File-based routing with Expo Router
-- TypeScript with strict mode enabled
-
-## Development Workflow
-
-### Making Changes
-1. Always run `npm install` if you haven't yet
-2. Start development server: `npx expo start --web` (wait for build completion)
-3. Make your code changes
-4. Verify automatic rebuild completes successfully
-5. Test your changes manually in browser at http://localhost:8081
-6. Run `npm run lint` on files you modified
-7. Always validate one complete user scenario before finishing
-
-### Common Patterns
-- Components use both React Native (View, Text, TouchableOpacity) and web (div, span) patterns
-- Styling combines React Native StyleSheet and Tailwind classes
-- Import paths use absolute imports via tsconfig paths (e.g., `"components/ui/button"`)
-- TypeScript is configured with strict mode - address all type errors
-
-### Performance Notes
-- Metro bundler caches aggressively - restart if you see unexpected build issues
-- Web builds include both React Native and web dependencies (large bundle size expected)
-- Development builds include extensive debugging and hot reload capabilities
-
-## Troubleshooting
-
-### Build Issues
-- If Metro bundler hangs: Stop process and restart with `npx expo start --web --clear`
-- If TypeScript errors: Check import paths and ensure all dependencies are installed
-- If component not rendering: Verify React Native vs web component compatibility
-
-### Common Errors
-- **"window is not defined"**: Expected for AsyncStorage on web builds
-- **Module resolution errors**: Check tsconfig.json path aliases
-- **Tailwind classes not working**: Verify cn() function usage from lib/utils.ts
-
-NEVER CANCEL long-running build commands. Metro bundler compilation is CPU-intensive and can take several minutes on first run.
+## Roadmap Signals (for AI)
+- Short term: Polish posting flow, chat stability, wallet mock flows.
+- Medium term: Real escrow integration, invitations/applications, better calendar integration.
+- Long term: Trust/safety features, ratings, dispute resolution.

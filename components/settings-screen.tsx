@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import React, { useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { EditProfileScreen } from "./edit-profile-screen"
 
 interface SettingsScreenProps {
@@ -156,19 +156,24 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
 
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <View className="flex justify-between items-center p-4 pt-8">
-        <View className="flex items-center">
+      <View className="flex-row justify-between items-center p-4 pt-8">
+        {/* Left: icon + BOUNTY */}
+        <View className="flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
-        <Text className="text-lg font-bold">$ 40.00</Text>
+
+        {/* Right: $40.00 placeholder + back */}
+        <View className="flex-row items-center">
+          <Text className="text-lg font-bold mr-3">$ 40.00</Text>
+          <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
+            <MaterialIcons name="arrow-back" size={24} color="#000000" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Back button and title */}
+      {/* Title */}
       <View className="px-4 py-2 flex items-center">
-        <TouchableOpacity onPress={onBack} className="mr-2">
-          <MaterialIcons name="arrow-back" size={24} color="#000000" />
-        </TouchableOpacity>
         <Text className="text-xl font-medium">Settings</Text>
       </View>
 
@@ -191,16 +196,16 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
 
       {/* Settings options */}
       <View className="flex-1">
-        <View className="py-2">
+        <ScrollView className="py-2">
           <SettingsItem icon={<MaterialIcons name="star" size={24} color="#000000" />} label="Starred Messages" />
-          <SettingsItem icon={<MaterialIcons name="laptop" size={24} color="#14b8a6" />} label="WhatsApp Web/Desktop" />
+          <SettingsItem icon={<MaterialIcons name="rate-review" size={24} color="#000000" />} label="Pending Reviews" />
           <SettingsItem icon={<MaterialIcons name="person" size={24} color="#000000" />} label="Account" />
           <SettingsItem icon={<MaterialIcons name="chat" size={24} color="#000000" />} label="Chats" />
           <SettingsItem icon={<MaterialIcons name="notifications" size={24} color="#000000" />} label="Notifications" />
-          <SettingsItem icon={<MaterialIcons name="storage" size={24} color="#8b5cf6" />} label="Data and Storage Usage" />
-          <SettingsItem icon={<MaterialIcons name="help" size={24} color="#3b82f6" />} label="Help" />
+          <SettingsItem icon={<MaterialIcons name="storage" size={24} color="#000000" />} label="Data and Storage Usage" />
+          <SettingsItem icon={<MaterialIcons name="help" size={24} color="#000000" />} label="Help" />
           <SettingsItem icon={<MaterialIcons name="favorite" size={24} color="#000000" />} label="Tell a Friend" />
-        </View>
+        </ScrollView>
       </View>
 
       {/* Bottom Navigation Indicator */}

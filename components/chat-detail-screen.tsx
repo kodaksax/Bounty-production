@@ -6,7 +6,7 @@ import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-nativ
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
-import type { Conversation } from "./messenger-screen"
+import type { Conversation } from "../app/tabs/messenger-screen"
 
 interface Message {
   id: string
@@ -18,10 +18,9 @@ interface Message {
 }
 
 interface ChatDetailScreenProps {
-  // For React Navigation this screen expects `route.params.conversation` and receives `navigation` prop
-  // Keep this interface for inline typing if you call the component directly.
-  conversation?: Conversation
+  conversation: Conversation
   onBack?: () => void
+  onNavigate?: (screen?: string) => void
 }
 
 // Generate random conversations for each contact
@@ -84,8 +83,11 @@ const getConversationMessages = (conversationId: string): Message[] => {
   return conversations[conversationId] || []
 }
 
-export default function ChatDetailScreen({ route, navigation }: any) {
-  const conversation: Conversation = route?.params?.conversation || { id: "1", name: "Unknown", avatar: "", status: "" }
+export function ChatDetailScreen({
+  conversation,
+  onBack,
+  onNavigate,
+}: ChatDetailScreenProps) {
 
   const [messages, setMessages] = useState<Message[]>(() => getConversationMessages(conversation.id))
   const [newMessage, setNewMessage] = useState("")
@@ -159,9 +161,20 @@ export default function ChatDetailScreen({ route, navigation }: any) {
       {/* Chat Header */}
       <View className="px-4 py-2 flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="mr-2">
-            <MaterialIcons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
+          <TouchableOpacity
+  onPress={() => {
+    // prefer the app-level navigator if provided
+    if (typeof onNavigate === 'function') {
+      onNavigate('create')   // 'create' maps to Messenger in your BottomNav mapping
+    } else if (typeof onBack === 'function') {
+      // fall back to any existing handler
+      onBack()
+    }
+  }}
+  className="mr-1 p-2 touch-target-min"
+>
+  <MaterialIcons name="arrow-back" size={24} color="#000000" />
+</TouchableOpacity>
           <Avatar className="h-10 w-10 mr-2">
             <AvatarImage src={conversation.avatar} alt={conversation.name} />
             <AvatarFallback className="bg-emerald-700 text-emerald-200">

@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
-export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "calendar";
+export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile";
 
 interface BottomNavProps {
   activeScreen: string;
@@ -25,8 +25,8 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
         <TouchableOpacity onPress={() => onNavigate("postings")} style={styles.navButton}>
           <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => onNavigate("calendar")} style={styles.navButton}>
-          <MaterialIcons name="calendar-today" color={activeScreen === "calendar" ? "#fff" : "#d1fae5"} size={24} />
+        <TouchableOpacity onPress={() => onNavigate("profile")} style={styles.navButton}>
+          <MaterialIcons name="person" color={activeScreen === "profile" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
       </View>
     </View>
