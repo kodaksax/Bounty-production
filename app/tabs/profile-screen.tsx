@@ -19,10 +19,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     about: "Russian opportunist",
     avatar: "/placeholder.svg?height=80&width=80",
   })
-  const [skills, setSkills] = useState<{ id: string; icon: string; text: string }[]>([
+  const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([
     { id: "1", icon: "code", text: "Knows English, Spanish" },
-    { id: "2", icon: "target", text: "Private Investigator Certification" },
-    { id: "3", icon: "heart", text: "Joined December 28th 2024" },
+    { id: "2", icon: "gps-fixed", text: "Private Investigator Certification", credentialUrl: undefined },
+    { id: "3", icon: "favorite", text: "Joined December 28th 2024" },
   ])
 
   // Add state for statistics
@@ -111,9 +111,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     switch (iconName) {
       case "code":
         return <MaterialIcons name="code" size={16} color="#34d399" />
-      case "target":
+      case "gps-fixed":
         return <MaterialIcons name="gps-fixed" size={16} color="#34d399" />
-      case "heart":
+      case "favorite":
         return <MaterialIcons name="favorite" size={16} color="#34d399" />
       case "globe":
         return <MaterialIcons name="public" size={16} color="#34d399" />
@@ -217,10 +217,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
-        <View className="flex-row items-center space-x-3">
-          <TouchableOpacity className="p-2" onPress={onBack}>
-            <MaterialIcons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
+        <View className="flex-row items-center">
           <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
             <MaterialIcons name="settings" size={24} color="#000000" />
           </TouchableOpacity>
@@ -292,8 +289,18 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <View className="space-y-3">
             {skills.map((skill) => (
               <View key={skill.id} className="flex-row justify-between items-center bg-emerald-700/20 rounded-lg p-3">
-                <Text className="text-sm text-emerald-100">{skill.text}</Text>
-                <View className="ml-2">{getIconComponent(skill.icon)}</View>
+                <View className="flex-1 pr-2">
+                  <Text className="text-sm text-emerald-100" numberOfLines={2}>{skill.text}</Text>
+                  {skill.credentialUrl && (
+                    <View className="flex-row items-center mt-1">
+                      <MaterialIcons name="attach-file" size={14} color="#a7f3d0" />
+                      <Text className="text-xs text-emerald-200 ml-1" numberOfLines={1}>{skill.credentialUrl.split('/').pop()}</Text>
+                    </View>
+                  )}
+                </View>
+                <View className="ml-2 h-8 w-8 rounded-full bg-black/30 items-center justify-center">
+                  {getIconComponent(skill.icon)}
+                </View>
               </View>
             ))}
           </View>

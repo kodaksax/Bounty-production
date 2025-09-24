@@ -53,11 +53,6 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           <MaterialIcons name="gps-fixed" size={20} color="#fff" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={20} color="#fff" />
-          </TouchableOpacity>
-        )}
       </View>
   
         {/* Balance Card */}
@@ -117,7 +112,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
         {/* Bounty Postings Section */}
         
-        <View style={[styles.sectionPad, { flex: 1 }]}> 
+  <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}> 
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Bounty Postings</Text>
             <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
@@ -156,7 +151,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingTop: 32,
     paddingHorizontal: 16,
     backgroundColor: '#059669',

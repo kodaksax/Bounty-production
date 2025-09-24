@@ -3,7 +3,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
-import { useWallet } from '../lib/wallet-context'
 import { ArchivedBountyCard } from "./archived-bounty-card"
 
 interface ArchivedBountiesScreenProps {
@@ -42,28 +41,17 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
     },
   ])
 
-  const { balance } = useWallet()
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600">
-      {/* Header */}
-      <View className="flex justify-between items-center p-4 pt-8">
-        <View className="flex items-center gap-3">
+      {/* Header: icon + title on left, back on right */}
+      <View className="flex flex-row justify-between items-center p-4 pt-8">
+        <View className="flex flex-row items-center gap-3">
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
         </View>
-        <View className="flex items-center gap-4">
-          <Text className="text-white font-medium">$ {balance.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      {/* Title with back button */}
-      <View className="px-4 py-2 flex items-center">
-        <TouchableOpacity onPress={onBack} className="mr-3 text-white">
+        <TouchableOpacity onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
-        <Text className="text-white text-xl font-bold tracking-wide uppercase text-center flex-1 mr-5">
-          Archived Bounty
-        </Text>
       </View>
 
       {/* NFT Collection */}
