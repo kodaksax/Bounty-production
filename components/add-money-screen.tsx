@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
+import { useWallet } from '../lib/wallet-context'
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -12,6 +13,7 @@ interface AddMoneyScreenProps {
 
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
+  const { deposit } = useWallet()
 
   const handleNumberPress = (num: number) => {
     if (amount === "0") {
@@ -45,8 +47,10 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
   const handleAddMoney = () => {
     const numAmount = Number.parseFloat(amount)
-    if (onAddMoney && !isNaN(numAmount)) {
-      onAddMoney(numAmount)
+    if (!isNaN(numAmount) && numAmount > 0) {
+      deposit(numAmount)
+      onAddMoney?.(numAmount)
+      onBack?.()
     }
   }
 

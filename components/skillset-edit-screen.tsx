@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useWallet } from '../lib/wallet-context'
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -24,19 +25,15 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
   ])
 
   const [selectedSkill, setSelectedSkill] = useState<string>("1")
+  const { balance } = useWallet()
 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
-      case "code":
-        return <MaterialIcons name="code" size={20} color="#ef4444" />
-      case "target":
-        return <MaterialIcons name="gps-fixed" size={20} color="#000" />
-      case "heart":
-        return <MaterialIcons name="favorite" size={20} color="#000" />
-      case "globe":
-        return <MaterialIcons name="public" size={20} color="#3b82f6" />
-      default:
-        return <MaterialIcons name="code" size={20} color="#000" />
+      case 'code': return <MaterialIcons name="code" size={20} color="#ef4444" />
+      case 'target': return <MaterialIcons name="gps-fixed" size={20} color="#000" />
+      case 'heart': return <MaterialIcons name="favorite" size={20} color="#000" />
+      case 'globe': return <MaterialIcons name="public" size={20} color="#3b82f6" />
+      default: return <MaterialIcons name="code" size={20} color="#000" />
     }
   }
 
@@ -73,7 +70,7 @@ export function SkillsetEditScreen({ onBack, onSave }: SkillsetEditScreenProps) 
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
           <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
         </View>
-        <Text className="text-lg font-bold">$ 40.00</Text>
+  <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
       </View>
 
       {/* Title with actions */}

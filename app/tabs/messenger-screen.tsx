@@ -6,6 +6,7 @@ import { cn } from "lib/utils"
 import React, { useState } from "react"
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { ChatDetailScreen } from "../../components/chat-detail-screen"
+import { useWallet } from '../../lib/wallet-context'
 
 
 export interface Conversation {
@@ -24,9 +25,11 @@ export interface Conversation {
 export function MessengerScreen({
   activeScreen,
   onNavigate,
+  onConversationModeChange,
 }: {
   activeScreen: string
   onNavigate: (screen: string) => void
+  onConversationModeChange?: (inConversation: boolean) => void
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([
     {
@@ -61,13 +64,18 @@ export function MessengerScreen({
   ])
 
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
+  const { balance } = useWallet()
   // activeScreen is received from props (lifted state)
   const handleConversationClick = (id: string) => {
     setConversations((prev) => prev.map((conv) => (conv.id === id ? { ...conv, unread: 0, isRead: true } : conv)))
     setActiveConversation(id)
+    onConversationModeChange?.(true)
   }
 
-  const handleBackToInbox = () => setActiveConversation(null)
+  const handleBackToInbox = () => {
+    setActiveConversation(null)
+    onConversationModeChange?.(false)
+  }
 
 const styles = StyleSheet.create({
   container: {
@@ -119,7 +127,7 @@ const styles = StyleSheet.create({
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
             <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
           </View>
-          <Text className="text-lg font-bold">$ 40.00</Text>
+          <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
         </View>
       </View>
 

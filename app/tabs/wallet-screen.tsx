@@ -2,12 +2,13 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { WithdrawScreen } from "../../components/withdraw-screen";
+import { useWallet } from '../../lib/wallet-context';
 
 
 interface WalletScreenProps {
@@ -19,12 +20,18 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const [balance, setBalance] = useState(40)
+  const { balance, deposit, transactions } = useWallet();
 
-  const handleAddMoney = (amount: number) => {
-    setBalance((prev) => prev + amount)
-    setShowAddMoney(false)
-  }
+  const handleAddMoney = async (amount: number) => {
+    await deposit(amount, { method: 'Manual Add' });
+    setShowAddMoney(false);
+  };
+
+  // Filter bounty related transactions (posted/completed/received)
+  const bountyTransactions = useMemo(() => transactions
+    .filter(t => t.type === 'bounty_posted' || t.type === 'bounty_completed' || t.type === 'bounty_received')
+    .slice(0, 20) // cap for now
+  , [transactions]);
 
   if (showWithdraw) {
     return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
@@ -119,14 +126,18 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </View>
           
           <ScrollView style={{ flex: 1 }}>
-          <View style={styles.bountyCard}>
-            <Text style={styles.bountyName}>Bounty</Text>
-            <Text style={styles.bountyAmount}>$15.00</Text>
-          </View>
-          <View style={styles.bountyCard}>
-            <Text style={styles.bountyName}>Bounty</Text>
-            <Text style={styles.bountyAmount}>$25.00</Text>
-          </View>
+            {bountyTransactions.length === 0 ? (
+              <View style={styles.emptyState}> 
+                <Text style={styles.emptyStateText}>No bounty transactions yet</Text>
+              </View>
+            ) : bountyTransactions.map(tx => (
+              <View key={tx.id} style={styles.bountyCard}>
+                <Text style={styles.bountyName}>{
+                  tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
+                } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
+                <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+              </View>
+            ))}
           </ScrollView>
         </View>
         
@@ -279,6 +290,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: '#6ee7b7',
+    fontSize: 14,
+    opacity: 0.9,
   },
   // bottom nav indicator removed; using shared BottomNav at app level
 });

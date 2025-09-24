@@ -93,9 +93,12 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         )}
       >
         {/* Header */}
-        <View className="flex items-center justify-between p-4 bg-emerald-700">
-          <Text className="text-lg font-bold text-white">Transaction Details</Text>
-          <TouchableOpacity onPress={handleClose} className="text-white p-2 touch-target-min">
+        <View className="flex flex-row items-center justify-between p-4 bg-emerald-700">
+          <View className="flex flex-row items-center">
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <Text className="text-lg font-bold text-white ml-2">Transaction Details</Text>
+          </View>
+          <TouchableOpacity onPress={handleClose} className="p-2 touch-target-min">
             <MaterialIcons name="close" size={24} color="#000000" />
           </TouchableOpacity>
         </View>

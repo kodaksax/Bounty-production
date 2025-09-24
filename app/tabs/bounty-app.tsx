@@ -7,8 +7,11 @@ import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
-import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { WalletProvider, useWallet } from '../../lib/wallet-context'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -23,15 +26,40 @@ type Bounty = {
 }
 
 
-export function BountyApp() {
+function BountyAppInner() {
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
   const [activeScreen, setActiveScreen] = useState("bounty")
+  const [showBottomNav, setShowBottomNav] = useState(true)
   const [showSearch, setShowSearch] = useState(false)
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [userBalance] = useState(40)
+  const { balance } = useWallet()
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const insets = useSafeAreaInsets()
+  const scrollY = useRef(new Animated.Value(0)).current
+  // Reduce header vertical padding to move content up ~25px while respecting safe area
+  // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
+  const headerTopPad = Math.max(insets.top - 50, 0)
+
+  // Collapsing header config
+  const HEADER_EXPANDED = 150
+  const HEADER_COLLAPSED = 60
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_EXPANDED - HEADER_COLLAPSED],
+    outputRange: [HEADER_EXPANDED + headerTopPad, HEADER_COLLAPSED + headerTopPad],
+    extrapolate: 'clamp'
+  })
+  const extraContentOpacity = scrollY.interpolate({
+    inputRange: [0, 40, 80],
+    outputRange: [1, 0.4, 0],
+    extrapolate: 'clamp'
+  })
+  const titleScale = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [1, 0.85],
+    extrapolate: 'clamp'
+  })
   // list layout (single column)
 
   // Filter chips per design
@@ -135,58 +163,67 @@ export function BountyApp() {
   // Render dashboard content when activeScreen is "bounty"
   const renderDashboardContent = () => (
     <View style={styles.dashboardArea}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+      {/* Collapsing Header */}
+  <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
+        <View style={styles.headerRow}> 
+          <View style={styles.headerLeft}> 
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
+          </View>
+          <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
+            <Text style={styles.headerBalance}>$ {balance.toFixed(2)}</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
-          <Text style={styles.headerBalance}>$ 40.00</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchWrapper}>
-        <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
-          <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
-          <Text style={styles.searchText}>Search bounties or users...</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Filter Chips */}
-      <View style={styles.filtersRow}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={categories}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16 }}
-          renderItem={({ item }) => {
-            const isActive = activeCategory === item.id
-            return (
-              <TouchableOpacity
-                onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
-                style={[styles.chip, isActive && styles.chipActive]}
-              >
-                <MaterialIcons
-                  name={item.icon}
-                  size={16}
-                  color={isActive ? '#052e1b' : '#d1fae5'}
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
-              </TouchableOpacity>
-            )
-          }}
+        <Animated.View style={{ opacity: extraContentOpacity }}>
+          {/* Search Bar */}
+          <View style={styles.searchWrapper}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
+              <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
+              <Text style={styles.searchText}>Search bounties or users...</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Filter Chips */}
+          <View style={styles.filtersRow}>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={categories}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+              renderItem={({ item }) => {
+                const isActive = activeCategory === item.id
+                return (
+                  <TouchableOpacity
+                    onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
+                    style={[styles.chip, isActive && styles.chipActive]}
+                  >
+                    <MaterialIcons
+                      name={item.icon}
+                      size={16}
+                      color={isActive ? '#052e1b' : '#d1fae5'}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              }}
+            />
+          </View>
+        </Animated.View>
+        <LinearGradient
+          colors={["rgba(5,150,105,0.0)", "rgba(5,150,105,0.25)", "rgba(5,150,105,0.55)"]}
+          style={styles.gradientSeparator}
+          pointerEvents="none"
         />
-      </View>
+      </Animated.View>
 
-      {/* Bounty List */}
-      <FlatList
+      {/* Bounty List with scroll listener */}
+      <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 }}
+  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 8, paddingBottom:  (insets.bottom + 40) }}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+        scrollEventThrottle={16}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
@@ -226,14 +263,26 @@ export function BountyApp() {
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (
-        <MessengerScreen activeScreen={activeScreen} onNavigate={setActiveScreen} />
+        <MessengerScreen
+          activeScreen={activeScreen}
+          onNavigate={setActiveScreen}
+          onConversationModeChange={(inConv) => setShowBottomNav(!inConv)}
+        />
       ) : null}
 
       {/* Bottom Navigation - iPhone optimized with safe area inset */}
-          <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen}/>
+          {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen}/>}
     </View>
   );
 
+}
+
+export function BountyApp() {
+  return (
+    <WalletProvider>
+      <BountyAppInner />
+    </WalletProvider>
+  )
 }
 
 const styles = StyleSheet.create({
@@ -251,8 +300,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 32,
     paddingBottom: 8,
+  },
+  collapsingHeader: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 10,
+    backgroundColor: '#059669',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -312,6 +368,13 @@ const styles = StyleSheet.create({
   },
   filtersRow: {
     marginBottom: 8,
+  },
+  gradientSeparator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 40,
   },
   chip: {
     flexDirection: 'row',

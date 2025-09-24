@@ -5,11 +5,15 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bountyexpo",
+    "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bounty0.BOUNTYExpo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,6 +30,13 @@
     "plugins": [
       "expo-router",
       [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.bountyexpo-workspace",
+          "publishableKey": "pk_live_51PGppVJekUCspsfJ6faxkQosXxBh9K4Srl9sWzCj4ZSkyPG2CJtU8T9WAhWIemp8ef2XXywb8vJODtlAVtKQU8Lo000ZVwbZee"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -37,6 +48,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b5485f88-0b1f-4622-bbed-b1ae142dcb46"
+      }
     }
   }
 }

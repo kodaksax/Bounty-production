@@ -1,36 +1,39 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import React, { useState } from "react"
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native"
 import { EditProfileScreen } from "./edit-profile-screen"
+import { ContactSupportScreen } from "./settings/contact-support-screen"
+import { FAQScreen } from "./settings/faq-screen"
+import { HelpSupportScreen } from "./settings/help-support-screen"
+import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
+import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
+import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
 
-interface SettingsScreenProps {
-  onBack?: () => void
-}
+interface SettingsScreenProps { onBack?: () => void }
+
+type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'help' | 'contact' | 'terms' | 'faq'
 
 export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
-  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [panel, setPanel] = useState<Panel>('root')
   const [profileData, setProfileData] = useState({
-    name: "@jon_Doe",
-    about: "Russian opportunist",
-    phone: "+998 90 943 32 00",
-    avatar: "/placeholder.svg?height=48&width=48",
+    name: '@jon_Doe',
+    about: 'Russian opportunist',
+    phone: '+998 90 943 32 00',
+    avatar: '/placeholder.svg?height=48&width=48',
   })
 
   const handleProfileSave = (data: { name: string; about: string; phone: string }) => {
-    setProfileData({
-      ...profileData,
-      ...data,
-    })
-    setShowEditProfile(false)
+    setProfileData(prev => ({ ...prev, ...data }))
+    setPanel('root')
   }
 
-  if (showEditProfile) {
+  // Panel routing
+  if (panel === 'editProfile') {
     return (
       <EditProfileScreen
-        onBack={() => setShowEditProfile(false)}
+        onBack={() => setPanel('root')}
         initialName={profileData.name}
         initialAbout={profileData.about}
         initialPhone={profileData.phone}
@@ -39,184 +42,72 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
       />
     )
   }
+  if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
+  if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
+  if (panel === 'help') return <HelpSupportScreen onBack={() => setPanel('root')} onNavigateContact={() => setPanel('contact')} onNavigateTerms={() => setPanel('terms')} onNavigateFAQ={() => setPanel('faq')} />
+  if (panel === 'contact') return <ContactSupportScreen onBack={() => setPanel('help')} />
+  if (panel === 'terms') return <TermsPrivacyScreen onBack={() => setPanel('help')} />
+  if (panel === 'faq') return <FAQScreen onBack={() => setPanel('help')} />
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#059669', // emerald-600
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: 16,
-      paddingTop: 32,
-    },
-    headerContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    headerIcon: {
-      marginRight: 8,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: 'white',
-      letterSpacing: 2,
-    },
-    balanceText: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: 'white',
-    },
-    backContainer: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    backButton: {
-      marginRight: 8,
-    },
-    titleText: {
-      fontSize: 20,
-      fontWeight: '500',
-      color: 'white',
-    },
-    profileSection: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: 'rgba(6, 95, 70, 0.3)', // emerald-700/30
-    },
-    profileContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    profileInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    avatarContainer: {
-      marginRight: 12,
-    },
-    profileName: {
-      fontWeight: '500',
-      color: 'white',
-      fontSize: 16,
-    },
-    profileAbout: {
-      fontSize: 12,
-      color: '#A7F3D0', // emerald-200
-    },
-    settingsContainer: {
-      flex: 1,
-    },
-    settingsContent: {
-      paddingVertical: 8,
-    },
-    navigationIndicator: {
-      marginTop: 'auto',
-      flexDirection: 'row',
-      justifyContent: 'center',
-      paddingBottom: 24,
-    },
-    indicator: {
-      height: 4,
-      width: 4,
-      borderRadius: 2,
-      backgroundColor: 'rgba(255, 255, 255, 0.5)',
-      marginHorizontal: 4,
-    },
-    settingsItem: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    },
-    settingsItemContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    settingsItemIcon: {
-      marginRight: 12,
-    },
-    settingsItemLabel: {
-      color: 'white',
-      fontSize: 16,
-    },
-  });
-
+  // Root panel
   return (
-
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex-1 bg-emerald-600">
       {/* Header */}
       <View className="flex-row justify-between items-center p-4 pt-8">
-        {/* Left: icon + BOUNTY */}
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
+          <MaterialIcons name="gps-fixed" size={24} color="#000" />
+          <Text className="text-lg font-bold tracking-wider ml-2 text-black">BOUNTY</Text>
         </View>
-
-        {/* Right: $40.00 placeholder + back */}
-        <View className="flex-row items-center">
-          <Text className="text-lg font-bold mr-3">$ 40.00</Text>
-          <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Title */}
-      <View className="px-4 py-2 flex items-center">
-        <Text className="text-xl font-medium">Settings</Text>
-      </View>
-
-      {/* Profile section */}
-      <View className="px-4 py-3 bg-emerald-700/30">
-        <TouchableOpacity className="flex-row items-center justify-between" onPress={() => setShowEditProfile(true)}>
-          <View className="flex-row items-center">
-            <Avatar className="h-12 w-12 mr-3 border-2 border-white">
-              <AvatarImage src={profileData.avatar} alt={profileData.name} />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-            <View>
-              <Text className="font-medium">{profileData.name}</Text>
-              <Text className="text-xs text-emerald-200">{profileData.about}</Text>
-            </View>
-          </View>
-          <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
+        <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
+          <MaterialIcons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
       </View>
-
-      {/* Settings options */}
-      <View className="flex-1">
-        <ScrollView className="py-2">
-          <SettingsItem icon={<MaterialIcons name="star" size={24} color="#000000" />} label="Starred Messages" />
-          <SettingsItem icon={<MaterialIcons name="rate-review" size={24} color="#000000" />} label="Pending Reviews" />
-          <SettingsItem icon={<MaterialIcons name="person" size={24} color="#000000" />} label="Account" />
-          <SettingsItem icon={<MaterialIcons name="chat" size={24} color="#000000" />} label="Chats" />
-          <SettingsItem icon={<MaterialIcons name="notifications" size={24} color="#000000" />} label="Notifications" />
-          <SettingsItem icon={<MaterialIcons name="storage" size={24} color="#000000" />} label="Data and Storage Usage" />
-          <SettingsItem icon={<MaterialIcons name="help" size={24} color="#000000" />} label="Help" />
-          <SettingsItem icon={<MaterialIcons name="favorite" size={24} color="#000000" />} label="Tell a Friend" />
-        </ScrollView>
-      </View>
-
-      {/* Bottom Navigation Indicator */}
-      <View className="mt-auto flex justify-center pb-6">
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-        <View className="h-1 w-1 rounded-full bg-white/50 mx-1"></View>
-
-      </View>
+      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
+        <Text className="text-xl font-semibold text-white mb-4 text-center">Settings</Text>
+        {/* Cards */}
+        <SettingsCard
+          title="Edit Profile"
+          description="Allows users to modify their personal information such as name, profile picture, contact details, and update their role preferences. It provides"
+          primaryLabel="Save Changes"
+          secondaryLabel="View My Profile"
+          onPrimary={() => setPanel('editProfile')}
+          onSecondary={() => setPanel('editProfile')}
+          icon="person"
+        />
+        <SettingsCard
+          title="Privacy & Security Settings"
+            description="Provides users with options to manage their account's privacy and security, including password changes, two-factor authentication"
+          primaryLabel="Open"
+          onPrimary={() => setPanel('privacy')}
+          icon="lock"
+        />
+        <SettingsCard
+          title="Notifications Center"
+          description="Aggregates all in-app notifications, such as new applicants, task assignments, payment updates, and reminders, in a chronological feed."
+          primaryLabel="Open"
+          onPrimary={() => setPanel('notifications')}
+          icon="notifications"
+        />
+        <SettingsCard
+          title="Help & Support"
+          description="Offers various resources for user assistance, including FAQs, a direct contact form for support inquiries, and links to legal documentation."
+          primaryLabel="Open"
+          onPrimary={() => setPanel('help')}
+          icon="help-center"
+        />
+        <SettingsCard
+          title="Log Out"
+          description="Sign out of the application securely and end your current session."
+          primaryLabel="Confirm Log Out"
+          onPrimary={() => Alert.alert('Logged Out', 'Session ended (placeholder).')}
+          icon="logout"
+        />
+        <View className="mt-6 mb-10">
+          <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
+            <Text className="text-white text-sm font-medium">Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   )
 }
@@ -228,39 +119,45 @@ interface SettingsItemProps {
 }
 
 function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
-  const styles = StyleSheet.create({
-    settingsItem: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    },
-    settingsItemContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    settingsItemIcon: {
-      marginRight: 12,
-    },
-    settingsItemLabel: {
-      color: 'white',
-      fontSize: 16,
-    },
-  });
-
   return (
-    <TouchableOpacity
-      className="w-full flex-row items-center justify-between px-4 py-3"
-      onPress={onClick}
-    >
+    <TouchableOpacity className="w-full flex-row items-center justify-between px-4 py-3" onPress={onClick}>
       <View className="flex-row items-center">
         {icon}
         <Text className="ml-3">{label}</Text>
       </View>
-      <MaterialIcons name="keyboard-arrow-right" size={24} color="#000000" />
+      <MaterialIcons name="keyboard-arrow-right" size={24} color="#000" />
     </TouchableOpacity>
+  )
+}
+
+interface SettingsCardProps {
+  title: string
+  description: string
+  primaryLabel: string
+  secondaryLabel?: string
+  onPrimary: () => void
+  onSecondary?: () => void
+  icon: any
+}
+
+const SettingsCard = ({ title, description, primaryLabel, secondaryLabel, onPrimary, onSecondary, icon }: SettingsCardProps) => {
+  return (
+    <View className="bg-black/30 rounded-xl p-4 mb-4">
+      <View className="flex-row items-center mb-2">
+        <MaterialIcons name={icon} size={22} color="#34d399" />
+        <Text className="ml-2 text-white font-medium text-sm flex-1" numberOfLines={1}>{title}</Text>
+      </View>
+      <Text className="text-emerald-200 text-xs leading-4 mb-3" numberOfLines={4}>{description}</Text>
+      <View className="flex-row gap-2">
+        <TouchableOpacity onPress={onPrimary} className="px-3 py-1 rounded-md bg-emerald-700">
+          <Text className="text-white text-xs font-medium">{primaryLabel}</Text>
+        </TouchableOpacity>
+        {secondaryLabel && onSecondary && (
+          <TouchableOpacity onPress={onSecondary} className="px-3 py-1 rounded-md bg-black/40">
+            <Text className="text-white text-xs font-medium">{secondaryLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   )
 }

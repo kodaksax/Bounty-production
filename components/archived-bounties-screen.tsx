@@ -1,9 +1,10 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { ArchivedBountyCard } from "./archived-bounty-card"
 import { useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
+import { Text, TouchableOpacity, View } from "react-native"
+import { useWallet } from '../lib/wallet-context'
+import { ArchivedBountyCard } from "./archived-bounty-card"
 
 interface ArchivedBountiesScreenProps {
   onBack?: () => void
@@ -41,6 +42,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
     },
   ])
 
+  const { balance } = useWallet()
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600">
       {/* Header */}
@@ -50,7 +52,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
           <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
         </View>
         <View className="flex items-center gap-4">
-          <Text className="text-white font-medium">$ 40.00</Text>
+          <Text className="text-white font-medium">$ {balance.toFixed(2)}</Text>
         </View>
       </View>
 

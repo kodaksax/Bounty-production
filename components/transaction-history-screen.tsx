@@ -2,9 +2,9 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
-import { transactionService } from "lib/services/transaction-service"
+// import { transactionService } from "lib/services/transaction-service"
 import { cn } from "lib/utils"
-import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { useWallet } from "lib/wallet-context"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 import { TransactionDetailModal } from "./transaction-detail-modal"
@@ -24,6 +24,8 @@ export interface Transaction {
 }
 
 export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
+  // Local view of transactions (sourced from wallet context for now)
+  const { transactions: walletTransactions } = useWallet()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -52,55 +54,27 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   // Fetch transactions when page or filter changes
   useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
+    // Simulate pagination on in-memory list
+    setIsLoading(true)
+    try {
+      let filtered = walletTransactions as Transaction[]
+      if (activeFilter === 'deposits') filtered = filtered.filter(t => t.type === 'deposit')
+      else if (activeFilter === 'withdrawals') filtered = filtered.filter(t => t.type === 'withdrawal')
+      else if (activeFilter === 'bounties') filtered = filtered.filter(t => t.type.startsWith('bounty_'))
 
-        // Map our filter to the transaction types
-        let type: string | undefined
-        switch (activeFilter) {
-          case "deposits":
-            type = "deposit"
-            break
-          case "withdrawals":
-            type = "withdrawal"
-            break
-          case "bounties":
-            // For bounties, we want multiple types
-            type = "bounty"
-            break
-          default:
-            type = undefined
-        }
-
-        const {
-          transactions: newTransactions,
-          count,
-          error,
-        } = await transactionService.getTransactions(CURRENT_USER_ID, {
-          page: currentPage,
-          limit: 10,
-          type,
-        })
-
-        if (error) {
-          throw error
-        }
-
-        // If it's the first page, replace transactions, otherwise append
-        setTransactions((prev) => (currentPage === 1 ? newTransactions : [...prev, ...newTransactions]))
-        setHasMore(currentPage * 10 < count)
-      } catch (err) {
-        console.error("Error fetching transactions:", err)
-        setError("Failed to load transactions. Please try again.")
-      } finally {
-        setIsLoading(false)
-      }
+      // Sort newest first
+      filtered = [...filtered].sort((a,b) => b.date.getTime() - a.date.getTime())
+      const pageSize = 10
+      const slice = filtered.slice(0, currentPage * pageSize)
+      setTransactions(slice)
+      setHasMore(slice.length < filtered.length)
+      setError(null)
+    } catch (e) {
+      setError('Failed to load transactions.')
+    } finally {
+      setIsLoading(false)
     }
-
-    fetchTransactions()
-  }, [currentPage, activeFilter])
+  }, [walletTransactions, activeFilter, currentPage])
 
   // Group transactions by date
   const groupedTransactions = useMemo(() => {
@@ -167,14 +141,14 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <View className="flex justify-between items-center p-4 pt-safe">
-        <View className="flex items-center">
-          <TouchableOpacity onPress={onBack} className="mr-3 p-2 touch-target-min">
-            <MaterialIcons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
+      <View className="flex flex-row items-center justify-between p-4 pt-safe">
+        <View className="flex flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
+        <TouchableOpacity onPress={onBack} className="p-2 touch-target-min ml-4">
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
+        </TouchableOpacity>
       </View>
 
       {/* Title */}

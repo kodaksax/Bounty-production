@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import type React from "react"
 import { useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useWallet } from '../lib/wallet-context'
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -27,6 +28,7 @@ export function EditProfileScreen({
   const [about, setAbout] = useState(initialAbout)
   const [phone, setPhone] = useState(initialPhone)
   const [avatar, setAvatar] = useState(initialAvatar)
+  const { balance } = useWallet()
 
   const handleSave = () => {
     onSave({
@@ -56,7 +58,7 @@ export function EditProfileScreen({
               <MaterialIcons name="gps-fixed" size={24} color="#000000" />
               <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
             </View>
-            <Text className="text-lg font-bold">$ 40.00</Text>
+            <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
           </View>
           <View className="h-px bg-emerald-500/50 my-2"></View>
         </View>

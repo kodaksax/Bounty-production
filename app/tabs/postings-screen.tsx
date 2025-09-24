@@ -12,10 +12,12 @@ import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
+import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
+import { useWallet } from '../../lib/wallet-context'
 
 const styles = StyleSheet.create({
   container: {
@@ -86,6 +88,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const AMOUNT_PRESETS = [5, 10, 15, 25, 50, 75]
+  const { balance, deposit } = useWallet()
+  const [showAddMoney, setShowAddMoney] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
 
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
@@ -293,6 +299,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
       />
     )
   }
+  if (showAddMoney) {
+    return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
+  }
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
   const calculateDistance = (location: string) => {
@@ -349,7 +358,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
 
             {/* Right: $40 placeholder and bookmark below it */}
             <View className="flex items-end">
-              <Text className="text-white font-medium">$ 40.00</Text>
+              <Text className="text-white font-medium">$ {balance.toFixed(2)}</Text>
               <TouchableOpacity className="mt-1 text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
                 <MaterialIcons name="bookmark" size={20} color="#ffffff" />
               </TouchableOpacity>
@@ -618,7 +627,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
             {/* Amount header row */}
             <View className="flex-row items-center justify-between mb-2 px-2">
               <Text className="text-white text-base font-medium">Bounty Amount</Text>
-              <Text className="text-emerald-200 text-sm">Current Balance: $40.00</Text>
+              <Text className="text-emerald-200 text-sm">Current Balance: ${balance.toFixed(2)}</Text>
             </View>
 
             {/* Preset amount chips */}
@@ -630,42 +639,59 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                     key={amt}
                     onPress={() => handleChooseAmount(amt)}
                     className={cn(
-                      "px-4 py-2 rounded-full",
-                      selected ? "bg-emerald-400" : "bg-emerald-700/60",
+                      "px-4 py-2 rounded-full border",
+                      selected
+                        ? "bg-emerald-300 text-emerald-900 border-emerald-200"
+                        : "bg-emerald-900/40 border-emerald-500/40",
                     )}
                   >
-                    <Text className={cn("font-semibold", selected ? "text-emerald-900" : "text-emerald-100")}>{`$${amt}`}</Text>
+                    <Text className={cn("font-medium", selected ? "text-emerald-900" : "text-emerald-100")}>${amt}</Text>
                   </TouchableOpacity>
                 )
               })}
               <TouchableOpacity
                 onPress={() => setShowAddBountyAmount(true)}
-                className="px-4 py-2 rounded-full bg-emerald-900/40 border border-emerald-500/40"
+                className={cn(
+                  "px-4 py-2 rounded-full border",
+                  otherSelected ? "bg-emerald-300 border-emerald-200" : "bg-emerald-900/40 border-emerald-500/40"
+                )}
               >
-                <Text className="text-emerald-100 font-medium">Other…</Text>
+                <Text className={cn("font-medium", otherSelected ? "text-emerald-900" : "text-emerald-100")}>{otherSelected ? `$${formData.amount}` : "Other…"}</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Ghost/transparent Post button (primary solid removed per request) */}
-            <TouchableOpacity
-              ref={postButtonRef}
-              onPress={handleShowConfirmation}
-              disabled={
-                isSubmitting || !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
-              }
-              className={cn(
-                "self-center px-8 py-3 rounded-full border border-emerald-300/50",
-                "backdrop-blur-sm bg-emerald-700/30",
-                !(isSubmitting || !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor))
-                  ? ""
-                  : "opacity-60",
-              )}
-            >
-              <View className="flex-row items-center gap-2">
-                {isSubmitting && <ActivityIndicator size="small" color="white" />}
-                <Text className="text-white font-semibold">Post Bounty</Text>
+            {validationError && (
+              <View className="mx-2 mb-2 p-2 bg-red-500/70 rounded-md">
+                <Text className="text-white text-xs">{validationError}</Text>
               </View>
-            </TouchableOpacity>
+            )}
+            {(() => {
+              const requiredMissing = !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
+              const lowBalance = !formData.isForHonor && formData.amount > balance
+              const label = lowBalance ? "Low Balance • Tap to Deposit" : "Post Bounty"
+              const handlePress = () => {
+                if (lowBalance) { setShowAddMoney(true); return }
+                if (requiredMissing) { setValidationError("Please fill Title, Description and Amount (or mark For Honor)"); return }
+                setValidationError(null)
+                handleShowConfirmation()
+              }
+              return (
+                <TouchableOpacity
+                  ref={postButtonRef}
+                  onPress={handlePress}
+                  className={cn(
+                    "self-center w-full px-8 py-4 rounded-2xl border",
+                    lowBalance ? "border-amber-400 bg-amber-500/20" : "border-emerald-300/50 bg-emerald-700/30",
+                    requiredMissing && !lowBalance ? "border-red-400/70" : ""
+                  )}
+                  activeOpacity={0.85}
+                >
+                  <View className="flex-row items-center justify-center gap-2">
+                    {isSubmitting && !lowBalance && <ActivityIndicator size="small" color="white" />}
+                    <Text className={cn("font-semibold", lowBalance ? "text-amber-300" : "text-white")}>{label}</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            })()}
           </View>
         )}
 
