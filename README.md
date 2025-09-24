@@ -1,4 +1,4 @@
-# BOUNTYExpo
+# BOUNTY
 
 > Mobile-first micro‑bounty marketplace. Create → Match → Chat → Complete → Settle. Fast, transparent, escrow‑backed.
 
