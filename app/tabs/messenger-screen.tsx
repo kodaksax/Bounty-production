@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import React, { useState } from "react"
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ScrollView, Text, TouchableOpacity, View } from "react-native"
 import { ChatDetailScreen } from "../../components/chat-detail-screen"
 import { useWallet } from '../../lib/wallet-context'
 
@@ -77,42 +77,7 @@ export function MessengerScreen({
     onConversationModeChange?.(false)
   }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 16,
-  },
-  header: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  messageList: {
-    flex: 1,
-  },messageItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#111',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },input: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 8,
-  },
-  // bottom nav styles removed in favor of shared component
-});
+// Removed unused StyleSheet (styles)
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)

@@ -1,6 +1,22 @@
 import type { Bounty } from "lib/services/database.types"
 import { logger } from "lib/utils/error-logger"
 
+// Simple once-per-key logger to avoid spamming console when backend is offline
+const emitted: Record<string, boolean> = {}
+function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: any) {
+  if (emitted[key]) return
+  emitted[key] = true
+  if (level === 'error') {
+    logger.error(message, meta)
+  } else {
+    if (typeof (logger as any).warning === 'function') {
+      ;(logger as any).warning(message, meta)
+    } else {
+      logger.error(message, meta)
+    }
+  }
+}
+
 export const bountyService = {
   /**
    * Get a bounty by ID
@@ -32,13 +48,14 @@ export const bountyService = {
   /**
    * Get all bounties
    */
-  async getAll(options?: { status?: string; userId?: string }): Promise<Bounty[]> {
+  async getAll(options?: { status?: string; userId?: string; workType?: 'online' | 'in_person' }): Promise<Bounty[]> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
       const API_URL = "https://your-hostinger-domain.com/api/bounties"
       const params = new URLSearchParams()
 
-       if (options?.status) params.append("status", options.status)
+  if (options?.status) params.append("status", options.status)
+  if (options?.workType) params.append('work_type', options.workType)
     const response = await fetch(API_URL + "?" + params.toString())
     if (!response.ok) {
       throw new Error(`Failed to fetch bounties: ${response.statusText}`)
@@ -46,8 +63,8 @@ export const bountyService = {
     return await response.json()
   } catch (err) {
     const error = err instanceof Error ? err : new Error("Unknown error fetching bounties")
-    logger.error("Error fetching bounties", { options, error })
-    return [] // Add a return statement here
+    logOnce('bounties:getAll', 'error', 'Error fetching bounties (showing once until reload)', { options, error })
+    return []
   }
 },
 
@@ -58,6 +75,11 @@ export const bountyService = {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
       const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      // NOTE: Optional enhanced fields supported if backend allows:
+      // work_type?: 'online' | 'in_person'
+      // is_time_sensitive?: boolean
+      // deadline?: string (ISO)
+      // attachments_json?: string (serialized attachment metadata)
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -75,7 +97,7 @@ export const bountyService = {
       return await response.json()
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error creating bounty", { bounty, error })
+      logOnce('bounties:create', 'error', 'Error creating bounty (showing once until reload)', { bounty, error })
       return null
     }
   },
@@ -104,7 +126,7 @@ export const bountyService = {
       return await response.json()
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error updating bounty", { id, updates, error })
+      logOnce('bounties:update', 'error', 'Error updating bounty (showing once until reload)', { id, updates, error })
       return null
     }
   },
@@ -129,7 +151,7 @@ export const bountyService = {
       return true
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error deleting bounty", { id, error })
+      logOnce('bounties:delete', 'error', 'Error deleting bounty (showing once until reload)', { id, error })
       return false
     }
   },
@@ -155,6 +177,12 @@ export const bountyService = {
    */
   async getOpenBounties(): Promise<Bounty[]> {
     return this.getAll({ status: "open" })
+  },
+  /**
+   * Get bounties by work type (online or in_person)
+   */
+  async getByWorkType(workType: 'online' | 'in_person'): Promise<Bounty[]> {
+    return this.getAll({ workType })
   },
 
   /**

@@ -13,6 +13,9 @@ interface BountyConfirmationCardProps {
     amount: number
     isForHonor: boolean
     location: string
+    workType?: 'online' | 'in_person'
+    isTimeSensitive?: boolean
+    deadline?: string
   }
   onConfirm: () => Promise<void>
   onCancel: () => void
@@ -88,7 +91,17 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
               <View className="bg-emerald-700/50 px-4 py-2 rounded-lg text-white font-bold text-lg">
                 {bountyData.isForHonor ? "For Honor" : `$${bountyData.amount.toLocaleString()}`}
               </View>
-              <View className="text-base text-emerald-200">{bountyData.location}</View>
+              <View className="items-end">
+                {bountyData.workType && (
+                  <Text className="text-emerald-200 text-sm mb-1">{bountyData.workType === 'online' ? 'Online' : 'In Person'}</Text>
+                )}
+                {bountyData.workType === 'in_person' && !!bountyData.location && (
+                  <Text className="text-base text-emerald-200">{bountyData.location}</Text>
+                )}
+                {bountyData.isTimeSensitive && bountyData.deadline && (
+                  <Text className="text-emerald-100 text-xs mt-1">Deadline: {bountyData.deadline}</Text>
+                )}
+              </View>
             </View>
 
             {/* Swipe indicator */}

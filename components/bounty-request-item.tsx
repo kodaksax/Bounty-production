@@ -16,6 +16,8 @@ interface BountyRequestItemProps {
   onAccept?: () => Promise<void>;
   onReject?: () => Promise<void>;
   status: "pending" | "accepted" | "rejected";
+  workType?: 'online' | 'in_person'
+  deadline?: string
 }
 
 export function BountyRequestItem({
@@ -26,6 +28,8 @@ export function BountyRequestItem({
   timeAgo,
   avatarSrc,
   onMenuClick,
+  workType,
+  deadline,
 }: BountyRequestItemProps) {
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
@@ -51,6 +55,18 @@ export function BountyRequestItem({
               </View>
             </View>
             <Text className="text-white font-medium mt-0.5">{title}</Text>
+            <View className="flex-row gap-2 mt-1">
+              {workType && (
+                <View className="bg-emerald-700/40 px-2 py-0.5 rounded">
+                  <Text className="text-emerald-200 text-[10px] uppercase tracking-wide">{workType === 'online' ? 'Online' : 'In Person'}</Text>
+                </View>
+              )}
+              {deadline && (
+                <View className="bg-emerald-900/40 px-2 py-0.5 rounded">
+                  <Text className="text-emerald-300 text-[10px] tracking-wide">Due: {deadline.length > 16 ? deadline.slice(0,16)+'…' : deadline}</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 

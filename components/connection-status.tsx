@@ -46,7 +46,7 @@ export function ConnectionStatus() {
         ) : (
           <>
             <MaterialIcons name="wifi-off" size={16} color="#fff" />
-            <Text className="text-white text-sm font-medium">You're offline</Text>
+            <Text className="text-white text-sm font-medium">You&apos;re offline</Text>
           </>
         )}
       </View>

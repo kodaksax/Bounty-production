@@ -1,5 +1,5 @@
-import { View, Text } from "react-native"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { Text, View } from "react-native"
 
 interface InProgressBountyItemProps {
   username: string
@@ -8,6 +8,7 @@ interface InProgressBountyItemProps {
   distance: number
   timeAgo: string
   avatarSrc?: string
+  workType?: 'online' | 'in_person'
 }
 
 export function InProgressBountyItem({
@@ -17,6 +18,7 @@ export function InProgressBountyItem({
   distance,
   timeAgo,
   avatarSrc,
+  workType,
 }: InProgressBountyItemProps) {
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
@@ -37,9 +39,16 @@ export function InProgressBountyItem({
           </View>
         </View>
 
-        <View className="flex justify-between items-center mt-2">
-          <View className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">
-            <Text className="text-emerald-400 font-bold text-sm">${amount}</Text>
+        <View className="flex-row justify-between items-center mt-2">
+          <View className="flex-row items-center gap-2">
+            <View className="bg-emerald-900/50 px-2 py-1 rounded">
+              <Text className="text-emerald-400 font-bold text-xs">${amount}</Text>
+            </View>
+            {workType && (
+              <View className="bg-emerald-700/40 px-2 py-1 rounded">
+                <Text className="text-emerald-200 text-[10px] tracking-wide uppercase">{workType === 'online' ? 'Online' : 'In Person'}</Text>
+              </View>
+            )}
           </View>
           <Text className="text-sm text-emerald-200">{distance} mi</Text>
         </View>

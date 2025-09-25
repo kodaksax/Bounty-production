@@ -18,3 +18,4 @@ export const Separator = React.forwardRef<
     {...props}
   />
 ))
+Separator.displayName = 'Separator'

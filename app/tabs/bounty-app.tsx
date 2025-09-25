@@ -34,7 +34,7 @@ function BountyAppInner() {
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { balance } = useWallet()
-  const [error, setError] = useState<string | null>(null)
+  // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
   const insets = useSafeAreaInsets()
   const scrollY = useRef(new Animated.Value(0)).current
@@ -270,11 +270,9 @@ function BountyAppInner() {
         />
       ) : null}
 
-      {/* Bottom Navigation - iPhone optimized with safe area inset */}
-          {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen}/>}
+      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} />}
     </View>
-  );
-
+  )
 }
 
 export function BountyApp() {
@@ -285,115 +283,23 @@ export function BountyApp() {
   )
 }
 
+// Styles (consolidated)
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-    position: 'relative',
-    paddingBottom: 100, // space for BottomNav height
-  },
-  dashboardArea: {
-    flex: 1,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  collapsingHeader: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 10,
-    backgroundColor: '#059669',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    marginLeft: 8,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 1,
-  },
-  headerBalance: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  centerButton: {
-    height: 56,
-    width: 56,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -20,
-  },
-  bottomNavContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 100,
-    paddingBottom: 0,
-  },
-  // Search bar controls
-  searchWrapper: {
-    paddingHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  searchButton: {
-    width: '100%',
-    height: 44,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-  },
-  filtersRow: {
-    marginBottom: 8,
-  },
-  gradientSeparator: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 40,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5,46,27,0.2)',
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: 999,
-    marginRight: 8,
-  },
-  chipActive: {
-    backgroundColor: '#a7f3d0',
-  },
-  chipLabel: {
-    color: '#d1fae5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  chipLabelActive: {
-    color: '#052e1b',
-  },
-});
+  container: { flex: 1, backgroundColor: '#059669', position: 'relative', paddingBottom: 100 },
+  dashboardArea: { flex: 1 },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
+  headerBalance: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
+  searchWrapper: { paddingHorizontal: 16, marginBottom: 8 },
+  searchButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.35)', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
+  searchIcon: { marginRight: 8 },
+  searchText: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+  filtersRow: { paddingVertical: 8 },
+  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 14, height: 36, borderRadius: 999, marginRight: 8 },
+  chipActive: { backgroundColor: '#a7f3d0' },
+  chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
+  chipLabelActive: { color: '#052e1b' },
+})

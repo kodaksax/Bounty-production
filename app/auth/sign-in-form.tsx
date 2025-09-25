@@ -1,11 +1,10 @@
 "use client"
 
 import type React from "react"
-import { View, Text, TouchableOpacity, TextInput, ActivityIndicator } from "react-native"
+import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native"
 
-import { Alert, AlertDescription } from "components/ui/alert"
-import { MaterialIcons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
+import { Alert, AlertDescription } from "components/ui/alert"
 import { useState } from "react"
 
 export function SignInForm() {
@@ -116,10 +115,10 @@ export function SignInForm() {
       </TouchableOpacity>
 
       <View className="items-center">
-        <Text className="text-center text-sm">Don't have an account? </Text>
-        <TouchableOpacity onPress={() => { navigation.navigate('SignUp') }}>
-          <Text className="text-emerald-400">Sign up</Text>
-        </TouchableOpacity>
+        <Text className="text-center text-sm">Don&apos;t have an account? </Text>
+          <TouchableOpacity onPress={() => { navigation.navigate('SignUp') }}>
+            <Text className="text-emerald-400">Sign up</Text>
+          </TouchableOpacity>
       </View>
     </View>
   )

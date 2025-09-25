@@ -18,10 +18,13 @@ export const Select = ({ children, className }: { children?: React.ReactNode; cl
     {children}
   </View>
 )
+Select.displayName = 'Select'
 
 export const SelectGroup = ({ children }: { children?: React.ReactNode }) => <View>{children}</View>
+SelectGroup.displayName = 'SelectGroup'
 
 export const SelectValue = ({ children }: { children?: React.ReactNode }) => <Text>{children}</Text>
+SelectValue.displayName = 'SelectValue'
 
 export const SelectTrigger = React.forwardRef<any, any>(({ children, className, ...props }, ref) => (
   <TouchableOpacity ref={ref} // @ts-ignore
@@ -31,6 +34,7 @@ export const SelectTrigger = React.forwardRef<any, any>(({ children, className, 
     {children}
   </TouchableOpacity>
 ))
+SelectTrigger.displayName = 'SelectTrigger'
 
 export const SelectContent = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
   <View // @ts-ignore
@@ -39,6 +43,7 @@ export const SelectContent = ({ children, className }: { children?: React.ReactN
     {children}
   </View>
 )
+SelectContent.displayName = 'SelectContent'
 
 export const SelectLabel = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
   <Text // @ts-ignore
@@ -47,6 +52,7 @@ export const SelectLabel = ({ children, className }: { children?: React.ReactNod
     {children}
   </Text>
 )
+SelectLabel.displayName = 'SelectLabel'
 
 export const SelectItem = React.forwardRef<any, any>(({ children, className, ...props }, ref) => (
   <TouchableOpacity ref={ref} // @ts-ignore
@@ -56,11 +62,13 @@ export const SelectItem = React.forwardRef<any, any>(({ children, className, ...
     <Text>{children}</Text>
   </TouchableOpacity>
 ))
+SelectItem.displayName = 'SelectItem'
 
 export const SelectSeparator = ({ className }: { className?: string }) => (
   <View // @ts-ignore
     className={cn(className)}
   />
 )
+SelectSeparator.displayName = 'SelectSeparator'
 
 export default Select

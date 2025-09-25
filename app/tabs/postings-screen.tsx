@@ -1,6 +1,9 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import DateTimePicker from '@react-native-community/datetimepicker'
+import { BinaryToggle } from 'components/ui/binary-toggle'
+import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -9,7 +12,7 @@ import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Keyboard, Platform, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -19,30 +22,7 @@ import { BountyRequestItem } from "../../components/bounty-request-item"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { useWallet } from '../../lib/wallet-context'
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669', // emerald-600
-  },
-  dashboardContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  dashboardTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  calendarContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // bottom nav styles removed; using shared BottomNav component
-});
+// Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 
 
 
@@ -67,6 +47,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
     timeline: "",
     skills: "",
     isForHonor: false,
+    workType: 'in_person' as 'online' | 'in_person',
+    isTimeSensitive: false,
+    deadline: '',
+  attachments: [] as { id: string; name: string; uri: string; mimeType?: string; size?: number; status?: 'pending' | 'uploading' | 'uploaded' | 'failed'; progress?: number; remoteUri?: string }[],
   })
 
   // State for Supabase data
@@ -92,6 +76,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
+  const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false)
+  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null)
 
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
@@ -191,16 +178,20 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
       setError(null)
 
       // Prepare bounty data
-      const bountyData: Omit<Bounty, "id" | "created_at"> = {
+    const bountyData: Omit<Bounty, "id" | "created_at"> & { attachments_json?: string } = {
   title: formData.title,
   description: formData.description,
   amount: formData.isForHonor ? 0 : formData.amount,
   is_for_honor: formData.isForHonor,
-  location: formData.location,
+  location: formData.workType === 'in_person' ? formData.location : '',
   timeline: formData.timeline,
   skills_required: formData.skills,
   user_id: CURRENT_USER_ID, // Make sure this is set correctly from your auth state
   status: "open", // Ensure this matches the expected type
+  work_type: formData.workType,
+  is_time_sensitive: formData.isTimeSensitive,
+  deadline: formData.isTimeSensitive ? formData.deadline : undefined,
+  attachments_json: formData.attachments.filter(a => a.status === 'uploaded').length ? JSON.stringify(formData.attachments.filter(a => a.status === 'uploaded')) : undefined,
 
       }
 
@@ -229,6 +220,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           timeline: "",
           skills: "",
           isForHonor: false,
+          workType: 'in_person',
+          isTimeSensitive: false,
+          deadline: '',
+          attachments: [],
         })
 
         // Close confirmation card
@@ -466,17 +461,34 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                     />
                   </View>
 
+                  {/* Work Type Toggle */}
                   <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Location</Text>
-                    <TextInput
-                      value={formData.location}
-                      onChangeText={(text) => handleInputChange({ target: { name: 'location', value: text } })}
-                      placeholder="A location where the task can begin"
-                      className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                      placeholderTextColor="#6ee7b7"
-
+                    <Text className="text-emerald-100/90 text-base">Work Type</Text>
+                    <BinaryToggle
+                      value={formData.workType}
+                      onChange={(v) => setFormData(prev => ({ ...prev, workType: v }))}
+                      options={[
+                        { id: 'online', label: 'Online' },
+                        { id: 'in_person', label: 'In Person' },
+                      ] as const}
                     />
                   </View>
+
+                  {formData.workType === 'in_person' && (
+                    <View className="space-y-3">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-emerald-100/90 text-base">Location <Text className="text-red-300">*</Text></Text>
+                        <Text className="text-xs text-emerald-300">Required for in-person</Text>
+                      </View>
+                      <TextInput
+                        value={formData.location}
+                        onChangeText={(text) => handleInputChange({ target: { name: 'location', value: text } })}
+                        placeholder="Where will this task occur?"
+                        className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
+                        placeholderTextColor="#6ee7b7"
+                      />
+                    </View>
+                  )}
 
                   {/* Bounty Amount moved to sticky bottom action bar */}
 
@@ -502,21 +514,128 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                       placeholderTextColor="#6ee7b7"
                     />
                   </View>
+
+                  {/* Time Sensitive Toggle */}
+                  <View className="space-y-3">
+                    <Text className="text-emerald-100/90 text-base">Is the bounty time sensitive?</Text>
+                    <BinaryToggle
+                      value={formData.isTimeSensitive ? 'yes' : 'no'}
+                      onChange={(v) => {
+                        if (v === 'yes') {
+                          setFormData(prev => ({ ...prev, isTimeSensitive: true }))
+                          setShowDeadlinePicker(true)
+                        } else {
+                          setFormData(prev => ({ ...prev, isTimeSensitive: false, deadline: '' }))
+                          setDeadlineDate(null)
+                        }
+                      }}
+                      options={[
+                        { id: 'no', label: 'No' },
+                        { id: 'yes', label: 'Yes' },
+                      ] as const}
+                      className="max-w-[200px]"
+                    />
+                  </View>
+
+                  {formData.isTimeSensitive && (
+                    <View className="space-y-3">
+                      <Text className="text-emerald-100/90 text-base">Deadline</Text>
+                      <TouchableOpacity
+                        onPress={() => setShowDeadlinePicker(true)}
+                        className="w-full bg-emerald-700/50 rounded-lg p-4 border border-emerald-600/60"
+                      >
+                        <Text className="text-white">{formData.deadline || 'Pick a date/time'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Attachments */}
+                  <View className="space-y-3 mb-4">
+                    <Text className="text-emerald-100/90 text-base">Attachments</Text>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        try {
+                          const picker = await import('expo-document-picker')
+                          const result = await picker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true, type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*'] })
+                          if (result.assets && result.assets.length) {
+                            const mapped = result.assets.map(a => ({
+                              id: (a.uri + a.name + a.size).replace(/[^a-zA-Z0-9]/g,'').slice(0,24) || Math.random().toString(36).slice(2),
+                              name: a.name || 'file',
+                              uri: a.uri,
+                              mimeType: a.mimeType,
+                              size: a.size,
+                              status: 'pending' as const,
+                              progress: 0,
+                            }))
+                            setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...mapped] }))
+                            for (const att of mapped) {
+                              setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, status: 'uploading', progress: 0 } : a) }))
+                              try {
+                                const uploaded = await attachmentService.upload(att, { onProgress: (p) => {
+                                  setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, progress: p } : a) }))
+                                } })
+                                setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, ...uploaded } : a) }))
+                              } catch (e) {
+                                setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, status: 'failed' } : a) }))
+                              }
+                            }
+                          }
+                        } catch (e) {
+                          console.warn('Attachment pick failed', e)
+                        }
+                      }}
+                      className="px-4 py-3 rounded-lg border border-emerald-500/40 bg-emerald-800/40"
+                    >
+                      <Text className="text-emerald-100">Add File</Text>
+                    </TouchableOpacity>
+                    {formData.attachments.length > 0 && (
+                      <View className="space-y-2">
+                        {formData.attachments.map(att => (
+                          <View key={att.id} className="flex-row items-center gap-2 bg-emerald-900/40 rounded-md px-3 py-2">
+                            <View className="flex-1">
+                              <Text className="text-emerald-100 text-sm" numberOfLines={1}>{att.name}</Text>
+                              <View className="h-1 bg-emerald-800 rounded mt-1 overflow-hidden">
+                                <View style={{ width: `${Math.round((att.progress || (att.status==='uploaded'?1:0))*100)}%` }} className={cn('h-full', att.status==='failed' ? 'bg-red-400' : 'bg-emerald-400')} />
+                              </View>
+                              <Text className="text-[10px] text-emerald-300 mt-0.5">{att.status === 'uploaded' ? 'Uploaded' : att.status === 'failed' ? 'Failed' : att.status === 'uploading' ? `Uploading ${(Math.round((att.progress||0)*100))}%` : 'Pending'}</Text>
+                            </View>
+                            {att.status !== 'uploading' && (
+                              <TouchableOpacity onPress={() => setFormData(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== att.id) }))}>
+                                <Text className="text-red-300 text-xs px-2">Remove</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </ScrollView>
               </View>
             ) : (
               activeTab === "inProgress" ? (
                 <View className="space-y-3">
+                  {/* Work Type Filter */}
+                  <View className="flex-row gap-2 mb-1">
+                    {(['all','online','in_person'] as const).map(f => {
+                      const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                      const selected = workTypeFilter === f
+                      return (
+                        <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
                   {isLoading.inProgress ? (
                     <View className="flex justify-center items-center py-10">
                       <ActivityIndicator size="large" color="white" />
                     </View>
-                  ) : inProgressBounties.length === 0 ? (
+                  ) : inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).length === 0 ? (
                     <View className="text-center py-10 text-emerald-200">
                       <Text>No bounties in progress</Text>
                     </View>
                   ) : (
-                    inProgressBounties.map((bounty) => (
+                    inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).map((bounty) => (
                       <InProgressBountyItem
                         key={bounty.id}
                         username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
@@ -524,6 +643,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                         amount={Number(bounty.amount)}
                         distance={calculateDistance(bounty.location || "")}
                         timeAgo={formatTimeAgo(bounty.created_at)}
+                        workType={bounty.work_type}
                       />
                     ))
                   )}
@@ -552,17 +672,31 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                           onAccept={() => handleAcceptRequest(request.id)}
                           onReject={() => handleRejectRequest(request.id)}
                           status={request.status}
+                          workType={request.bounty.work_type}
+                          deadline={request.bounty.deadline}
                         />
                     )
                   )}
                 </View>
               ) : activeTab === "myPostings" ? (
                 <View className="space-y-3">
+                  {/* Work Type Filter */}
+                  <View className="flex-row gap-2 mb-1">
+                    {(['all','online','in_person'] as const).map(f => {
+                      const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                      const selected = workTypeFilter === f
+                      return (
+                        <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
                   {isLoading.myBounties ? (
                     <View className="flex justify-center items-center py-10">
                       <ActivityIndicator size="large" color="white" />
                     </View>
-                  ) : myBounties.length === 0 ? (
+                  ) : myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).length === 0 ? (
                     <View className="text-center py-10 text-emerald-200">
                       <Text>You haven't posted any bounties yet</Text>
                       <TouchableOpacity
@@ -573,7 +707,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    myBounties.map((bounty) => (
+                    myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).map((bounty) => (
                       <View
                         key={bounty.id}
                         className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
@@ -585,6 +719,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                               {bounty.status !== "open" && (
                                 <Text className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
                                   {bounty.status}
+                                </Text>
+                              )}
+                              {bounty.work_type && (
+                                <Text className="ml-2 px-2 py-0.5 bg-emerald-900/70 rounded-full text-xs text-emerald-300">
+                                  {bounty.work_type === 'online' ? 'Online' : 'In Person'}
                                 </Text>
                               )}
                             </Text>
@@ -665,12 +804,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               </View>
             )}
             {(() => {
-              const requiredMissing = !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
+              const baseMissing = !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
+              const locationMissing = formData.workType === 'in_person' && !formData.location
+              const deadlineMissing = formData.isTimeSensitive && !formData.deadline
+              const requiredMissing = baseMissing || locationMissing || deadlineMissing
               const lowBalance = !formData.isForHonor && formData.amount > balance
               const label = lowBalance ? "Low Balance • Tap to Deposit" : "Post Bounty"
               const handlePress = () => {
                 if (lowBalance) { setShowAddMoney(true); return }
-                if (requiredMissing) { setValidationError("Please fill Title, Description and Amount (or mark For Honor)"); return }
+                if (requiredMissing) { 
+                  let msg = 'Missing required fields:'
+                  if (baseMissing) msg += ' Title, Description, Amount/For Honor'
+                  if (locationMissing) msg += ' Location'
+                  if (deadlineMissing) msg += ' Deadline'
+                  setValidationError(msg.trim()); 
+                  return 
+                }
                 setValidationError(null)
                 handleShowConfirmation()
               }
@@ -707,11 +856,28 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               amount: formData.amount,
               isForHonor: formData.isForHonor,
               location: formData.location,
+              workType: formData.workType,
+              isTimeSensitive: formData.isTimeSensitive,
+              deadline: formData.isTimeSensitive ? formData.deadline : undefined,
             }}
             onConfirm={handlePostBounty}
             onCancel={() => setShowConfirmationCard(false)}
           />
         </View>
+      )}
+      {showDeadlinePicker && (
+        <DateTimePicker
+          value={deadlineDate || new Date()}
+          mode="datetime"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          onChange={(event, selectedDate) => {
+            if (event.type === 'dismissed') { setShowDeadlinePicker(false); return }
+            const d = selectedDate || new Date()
+            setDeadlineDate(d)
+            setFormData(prev => ({ ...prev, deadline: d.toISOString() }))
+            if (Platform.OS !== 'ios') setShowDeadlinePicker(false)
+          }}
+        />
       )}
     </View>
     </TouchableWithoutFeedback>

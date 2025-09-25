@@ -19,11 +19,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     about: "Russian opportunist",
     avatar: "/placeholder.svg?height=80&width=80",
   })
-  const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([
-    { id: "1", icon: "code", text: "Knows English, Spanish" },
-    { id: "2", icon: "gps-fixed", text: "Private Investigator Certification", credentialUrl: undefined },
-    { id: "3", icon: "favorite", text: "Joined December 28th 2024" },
-  ])
+  const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
 
   // Add state for statistics
   const [stats, setStats] = useState({
@@ -98,31 +94,35 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   // Listen for changes from settings screen
   useEffect(() => {
-  AsyncStorage.getItem("profileData").then((storedProfile) => {
-    if (storedProfile) {
-      setProfileData(JSON.parse(storedProfile))
+    const load = async () => {
+      try {
+        const storedProfile = await AsyncStorage.getItem("profileData")
+        if (storedProfile) setProfileData(JSON.parse(storedProfile))
+        const storedSkills = await AsyncStorage.getItem('profileSkills')
+        if (storedSkills) {
+          const parsed = JSON.parse(storedSkills)
+          if (Array.isArray(parsed)) setSkills(parsed)
+        } else {
+          setSkills([
+            { id: '1', icon: 'code', text: 'Knows English, Spanish' },
+            { id: '2', icon: 'gps-fixed', text: 'Private Investigator Certification' },
+            { id: '3', icon: 'favorite', text: 'Joined December 28th 2024' },
+          ])
+        }
+      } catch (error) {
+        console.error('Error fetching stored profile/skills:', error)
+      }
     }
-  }).catch((error) => {
-    console.error("Error fetching stored profile:", error)
-  })
-}, [showSettings])
+    load()
+  }, [showSettings])
 
   const getIconComponent = (iconName: string) => {
-    switch (iconName) {
-      case "code":
-        return <MaterialIcons name="code" size={16} color="#34d399" />
-      case "gps-fixed":
-        return <MaterialIcons name="gps-fixed" size={16} color="#34d399" />
-      case "favorite":
-        return <MaterialIcons name="favorite" size={16} color="#34d399" />
-      case "globe":
-        return <MaterialIcons name="public" size={16} color="#34d399" />
-      default:
-        return <MaterialIcons name="code" size={16} color="#34d399" />
-    }
+    const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
+    const resolved = alias[iconName] || iconName
+    return <MaterialIcons name={resolved as any} size={16} color="#34d399" />
   }
 
-  const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string }[]) => {
+  const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
     setSkills(updatedSkills)
     setIsEditing(false)
   }
@@ -202,7 +202,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   if (isEditing) {
-    return <SkillsetEditScreen onBack={() => setIsEditing(false)} onSave={handleSaveSkills} />
+    return <SkillsetEditScreen initialSkills={skills} onBack={() => setIsEditing(false)} onSave={handleSaveSkills} />
   }
 
   if (showSettings) {
@@ -234,8 +234,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                 <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
                   <MaterialIcons name="gps-fixed" size={24} color="#000000" />
                 </View>
-                <View className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">
-                  lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
+                <View className="absolute -top-1 -right-1 bg-red-500 rounded">
+                  <Text className="text-white text-xs font-bold px-1.5 py-0.5">
+                    lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
+                  </Text>
                 </View>
               </View>
               <View className="ml-4">

@@ -11,6 +11,23 @@ export type Bounty = {
   created_at: string
   status: "open" | "in_progress" | "completed" | "archived"
   distance?: number
+  // New optional fields for enhanced posting metadata
+  work_type?: 'online' | 'in_person'
+  is_time_sensitive?: boolean
+  deadline?: string // ISO date string when is_time_sensitive === true
+  attachments_json?: string // JSON serialized AttachmentMeta[] (storage format)
+}
+
+// Lightweight attachment metadata for client state (stored serialized in attachments_json)
+export interface AttachmentMeta {
+  id: string // uuid or generated id
+  name: string
+  uri: string // local uri (upload pipeline TBD)
+  mimeType?: string
+  size?: number // bytes
+  remoteUri?: string // where uploaded file is accessible (after upload)
+  status?: 'pending' | 'uploading' | 'uploaded' | 'failed'
+  progress?: number // 0-1
 }
 
 export type Profile = {

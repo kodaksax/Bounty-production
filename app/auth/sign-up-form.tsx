@@ -72,7 +72,7 @@ export function SignUpForm(): React.ReactElement {
       <View style={{ gap: 12 }}>
         <Alert>
           <AlertDescription>
-            Check your email for a confirmation link. You'll need to confirm your email before signing in.
+            Check your email for a confirmation link. You&apos;ll need to confirm your email before signing in.
           </AlertDescription>
         </Alert>
         <Button onPress={() => (navigation as any).navigate("SignIn")} className="w-full">

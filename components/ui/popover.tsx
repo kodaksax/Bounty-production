@@ -14,10 +14,12 @@ type PopoverProps = {
 function Popover({ children }: PopoverProps) {
   return <View>{children}</View>
 }
+Popover.displayName = 'Popover'
 
 function PopoverTrigger({ children }: { children: React.ReactNode }) {
   return <TouchableOpacity>{children as any}</TouchableOpacity>
 }
+PopoverTrigger.displayName = 'PopoverTrigger'
 
 const PopoverContent = React.forwardRef<any, any>(({ children, ..._props }, ref) => {
   return (
@@ -26,6 +28,7 @@ const PopoverContent = React.forwardRef<any, any>(({ children, ..._props }, ref)
     </Modal>
   )
 })
+PopoverContent.displayName = 'PopoverContent'
 
 export { Popover, PopoverContent, PopoverTrigger }
 

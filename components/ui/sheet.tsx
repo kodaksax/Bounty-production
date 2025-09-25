@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 // Replace Radix dialog primitives with RN-friendly wrappers
 import { cva } from "class-variance-authority"
 import * as React from "react"
-import { Text, View } from "react-native"
+import { Text, TouchableOpacity, View } from "react-native"
 
 
 const Sheet: React.FC<any> = ({ children }) => <>{children}</>
@@ -92,7 +92,7 @@ const SheetDescription = React.forwardRef<Text, any>(({ children, ...props }, re
 SheetDescription.displayName = "SheetDescription"
 
 export {
-  Sheet, SheetClose,
-  SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetOverlay, SheetPortal, SheetTitle, SheetTrigger
+    Sheet, SheetClose,
+    SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetOverlay, SheetPortal, SheetTitle, SheetTrigger
 }
 

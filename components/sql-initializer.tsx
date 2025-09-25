@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { View, Text, TouchableOpacity, ScrollView } from "react-native"
 import { Button } from "components/ui/button"
+import { useState } from "react"
+import { Text, View } from "react-native"
 
 export function SqlInitializer({ onInitialized }: { onInitialized: () => void }) {
   const [isInitializing, setIsInitializing] = useState(false)
@@ -38,7 +38,7 @@ export function SqlInitializer({ onInitialized }: { onInitialized: () => void })
         <Text className="text-xl font-bold text-white mb-4">Database Setup Required</Text>
 
         <Text className="text-emerald-100 mb-6">
-          The database tables required for this application don't exist yet. Let's create them using SQL.
+          The database tables required for this application don&apos;t exist yet. Let&apos;s create them using SQL.
         </Text>
 
         {error && (
