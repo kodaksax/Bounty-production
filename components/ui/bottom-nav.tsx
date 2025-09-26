@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
     height: 120,
-    backgroundColor: "#0a2e1e", // dark emerald base
+    backgroundColor: "#0d4d35", // lighter emerald base to match main background
     paddingHorizontal: 28,
     paddingBottom: 8,
     borderTopLeftRadius: 24,
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     elevation: 20,
     // Enhanced glass-morphism effect
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.2)", // emerald border
+    borderColor: "rgba(16, 185, 129, 0.25)", // slightly more visible emerald border
     // Add sophisticated shadow
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: -8 },

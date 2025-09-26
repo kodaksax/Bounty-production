@@ -101,14 +101,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
+    backgroundColor: 'rgba(16, 97, 62, 0.75)', // lighter emerald surface for better fog contrast
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 16,
     marginHorizontal: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
+    borderColor: 'rgba(16, 185, 129, 0.35)', // slightly more visible emerald border
     // Enhanced shadows and glass-morphism
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },

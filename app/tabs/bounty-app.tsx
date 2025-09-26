@@ -7,6 +7,7 @@ import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
+import { FogEffect } from 'components/ui/fog-effect'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -254,6 +255,14 @@ function BountyAppInner() {
 
   return (
     <View style={styles.container}>
+      {/* VANTA.FOG-like effect background */}
+      <FogEffect 
+        intensity={4}
+        speed={0.8}
+        color="#10b981"
+        opacity={0.12}
+      />
+      
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -283,11 +292,11 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated) - Enhanced spy-like aesthetic with green base
+// Styles (consolidated) - Enhanced spy-like aesthetic with lighter green base for fog contrast
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#0a2e1e', // dark emerald base
+    backgroundColor: '#0d4d35', // lighter emerald base for better fog contrast
     position: 'relative', 
     paddingBottom: 100 
   },
@@ -298,7 +307,7 @@ const styles = StyleSheet.create({
     right: 0, 
     top: 0, 
     zIndex: 10, 
-    backgroundColor: '#0c3a24', // slightly lighter dark emerald
+    backgroundColor: '#10613e', // lighter emerald for header
     // Add subtle gradient overlay
     shadowColor: '#10b981', // spy-glow
     shadowOffset: { width: 0, height: 2 },
@@ -347,12 +356,12 @@ const styles = StyleSheet.create({
   searchButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(12, 58, 36, 0.7)', // dark emerald with opacity
+    backgroundColor: 'rgba(16, 97, 62, 0.6)', // lighter emerald with opacity for better fog contrast
     borderRadius: 16, 
     paddingVertical: 14, 
     paddingHorizontal: 18,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
+    borderColor: 'rgba(16, 185, 129, 0.35)', // more visible emerald border
     // Add glass-morphism effect
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -381,13 +390,13 @@ const styles = StyleSheet.create({
   chip: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(12, 58, 36, 0.6)', // dark emerald base
+    backgroundColor: 'rgba(16, 97, 62, 0.5)', // lighter emerald base for better fog contrast
     paddingHorizontal: 16, 
     height: 40, 
     borderRadius: 20, 
     marginRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)', // emerald border
+    borderColor: 'rgba(16, 185, 129, 0.45)', // more visible emerald border
     // Add subtle shadow
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
