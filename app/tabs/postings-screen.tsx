@@ -1,7 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import DateTimePicker from '@react-native-community/datetimepicker'
+// DateTimePicker removed from inline usage; dedicated screen handles picking
 import { BinaryToggle } from 'components/ui/binary-toggle'
 import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
@@ -12,7 +12,7 @@ import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Keyboard, Platform, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -77,8 +77,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
-  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false)
-  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null)
+  // Deadline now simple text entry; dedicated screen removed
 
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
@@ -523,10 +522,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                       onChange={(v) => {
                         if (v === 'yes') {
                           setFormData(prev => ({ ...prev, isTimeSensitive: true }))
-                          setShowDeadlinePicker(true)
                         } else {
                           setFormData(prev => ({ ...prev, isTimeSensitive: false, deadline: '' }))
-                          setDeadlineDate(null)
                         }
                       }}
                       options={[
@@ -535,17 +532,33 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                       ] as const}
                       className="max-w-[200px]"
                     />
+                    {formData.isTimeSensitive && (
+                      <View className="mt-2 bg-emerald-900/40 border border-emerald-600/60 rounded-lg p-3">
+                        <Text className="text-emerald-200 text-xs leading-5">
+                          Time sensitive bounties show an urgency badge and may be prioritized in feeds. Make sure the
+                          deadline is realistic. Hunters will see a countdown so choose carefully.
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {formData.isTimeSensitive && (
                     <View className="space-y-3">
-                      <Text className="text-emerald-100/90 text-base">Deadline</Text>
-                      <TouchableOpacity
-                        onPress={() => setShowDeadlinePicker(true)}
-                        className="w-full bg-emerald-700/50 rounded-lg p-4 border border-emerald-600/60"
-                      >
-                        <Text className="text-white">{formData.deadline || 'Pick a date/time'}</Text>
-                      </TouchableOpacity>
+                      <View className="flex-row items-center justify-between mb-1">
+                        <Text className="text-emerald-100/90 text-base">Deadline <Text className="text-red-300">*</Text></Text>
+                        {formData.deadline ? (
+                          <View className="bg-red-500/20 px-2 py-0.5 rounded-full border border-red-400/30">
+                            <Text className="text-red-300 text-[10px] font-semibold tracking-wide">URGENCY</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <TextInput
+                        value={formData.deadline}
+                        onChangeText={(text) => setFormData(prev => ({ ...prev, deadline: text }))}
+                        placeholder="e.g. 2025-10-12 5:00 PM or 'End of week'"
+                        className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base"
+                        placeholderTextColor="#6ee7b7"
+                      />
                     </View>
                   )}
 
@@ -803,6 +816,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                 <Text className="text-white text-xs">{validationError}</Text>
               </View>
             )}
+            {formData.isTimeSensitive && !formData.deadline && !validationError && (
+              <View className="mx-2 mb-2 p-2 bg-amber-500/20 border border-amber-400/40 rounded-md">
+                <Text className="text-amber-200 text-[11px]">Enter a deadline (date/time or phrase) to mark this as urgent.</Text>
+              </View>
+            )}
             {(() => {
               const baseMissing = !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
               const locationMissing = formData.workType === 'in_person' && !formData.location
@@ -813,10 +831,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               const handlePress = () => {
                 if (lowBalance) { setShowAddMoney(true); return }
                 if (requiredMissing) { 
-                  let msg = 'Missing required fields:'
-                  if (baseMissing) msg += ' Title, Description, Amount/For Honor'
-                  if (locationMissing) msg += ' Location'
-                  if (deadlineMissing) msg += ' Deadline'
+                  let msg = 'Missing required:'
+                  if (baseMissing) msg += ' Title, Description, Amount/For Honor;'
+                  if (locationMissing) msg += ' Location;'
+                  if (deadlineMissing) msg += ' Deadline;'
                   setValidationError(msg.trim()); 
                   return 
                 }
@@ -865,20 +883,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           />
         </View>
       )}
-      {showDeadlinePicker && (
-        <DateTimePicker
-          value={deadlineDate || new Date()}
-          mode="datetime"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-          onChange={(event, selectedDate) => {
-            if (event.type === 'dismissed') { setShowDeadlinePicker(false); return }
-            const d = selectedDate || new Date()
-            setDeadlineDate(d)
-            setFormData(prev => ({ ...prev, deadline: d.toISOString() }))
-            if (Platform.OS !== 'ios') setShowDeadlinePicker(false)
-          }}
-        />
-      )}
+      {/* Deadline screen removed; using inline text input */}
     </View>
     </TouchableWithoutFeedback>
   )

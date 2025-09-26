@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { stripeService, StripePaymentMethod, CreatePaymentMethodData } from '../services/stripe-service';
+// Fixed import path: stripe-context.tsx sits in lib/, so services is a sibling folder under lib/
+import { CreatePaymentMethodData, StripePaymentMethod, stripeService } from './services/stripe-service';
 
 interface StripeContextType {
   isInitialized: boolean;
