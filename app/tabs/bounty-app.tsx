@@ -283,23 +283,128 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated)
+// Styles (consolidated) - Enhanced spy-like aesthetic
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative', paddingBottom: 100 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#0c1115', // spy-darker
+    position: 'relative', 
+    paddingBottom: 100 
+  },
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  headerBalance: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  searchWrapper: { paddingHorizontal: 16, marginBottom: 8 },
-  searchButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.35)', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
-  searchIcon: { marginRight: 8 },
-  searchText: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
-  filtersRow: { paddingVertical: 8 },
-  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 14, height: 36, borderRadius: 999, marginRight: 8 },
-  chipActive: { backgroundColor: '#a7f3d0' },
+  collapsingHeader: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    top: 0, 
+    zIndex: 10, 
+    backgroundColor: '#0f1419', // spy-dark
+    // Add subtle gradient overlay
+    shadowColor: '#10b981', // spy-glow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingBottom: 12 
+  },
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  headerTitle: { 
+    marginLeft: 8, 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#ffffff', 
+    letterSpacing: 1.2,
+    // Add subtle text shadow
+    textShadowColor: '#10b981',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  headerBalance: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#ffffff',
+    // Add premium styling
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  searchWrapper: { 
+    paddingHorizontal: 16, 
+    marginBottom: 12 
+  },
+  searchButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 20, 24, 0.7)', // spy-surface with opacity
+    borderRadius: 16, 
+    paddingVertical: 14, 
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(55, 65, 81, 0.3)',
+    // Add glass-morphism effect
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  searchIcon: { 
+    marginRight: 10 
+  },
+  searchText: { 
+    color: 'rgba(255,255,255,0.75)', 
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  filtersRow: { 
+    paddingVertical: 10 
+  },
+  gradientSeparator: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    height: 50 
+  },
+  chip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 20, 24, 0.6)', 
+    paddingHorizontal: 16, 
+    height: 40, 
+    borderRadius: 20, 
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(55, 65, 81, 0.4)',
+    // Add subtle shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  chipActive: { 
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    // Add glow effect for active state
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
   chipLabelActive: { color: '#052e1b' },
 })

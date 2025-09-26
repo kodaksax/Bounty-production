@@ -46,25 +46,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
     height: 120,
-    backgroundColor: "#065f46", // emerald-800
+    backgroundColor: "#0c1115", // spy-darker
     paddingHorizontal: 28,
     paddingBottom: 8,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    elevation: 30,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    elevation: 20,
+    // Enhanced glass-morphism effect
+    borderWidth: 1,
+    borderColor: "rgba(55, 65, 81, 0.2)",
+    // Add sophisticated shadow
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
   },
   navButton: {
-    padding: 12,
+    padding: 16,
+    borderRadius: 12,
+    // Add subtle hover state
+    backgroundColor: "transparent",
   },
   centerButton: {
-    height: 56,
-    width: 56,
-    backgroundColor: "transparent",
+    height: 64,
+    width: 64,
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
     borderWidth: 2,
-    borderColor: "#fff",
-    borderRadius: 28,
+    borderColor: "#10b981", // spy-glow
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -20,
+    marginTop: -24,
+    // Add sophisticated glow effect
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+    // Add backdrop blur simulation
+    overflow: 'hidden',
   },
 });

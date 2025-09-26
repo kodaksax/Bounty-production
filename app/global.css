@@ -4,57 +4,81 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
+    /* Spy-like dark theme foundation */
+    --background: 218 23% 4%;
+    --foreground: 210 40% 98%;
+    --card: 220 23% 6%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 23% 8%;
+    --popover-foreground: 210 40% 98%;
     --primary: 142 76% 36%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --primary-foreground: 218 23% 4%;
+    --secondary: 220 23% 12%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 23% 10%;
+    --muted-foreground: 215.4 16.3% 65%;
+    --accent: 220 23% 14%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 50.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 220 23% 18%;
+    --input: 220 23% 12%;
     --ring: 142 76% 36%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Spy-theme colors */
+    --spy-dark: 218 23% 3%;
+    --spy-darker: 216 27% 2%;
+    --spy-surface: 220 23% 8%;
+    --spy-surface-hover: 220 23% 12%;
+    --spy-border: 220 16% 22%;
+    --spy-glow: 142 76% 36%;
+    --spy-accent-blue: 210 100% 60%;
+    --spy-accent-purple: 270 80% 65%;
 
     /* iPhone-specific variables */
     --iphone-header-height: 60px;
     --iphone-bottom-nav-height: 83px;
     --iphone-content-padding: 16px;
 
-    /* Animation variables */
-    --card-animation-duration: 0.5s;
-    --card-animation-easing: cubic-bezier(0.32, 0.72, 0, 1);
+    /* Enhanced animation variables */
+    --card-animation-duration: 0.6s;
+    --card-animation-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --micro-animation-duration: 0.2s;
+    --slide-animation-easing: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    /* Enhanced spy-like dark theme */
+    --background: 218 23% 3%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 220 23% 6%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 220 23% 4%;
     --popover-foreground: 210 40% 98%;
     --primary: 142 76% 36%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --primary-foreground: 218 23% 3%;
+    --secondary: 220 23% 10%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 220 23% 8%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 220 23% 12%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 50.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 220 23% 16%;
+    --input: 220 23% 10%;
     --ring: 142 76% 36%;
+
+    /* Spy-theme colors enhanced for dark mode */
+    --spy-dark: 216 27% 1%;
+    --spy-darker: 214 30% 0.5%;
+    --spy-surface: 220 23% 5%;
+    --spy-surface-hover: 220 23% 9%;
+    --spy-border: 220 16% 18%;
+    --spy-glow: 142 76% 40%;
+    --spy-accent-blue: 210 100% 70%;
+    --spy-accent-purple: 270 80% 75%;
   }
 }
 
@@ -88,6 +112,41 @@
   .touch-target-min {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* Spy-theme utility classes */
+  .spy-glass {
+    background: hsla(var(--spy-surface), 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsla(var(--spy-border), 0.3);
+  }
+
+  .spy-glow {
+    box-shadow: 0 0 20px hsla(var(--spy-glow), 0.2);
+  }
+
+  .spy-glow-hover {
+    transition: box-shadow var(--micro-animation-duration) ease;
+  }
+
+  .spy-glow-hover:hover {
+    box-shadow: 0 0 30px hsla(var(--spy-glow), 0.4);
+  }
+
+  .spy-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsla(var(--spy-glow), 0.1),
+      transparent
+    );
+    background-size: 200px 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  .spy-morph {
+    animation: morphGlow 4s ease-in-out infinite;
   }
 
   .animation-delay-100 {
@@ -130,19 +189,41 @@
 
   /* iPhone-specific animations */
   .iphone-slide-up {
-    animation: iphone-slide-up var(--card-animation-duration) var(--card-animation-easing) forwards;
+    animation: iphone-slide-up var(--card-animation-duration) var(--slide-animation-easing) forwards;
   }
 
   .iphone-slide-down {
-    animation: iphone-slide-down var(--card-animation-duration) var(--card-animation-easing) forwards;
+    animation: iphone-slide-down var(--card-animation-duration) var(--slide-animation-easing) forwards;
   }
 
   .iphone-fade-in {
-    animation: iphone-fade-in var(--card-animation-duration) ease forwards;
+    animation: iphone-fade-in var(--micro-animation-duration) ease forwards;
   }
 
   .iphone-fade-out {
-    animation: iphone-fade-out var(--card-animation-duration) ease forwards;
+    animation: iphone-fade-out var(--micro-animation-duration) ease forwards;
+  }
+
+  .spy-pulse-glow {
+    animation: pulseGlow 3s ease-in-out infinite;
+  }
+
+  .spy-slide-up-spring {
+    animation: slideUpSpring var(--card-animation-duration) var(--card-animation-easing) forwards;
+  }
+
+  /* Enhanced layout utilities */
+  .spy-surface {
+    background: hsl(var(--spy-surface));
+    border: 1px solid hsl(var(--spy-border));
+  }
+
+  .spy-surface-elevated {
+    background: hsl(var(--spy-surface));
+    border: 1px solid hsl(var(--spy-border));
+    box-shadow: 
+      0 4px 16px hsla(var(--spy-dark), 0.4),
+      0 2px 8px hsla(var(--spy-dark), 0.2);
   }
 
   /* Custom styles for mobile optimization */
@@ -176,18 +257,42 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Enhanced typography for spy aesthetic */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     /* Prevent overscroll bounce effect on iOS */
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Increase touch targets for better mobile usability */
+  /* Enhanced touch targets for better mobile usability */
   button,
   a,
   input,
   select,
   textarea {
     @apply touch-target-min;
+  }
+
+  /* Spy-themed scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--spy-surface));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--spy-border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--spy-glow) / 0.6);
   }
 }
 
@@ -203,23 +308,41 @@
   }
 }
 
+@keyframes spyGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px hsla(var(--spy-glow), 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px hsla(var(--spy-glow), 0.6);
+  }
+}
+
 @keyframes pulse {
-  0%,
-  100% {
+  0%, 100% {
     opacity: 0.7;
   }
   50% {
-    opacity: 0.9;
+    opacity: 0.95;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
   }
 }
 
 @keyframes float {
-  0%,
-  100% {
+  0%, 100% {
     transform: translateY(0) rotate(12deg);
   }
   50% {
-    transform: translateY(-5px) rotate(12deg);
+    transform: translateY(-8px) rotate(12deg);
   }
 }
 
@@ -229,6 +352,21 @@
     opacity: 0;
   }
   to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpSpring {
+  from {
+    transform: translateY(100%) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
     transform: translateY(0);
     opacity: 1;
   }
@@ -245,36 +383,64 @@
 
 @keyframes iphone-slide-up {
   from {
-    transform: translateY(100%);
+    transform: translateY(100%) scale(0.98);
+    opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+    opacity: 1;
   }
 }
 
 @keyframes iphone-slide-down {
   from {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+    opacity: 1;
   }
   to {
-    transform: translateY(100%);
+    transform: translateY(100%) scale(0.98);
+    opacity: 0;
   }
 }
 
 @keyframes iphone-fade-in {
   from {
     opacity: 0;
+    transform: scale(0.95);
   }
   to {
     opacity: 1;
+    transform: scale(1);
   }
 }
 
 @keyframes iphone-fade-out {
   from {
     opacity: 1;
+    transform: scale(1);
   }
   to {
     opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+@keyframes morphGlow {
+  0%, 100% {
+    border-radius: 8px;
+    box-shadow: 0 4px 20px hsla(var(--spy-glow), 0.15);
+  }
+  50% {
+    border-radius: 16px;
+    box-shadow: 0 8px 40px hsla(var(--spy-glow), 0.25);
   }
 }

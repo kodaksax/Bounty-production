@@ -15,11 +15,11 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-// Add styles for React Native
+// Add styles for React Native - Enhanced spy theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0c1115', // spy-darker for consistency
   },
   inner: {
     flex: 1,

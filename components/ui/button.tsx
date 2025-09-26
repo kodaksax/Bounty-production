@@ -72,70 +72,96 @@ const buttonStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    minHeight: 48,
+    // Add sophisticated shadows
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   default: {
-    backgroundColor: '#3b82f6', // primary
+    backgroundColor: '#10b981', // spy-glow
+    // Add inner glow effect
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   destructive: {
-    backgroundColor: '#ef4444', // destructive
+    backgroundColor: '#dc2626', // Enhanced red
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
   },
   outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#d1d5db', // input border
+    backgroundColor: 'rgba(16, 20, 24, 0.6)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(55, 65, 81, 0.5)',
   },
   secondary: {
-    backgroundColor: '#f3f4f6', // secondary
+    backgroundColor: 'rgba(16, 20, 24, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(55, 65, 81, 0.4)',
   },
   ghost: {
     backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   link: {
     backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sm: {
     minHeight: 36,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
   lg: {
-    minHeight: 44,
+    minHeight: 56,
     paddingHorizontal: 32,
-    borderRadius: 6,
+    borderRadius: 12,
   },
   icon: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     paddingHorizontal: 0,
+    borderRadius: 12,
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   text: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   defaultText: {
-    color: 'white',
+    color: '#ffffff',
+    // Add text shadow for premium feel
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   destructiveText: {
-    color: 'white',
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   outlineText: {
-    color: '#374151',
+    color: '#ffffff',
   },
   secondaryText: {
-    color: '#374151',
+    color: '#ffffff',
   },
   ghostText: {
-    color: '#374151',
+    color: '#a7f3d0',
   },
   linkText: {
-    color: '#3b82f6',
+    color: '#60a5fa',
     textDecorationLine: 'underline',
   },
   disabledText: {
