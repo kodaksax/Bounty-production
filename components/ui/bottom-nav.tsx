@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useRef, useEffect } from "react";
+import { StyleSheet, TouchableOpacity, View, Animated } from "react-native";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile";
 
@@ -10,6 +10,45 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
+  const centerButtonScale = useRef(new Animated.Value(1)).current;
+  const centerButtonRotation = useRef(new Animated.Value(0)).current;
+
+  // Animate center button when active screen changes
+  useEffect(() => {
+    if (activeScreen === "bounty") {
+      Animated.parallel([
+        Animated.timing(centerButtonScale, {
+          toValue: 1.1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(centerButtonRotation, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(centerButtonScale, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(centerButtonRotation, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [activeScreen]);
+
+  const rotationInterpolation = centerButtonRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '90deg'],
+  });
+
   return (
     <View style={styles.bottomNavContainer}>
       <View style={styles.bottomNav}>
@@ -19,9 +58,24 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
         <TouchableOpacity onPress={() => onNavigate("wallet")} style={styles.navButton}>
           <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.centerButton} onPress={() => onNavigate("bounty")}>
-          <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
-        </TouchableOpacity>
+        <Animated.View
+          style={[
+            styles.centerButton,
+            {
+              transform: [
+                { scale: centerButtonScale },
+                { rotate: rotationInterpolation }
+              ]
+            }
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => onNavigate("bounty")}
+            style={styles.centerButtonInner}
+          >
+            <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
+          </TouchableOpacity>
+        </Animated.View>
         <TouchableOpacity onPress={() => onNavigate("postings")} style={styles.navButton}>
           <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
@@ -85,5 +139,12 @@ const styles = StyleSheet.create({
     elevation: 8,
     // Add backdrop blur simulation
     overflow: 'hidden',
+  },
+  centerButtonInner: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 32,
   },
 });

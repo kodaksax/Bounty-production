@@ -1,8 +1,8 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import React, { useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import React, { useState, useRef } from "react"
+import { StyleSheet, Text, TouchableOpacity, View, Animated, PanResponder } from "react-native"
 import { BountyDetailModal } from "./bountydetailmodal"
 
 export interface BountyListItemProps {
@@ -16,14 +16,54 @@ export interface BountyListItemProps {
 
 export function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
+  const scaleValue = useRef(new Animated.Value(1)).current
+  const opacityValue = useRef(new Animated.Value(1)).current
+
+  // Enhanced touch interactions
+  const handlePressIn = () => {
+    Animated.parallel([
+      Animated.timing(scaleValue, {
+        toValue: 0.98,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityValue, {
+        toValue: 0.8,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
+
+  const handlePressOut = () => {
+    Animated.parallel([
+      Animated.timing(scaleValue, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityValue, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
 
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        style={styles.row}
-        onPress={() => setShowDetail(true)}
+      <Animated.View
+        style={[
+          { transform: [{ scale: scaleValue }], opacity: opacityValue }
+        ]}
       >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.row}
+          onPress={() => setShowDetail(true)}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
         {/* Leading icon/avatar */}
         <View style={styles.leadingIconWrap}>
           <MaterialIcons name="paid" size={18} color="#a7f3d0" />
@@ -44,7 +84,8 @@ export function BountyListItem({ id, title, username, price, distance, descripti
           <Text style={styles.price}>${price}</Text>
           <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
         </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
 
       {showDetail && (
         <BountyDetailModal

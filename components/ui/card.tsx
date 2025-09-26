@@ -168,14 +168,13 @@ const cardStyles = StyleSheet.create<CardStyles>({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingTop: 0,
+    paddingTop: 16,
     paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: 'rgba(55, 65, 81, 0.2)',
     marginTop: 12,
-    paddingTop: 16,
   },
 })
 
