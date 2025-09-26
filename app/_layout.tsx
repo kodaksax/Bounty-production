@@ -3,6 +3,7 @@ import { Slot } from "expo-router";
 import type React from "react";
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { StripeProvider } from '../lib/stripe-context';
 import "../global.css";
 
 export const metadata = {
@@ -52,11 +53,13 @@ export default function RootLayout({
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <View style={styles.inner}>
-            <Slot />
-          </View>
-        </ThemeProvider>
+        <StripeProvider>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+            <View style={styles.inner}>
+              <Slot />
+            </View>
+          </ThemeProvider>
+        </StripeProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   );

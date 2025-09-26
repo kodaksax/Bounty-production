@@ -4,7 +4,9 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import type React from "react"
 import { useState } from "react"
-import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { Text, TextInput, TouchableOpacity, View, Alert } from "react-native"
+import { useStripe } from "../lib/stripe-context"
+import { stripeService } from "../lib/services/stripe-service"
 
 interface AddCardModalProps {
   onBack: () => void
