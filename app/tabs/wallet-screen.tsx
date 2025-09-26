@@ -9,6 +9,8 @@ import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { WithdrawScreen } from "../../components/withdraw-screen";
 import { useWallet } from '../../lib/wallet-context';
+import { useStripe } from '../../lib/stripe-context';
+import { stripeService } from '../../lib/services/stripe-service';
 
 
 interface WalletScreenProps {
@@ -21,9 +23,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const { balance, deposit, transactions } = useWallet();
+  const { paymentMethods, isLoading: stripeLoading } = useStripe();
 
   const handleAddMoney = async (amount: number) => {
-    await deposit(amount, { method: 'Manual Add' });
+    // AddMoneyScreen now handles Stripe integration internally
     setShowAddMoney(false);
   };
 
@@ -91,20 +94,40 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             contentContainerStyle={{ paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.accountCard}>
-              <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.accountName}>VISA **** **** 3456</Text>
-                <Text style={styles.accountSub}>Default Payment Method</Text>
+            {stripeLoading ? (
+              <View style={[styles.accountCard, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={styles.accountName}>Loading payment methods...</Text>
               </View>
-            </View>
-            <View style={styles.accountCard}>
-              <View style={styles.accountIcon}><MaterialIcons name="credit-card" size={24} color="#fff" /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.accountName}>AMEX **** **** 7890</Text>
-                <Text style={styles.accountSub}>Added 02/15/2025</Text>
-              </View>
-            </View>
+            ) : paymentMethods.length === 0 ? (
+              <TouchableOpacity 
+                style={styles.accountCard}
+                onPress={() => setShowPaymentMethods(true)}
+              >
+                <View style={styles.accountIcon}>
+                  <MaterialIcons name="add" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountName}>Add Payment Method</Text>
+                  <Text style={styles.accountSub}>No payment methods added yet</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              paymentMethods.map((method, index) => (
+                <View key={method.id} style={styles.accountCard}>
+                  <View style={styles.accountIcon}>
+                    <MaterialIcons name="credit-card" size={24} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accountName}>
+                      {stripeService.formatCardDisplay(method)}
+                    </Text>
+                    <Text style={styles.accountSub}>
+                      {index === 0 ? 'Default Payment Method' : `Added ${new Date(method.created * 1000).toLocaleDateString()}`}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
           </ScrollView>
         </View>
           
