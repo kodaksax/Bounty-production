@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import type React from "react"
 import { useState } from "react"
-import { Text, TextInput, TouchableOpacity, View, Alert } from "react-native"
+import { Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
 import { useStripe } from "../lib/stripe-context"
 import { stripeService } from "../lib/services/stripe-service"
 
@@ -25,6 +25,10 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
   const [cardholderName, setCardholderName] = useState("")
   const [expiryDate, setExpiryDate] = useState("")
   const [securityCode, setSecurityCode] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [cardErrors, setCardErrors] = useState<{[key: string]: string}>({})
+  
+  const { createPaymentMethod, error: stripeError } = useStripe()
 
   const formatCardNumber = (value: string) => {
     const digits = value.replace(/\D/g, "")
@@ -40,6 +44,17 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
   const handleCardNumberChange = (value: string) => {
     const formatted = formatCardNumber(value)
     setCardNumber(formatted)
+    
+    // Clear error when user starts typing
+    if (cardErrors.cardNumber) {
+      setCardErrors(prev => ({ ...prev, cardNumber: '' }))
+    }
+    
+    // Basic validation
+    const cleanNumber = value.replace(/\s/g, '')
+    if (cleanNumber.length > 0 && !stripeService.validateCardNumber(cleanNumber)) {
+      setCardErrors(prev => ({ ...prev, cardNumber: 'Invalid card number' }))
+    }
   }
 
   const handleExpiryDateChange = (value: string) => {
@@ -53,22 +68,93 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
       } else {
         setExpiryDate(`${month}/${year}`)
       }
+      
+      // Clear error when user starts typing
+      if (cardErrors.expiryDate) {
+        setCardErrors(prev => ({ ...prev, expiryDate: '' }))
+      }
+      
+      // Validate expiry date
+      if (digitsOnly.length === 4) {
+        const monthNum = parseInt(month)
+        const yearNum = parseInt('20' + year)
+        const currentYear = new Date().getFullYear()
+        const currentMonth = new Date().getMonth() + 1
+        
+        if (monthNum < 1 || monthNum > 12) {
+          setCardErrors(prev => ({ ...prev, expiryDate: 'Invalid month' }))
+        } else if (yearNum < currentYear || (yearNum === currentYear && monthNum < currentMonth)) {
+          setCardErrors(prev => ({ ...prev, expiryDate: 'Card has expired' }))
+        }
+      }
     }
   }
 
-  const handleSave = () => {
-    if (onSave) {
-      onSave({
+  const handleSave = async () => {
+    setIsLoading(true)
+    setCardErrors({})
+    
+    try {
+      // Validate all fields
+      const errors: {[key: string]: string} = {}
+      
+      if (!cardNumber || cardNumber.length < 19) {
+        errors.cardNumber = 'Please enter a valid card number'
+      }
+      
+      if (!cardholderName.trim()) {
+        errors.cardholderName = 'Please enter the cardholder name'
+      }
+      
+      if (!expiryDate || expiryDate.length < 5) {
+        errors.expiryDate = 'Please enter a valid expiry date'
+      }
+      
+      if (!securityCode || securityCode.length < 3) {
+        errors.securityCode = 'Please enter a valid security code'
+      }
+      
+      if (Object.keys(errors).length > 0) {
+        setCardErrors(errors)
+        return
+      }
+
+      // Create payment method through Stripe
+      const paymentMethod = await createPaymentMethod({
         cardNumber,
         cardholderName,
         expiryDate,
         securityCode,
       })
+
+      // Call onSave callback
+      if (onSave) {
+        onSave({
+          cardNumber,
+          cardholderName,
+          expiryDate,
+          securityCode,
+        })
+      }
+      
+      // Show success and close modal
+      Alert.alert('Success', 'Payment method added successfully!', [
+        { text: 'OK', onPress: onBack }
+      ])
+      
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add payment method')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const isFormValid =
-    cardNumber.length >= 19 && cardholderName.trim() !== "" && expiryDate.length >= 5 && securityCode.length >= 3
+  const isFormValid = 
+    cardNumber.length >= 19 && 
+    cardholderName.trim() !== "" && 
+    expiryDate.length >= 5 && 
+    securityCode.length >= 3 &&
+    Object.keys(cardErrors).length === 0
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -124,18 +210,35 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
               placeholder="1244 1234 1345 3255"
               maxLength={19}
               keyboardType="numeric"
-              className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+              className={cn(
+                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                cardErrors.cardNumber && "border border-red-400"
+              )}
             />
+            {cardErrors.cardNumber && (
+              <Text className="text-xs text-red-300">{cardErrors.cardNumber}</Text>
+            )}
           </View>
 
           <View className="space-y-1">
             <Text className="text-sm text-emerald-200">Cardholder Name</Text>
             <TextInput
               value={cardholderName}
-              onChangeText={setCardholderName}
+              onChangeText={(text) => {
+                setCardholderName(text)
+                if (cardErrors.cardholderName) {
+                  setCardErrors(prev => ({ ...prev, cardholderName: '' }))
+                }
+              }}
               placeholder="Yessie"
-              className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+              className={cn(
+                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                cardErrors.cardholderName && "border border-red-400"
+              )}
             />
+            {cardErrors.cardholderName && (
+              <Text className="text-xs text-red-300">{cardErrors.cardholderName}</Text>
+            )}
           </View>
 
           <View className="grid grid-cols-2 gap-4">
@@ -147,21 +250,39 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
                 placeholder="MM/YY"
                 maxLength={5}
                 keyboardType="numeric"
-                className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+                className={cn(
+                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                  cardErrors.expiryDate && "border border-red-400"
+                )}
               />
+              {cardErrors.expiryDate && (
+                <Text className="text-xs text-red-300">{cardErrors.expiryDate}</Text>
+              )}
             </View>
 
             <View className="space-y-1">
               <Text className="text-sm text-emerald-200">Security Code</Text>
               <TextInput
                 value={securityCode}
-                onChangeText={(text) => setSecurityCode(text.replace(/\D/g, "").slice(0, 4))}
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/\D/g, "").slice(0, 4)
+                  setSecurityCode(cleaned)
+                  if (cardErrors.securityCode) {
+                    setCardErrors(prev => ({ ...prev, securityCode: '' }))
+                  }
+                }}
                 placeholder="•••"
                 maxLength={4}
                 secureTextEntry
                 keyboardType="numeric"
-                className="w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white"
+                className={cn(
+                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                  cardErrors.securityCode && "border border-red-400"
+                )}
               />
+              {cardErrors.securityCode && (
+                <Text className="text-xs text-red-300">{cardErrors.securityCode}</Text>
+              )}
             </View>
           </View>
         </View>
@@ -171,19 +292,33 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
       <View className="p-4 pb-8">
         <TouchableOpacity
           onPress={handleSave}
-          disabled={!isFormValid}
+          disabled={!isFormValid || isLoading}
           className={cn(
-            "w-full py-3 rounded-full text-center font-medium",
-            isFormValid
+            "w-full py-3 rounded-full text-center font-medium flex-row items-center justify-center",
+            isFormValid && !isLoading
               ? "bg-gray-700 hover:bg-gray-600 text-white transition-colors"
               : "bg-gray-700/50 text-gray-300 cursor-not-allowed"
           )}
         >
-          <Text className={cn(
-            "text-center font-medium",
-            isFormValid ? "text-white" : "text-gray-300"
-          )}>Save</Text>
+          {isLoading ? (
+            <>
+              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+              <Text className="text-center font-medium text-white">Adding Card...</Text>
+            </>
+          ) : (
+            <Text className={cn(
+              "text-center font-medium",
+              isFormValid ? "text-white" : "text-gray-300"
+            )}>Save Card</Text>
+          )}
         </TouchableOpacity>
+        
+        {/* Error message from Stripe */}
+        {stripeError && (
+          <View className="mt-2 p-2 bg-red-100 rounded-md">
+            <Text className="text-red-800 text-sm text-center">{stripeError}</Text>
+          </View>
+        )}
       </View>
     </View>
   )

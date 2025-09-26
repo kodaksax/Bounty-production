@@ -3,8 +3,9 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { useState } from "react"
-import { Text, TouchableOpacity, View } from "react-native"
+import { Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
 import { useWallet } from '../lib/wallet-context'
+import { useStripe } from '../lib/stripe-context'
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -13,7 +14,9 @@ interface AddMoneyScreenProps {
 
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
+  const [isProcessing, setIsProcessing] = useState(false)
   const { deposit } = useWallet()
+  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError } = useStripe()
 
   const handleNumberPress = (num: number) => {
     if (amount === "0") {
@@ -45,12 +48,68 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     }
   }
 
-  const handleAddMoney = () => {
+  const handleAddMoney = async () => {
     const numAmount = Number.parseFloat(amount)
     if (!isNaN(numAmount) && numAmount > 0) {
-      deposit(numAmount)
-      onAddMoney?.(numAmount)
-      onBack?.()
+      
+      // Check if we have payment methods
+      if (paymentMethods.length === 0) {
+        Alert.alert(
+          'No Payment Method', 
+          'Please add a payment method first to add money to your wallet.',
+          [{ text: 'OK' }]
+        )
+        return
+      }
+
+      setIsProcessing(true)
+      
+      try {
+        // Process payment through Stripe
+        const result = await processPayment(numAmount)
+        
+        if (result.success) {
+          // Add to local wallet balance
+          await deposit(numAmount, { 
+            method: 'Credit Card',
+            title: 'Added Money via Stripe',
+            status: 'completed'
+          })
+          
+          // Show success message
+          Alert.alert(
+            'Success!', 
+            `$${numAmount.toFixed(2)} has been added to your wallet.`,
+            [{
+              text: 'OK',
+              onPress: () => {
+                onAddMoney?.(numAmount)
+                onBack?.()
+              }
+            }]
+          )
+        } else {
+          Alert.alert(
+            'Payment Failed', 
+            result.error || 'Unable to process payment. Please try again.',
+            [{ text: 'OK' }]
+          )
+        }
+      } catch (error) {
+        Alert.alert(
+          'Error', 
+          'Something went wrong. Please try again.',
+          [{ text: 'OK' }]
+        )
+      } finally {
+        setIsProcessing(false)
+      }
+    } else {
+      Alert.alert(
+        'Invalid Amount', 
+        'Please enter a valid amount greater than $0.',
+        [{ text: 'OK' }]
+      )
     }
   }
 
@@ -126,17 +185,24 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         <View className="px-4">
           <TouchableOpacity
             className={cn(
-              "w-full py-4 rounded-full",
-              Number.parseFloat(amount) > 0 ? "bg-gray-700" : "bg-gray-700/50"
+              "w-full py-4 rounded-full flex-row items-center justify-center",
+              Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
             )}
-            disabled={Number.parseFloat(amount) <= 0}
+            disabled={Number.parseFloat(amount) <= 0 || isProcessing}
             onPress={handleAddMoney}
             activeOpacity={0.8}
           >
-            <Text className={cn(
-              "text-center text-base font-medium",
-              Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-            )}>Add</Text>
+            {isProcessing ? (
+              <>
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <Text className="text-center text-base font-medium text-white">Processing...</Text>
+              </>
+            ) : (
+              <Text className={cn(
+                "text-center text-base font-medium",
+                Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+              )}>Add Money</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
