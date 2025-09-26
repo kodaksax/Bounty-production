@@ -1,7 +1,9 @@
 
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useState, useEffect } from "react";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native";
+import { useWallet } from '../lib/wallet-context';
+import { useStripe } from '../lib/stripe-context';
 
 
 interface WithdrawScreenProps {
@@ -9,63 +11,64 @@ interface WithdrawScreenProps {
   balance: number;
 }
 
-interface PaymentMethod {
-  id: string;
-  name: string;
-  details: string;
-  icon: React.ReactNode;
-}
-
 export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
-  const [selectedMethod, setSelectedMethod] = useState<string>("bank-of-america");
+  const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0);
-
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: "bank-of-america",
-      name: "Bank Of America",
-      details: "Checking XXXXXX23",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "apple-pay",
-      name: "Apple Pay",
-      details: "ending in 1138",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "chase-bank",
-      name: "Chase Bank",
-      details: "Checking XXXXXX45",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "wells-fargo",
-      name: "Wells Fargo",
-      details: "Savings XXXXXX78",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "venmo",
-      name: "Venmo",
-      details: "@username",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "paypal",
-      name: "PayPal",
-      details: "user@example.com",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-    {
-      id: "cash-app",
-      name: "Cash App",
-      details: "$username",
-      icon: <MaterialIcons name="home" size={20} color="#fff" />,
-    },
-  ];
-
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [customAmount, setCustomAmount] = useState<string>("");
   
+  const { withdraw } = useWallet();
+  const { paymentMethods, isLoading } = useStripe();
+  
+  // Set default selected method when payment methods load
+  useEffect(() => {
+    if (paymentMethods.length > 0 && !selectedMethod) {
+      setSelectedMethod(paymentMethods[0].id);
+    }
+  }, [paymentMethods, selectedMethod]);
+
+  const handleWithdraw = async () => {
+    if (!selectedMethod) {
+      Alert.alert('No Payment Method', 'Please select a payment method for withdrawal.');
+      return;
+    }
+
+    if (withdrawalAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
+      return;
+    }
+
+    if (withdrawalAmount > balance) {
+      Alert.alert('Insufficient Balance', 'You cannot withdraw more than your current balance.');
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      // In a real app, this would involve Stripe Express or similar for payouts
+      // For now, we'll simulate the withdrawal
+      const success = await withdraw(withdrawalAmount, {
+        method: paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
+        title: 'Withdrawal to Payment Method',
+        status: 'pending'
+      });
+
+      if (success) {
+        Alert.alert(
+          'Withdrawal Initiated',
+          `$${withdrawalAmount.toFixed(2)} withdrawal has been initiated. It may take 1-3 business days to process.`,
+          [{ text: 'OK', onPress: onBack }]
+        );
+      } else {
+        Alert.alert('Withdrawal Failed', 'Insufficient balance or invalid withdrawal amount.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to process withdrawal. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -112,45 +115,83 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       <ScrollView style={styles.scrollArea} contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.methodsBox}>
           <Text style={styles.methodsTitle}>Select Withdrawal Method</Text>
-          {paymentMethods.map((method) => (
-            <TouchableOpacity
-              key={method.id}
-              style={[
-                styles.methodRow,
-                selectedMethod === method.id ? styles.methodRowActive : styles.methodRowInactive,
-              ]}
-              onPress={() => setSelectedMethod(method.id)}
-            >
-              <View style={styles.methodIconCircle}>{method.icon}</View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.methodName}>{method.name}</Text>
-                {method.details ? <Text style={styles.methodDetails}>{method.details}</Text> : null}
-              </View>
-              <View style={styles.methodCheckCircle}>
-                {selectedMethod === method.id && <MaterialIcons name="check" size={16} color="#34d399" />}
-              </View>
-            </TouchableOpacity>
-          ))}
-          {/* Add New Bank Account */}
-          <View style={styles.methodRowInactive}>
-            <View style={styles.methodIconCircle}><MaterialIcons name="add" size={20} color="#fff" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.methodName}>New Bank Account</Text>
-              <Text style={styles.methodDetails}>Menu description</Text>
+          
+          {isLoading ? (
+            <View style={[styles.methodRow, { justifyContent: 'center', alignItems: 'center' }]}>
+              <ActivityIndicator size="small" color="#ffffff" />
+              <Text style={[styles.methodName, { marginLeft: 8 }]}>Loading payment methods...</Text>
             </View>
-            <MaterialIcons name="keyboard-arrow-right" size={20} color="#34d399" />
+          ) : paymentMethods.length === 0 ? (
+            <View style={styles.methodRowInactive}>
+              <View style={styles.methodIconCircle}>
+                <MaterialIcons name="credit-card" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodName}>No Payment Methods</Text>
+                <Text style={styles.methodDetails}>Add a payment method first to withdraw funds</Text>
+              </View>
+            </View>
+          ) : (
+            paymentMethods.map((method) => (
+              <TouchableOpacity
+                key={method.id}
+                style={[
+                  styles.methodRow,
+                  selectedMethod === method.id ? styles.methodRowActive : styles.methodRowInactive,
+                ]}
+                onPress={() => setSelectedMethod(method.id)}
+              >
+                <View style={styles.methodIconCircle}>
+                  <MaterialIcons name="credit-card" size={20} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.methodName}>
+                    {method.card.brand.toUpperCase()} •••• {method.card.last4}
+                  </Text>
+                  <Text style={styles.methodDetails}>
+                    Expires {method.card.exp_month.toString().padStart(2, '0')}/{method.card.exp_year}
+                  </Text>
+                </View>
+                <View style={styles.methodCheckCircle}>
+                  {selectedMethod === method.id && <MaterialIcons name="check" size={16} color="#34d399" />}
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+          
+          {/* Note about bank accounts */}
+          <View style={styles.methodRowInactive}>
+            <View style={styles.methodIconCircle}>
+              <MaterialIcons name="info" size={20} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.methodName}>Bank Account Withdrawals</Text>
+              <Text style={styles.methodDetails}>Coming soon - direct bank transfers</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
       <View style={styles.bottomButtonBox}>
         <TouchableOpacity
+          onPress={handleWithdraw}
           style={[
             styles.bottomButton,
-            withdrawalAmount > 0 ? styles.bottomButtonActive : styles.bottomButtonInactive,
+            withdrawalAmount > 0 && selectedMethod && !isProcessing
+              ? styles.bottomButtonActive 
+              : styles.bottomButtonInactive,
           ]}
-          disabled={withdrawalAmount <= 0}
+          disabled={withdrawalAmount <= 0 || !selectedMethod || isProcessing}
         >
-          <Text style={styles.bottomButtonText}>Begin Withdrawal</Text>
+          {isProcessing ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.bottomButtonText}>Processing...</Text>
+            </View>
+          ) : (
+            <Text style={styles.bottomButtonText}>
+              Withdraw ${withdrawalAmount.toFixed(2)}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
