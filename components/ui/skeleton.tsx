@@ -29,7 +29,7 @@ function Skeleton({
 
 const skeletonStyles = StyleSheet.create({
   base: {
-    backgroundColor: 'rgba(55, 65, 81, 0.3)', // spy-border with opacity
+    backgroundColor: 'rgba(16, 185, 129, 0.3)', // emerald with opacity
     borderRadius: 8,
     // Add subtle shimmer effect
     overflow: 'hidden',
@@ -37,19 +37,19 @@ const skeletonStyles = StyleSheet.create({
   card: {
     borderRadius: 16,
     height: 120,
-    backgroundColor: 'rgba(16, 20, 24, 0.6)',
+    backgroundColor: 'rgba(12, 58, 36, 0.6)', // dark emerald surface
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)', // emerald border
   },
   text: {
     height: 16,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(167, 243, 208, 0.1)', // light emerald with opacity
   },
   circle: {
     borderRadius: 999,
     aspectRatio: 1,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)', // emerald glow with opacity
   },
 })
 

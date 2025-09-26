@@ -119,9 +119,9 @@ interface CardStyles {
 const cardStyles = StyleSheet.create<CardStyles>({
   base: {
     borderRadius: 16,
-    backgroundColor: 'rgba(16, 20, 24, 0.8)', // spy-surface
+    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
@@ -142,7 +142,7 @@ const cardStyles = StyleSheet.create<CardStyles>({
     shadowRadius: 20,
     elevation: 12,
     // Add subtle glow for elevated cards
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
   },
   header: {
     paddingTop: 20,
@@ -173,7 +173,7 @@ const cardStyles = StyleSheet.create<CardStyles>({
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(55, 65, 81, 0.2)',
+    borderTopColor: 'rgba(16, 185, 129, 0.2)', // emerald border
     marginTop: 12,
   },
 })

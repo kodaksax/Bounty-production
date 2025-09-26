@@ -27,7 +27,7 @@ const inputStyles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: '#ffffff',
-    backgroundColor: 'rgba(16, 20, 24, 0.8)',
+    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
     fontWeight: '400',
     // Glass-morphism styling
     shadowColor: '#000000',
@@ -38,7 +38,7 @@ const inputStyles = StyleSheet.create({
   },
   default: {
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.4)',
+    borderColor: 'rgba(16, 185, 129, 0.4)', // emerald border
   },
   outline: {
     borderWidth: 1.5,

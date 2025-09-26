@@ -26,12 +26,12 @@
     --ring: 142 76% 36%;
     --radius: 0.75rem;
 
-    /* Spy-theme colors */
-    --spy-dark: 218 23% 3%;
-    --spy-darker: 216 27% 2%;
-    --spy-surface: 220 23% 8%;
-    --spy-surface-hover: 220 23% 12%;
-    --spy-border: 220 16% 22%;
+    /* Spy-theme colors with green base */
+    --spy-dark: 10 58 36; /* dark emerald */
+    --spy-darker: 8 46 29; /* darker emerald */
+    --spy-surface: 12 58 36; /* emerald surface */
+    --spy-surface-hover: 16 74 46; /* lighter emerald surface */
+    --spy-border: 16 185 129; /* emerald border */
     --spy-glow: 142 76% 36%;
     --spy-accent-blue: 210 100% 60%;
     --spy-accent-purple: 270 80% 65%;
@@ -70,12 +70,12 @@
     --input: 220 23% 10%;
     --ring: 142 76% 36%;
 
-    /* Spy-theme colors enhanced for dark mode */
-    --spy-dark: 216 27% 1%;
-    --spy-darker: 214 30% 0.5%;
-    --spy-surface: 220 23% 5%;
-    --spy-surface-hover: 220 23% 9%;
-    --spy-border: 220 16% 18%;
+    /* Spy-theme colors enhanced for dark mode with green base */
+    --spy-dark: 8 46 29; /* darker emerald */
+    --spy-darker: 6 37 23; /* darkest emerald */
+    --spy-surface: 10 58 36; /* dark emerald surface */
+    --spy-surface-hover: 14 70 43; /* lighter emerald surface */
+    --spy-border: 16 185 129; /* emerald border */
     --spy-glow: 142 76% 40%;
     --spy-accent-blue: 210 100% 70%;
     --spy-accent-purple: 270 80% 75%;

@@ -283,11 +283,11 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated) - Enhanced spy-like aesthetic
+// Styles (consolidated) - Enhanced spy-like aesthetic with green base
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#0c1115', // spy-darker
+    backgroundColor: '#0a2e1e', // dark emerald base
     position: 'relative', 
     paddingBottom: 100 
   },
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     right: 0, 
     top: 0, 
     zIndex: 10, 
-    backgroundColor: '#0f1419', // spy-dark
+    backgroundColor: '#0c3a24', // slightly lighter dark emerald
     // Add subtle gradient overlay
     shadowColor: '#10b981', // spy-glow
     shadowOffset: { width: 0, height: 2 },
@@ -347,12 +347,12 @@ const styles = StyleSheet.create({
   searchButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(16, 20, 24, 0.7)', // spy-surface with opacity
+    backgroundColor: 'rgba(12, 58, 36, 0.7)', // dark emerald with opacity
     borderRadius: 16, 
     paddingVertical: 14, 
     paddingHorizontal: 18,
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
     // Add glass-morphism effect
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -381,13 +381,13 @@ const styles = StyleSheet.create({
   chip: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(16, 20, 24, 0.6)', 
+    backgroundColor: 'rgba(12, 58, 36, 0.6)', // dark emerald base
     paddingHorizontal: 16, 
     height: 40, 
     borderRadius: 20, 
     marginRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.4)',
+    borderColor: 'rgba(16, 185, 129, 0.4)', // emerald border
     // Add subtle shadow
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },

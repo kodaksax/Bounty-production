@@ -101,14 +101,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 24, 0.8)', // Enhanced spy surface
+    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 16,
     marginHorizontal: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
     // Enhanced shadows and glass-morphism
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
