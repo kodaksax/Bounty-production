@@ -1,8 +1,8 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import React, { useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import React, { useState, useRef } from "react"
+import { StyleSheet, Text, TouchableOpacity, View, Animated, PanResponder } from "react-native"
 import { BountyDetailModal } from "./bountydetailmodal"
 
 export interface BountyListItemProps {
@@ -16,14 +16,54 @@ export interface BountyListItemProps {
 
 export function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
+  const scaleValue = useRef(new Animated.Value(1)).current
+  const opacityValue = useRef(new Animated.Value(1)).current
+
+  // Enhanced touch interactions
+  const handlePressIn = () => {
+    Animated.parallel([
+      Animated.timing(scaleValue, {
+        toValue: 0.98,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityValue, {
+        toValue: 0.8,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
+
+  const handlePressOut = () => {
+    Animated.parallel([
+      Animated.timing(scaleValue, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityValue, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
 
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        style={styles.row}
-        onPress={() => setShowDetail(true)}
+      <Animated.View
+        style={[
+          { transform: [{ scale: scaleValue }], opacity: opacityValue }
+        ]}
       >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.row}
+          onPress={() => setShowDetail(true)}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
         {/* Leading icon/avatar */}
         <View style={styles.leadingIconWrap}>
           <MaterialIcons name="paid" size={18} color="#a7f3d0" />
@@ -44,7 +84,8 @@ export function BountyListItem({ id, title, username, price, distance, descripti
           <Text style={styles.price}>${price}</Text>
           <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
         </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
 
       {showDetail && (
         <BountyDetailModal
@@ -60,22 +101,39 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 10,
+    backgroundColor: 'rgba(16, 97, 62, 0.75)', // lighter emerald surface for better fog contrast
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)', // slightly more visible emerald border
+    // Enhanced shadows and glass-morphism
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+    // Backdrop blur effect simulation
+    overflow: 'hidden',
   },
   leadingIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#064e3b', // dark emerald
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)', // spy-glow tinted
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/50
+    marginRight: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    // Add subtle inner glow
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 2,
   },
   mainContent: {
     flex: 1,
@@ -83,39 +141,47 @@ const styles = StyleSheet.create({
   title: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 15,
-    marginBottom: 4,
+    fontSize: 16,
+    marginBottom: 6,
+    letterSpacing: 0.3,
+    lineHeight: 22,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   username: {
-    color: '#a7f3d0', // emerald-200
-    fontSize: 12,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#a7f3d0',
-    marginHorizontal: 6,
+    color: '#a7f3d0', // emerald-200 with slight opacity
+    fontSize: 13,
+    fontWeight: '500',
     opacity: 0.9,
   },
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(167, 243, 208, 0.6)',
+    marginHorizontal: 8,
+  },
   distance: {
-    color: '#d1fae5', // emerald-100
-    fontSize: 12,
+    color: 'rgba(209, 250, 229, 0.8)', // emerald-100 with opacity
+    fontSize: 13,
+    fontWeight: '400',
   },
   trailing: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginLeft: 16,
   },
   price: {
-    color: '#fcd34d', // amber-300
+    color: '#fbbf24', // Enhanced amber for premium feel
     fontWeight: '800',
-    fontSize: 16,
-    marginBottom: 2,
+    fontSize: 18,
+    marginBottom: 4,
+    // Add subtle glow to price
+    textShadowColor: 'rgba(251, 191, 36, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
 })
 

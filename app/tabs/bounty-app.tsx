@@ -7,6 +7,7 @@ import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
+import { FogEffect } from 'components/ui/fog-effect'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -254,6 +255,14 @@ function BountyAppInner() {
 
   return (
     <View style={styles.container}>
+      {/* VANTA.FOG-like effect background */}
+      <FogEffect 
+        intensity={4}
+        speed={0.8}
+        color="#10b981"
+        opacity={0.12}
+      />
+      
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -283,23 +292,128 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated)
+// Styles (consolidated) - Enhanced spy-like aesthetic with lighter green base for fog contrast
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative', paddingBottom: 100 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#0d4d35', // lighter emerald base for better fog contrast
+    position: 'relative', 
+    paddingBottom: 100 
+  },
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  headerBalance: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  searchWrapper: { paddingHorizontal: 16, marginBottom: 8 },
-  searchButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.35)', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
-  searchIcon: { marginRight: 8 },
-  searchText: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
-  filtersRow: { paddingVertical: 8 },
-  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 14, height: 36, borderRadius: 999, marginRight: 8 },
-  chipActive: { backgroundColor: '#a7f3d0' },
+  collapsingHeader: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    top: 0, 
+    zIndex: 10, 
+    backgroundColor: '#10613e', // lighter emerald for header
+    // Add subtle gradient overlay
+    shadowColor: '#10b981', // spy-glow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingBottom: 12 
+  },
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  headerTitle: { 
+    marginLeft: 8, 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#ffffff', 
+    letterSpacing: 1.2,
+    // Add subtle text shadow
+    textShadowColor: '#10b981',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  headerBalance: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#ffffff',
+    // Add premium styling
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  searchWrapper: { 
+    paddingHorizontal: 16, 
+    marginBottom: 12 
+  },
+  searchButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 97, 62, 0.6)', // lighter emerald with opacity for better fog contrast
+    borderRadius: 16, 
+    paddingVertical: 14, 
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)', // more visible emerald border
+    // Add glass-morphism effect
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  searchIcon: { 
+    marginRight: 10 
+  },
+  searchText: { 
+    color: 'rgba(255,255,255,0.75)', 
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  filtersRow: { 
+    paddingVertical: 10 
+  },
+  gradientSeparator: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    height: 50 
+  },
+  chip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 97, 62, 0.5)', // lighter emerald base for better fog contrast
+    paddingHorizontal: 16, 
+    height: 40, 
+    borderRadius: 20, 
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.45)', // more visible emerald border
+    // Add subtle shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  chipActive: { 
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    // Add glow effect for active state
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
   chipLabelActive: { color: '#052e1b' },
 })
