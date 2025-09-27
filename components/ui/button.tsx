@@ -3,6 +3,7 @@ import { TouchableOpacity, TouchableOpacityProps, Text } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "lib/utils"
 import { StyleSheet, ViewStyle, TextStyle } from "react-native";
+import { useHapticFeedback } from "lib/haptic-feedback";
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -38,10 +39,27 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   className?: string;
   children?: React.ReactNode;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
-  ({ className, variant, size, disabled, onPress, children, ...props }, ref) => {
+  ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
+    const { triggerHaptic } = useHapticFeedback();
+    
+    const handlePress = React.useCallback((event: any) => {
+      if (disabled) return;
+      
+      // Trigger appropriate haptic feedback based on variant
+      if (variant === 'destructive') {
+        triggerHaptic('warning');
+      } else {
+        triggerHaptic('light');
+      }
+      
+      onPress?.(event);
+    }, [disabled, onPress, triggerHaptic, variant]);
+
     return (
       <TouchableOpacity
         className={cn(buttonVariants({ variant, size, className }))}
@@ -53,11 +71,24 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           disabled && buttonStyles.disabled,
         ]}
         disabled={disabled}
-        onPress={onPress}
+        onPress={handlePress}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled: disabled || false }}
         {...props}
       >
         {typeof children === "string" ? (
-          <Text className="text-inherit font-inherit">{children}</Text>
+          <Text 
+            className="text-inherit font-inherit"
+            style={[
+              buttonStyles.text,
+              buttonStyles[`${variant ?? "default"}Text` as keyof typeof buttonStyles],
+            ]}
+          >
+            {children}
+          </Text>
         ) : (
           children
         )}
@@ -76,18 +107,24 @@ const buttonStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     minHeight: 48,
-    // Add sophisticated shadows
+    // Enhanced sophisticated shadows for better depth
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 12,
+    elevation: 6,
+    // Add subtle transition feel (even though we can't animate in StyleSheet)
+    transform: [{ scale: 1 }],
   },
   default: {
     backgroundColor: '#10b981', // spy-glow
-    // Add inner glow effect
+    // Enhanced inner glow effect for premium feel
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   destructive: {
     backgroundColor: '#dc2626', // Enhanced red
