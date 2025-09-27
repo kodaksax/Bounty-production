@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useHapticFeedback } from "lib/haptic-feedback";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile";
 
@@ -12,6 +13,20 @@ interface BottomNavProps {
 export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
+  const { triggerHaptic } = useHapticFeedback();
+
+  const handleNavigate = React.useCallback((screen: ScreenKey) => {
+    if (screen === activeScreen) return;
+    
+    // Trigger haptic feedback - different types for different screens
+    if (screen === "bounty") {
+      triggerHaptic('medium'); // Main screen gets medium feedback
+    } else {
+      triggerHaptic('selection'); // Other screens get selection feedback
+    }
+    
+    onNavigate(screen);
+  }, [activeScreen, onNavigate, triggerHaptic]);
 
   // Animate center button when active screen changes
   useEffect(() => {
@@ -52,10 +67,24 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
   return (
     <View style={styles.bottomNavContainer}>
       <View style={styles.bottomNav}>
-        <TouchableOpacity onPress={() => onNavigate("create")} style={styles.navButton}>
+        <TouchableOpacity 
+          onPress={() => handleNavigate("create")} 
+          style={styles.navButton}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Create new bounty or message"
+          accessibilityState={{ selected: activeScreen === "create" }}
+        >
           <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => onNavigate("wallet")} style={styles.navButton}>
+        <TouchableOpacity 
+          onPress={() => handleNavigate("wallet")} 
+          style={styles.navButton}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="View wallet and transactions"
+          accessibilityState={{ selected: activeScreen === "wallet" }}
+        >
           <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
         <Animated.View
@@ -70,16 +99,35 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
           ]}
         >
           <TouchableOpacity
-            onPress={() => onNavigate("bounty")}
+            onPress={() => handleNavigate("bounty")}
             style={styles.centerButtonInner}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="View bounty dashboard - Main screen"
+            accessibilityState={{ selected: activeScreen === "bounty" }}
+            accessibilityHint="This is the main screen with available bounties"
           >
             <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
           </TouchableOpacity>
         </Animated.View>
-        <TouchableOpacity onPress={() => onNavigate("postings")} style={styles.navButton}>
+        <TouchableOpacity 
+          onPress={() => handleNavigate("postings")} 
+          style={styles.navButton}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Search and browse postings"
+          accessibilityState={{ selected: activeScreen === "postings" }}
+        >
           <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => onNavigate("profile")} style={styles.navButton}>
+        <TouchableOpacity 
+          onPress={() => handleNavigate("profile")} 
+          style={styles.navButton}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="View and edit profile"
+          accessibilityState={{ selected: activeScreen === "profile" }}
+        >
           <MaterialIcons name="person" color={activeScreen === "profile" ? "#fff" : "#d1fae5"} size={24} />
         </TouchableOpacity>
       </View>

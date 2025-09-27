@@ -5,9 +5,12 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { NetworkStatusBar } from 'components/network-status'
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
+import { BountyEmptyState } from 'components/ui/empty-state'
 import { FogEffect } from 'components/ui/fog-effect'
+import { BountySkeleton } from 'components/ui/skeleton-loading'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -171,14 +174,27 @@ function BountyAppInner() {
             <MaterialIcons name="gps-fixed" size={24} color="#000000" />
             <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
           </View>
-          <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
+          <TouchableOpacity 
+            onPress={() => setActiveScreen('wallet')}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`Wallet balance: $${balance.toFixed(2)}`}
+            accessibilityHint="Tap to view wallet and transaction history"
+          >
             <Text style={styles.headerBalance}>$ {balance.toFixed(2)}</Text>
           </TouchableOpacity>
         </View>
         <Animated.View style={{ opacity: extraContentOpacity }}>
           {/* Search Bar */}
           <View style={styles.searchWrapper}>
-            <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
+            <TouchableOpacity 
+              accessibilityRole="button" 
+              onPress={() => setShowSearch(true)} 
+              style={styles.searchButton}
+              accessible={true}
+              accessibilityLabel="Search bounties and users"
+              accessibilityHint="Tap to open search screen"
+            >
               <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
               <Text style={styles.searchText}>Search bounties or users...</Text>
             </TouchableOpacity>
@@ -197,12 +213,18 @@ function BountyAppInner() {
                   <TouchableOpacity
                     onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
                     style={[styles.chip, isActive && styles.chipActive]}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${item.label}`}
+                    accessibilityState={{ selected: isActive }}
+                    accessibilityHint={isActive ? "Tap to clear filter" : `Filter bounties by ${item.label} category`}
                   >
                     <MaterialIcons
                       name={item.icon}
                       size={16}
                       color={isActive ? '#052e1b' : '#d1fae5'}
                       style={{ marginRight: 8 }}
+                      accessibilityElementsHidden={true}
                     />
                     <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
                   </TouchableOpacity>
@@ -219,6 +241,7 @@ function BountyAppInner() {
       </Animated.View>
 
       {/* Bounty List with scroll listener */}
+      <NetworkStatusBar />
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
@@ -227,19 +250,23 @@ function BountyAppInner() {
         scrollEventThrottle={16}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListEmptyComponent={() => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-            <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-            <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-              <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        ListEmptyComponent={() => {
+          if (isLoading) {
+            return <BountySkeleton count={3} />;
+          }
+          return (
+            <BountyEmptyState 
+              filter={activeCategory === 'all' ? undefined : activeCategory}
+              onClearFilter={() => setActiveCategory('all')}
+            />
+          );
+        }}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
           const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
             <BountyListItem
+              key={item.id} // Explicit key for better performance
               id={numericId}
               title={item.title}
               username="@Jon_Doe"
@@ -248,6 +275,15 @@ function BountyAppInner() {
             />
           )
         }}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={8}
+        windowSize={10}
+        getItemLayout={(data, index) => (
+          {length: 88, offset: 90 * index, index} // Approximate item height + margin
+        )}
       />
     </View>
   )

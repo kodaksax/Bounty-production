@@ -106,8 +106,14 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
       presentationStyle="overFullScreen"
       transparent
       onRequestClose={handleClose}
+      accessibilityViewIsModal={true}
     >
-      <View style={styles.overlay}>
+      <View 
+        style={styles.overlay}
+        accessible={true}
+        accessibilityRole="none"
+        accessibilityLabel={`Bounty details: ${bounty.title}`}
+      >
         {/* Shadow wrapper (no overflow) */}
         <View
           style={[
@@ -124,13 +130,29 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
             <Text style={styles.headerTitle}>BOUNTY</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              accessibilityRole="button" 
+              accessibilityLabel="Share bounty"
+              accessibilityHint="Share this bounty with others"
+            >
               <MaterialIcons name="share" size={20} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              accessibilityRole="button" 
+              accessibilityLabel="Report bounty"
+              accessibilityHint="Report this bounty if it seems inappropriate"
+            >
               <MaterialIcons name="report" size={20} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+            <TouchableOpacity 
+              onPress={handleClose} 
+              style={styles.closeButton} 
+              accessibilityRole="button" 
+              accessibilityLabel="Close bounty details"
+              accessibilityHint="Close this modal and return to bounty list"
+            >
               <MaterialIcons name="close" size={20} color="white" />
             </TouchableOpacity>
           </View>

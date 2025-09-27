@@ -14,7 +14,7 @@ export interface BountyListItemProps {
   description?: string
 }
 
-export function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
+export const BountyListItem = React.memo(function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const scaleValue = useRef(new Animated.Value(1)).current
   const opacityValue = useRef(new Animated.Value(1)).current
@@ -63,16 +63,21 @@ export function BountyListItem({ id, title, username, price, distance, descripti
           onPress={() => setShowDetail(true)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Bounty: ${title}, by ${username}, ${distance} miles away, $${price}`}
+          accessibilityHint="Tap to view bounty details and apply"
+          accessibilityState={{ expanded: showDetail }}
         >
         {/* Leading icon/avatar */}
-        <View style={styles.leadingIconWrap}>
+        <View style={styles.leadingIconWrap} accessibilityElementsHidden={true}>
           <MaterialIcons name="paid" size={18} color="#a7f3d0" />
         </View>
 
         {/* Main content */}
         <View style={styles.mainContent}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
-          <View style={styles.metaRow}>
+          <Text style={styles.title} numberOfLines={2} accessibilityRole="header">{title}</Text>
+          <View style={styles.metaRow} accessibilityElementsHidden={true}>
             <Text style={styles.username}>{username}</Text>
             <View style={styles.dot} />
             <Text style={styles.distance}>{distance} mi</Text>
@@ -80,7 +85,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
         </View>
 
         {/* Trailing price and chevron */}
-        <View style={styles.trailing}>
+        <View style={styles.trailing} accessibilityElementsHidden={true}>
           <Text style={styles.price}>${price}</Text>
           <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
         </View>
@@ -95,7 +100,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       )}
     </>
   )
-}
+});
 
 const styles = StyleSheet.create({
   row: {
