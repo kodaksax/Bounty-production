@@ -5,6 +5,7 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { NetworkStatusBar } from 'components/network-status'
 import { SearchScreen } from "components/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
 import { BountyEmptyState } from 'components/ui/empty-state'
@@ -240,6 +241,7 @@ function BountyAppInner() {
       </Animated.View>
 
       {/* Bounty List with scroll listener */}
+      <NetworkStatusBar />
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
@@ -264,6 +266,7 @@ function BountyAppInner() {
           const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
             <BountyListItem
+              key={item.id} // Explicit key for better performance
               id={numericId}
               title={item.title}
               username="@Jon_Doe"
@@ -272,6 +275,15 @@ function BountyAppInner() {
             />
           )
         }}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={8}
+        windowSize={10}
+        getItemLayout={(data, index) => (
+          {length: 88, offset: 90 * index, index} // Approximate item height + margin
+        )}
       />
     </View>
   )

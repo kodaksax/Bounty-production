@@ -2,11 +2,14 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { ErrorBanner } from "components/ui/error-banner"
+import { SkeletonLoading } from "components/ui/skeleton-loading"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
+import { useHapticFeedback } from "lib/haptic-feedback"
 import { cn } from "lib/utils"
-import { useEffect, useRef, useState } from "react"
-import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Text, TextInput, TouchableOpacity, View, FlatList, Keyboard } from "react-native"
 
 interface SearchScreenProps {
   onBack: () => void
@@ -28,17 +31,34 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [allBounties, setAllBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<TextInput | null>(null)
+  const { triggerHaptic } = useHapticFeedback()
+  
+  // Debounce search to avoid too many searches
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearch = useCallback((query: string) => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+    
+    debounceRef.current = setTimeout(() => {
+      performSearch(query)
+    }, 300)
+  }, [])
 
   // Fetch all bounties when the component mounts
   useEffect(() => {
     const fetchBounties = async () => {
       setIsLoading(true)
+      setError(null)
       try {
         const bounties = await bountyService.getAll({ status: "open" })
         setAllBounties(bounties)
       } catch (error) {
         console.error("Error fetching bounties for search:", error)
+        setError("Failed to load bounties. Please try again.")
       } finally {
         setIsLoading(false)
       }
@@ -46,6 +66,31 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
 
     fetchBounties()
   }, [])
+
+  // Perform the actual search
+  const performSearch = useCallback((query: string) => {
+    if (!query.trim()) {
+      setSearchResults([])
+      return
+    }
+
+    const filtered = allBounties.filter(bounty => 
+      bounty.title.toLowerCase().includes(query.toLowerCase()) ||
+      bounty.description?.toLowerCase().includes(query.toLowerCase()) ||
+      (bounty.location && bounty.location.toLowerCase().includes(query.toLowerCase()))
+    )
+
+    const results: BountyItem[] = filtered.map(bounty => ({
+      id: String(bounty.id),
+      username: "@Jon_Doe", // Mock username - in real app would come from user data
+      title: bounty.title,
+      amount: Number(bounty.amount) || 0,
+      distance: calculateDistance(bounty.location || ''),
+      timeAgo: formatTimeAgo(bounty.created_at || new Date().toISOString()),
+    }))
+
+    setSearchResults(results)
+  }, [allBounties])
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
   const calculateDistance = (location: string) => {
@@ -84,22 +129,10 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
     }
   }
 
-  // Search function
+  // Search function - using the debounced version
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setSearchResults([])
-      return
-    }
-
-    const query = searchQuery.toLowerCase()
-    const results = allBounties
-      .filter(
-        (bounty) => bounty.title.toLowerCase().includes(query) || bounty.description?.toLowerCase().includes(query),
-      )
-      .map(convertToBountyItem)
-
-    setSearchResults(results)
-  }, [searchQuery, allBounties])
+    handleSearch(searchQuery)
+  }, [searchQuery, handleSearch])
 
   // Focus input on mount
   useEffect(() => {
@@ -108,11 +141,31 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
     }
   }, [])
 
-  // Handle search submission
-  const handleSearch = (query: string) => {
+  // Handle search submission and add to recent searches
+  const handleSearchSubmit = (query: string) => {
     setSearchQuery(query)
+    triggerHaptic('selection')
     if (query.trim() !== "" && !recentSearches.includes(query)) {
       setRecentSearches((prev) => [query, ...prev.slice(0, 4)])
+    }
+  }
+
+  // Handle recent search selection
+  const handleRecentSearchTap = (query: string) => {
+    setSearchQuery(query)
+    triggerHaptic('light')
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchQuery("")
+    setSearchResults([])
+    triggerHaptic('light')
+    if (inputRef.current) {
+      inputRef.current.focus()
     }
   }
 
@@ -164,12 +217,34 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       {/* Search Header */}
       <View className="p-4 pt-8">
         <View className="flex items-center gap-3">
-          <TouchableOpacity onPress={onBack} className="text-white">
+          <TouchableOpacity 
+            onPress={onBack} 
+            className="text-white"
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Return to previous screen"
+          >
             <MaterialIcons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
-          <Text className="text-xl font-bold text-white">Search</Text>
+          <Text 
+            className="text-xl font-bold text-white"
+            accessibilityRole="header"
+          >
+            Search
+          </Text>
         </View>
       </View>
+
+      {/* Error Banner */}
+      {error && (
+        <ErrorBanner
+          type="error"
+          message={error}
+          onRetry={() => window.location.reload()}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Search Input */}
       <View className="px-4 mb-4">
@@ -179,21 +254,38 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             isInputFocused ? "ring-2 ring-white/30" : "",
           )}
         >
-
-          <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
+          <MaterialIcons 
+            name="search" 
+            size={16} 
+            color="#6ee7b7" 
+            style={{ position: 'absolute', left: 12, zIndex: 1 }}
+            accessibilityElementsHidden={true}
+          />
           <TextInput
             ref={inputRef}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
+            onSubmitEditing={() => handleSearchSubmit(searchQuery)}
             placeholder="Search bounties or users..."
             className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-emerald-300/70 focus:outline-none"
             placeholderTextColor="#6ee7b7"
             style={{ paddingLeft: 40, paddingRight: 40 }}
+            accessible={true}
+            accessibilityLabel="Search input"
+            accessibilityHint="Type to search for bounties or users"
+            returnKeyType="search"
           />
           {searchQuery && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ position: 'absolute', right: 12 }}>
+            <TouchableOpacity 
+              onPress={clearSearch} 
+              style={{ position: 'absolute', right: 12 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              accessibilityHint="Clear the search text"
+            >
               <MaterialIcons name="close" size={16} color="#6ee7b7" />
             </TouchableOpacity>
           )}
@@ -202,25 +294,53 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
 
       {/* Search Results or Recent Searches */}
       <View className="flex-1 px-4 overflow-y-auto">
-        {searchQuery.trim() === "" ? (
+        {isLoading ? (
+          <View className="space-y-4">
+            <SkeletonLoading width="40%" height={16} />
+            <SkeletonLoading width="100%" height={60} />
+            <SkeletonLoading width="90%" height={60} />
+            <SkeletonLoading width="95%" height={60} />
+          </View>
+        ) : searchQuery.trim() === "" ? (
           <>
             {recentSearches.length > 0 && (
               <View className="mb-4">
                 <View className="flex justify-between items-center mb-2">
-                  <Text className="text-sm font-medium text-emerald-200">Recent searches</Text>
-                  <TouchableOpacity onPress={() => setRecentSearches([])} className="text-xs text-emerald-300">
-                    Clear all
+                  <Text 
+                    className="text-sm font-medium text-emerald-200"
+                    accessibilityRole="header"
+                  >
+                    Recent searches
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => setRecentSearches([])} 
+                    className="text-xs text-emerald-300"
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear all recent searches"
+                  >
+                    <Text className="text-xs text-emerald-300">Clear all</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="space-y-2">
                   {recentSearches.map((search, index) => (
                     <TouchableOpacity
                       key={index}
-                      onPress={() => handleSearch(search)}
+                      onPress={() => handleRecentSearchTap(search)}
                       className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Search for ${search}`}
+                      accessibilityHint="Tap to use this recent search"
                     >
                       <View className="flex items-center">
-                        <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
+                        <MaterialIcons 
+                          name="search" 
+                          size={16} 
+                          color="#6ee7b7" 
+                          style={{ marginRight: 12 }}
+                          accessibilityElementsHidden={true}
+                        />
                         <Text className="text-white">{search}</Text>
                       </View>
                       <TouchableOpacity

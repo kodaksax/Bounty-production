@@ -14,7 +14,7 @@ export interface BountyListItemProps {
   description?: string
 }
 
-export function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
+export const BountyListItem = React.memo(function BountyListItem({ id, title, username, price, distance, description }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const scaleValue = useRef(new Animated.Value(1)).current
   const opacityValue = useRef(new Animated.Value(1)).current
@@ -100,7 +100,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       )}
     </>
   )
-}
+});
 
 const styles = StyleSheet.create({
   row: {
