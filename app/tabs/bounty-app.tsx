@@ -222,7 +222,7 @@ function BountyAppInner() {
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 8, paddingBottom:  (insets.bottom + 40) }}
+  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 24, paddingBottom: insets.bottom + 120 }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
@@ -262,6 +262,25 @@ function BountyAppInner() {
         color="#10b981"
         opacity={0.12}
       />
+      {/* Top gradient covering safe area (status bar) for consistent highlight */}
+      <LinearGradient
+        colors={["#158f60", "#10613e90", "#10613e00"]}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: headerTopPad + 60, // cover status bar + slight fade
+          zIndex: 5,
+        }}
+        pointerEvents="none"
+      />
+      {/* Bottom fade so list items appear to disappear behind nav */}
+      <LinearGradient
+        colors={["rgba(13,77,53,0)", "rgba(13,77,53,0.75)", "#0d4d35"]}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 50, height: 80, zIndex: 50 }}
+        pointerEvents="none"
+      />
       
       {activeScreen === "bounty" ? (
         renderDashboardContent()
@@ -297,8 +316,7 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: '#0d4d35', // lighter emerald base for better fog contrast
-    position: 'relative', 
-    paddingBottom: 100 
+    position: 'relative'
   },
   dashboardArea: { flex: 1 },
   collapsingHeader: { 
@@ -358,7 +376,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     backgroundColor: 'rgba(16, 97, 62, 0.6)', // lighter emerald with opacity for better fog contrast
     borderRadius: 16, 
-    paddingVertical: 14, 
+    paddingVertical: 10, 
     paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.35)', // more visible emerald border
@@ -385,14 +403,14 @@ const styles = StyleSheet.create({
     left: 0, 
     right: 0, 
     bottom: 0, 
-    height: 50 
+    height: 10 
   },
   chip: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     backgroundColor: 'rgba(16, 97, 62, 0.5)', // lighter emerald base for better fog contrast
     paddingHorizontal: 16, 
-    height: 40, 
+    height: 28, 
     borderRadius: 20, 
     marginRight: 10,
     borderWidth: 1,
@@ -402,7 +420,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   chipActive: { 
     backgroundColor: 'rgba(16, 185, 129, 0.15)',

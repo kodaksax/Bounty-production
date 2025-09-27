@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useRef, useEffect } from "react";
-import { StyleSheet, TouchableOpacity, View, Animated } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile";
 
@@ -92,14 +92,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: -50,
+  // Float partially off-screen for layered effect while remaining visually fixed
+  bottom: -50,
     zIndex: 100,
   },
   bottomNav: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    height: 120,
+  height: 120,
     backgroundColor: "#0d4d35", // lighter emerald base to match main background
     paddingHorizontal: 28,
     paddingBottom: 8,
