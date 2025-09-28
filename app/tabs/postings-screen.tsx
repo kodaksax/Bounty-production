@@ -14,14 +14,14 @@ import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Easing, Keyboard, LayoutChangeEvent, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
-import { AddMoneyScreen } from "../../components/add-money-screen"
-import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { hapticFeedback } from '../../lib/haptic-feedback'
 import { useWallet } from '../../lib/wallet-context'
+import { AddBountyAmountScreen } from "./add-bounty-amount-screen"
+import { AddMoneyScreen } from "./add-money-screen"
+import { ArchivedBountiesScreen } from "./archived-bounties-screen"
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 

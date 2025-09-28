@@ -1,4 +1,4 @@
-import type { Transaction } from "components/transaction-history-screen"
+import type { Transaction } from "app/tabs/transaction-history-screen"
 import { logger } from "lib/utils/error-logger"
 
 /**

@@ -5,7 +5,7 @@ import { format } from "date-fns"
 import { cn } from "lib/utils"
 import { useEffect, useRef, useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
-import type { Transaction } from "./transaction-history-screen"
+import type { Transaction } from "../app/tabs/transaction-history-screen"
 
 interface TransactionDetailModalProps {
   transaction: Transaction

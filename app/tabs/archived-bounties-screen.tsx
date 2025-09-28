@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
-import { ArchivedBountyCard } from "./archived-bounty-card"
+import { ArchivedBountyCard } from "../../components/archived-bounty-card"
 
 interface ArchivedBountiesScreenProps {
   onBack?: () => void

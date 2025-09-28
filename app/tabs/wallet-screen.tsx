@@ -4,13 +4,13 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
-import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
-import { WithdrawScreen } from "../../components/withdraw-screen";
-import { useWallet } from '../../lib/wallet-context';
-import { useStripe } from '../../lib/stripe-context';
 import { stripeService } from '../../lib/services/stripe-service';
+import { useStripe } from '../../lib/stripe-context';
+import { useWallet } from '../../lib/wallet-context';
+import { AddMoneyScreen } from "./add-money-screen";
+import { TransactionHistoryScreen } from "./transaction-history-screen";
+import { WithdrawScreen } from "./withdraw-screen";
 
 
 interface WalletScreenProps {
