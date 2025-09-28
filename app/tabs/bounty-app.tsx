@@ -298,19 +298,7 @@ function BountyAppInner() {
         color="#10b981"
         opacity={0.12}
       />
-      {/* Top gradient covering safe area (status bar) for consistent highlight */}
-      <LinearGradient
-        colors={["#158f60", "#10613e90", "#10613e00"]}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: headerTopPad + 60, // cover status bar + slight fade
-          zIndex: 5,
-        }}
-        pointerEvents="none"
-      />
+      
       {/* Bottom fade so list items appear to disappear behind nav */}
       <LinearGradient
         colors={["rgba(13,77,53,0)", "rgba(13,77,53,0.75)", "#0d4d35"]}

@@ -12,7 +12,7 @@ import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Animated, Easing, Keyboard, LayoutChangeEvent, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -20,6 +20,7 @@ import { ArchivedBountiesScreen } from "../../components/archived-bounties-scree
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
+import { hapticFeedback } from '../../lib/haptic-feedback'
 import { useWallet } from '../../lib/wallet-context'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
@@ -69,6 +70,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
 
   const insets = useSafeAreaInsets()
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
+  const BOTTOM_NAV_HEIGHT = 84 // estimated bottom nav height to keep sticky bar above it
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const { balance, deposit } = useWallet()
@@ -76,6 +78,63 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const [validationError, setValidationError] = useState<string | null>(null)
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
   // Deadline now simple text entry; dedicated screen removed
+
+  // Track validity transition for haptic feedback
+  const wasStep1ValidRef = useRef(false)
+
+  // Animation ref for sticky action bar
+  const stickyBarAnim = useRef(new Animated.Value(0)).current
+  // Animated underline for tabs
+  const tabIndicatorX = useRef(new Animated.Value(0)).current
+  const tabContainerWidthRef = useRef(0)
+
+  const handleTabContainerLayout = (e: LayoutChangeEvent) => {
+    tabContainerWidthRef.current = e.nativeEvent.layout.width
+    // reposition indicator to current tab on layout
+    const idx = tabs.findIndex(t => t.id === activeTab)
+    if (idx >= 0) {
+      const segmentWidth = tabContainerWidthRef.current / tabs.length
+      tabIndicatorX.setValue(idx * segmentWidth)
+    }
+  }
+
+  // Animate sticky bar when entering the "new" tab
+  useEffect(() => {
+    if (activeTab === 'new') {
+      stickyBarAnim.setValue(0)
+      Animated.timing(stickyBarAnim, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start()
+    }
+  }, [activeTab, stickyBarAnim])
+
+  // Animate tab indicator when activeTab changes
+  useEffect(() => {
+    const idx = tabs.findIndex(t => t.id === activeTab)
+    if (idx < 0 || tabContainerWidthRef.current === 0) return
+    const segmentWidth = tabContainerWidthRef.current / tabs.length
+    Animated.timing(tabIndicatorX, {
+      toValue: idx * segmentWidth,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
+  }, [activeTab])
+
+  // Haptic feedback when Step 1 first becomes valid
+  useEffect(() => {
+    const missingTitle = !formData.title.trim()
+    const missingDescription = !formData.description.trim()
+    const missingLocation = formData.workType === 'in_person' && !formData.location.trim()
+    const isStep1Valid = !missingTitle && !missingDescription && !missingLocation
+    if (isStep1Valid && !wasStep1ValidRef.current) {
+      hapticFeedback.light()
+    }
+    wasStep1ValidRef.current = isStep1Valid
+  }, [formData.title, formData.description, formData.location, formData.workType])
 
   // Navigate to amount screen (replaces sticky bottom amount selection)
   const handleProceedToAmount = () => {
@@ -358,26 +417,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-          style={[
-            {
-              position: "absolute",
-              top: -55,
-              left: 0,
-              right: 0,
-              zIndex: 20,
-              backgroundColor: "#059669", // emerald-600
-              paddingTop: insets.top, // ensure content starts right under the status bar safe area
-            },
-            showShadow
-              ? {
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 6,
-                  elevation: 6,
-                }
-              : null,
-          ]}
+          style={{
+            position: 'absolute',
+            top: 0, // remove negative offset to eliminate layered color banding
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            backgroundColor: '#059669', // unified solid emerald
+            paddingTop: insets.top,
+          }}
         >
           {/* Header */}
           <View className="flex-row justify-between items-center px-4">
@@ -387,17 +435,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
             </View>
 
-            {/* Right: $40 placeholder and bookmark below it */}
-            <View className="flex items-end">
-              <Text className="text-white font-medium">$ {balance.toFixed(2)}</Text>
-              <TouchableOpacity className="mt-1 text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
+            {/* Right: balance + bookmark horizontally */}
+            <View className="flex-row items-center gap-3">
+              <Text className="text-white font-semibold tracking-wide">${' '}{balance.toFixed(2)}</Text>
+              <TouchableOpacity
+                accessibilityLabel="Archived bounties"
+                accessibilityRole="button"
+                className="p-2 rounded-full bg-emerald-700/40 active:opacity-80"
+                onPress={() => setShowArchivedBounties(true)}
+              >
                 <MaterialIcons name="bookmark" size={20} color="#ffffff" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Title (centered below header) */}
-          <View className="px-4">
+          {/* Title (centered below header) with extra spacing */}
+          <View className="px-4 mt-4 mb-4">
             <Text className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
@@ -409,33 +462,58 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
             </Text>
           </View>
 
-
-          {/* Tabs - Scrollable for iPhone */}
-          <View className="px-4 mb-3 bg-emerald-600">
-            <View className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
-              {tabs.map((tab) => (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "py-2 px-1 text-base font-medium transition-colors whitespace-nowrap touch-target-min",
-                    activeTab === tab.id ? "text-white border-b-2 border-white" : "text-emerald-200/70",
-                  )}
-                >
-                  <Text className={cn(
-                    "text-base font-medium",
-                    activeTab === tab.id ? "text-white" : "text-emerald-200/70",
-                  )}>
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          {/* Tabs - Fixed with animated indicator + extra separation */}
+          <View className="px-4 mb-4" /* removed inner bg to keep single flat color */>
+            <View
+              className="flex-row rounded-xl overflow-hidden border border-emerald-500/40 relative"
+              onLayout={handleTabContainerLayout}
+            >
+              {/* Animated underline spans one segment */}
+              <Animated.View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  height: 3,
+                  width: tabContainerWidthRef.current ? tabContainerWidthRef.current / tabs.length : 0,
+                  backgroundColor: '#ffffff',
+                  transform: [{ translateX: tabIndicatorX }],
+                }}
+              />
+              {tabs.map((tab, idx) => {
+                const isActive = activeTab === tab.id
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    onPress={() => setActiveTab(tab.id)}
+                    className={cn(
+                      'flex-1 py-3 items-center justify-center touch-target-min',
+                      isActive ? 'bg-emerald-500/20' : 'bg-transparent'
+                    )}
+                    style={{
+                      borderLeftWidth: idx === 0 ? 0 : 1,
+                      borderLeftColor: 'rgba(16,185,129,0.25)',
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text
+                      className={cn(
+                        'text-[11px] font-medium tracking-wide',
+                        isActive ? 'text-white' : 'text-emerald-200/70'
+                      )}
+                    >
+                      {tab.label.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
             </View>
           </View>
         </View>
 
   {/* Scrollable Content Area - starts under visible bottom of header */}
-  <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - HEADER_TOP_OFFSET) }}>
+  <View className="flex-1" style={{ paddingTop: headerHeight }}>
           {/* Error message */}
           {error && (
             <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
@@ -463,7 +541,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                   className="flex-1 px-2"
                   // 3) Ensure the last inputs won’t be hidden by the sticky bar
                   contentContainerStyle={{
-                    paddingBottom: insets.bottom + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + 12,
+                    paddingBottom: insets.bottom + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + 12 + BOTTOM_NAV_HEIGHT,
                   }}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
@@ -815,42 +893,96 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           </View>
         </View>
 
-        {/* Sticky Bottom Actions - Simplified "Next" button */}
+        {/* Sticky Bottom Actions - Enhanced step navigation + validation with animation */}
         {activeTab === "new" && (
-          <View
-            className="absolute left-0 right-0 bottom-0 bg-emerald-600/95 border-t border-emerald-500/30"
+          <Animated.View
+            className="absolute left-0 right-0 border-t border-emerald-500/30"
             style={{
               paddingHorizontal: 16,
-              paddingTop: 12,
-              paddingBottom: insets.bottom + 8,
-              minHeight: BOTTOM_ACTIONS_HEIGHT,
-              bottom: -50,
+              paddingTop: 10,
+              paddingBottom: insets.bottom + 5,
+              minHeight: BOTTOM_ACTIONS_HEIGHT + 22,
+              bottom: 60, // keep fully visible above bottom nav
+              backgroundColor: '#065f46', // solid emerald-800-ish to remove translucent gradient feel
+              opacity: stickyBarAnim,
+              transform: [{ translateY: stickyBarAnim.interpolate({ inputRange: [0,1], outputRange: [24,0] }) }],
+              shadowColor: '#000',
+              shadowOpacity: 0.25,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: -2 },
+              elevation: 12,
             }}
           >
-            {validationError && (
-              <View className="mb-3 p-3 bg-red-500/70 rounded-lg">
-                <Text className="text-white text-sm">{validationError}</Text>
-              </View>
-            )}
-            
-            {formData.isTimeSensitive && !formData.deadline && !validationError && (
-              <View className="mb-3 p-3 bg-amber-500/20 border border-amber-400/40 rounded-lg">
-                <Text className="text-amber-200 text-sm">Enter a deadline to mark this as urgent.</Text>
-              </View>
-            )}
-            
-            <TouchableOpacity
-              ref={postButtonRef}
-              onPress={handleProceedToAmount}
-              className="w-full px-8 py-4 rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/30"
-              activeOpacity={0.85}
-            >
-              <View className="flex-row items-center justify-center gap-3">
-                <Text className="font-bold text-white text-lg">Next: Set Amount</Text>
-                <MaterialIcons name="arrow-forward" size={22} color="white" />
-              </View>
-            </TouchableOpacity>
-          </View>
+            {(() => {
+              const missingTitle = !formData.title.trim()
+              const missingDescription = !formData.description.trim()
+              const missingLocation = formData.workType === 'in_person' && !formData.location.trim()
+              const isStep1Valid = !missingTitle && !missingDescription && !missingLocation
+              const nextLabel = isStep1Valid ? 'Next: Set Amount' : 'Complete Required Fields'
+              return (
+                <>
+                  <View className="flex-row items-center justify-between mb-2">
+                    <View className="flex-row items-center">
+                      <Text className="text-emerald-200 text-xs font-medium tracking-wide mr-2">STEP 1 OF 2</Text>
+                      <View className="flex-row gap-1">
+                        <View className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <View className="w-2 h-2 rounded-full bg-emerald-900/60" />
+                      </View>
+                    </View>
+                    {(!isStep1Valid) && (
+                      <Text className="text-[10px] text-amber-200">Fill all required fields</Text>
+                    )}
+                  </View>
+
+                  {validationError && (
+                    <View className="mb-2 p-3 bg-red-500/70 rounded-lg">
+                      <Text className="text-white text-xs leading-4">{validationError}</Text>
+                    </View>
+                  )}
+
+                  {formData.isTimeSensitive && !formData.deadline && !validationError && (
+                    <View className="mb-2 p-3 bg-amber-500/20 border border-amber-400/40 rounded-lg">
+                      <Text className="text-amber-200 text-xs">Enter a deadline to mark this as urgent.</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    ref={postButtonRef}
+                    onPress={() => {
+                      if (!isStep1Valid) {
+                        let msg = 'Please complete required fields:'
+                        if (missingTitle) msg += ' Title;'
+                        if (missingDescription) msg += ' Description;'
+                        if (missingLocation) msg += ' Location;'
+                        setValidationError(msg.trim())
+                        return
+                      }
+                      setValidationError(null)
+                      handleProceedToAmount()
+                    }}
+                    disabled={!isStep1Valid}
+                    className={cn(
+                      'w-full px-8 py-4 rounded-2xl border-2 flex-row items-center justify-center gap-3',
+                      isStep1Valid
+                        ? 'border-emerald-300 bg-emerald-500/30 active:opacity-80'
+                        : 'border-emerald-500/30 bg-emerald-800/40'
+                    )}
+                    activeOpacity={0.85}
+                  >
+                    <Text className={cn('font-bold text-lg', isStep1Valid ? 'text-white' : 'text-emerald-400/60')}>{nextLabel}</Text>
+                    <MaterialIcons name="arrow-forward" size={22} color={isStep1Valid ? 'white' : 'rgba(110,231,183,0.4)'} />
+                  </TouchableOpacity>
+                  {!isStep1Valid && (
+                    <View className="mt-2">
+                      <Text className="text-[11px] text-emerald-200/70 leading-4">
+                        Title, description{formData.workType==='in_person' ? ', and location' : ''} are required to continue.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )
+            })()}
+          </Animated.View>
         )}
 
   {/* Bottom navigation is provided by the app container (BountyApp) */}
@@ -874,7 +1006,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           />
         </View>
       )}
-      {/* Deadline screen removed; using inline text input */}
     </View>
     </TouchableWithoutFeedback>
   )
