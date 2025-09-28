@@ -7,10 +7,18 @@ import { MaterialIcons } from "@expo/vector-icons"
 interface AddBountyAmountScreenProps {
   onBack: () => void
   onAddAmount: (amount: number, isForHonor: boolean) => void
+  onProceedToConfirmation?: () => void
   initialAmount?: number
+  showProceedButton?: boolean
 }
 
-export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
+export function AddBountyAmountScreen({ 
+  onBack, 
+  onAddAmount, 
+  onProceedToConfirmation,
+  initialAmount = 0,
+  showProceedButton = false
+}: AddBountyAmountScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
   const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
@@ -78,6 +86,11 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     const numAmount = Number.parseFloat(amount)
     if (!isNaN(numAmount)) {
       onAddAmount(numAmount, isForHonor)
+      
+      // If we should proceed to confirmation, do that instead of going back
+      if (showProceedButton && onProceedToConfirmation) {
+        onProceedToConfirmation()
+      }
     }
   }
 
@@ -276,6 +289,27 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       borderRadius: 8,
       alignItems: 'center',
     },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 4,
+    },
+    progressText: {
+      fontSize: 12,
+      color: '#6EE7B7', // emerald-300
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    progressDotComplete: {
+      backgroundColor: '#10B981', // emerald-400
+    },
+    progressDotActive: {
+      backgroundColor: '#10B981', // emerald-400
+    },
   });
 
   return (
@@ -294,6 +328,15 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Title */}
       <View style={styles.titleContainer}>
+        {showProceedButton && (
+          <View style={[styles.progressContainer, { marginBottom: 8 }]}>
+            <Text style={styles.progressText}>Step 2 of 2: Set Amount</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={[styles.progressDot, styles.progressDotComplete]}></View>
+              <View style={[styles.progressDot, styles.progressDotActive]}></View>
+            </View>
+          </View>
+        )}
         <Text style={styles.title}>Add Bounty Amount</Text>
       </View>
 
@@ -379,7 +422,9 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           <Text style={[
             styles.addButtonText,
             !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
-          ]}>Add</Text>
+          ]}>
+            {showProceedButton ? "Continue" : "Add"}
+          </Text>
 
         </TouchableOpacity>
       </View>
