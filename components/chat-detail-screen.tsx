@@ -110,7 +110,7 @@ export function ChatDetailScreen({
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center">
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
             <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
           </View>
           <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
@@ -134,7 +134,7 @@ export function ChatDetailScreen({
   }}
   className="mr-1 p-2 touch-target-min"
 >
-  <MaterialIcons name="arrow-back" size={24} color="#000000" />
+  <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
 </TouchableOpacity>
           <Avatar className="h-10 w-10 mr-2">
             <AvatarImage src={conversation.avatar} alt={conversation.name} />
@@ -149,10 +149,10 @@ export function ChatDetailScreen({
         </View>
         <View className="flex-row gap-3">
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="phone" size={24} color="#000000" />
+            <MaterialIcons name="phone" size={24} color="#fffef5" />
           </TouchableOpacity>
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="videocam" size={24} color="#000000" />
+            <MaterialIcons name="videocam" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
       </View>

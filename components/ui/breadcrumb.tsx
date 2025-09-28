@@ -37,7 +37,7 @@ const BreadcrumbText = React.forwardRef<Text, { children?: React.ReactNode }>((p
 BreadcrumbText.displayName = "BreadcrumbText"
 
 const BreadcrumbSeparator: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <View>{children ?? <MaterialIcons name="keyboard-arrow-right" size={20} color="#000" />}</View>
+  <View>{children ?? <MaterialIcons name="keyboard-arrow-right" size={20} color="#fffef5" />}</View>
 )
 
 export { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator, BreadcrumbText };

@@ -98,7 +98,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
               </TouchableOpacity>
               {text.length > 0 ? (
                 <TouchableOpacity onPress={handleSend} disabled={isSending} className="h-9 w-9 rounded-full bg-emerald-500 items-center justify-center mb-1">
-                  <MaterialIcons name={isSending ? 'hourglass-empty' : 'send'} size={18} color="#000" />
+                  <MaterialIcons name={isSending ? 'hourglass-empty' : 'send'} size={18} color="#fffef5" />
                 </TouchableOpacity>
               ) : (
                 <>
