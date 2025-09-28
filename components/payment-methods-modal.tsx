@@ -101,7 +101,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
           <TouchableOpacity onPress={onClose} style={{ padding: 4, backgroundColor: 'transparent', borderWidth: 0 }}>
-            <MaterialIcons name="arrow-back" size={24} color="#000000" />
+            <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
           <Text style={{ marginLeft: 12, fontSize: 18, fontWeight: '500', color: 'white' }}>Payment Methods</Text>
         </View>

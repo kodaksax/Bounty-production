@@ -214,12 +214,12 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       {/* Header — left: BOUNTY brand, right: back + settings */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
           <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
         <View className="flex-row items-center">
           <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
-            <MaterialIcons name="settings" size={24} color="#000000" />
+            <MaterialIcons name="settings" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
       </View>
@@ -232,7 +232,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <View className="flex-row items-center mb-4">
               <View className="relative">
                 <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
-                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                  <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
                 </View>
                 <View className="absolute -top-1 -right-1 bg-red-500 rounded">
                   <Text className="text-white text-xs font-bold px-1.5 py-0.5">
@@ -317,7 +317,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                 <View key={i} className="bg-emerald-700/30 rounded-lg p-3">
                   <View className="flex justify-between items-center mb-1">
                     <Text className="text-sm font-medium flex items-center gap-1">
-                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#000000" />}
+                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={14} color="#fffef5" />}
                       {activity.type === "job_accepted" && <MaterialIcons name="check-circle" size={14} color="#ffffff" />}
                       {activity.type === "badge_earned" && <MaterialIcons name="emoji-events" size={14} color="#f59e0b" />}
                       {activity.type === "bounty_posted"
@@ -355,9 +355,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                     className={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
                   >
                     {i % 3 === 0 ? (
-                      <MaterialIcons name="gps-fixed" size={20} color="#000000" />
+                      <MaterialIcons name="gps-fixed" size={20} color="#fffef5" />
                     ) : i % 3 === 1 ? (
-                      <MaterialIcons name="favorite" size={20} color="#000000" />
+                      <MaterialIcons name="favorite" size={20} color="#fffef5" />
                     ) : (
                       <MaterialIcons name="public" size={20} color={isEarned ? "#f59e0b" : "#34d399"} />
                     )}
