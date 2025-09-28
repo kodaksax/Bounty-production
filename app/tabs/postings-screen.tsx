@@ -476,13 +476,16 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                   <View className="space-y-4">
                     {/* Progress Indicator */}
                     <View className="bg-emerald-700/30 rounded-lg p-4 mb-2">
-                      <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center justify-between mb-2">
                         <Text className="text-emerald-200 text-sm">Step 1 of 2: Basic Details</Text>
                         <View className="flex-row space-x-2">
                           <View className="w-2 h-2 rounded-full bg-emerald-400"></View>
                           <View className="w-2 h-2 rounded-full bg-emerald-700"></View>
                         </View>
                       </View>
+                      <Text className="text-emerald-300/80 text-xs">
+                        Fill out your bounty details, then proceed to set the amount and confirm posting.
+                      </Text>
                     </View>
 
                     <View className="space-y-3">
@@ -839,12 +842,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
             <TouchableOpacity
               ref={postButtonRef}
               onPress={handleProceedToAmount}
-              className="w-full px-8 py-4 rounded-2xl border border-emerald-300/50 bg-emerald-700/30"
+              className="w-full px-8 py-4 rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/30"
               activeOpacity={0.85}
             >
-              <View className="flex-row items-center justify-center gap-2">
-                <Text className="font-semibold text-white text-lg">Next</Text>
-                <MaterialIcons name="arrow-forward" size={20} color="white" />
+              <View className="flex-row items-center justify-center gap-3">
+                <Text className="font-bold text-white text-lg">Next: Set Amount</Text>
+                <MaterialIcons name="arrow-forward" size={22} color="white" />
               </View>
             </TouchableOpacity>
           </View>

@@ -329,7 +329,7 @@ export function AddBountyAmountScreen({
       {/* Title */}
       <View style={styles.titleContainer}>
         {showProceedButton && (
-          <View style={[styles.progressContainer, { marginBottom: 8 }]}>
+          <View style={[styles.progressContainer, { marginBottom: 12 }]}>
             <Text style={styles.progressText}>Step 2 of 2: Set Amount</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={[styles.progressDot, styles.progressDotComplete]}></View>
@@ -337,7 +337,9 @@ export function AddBountyAmountScreen({
             </View>
           </View>
         )}
-        <Text style={styles.title}>Add Bounty Amount</Text>
+        <Text style={styles.title}>
+          {showProceedButton ? "Set Your Bounty Amount" : "Add Bounty Amount"}
+        </Text>
       </View>
 
       {/* Amount Display */}
