@@ -55,7 +55,7 @@ export function EditProfileScreen({
         <View className="p-4 pt-8 pb-2">
           <View className="flex justify-between items-center">
             <View className="flex items-center">
-              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+              <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
               <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
             </View>
             <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
@@ -67,7 +67,7 @@ export function EditProfileScreen({
         <View className="px-4 py-2 flex items-center justify-between bg-emerald-700/30">
           <View className="flex items-center">
             <TouchableOpacity onPress={onBack} className="mr-2">
-              <MaterialIcons name="arrow-back" size={24} color="#000000" />
+              <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
             </TouchableOpacity>
             <Text className="text-lg">Settings</Text>
           </View>
