@@ -89,11 +89,11 @@ const badgeStyles = StyleSheet.create({
   },
   outline: {
     backgroundColor: 'transparent',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 254, 245, 0.2)', // Using company specified header text color
   },
   success: {
-    backgroundColor: '#10b981',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: '#00912C', // Company specified primary green base
+    borderColor: 'rgba(0, 145, 44, 0.3)', // Using primary brand color
   },
   warning: {
     backgroundColor: '#f59e0b',
@@ -105,22 +105,22 @@ const badgeStyles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   defaultText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
   secondaryText: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 254, 245, 0.8)', // Derived from company specified header text
   },
   destructiveText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
   outlineText: {
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 254, 245, 0.9)', // Derived from company specified header text
   },
   successText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
   warningText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
 });
 
