@@ -97,7 +97,7 @@ export function AddBountyAmountScreen({
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#059669', // emerald-600
+      backgroundColor: '#1a3d2e', // Updated to use new primary background
     },
     header: {
       flexDirection: 'row',
@@ -164,10 +164,10 @@ export function AddBountyAmountScreen({
       justifyContent: 'center',
     },
     toggleButtonActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
     toggleButtonInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#61656b', // Company specified trim color
     },
     toggleCircle: {
       position: 'absolute',
@@ -189,7 +189,7 @@ export function AddBountyAmountScreen({
     },
     honorDescriptionText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#c3c3c4', // Company specified subtle highlight color
     },
     keypadContainer: {
       flex: 1,
@@ -230,18 +230,18 @@ export function AddBountyAmountScreen({
       justifyContent: 'center',
     },
     addButtonEnabled: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#2d5240', // Updated to use new secondary background
     },
     addButtonDisabled: {
-      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-800/50
+      backgroundColor: 'rgba(97, 101, 107, 0.5)', // Company specified trim color with transparency
     },
     addButtonText: {
       fontWeight: '500',
-      color: 'white',
+      color: '#fffef5', // Company specified header text/logos color
       fontSize: 16,
     },
     addButtonTextDisabled: {
-      color: '#6EE7B7', // emerald-300
+      color: '#929497', // Company specified highlight color
     },
     // Style aliases to match JSX usage
     toggle: {
@@ -252,10 +252,10 @@ export function AddBountyAmountScreen({
       justifyContent: 'center',
     },
     toggleActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
     toggleInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#61656b', // Company specified trim color
     },
     toggleSlider: {
       position: 'absolute',
@@ -277,7 +277,7 @@ export function AddBountyAmountScreen({
     },
     honorText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#c3c3c4', // Company specified subtle highlight color
     },
     bottomButtonContainer: {
       padding: 16,
@@ -297,7 +297,7 @@ export function AddBountyAmountScreen({
     },
     progressText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#c3c3c4', // Company specified subtle highlight color
     },
     progressDot: {
       width: 8,
@@ -305,10 +305,10 @@ export function AddBountyAmountScreen({
       borderRadius: 4,
     },
     progressDotComplete: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
     progressDotActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
   });
 

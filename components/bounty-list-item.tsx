@@ -71,7 +71,7 @@ export const BountyListItem = React.memo(function BountyListItem({ id, title, us
         >
         {/* Leading icon/avatar */}
         <View style={styles.leadingIconWrap} accessibilityElementsHidden={true}>
-          <MaterialIcons name="paid" size={18} color="#a7f3d0" />
+          <MaterialIcons name="paid" size={18} color="#c3c3c4" />
         </View>
 
         {/* Main content */}
@@ -87,7 +87,7 @@ export const BountyListItem = React.memo(function BountyListItem({ id, title, us
         {/* Trailing price and chevron */}
         <View style={styles.trailing} accessibilityElementsHidden={true}>
           <Text style={styles.price}>${price}</Text>
-          <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
+          <MaterialIcons name="chevron-right" size={20} color="#929497" />
         </View>
         </TouchableOpacity>
       </Animated.View>
@@ -127,14 +127,14 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)', // spy-glow tinted
+    backgroundColor: 'rgba(0, 145, 44, 0.12)', // Updated to use company specified primary green
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderColor: 'rgba(0, 145, 44, 0.25)', // Updated to use company specified primary green
     // Add subtle inner glow
-    shadowColor: '#10b981',
+    shadowColor: '#00912C', // Company specified primary green base
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
     fontWeight: '700',
     fontSize: 16,
     marginBottom: 6,
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   username: {
-    color: '#a7f3d0', // emerald-200 with slight opacity
+    color: '#c3c3c4', // Company specified subtle highlight color
     fontSize: 13,
     fontWeight: '500',
     opacity: 0.9,
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 2,
-    backgroundColor: 'rgba(167, 243, 208, 0.6)',
+    backgroundColor: 'rgba(195, 195, 196, 0.6)', // Company specified subtle highlight color with transparency
     marginHorizontal: 8,
   },
   distance: {

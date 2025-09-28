@@ -4,37 +4,43 @@
 
 @layer base {
   :root {
-    /* Spy-like dark theme foundation */
-    --background: 218 23% 4%;
-    --foreground: 210 40% 98%;
-    --card: 220 23% 6%;
-    --card-foreground: 210 40% 98%;
-    --popover: 220 23% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 142 76% 36%;
-    --primary-foreground: 218 23% 4%;
-    --secondary: 220 23% 12%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 220 23% 10%;
-    --muted-foreground: 215.4 16.3% 65%;
-    --accent: 220 23% 14%;
-    --accent-foreground: 210 40% 98%;
+    /* Company branding aligned theme foundation */
+    --background: 26 61 46; /* Updated to align with primary brand */
+    --foreground: 255 254 245; /* Company specified header text color */
+    --card: 45 82 64; /* Updated background secondary */
+    --card-foreground: 255 254 245;
+    --popover: 45 82 64;
+    --popover-foreground: 255 254 245;
+    --primary: 0 145 44; /* Company specified primary green base */
+    --primary-foreground: 255 254 245;
+    --secondary: 45 82 64;
+    --secondary-foreground: 255 254 245;
+    --muted: 45 82 64;
+    --muted-foreground: 97 101 107; /* Company specified trim color */
+    --accent: 45 82 64;
+    --accent-foreground: 255 254 245;
     --destructive: 0 62.8% 50.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 23% 18%;
-    --input: 220 23% 12%;
-    --ring: 142 76% 36%;
+    --destructive-foreground: 255 254 245;
+    --border: 97 101 107; /* Company specified trim color */
+    --input: 45 82 64;
+    --ring: 0 145 44; /* Company specified primary green */
     --radius: 0.75rem;
 
-    /* Spy-theme colors with green base */
-    --spy-dark: 10 58 36; /* dark emerald */
-    --spy-darker: 8 46 29; /* darker emerald */
-    --spy-surface: 12 58 36; /* emerald surface */
-    --spy-surface-hover: 16 74 46; /* lighter emerald surface */
-    --spy-border: 16 185 129; /* emerald border */
-    --spy-glow: 142 76% 36%;
-    --spy-accent-blue: 210 100% 60%;
-    --spy-accent-purple: 270 80% 65%;
+    /* Brand-aligned theme colors */
+    --brand-primary: 0 145 44; /* Company specified primary green base */
+    --brand-primary-dark: 0 116 35; /* Darker shade of primary */
+    --brand-surface: 45 82 64; /* Updated surface color */
+    --brand-surface-hover: 58 102 81; /* Lighter surface for hover */
+    --brand-border: 0 145 44; /* Primary green for borders */
+    --brand-glow: 0 145 44; /* Primary green for glow effects */
+    --brand-accent-blue: 210 100% 60%;
+    --brand-accent-purple: 270 80% 65%;
+
+    /* Brand text colors */
+    --brand-text-primary: 255 254 245; /* Company specified header text */
+    --brand-text-trim: 97 101 107; /* Company specified trim color */
+    --brand-text-highlight: 146 148 151; /* Company specified highlight color */
+    --brand-text-subtle: 195 195 196; /* Company specified subtle highlight color */
 
     /* iPhone-specific variables */
     --iphone-header-height: 60px;
@@ -49,36 +55,36 @@
   }
 
   .dark {
-    /* Enhanced spy-like dark theme */
-    --background: 218 23% 3%;
-    --foreground: 210 40% 98%;
-    --card: 220 23% 6%;
-    --card-foreground: 210 40% 98%;
-    --popover: 220 23% 4%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 142 76% 36%;
-    --primary-foreground: 218 23% 3%;
-    --secondary: 220 23% 10%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 220 23% 8%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 220 23% 12%;
-    --accent-foreground: 210 40% 98%;
+    /* Enhanced brand-aligned dark theme */
+    --background: 26 61 46;
+    --foreground: 255 254 245;
+    --card: 45 82 64;
+    --card-foreground: 255 254 245;
+    --popover: 26 61 46;
+    --popover-foreground: 255 254 245;
+    --primary: 0 145 44;
+    --primary-foreground: 255 254 245;
+    --secondary: 45 82 64;
+    --secondary-foreground: 255 254 245;
+    --muted: 45 82 64;
+    --muted-foreground: 97 101 107;
+    --accent: 45 82 64;
+    --accent-foreground: 255 254 245;
     --destructive: 0 62.8% 50.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 23% 16%;
-    --input: 220 23% 10%;
-    --ring: 142 76% 36%;
+    --destructive-foreground: 255 254 245;
+    --border: 97 101 107;
+    --input: 45 82 64;
+    --ring: 0 145 44;
 
-    /* Spy-theme colors enhanced for dark mode with green base */
-    --spy-dark: 8 46 29; /* darker emerald */
-    --spy-darker: 6 37 23; /* darkest emerald */
-    --spy-surface: 10 58 36; /* dark emerald surface */
-    --spy-surface-hover: 14 70 43; /* lighter emerald surface */
-    --spy-border: 16 185 129; /* emerald border */
-    --spy-glow: 142 76% 40%;
-    --spy-accent-blue: 210 100% 70%;
-    --spy-accent-purple: 270 80% 75%;
+    /* Brand-aligned theme colors for dark mode */
+    --brand-primary: 0 145 44;
+    --brand-primary-dark: 0 116 35;
+    --brand-surface: 45 82 64;
+    --brand-surface-hover: 58 102 81;
+    --brand-border: 0 145 44;
+    --brand-glow: 0 145 44;
+    --brand-accent-blue: 210 100% 70%;
+    --brand-accent-purple: 270 80% 75%;
   }
 }
 
@@ -114,38 +120,38 @@
     min-width: 44px;
   }
 
-  /* Spy-theme utility classes */
-  .spy-glass {
-    background: hsla(var(--spy-surface), 0.6);
+  /* Brand-aligned utility classes */
+  .brand-glass {
+    background: hsla(var(--brand-surface), 0.6);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid hsla(var(--spy-border), 0.3);
+    border: 1px solid hsla(var(--brand-border), 0.3);
   }
 
-  .spy-glow {
-    box-shadow: 0 0 20px hsla(var(--spy-glow), 0.2);
+  .brand-glow {
+    box-shadow: 0 0 20px hsla(var(--brand-glow), 0.2);
   }
 
-  .spy-glow-hover {
+  .brand-glow-hover {
     transition: box-shadow var(--micro-animation-duration) ease;
   }
 
-  .spy-glow-hover:hover {
-    box-shadow: 0 0 30px hsla(var(--spy-glow), 0.4);
+  .brand-glow-hover:hover {
+    box-shadow: 0 0 30px hsla(var(--brand-glow), 0.4);
   }
 
-  .spy-shimmer {
+  .brand-shimmer {
     background: linear-gradient(
       90deg,
       transparent,
-      hsla(var(--spy-glow), 0.1),
+      hsla(var(--brand-glow), 0.1),
       transparent
     );
     background-size: 200px 100%;
     animation: shimmer 2s infinite;
   }
 
-  .spy-morph {
+  .brand-morph {
     animation: morphGlow 4s ease-in-out infinite;
   }
 
@@ -204,26 +210,26 @@
     animation: iphone-fade-out var(--micro-animation-duration) ease forwards;
   }
 
-  .spy-pulse-glow {
+  .brand-pulse-glow {
     animation: pulseGlow 3s ease-in-out infinite;
   }
 
-  .spy-slide-up-spring {
+  .brand-slide-up-spring {
     animation: slideUpSpring var(--card-animation-duration) var(--card-animation-easing) forwards;
   }
 
   /* Enhanced layout utilities */
-  .spy-surface {
-    background: hsl(var(--spy-surface));
-    border: 1px solid hsl(var(--spy-border));
+  .brand-surface {
+    background: hsl(var(--brand-surface));
+    border: 1px solid hsl(var(--brand-border));
   }
 
-  .spy-surface-elevated {
-    background: hsl(var(--spy-surface));
-    border: 1px solid hsl(var(--spy-border));
+  .brand-surface-elevated {
+    background: hsl(var(--brand-surface));
+    border: 1px solid hsl(var(--brand-border));
     box-shadow: 
-      0 4px 16px hsla(var(--spy-dark), 0.4),
-      0 2px 8px hsla(var(--spy-dark), 0.2);
+      0 4px 16px hsla(var(--brand-primary-dark), 0.4),
+      0 2px 8px hsla(var(--brand-primary-dark), 0.2);
   }
 
   /* Custom styles for mobile optimization */
@@ -277,22 +283,22 @@
     @apply touch-target-min;
   }
 
-  /* Spy-themed scrollbar styling */
+  /* Brand-aligned scrollbar styling */
   ::-webkit-scrollbar {
     width: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: hsl(var(--spy-surface));
+    background: hsl(var(--brand-surface));
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--spy-border));
+    background: hsl(var(--brand-border));
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--spy-glow) / 0.6);
+    background: hsl(var(--brand-glow) / 0.6);
   }
 }
 
@@ -437,10 +443,10 @@
 @keyframes morphGlow {
   0%, 100% {
     border-radius: 8px;
-    box-shadow: 0 4px 20px hsla(var(--spy-glow), 0.15);
+    box-shadow: 0 4px 20px hsla(var(--brand-glow), 0.15);
   }
   50% {
     border-radius: 16px;
-    box-shadow: 0 8px 40px hsla(var(--spy-glow), 0.25);
+    box-shadow: 0 8px 40px hsla(var(--brand-glow), 0.25);
   }
 }

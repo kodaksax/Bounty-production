@@ -222,7 +222,7 @@ function BountyAppInner() {
                     <MaterialIcons
                       name={item.icon}
                       size={16}
-                      color={isActive ? '#052e1b' : '#d1fae5'}
+                      color={isActive ? '#1a3d2e' : '#c3c3c4'}
                       style={{ marginRight: 8 }}
                       accessibilityElementsHidden={true}
                     />
@@ -249,7 +249,7 @@ function BountyAppInner() {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fffef5" />}
         ListEmptyComponent={() => {
           if (isLoading) {
             return <BountySkeleton count={3} />;
@@ -295,13 +295,27 @@ function BountyAppInner() {
       <FogEffect 
         intensity={4}
         speed={0.8}
-        color="#10b981"
+        color="#00912C"
         opacity={0.12}
       />
-      
+
+      {/* Top gradient covering safe area (status bar) for consistent highlight */}
+      <LinearGradient
+        colors={["#2d5240", "#1a3d2e90", "#1a3d2e00"]}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: headerTopPad + 60, // cover status bar + slight fade
+          zIndex: 5,
+        }}
+        pointerEvents="none"
+      />
+
       {/* Bottom fade so list items appear to disappear behind nav */}
       <LinearGradient
-        colors={["rgba(13,77,53,0)", "rgba(13,77,53,0.75)", "#0d4d35"]}
+        colors={["rgba(26,61,46,0)", "rgba(26,61,46,0.75)", "#1a3d2e"]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 50, height: 80, zIndex: 50 }}
         pointerEvents="none"
       />
@@ -339,7 +353,7 @@ export function BountyApp() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#0d4d35', // lighter emerald base for better fog contrast
+    backgroundColor: '#1a3d2e', // Updated to use new primary background
     position: 'relative'
   },
   dashboardArea: { flex: 1 },
@@ -349,9 +363,9 @@ const styles = StyleSheet.create({
     right: 0, 
     top: 0, 
     zIndex: 10, 
-    backgroundColor: '#10613e', // lighter emerald for header
+    backgroundColor: '#2d5240', // Updated to use new secondary background
     // Add subtle gradient overlay
-    shadowColor: '#10b981', // spy-glow
+    shadowColor: '#00912C', // Company specified primary green base
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -372,19 +386,19 @@ const styles = StyleSheet.create({
     marginLeft: 8, 
     fontSize: 20, 
     fontWeight: '700', 
-    color: '#ffffff', 
+    color: '#fffef5', // Company specified header text/logos color
     letterSpacing: 1.2,
     // Add subtle text shadow
-    textShadowColor: '#10b981',
+    textShadowColor: '#00912C', // Company specified primary green base
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },
   headerBalance: { 
     fontSize: 18, 
     fontWeight: '600', 
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
     // Add premium styling
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(0, 145, 44, 0.1)', // Using company specified primary green
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -447,15 +461,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   chipActive: { 
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    backgroundColor: 'rgba(0, 145, 44, 0.15)', // Using company specified primary green
+    borderColor: 'rgba(0, 145, 44, 0.4)', // Using company specified primary green
     // Add glow effect for active state
-    shadowColor: '#10b981',
+    shadowColor: '#00912C', // Company specified primary green base
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
-  chipLabelActive: { color: '#052e1b' },
+  chipLabel: { color: '#c3c3c4', fontSize: 14, fontWeight: '600' }, // Company specified subtle highlight color
+  chipLabelActive: { color: '#1a3d2e' }, // Updated to use new primary background
 })

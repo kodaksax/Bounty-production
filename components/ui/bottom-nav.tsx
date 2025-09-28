@@ -75,7 +75,7 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
           accessibilityLabel="Create new bounty or message"
           accessibilityState={{ selected: activeScreen === "create" }}
         >
-          <MaterialIcons name="chat" color={activeScreen === "create" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="chat" color={activeScreen === "create" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
         <TouchableOpacity 
           onPress={() => handleNavigate("wallet")} 
@@ -85,7 +85,7 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
           accessibilityLabel="View wallet and transactions"
           accessibilityState={{ selected: activeScreen === "wallet" }}
         >
-          <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="account-balance-wallet" color={activeScreen === "wallet" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
         <Animated.View
           style={[
@@ -107,7 +107,7 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
             accessibilityState={{ selected: activeScreen === "bounty" }}
             accessibilityHint="This is the main screen with available bounties"
           >
-            <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fff" : "#d1fae5"} size={28} />
+            <MaterialIcons name="gps-fixed" color={activeScreen === "bounty" ? "#fffef5" : "#c3c3c4"} size={28} />
           </TouchableOpacity>
         </Animated.View>
         <TouchableOpacity 
@@ -118,7 +118,7 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
           accessibilityLabel="Search and browse postings"
           accessibilityState={{ selected: activeScreen === "postings" }}
         >
-          <MaterialIcons name="search" color={activeScreen === "postings" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="search" color={activeScreen === "postings" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
         <TouchableOpacity 
           onPress={() => handleNavigate("profile")} 
@@ -128,7 +128,7 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
           accessibilityLabel="View and edit profile"
           accessibilityState={{ selected: activeScreen === "profile" }}
         >
-          <MaterialIcons name="person" color={activeScreen === "profile" ? "#fff" : "#d1fae5"} size={24} />
+          <MaterialIcons name="person" color={activeScreen === "profile" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
       </View>
     </View>
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
   height: 120,
-    backgroundColor: "#0d4d35", // lighter emerald base to match main background
+    backgroundColor: "#1a3d2e", // Updated to use new primary background
     paddingHorizontal: 28,
     paddingBottom: 8,
     borderTopLeftRadius: 24,
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     elevation: 20,
     // Enhanced glass-morphism effect
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)", // slightly more visible emerald border
+    borderColor: "rgba(0, 145, 44, 0.25)", // Updated to use company specified primary green
     // Add sophisticated shadow
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: -8 },
@@ -173,15 +173,15 @@ const styles = StyleSheet.create({
   centerButton: {
     height: 64,
     width: 64,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    backgroundColor: "rgba(0, 145, 44, 0.1)", // Updated to use company specified primary green
     borderWidth: 2,
-    borderColor: "#10b981", // spy-glow
+    borderColor: "#00912C", // Company specified primary green base
     borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
     marginTop: -24,
     // Add sophisticated glow effect
-    shadowColor: "#10b981",
+    shadowColor: "#00912C", // Company specified primary green base
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 20,

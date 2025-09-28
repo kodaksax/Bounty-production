@@ -117,11 +117,11 @@ const buttonStyles = StyleSheet.create({
     transform: [{ scale: 1 }],
   },
   default: {
-    backgroundColor: '#10b981', // spy-glow
+    backgroundColor: '#00912C', // Company specified primary green base
     // Enhanced inner glow effect for premium feel
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)',
-    shadowColor: '#10b981',
+    borderColor: 'rgba(0, 145, 44, 0.4)', // Using primary brand color
+    shadowColor: '#00912C', // Company specified primary green
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -132,14 +132,14 @@ const buttonStyles = StyleSheet.create({
     borderColor: 'rgba(220, 38, 38, 0.3)',
   },
   outline: {
-    backgroundColor: 'rgba(16, 20, 24, 0.6)',
+    backgroundColor: 'rgba(26, 61, 46, 0.6)', // Updated to use new background primary
     borderWidth: 1.5,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
+    borderColor: 'rgba(97, 101, 107, 0.5)', // Company specified trim color
   },
   secondary: {
-    backgroundColor: 'rgba(16, 20, 24, 0.8)',
+    backgroundColor: 'rgba(26, 61, 46, 0.8)', // Updated to use new background primary
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.4)',
+    borderColor: 'rgba(97, 101, 107, 0.4)', // Company specified trim color
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -176,7 +176,7 @@ const buttonStyles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   defaultText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
     // Add text shadow for premium feel
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
@@ -189,16 +189,16 @@ const buttonStyles = StyleSheet.create({
     textShadowRadius: 2,
   },
   outlineText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
   secondaryText: {
-    color: '#ffffff',
+    color: '#fffef5', // Company specified header text/logos color
   },
   ghostText: {
-    color: '#a7f3d0',
+    color: '#c3c3c4', // Company specified subtle highlight color
   },
   linkText: {
-    color: '#60a5fa',
+    color: '#00912C', // Company specified primary green base for links
     textDecorationLine: 'underline',
   },
   disabledText: {

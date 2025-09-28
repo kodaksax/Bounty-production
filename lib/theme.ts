@@ -2,39 +2,43 @@
 // Spy-themed emerald color palette with glass-morphism effects
 
 export const colors = {
-  // Primary emerald palette (spy-themed)
+  // Primary green palette (company branding)
   primary: {
-    50: '#ecfdf5',
-    100: '#d1fae5',
-    200: '#a7f3d0',
-    300: '#6ee7b7',
-    400: '#34d399',
-    500: '#10b981', // Main brand color
-    600: '#059669',
-    700: '#047857',
-    800: '#065f46',
-    900: '#064e3b',
-    950: '#052e1b',
+    50: '#e6f7ec',
+    100: '#ccefda',
+    200: '#99deb4',
+    300: '#66ce8f',
+    400: '#33bd69',
+    500: '#00912C', // Main brand color - company specified
+    600: '#007423',
+    700: '#00571a',
+    800: '#003a12',
+    900: '#001d09',
+    950: '#000e04',
   },
   
-  // Background colors (darker emerald theme)
+  // Background colors (darker green theme aligned with branding)
   background: {
-    primary: '#0d4d35', // Main background
-    secondary: '#10613e', // Header background
-    surface: 'rgba(16, 97, 62, 0.75)', // Card surface
-    overlay: 'rgba(16, 97, 62, 0.3)', // Glass-morphism overlay
+    primary: '#1a3d2e', // Main background - darker tone of primary
+    secondary: '#2d5240', // Header background - complementary to primary
+    surface: 'rgba(45, 82, 64, 0.75)', // Card surface
+    overlay: 'rgba(45, 82, 64, 0.3)', // Glass-morphism overlay
   },
   
-  // Text colors
+  // Text colors (using company specified header text color)
   text: {
-    primary: '#ffffff',
-    secondary: 'rgba(255, 255, 255, 0.8)',
-    muted: 'rgba(255, 255, 255, 0.6)',
-    disabled: 'rgba(255, 255, 255, 0.4)',
+    primary: '#fffef5', // Company specified header text/logos color
+    secondary: 'rgba(255, 254, 245, 0.8)', // Derived from primary text
+    muted: 'rgba(255, 254, 245, 0.6)', // Derived from primary text
+    disabled: 'rgba(255, 254, 245, 0.4)', // Derived from primary text
+    // Trim colors for secondary content
+    trim: '#61656b', // Company specified trim color
+    highlight: '#929497', // Company specified highlight color
+    subtle: '#c3c3c4', // Company specified subtle highlight color
   },
   
-  // Status colors
-  success: '#10b981',
+  // Status colors (maintaining functionality with brand-aligned tones)
+  success: '#00912C', // Using primary brand color for success
   warning: '#f59e0b',
   error: '#dc2626',
   info: '#3b82f6',
@@ -42,12 +46,13 @@ export const colors = {
   // Special colors
   gold: '#fbbf24', // For pricing, premium features
   
-  // Border colors
+  // Border colors (aligned with new primary)
   border: {
-    default: 'rgba(16, 185, 129, 0.4)',
-    muted: 'rgba(16, 185, 129, 0.2)',
-    focus: '#10b981',
+    default: 'rgba(0, 145, 44, 0.4)', // Using primary brand color
+    muted: 'rgba(0, 145, 44, 0.2)', // Using primary brand color
+    focus: '#00912C', // Primary brand color
     error: '#dc2626',
+    trim: '#61656b', // Company specified trim color
   },
 } as const;
 
@@ -136,9 +141,9 @@ export const shadows = {
     shadowRadius: 16,
     elevation: 8,
   },
-  // Special glow effects
+  // Special glow effects (updated for new brand colors)
   glow: {
-    shadowColor: colors.primary[500],
+    shadowColor: colors.primary[500], // Using new primary brand color
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -148,22 +153,22 @@ export const shadows = {
 
 export const glassMorphism = {
   light: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 254, 245, 0.1)', // Using brand header text color
     backdropFilter: 'blur(10px)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 254, 245, 0.2)',
   },
   medium: {
-    backgroundColor: 'rgba(16, 97, 62, 0.3)',
+    backgroundColor: 'rgba(45, 82, 64, 0.3)', // Using new background secondary
     backdropFilter: 'blur(15px)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(0, 145, 44, 0.3)', // Using new primary brand color
   },
   heavy: {
-    backgroundColor: 'rgba(16, 97, 62, 0.6)',
+    backgroundColor: 'rgba(45, 82, 64, 0.6)', // Using new background secondary
     backdropFilter: 'blur(20px)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderColor: 'rgba(0, 145, 44, 0.4)', // Using new primary brand color
   },
 } as const;
 

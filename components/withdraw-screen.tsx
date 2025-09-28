@@ -75,10 +75,10 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={20} color="#fff" />
+          <MaterialIcons name="arrow-back" size={20} color="#fffef5" />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
+          <MaterialIcons name="gps-fixed" size={20} color="#fffef5" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
       </View>
@@ -202,14 +202,14 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#1a3d2e', // Updated to use new primary background
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
   },
   backButton: {
     marginRight: 12,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   title: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 24,
     fontWeight: 'bold',
     letterSpacing: 1,
@@ -245,23 +245,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balanceLabel: {
-    color: '#a7f3d0',
+    color: '#c3c3c4', // Company specified subtle highlight color
     fontSize: 14,
   },
   balanceSubLabel: {
-    color: '#6ee7b7',
+    color: '#929497', // Company specified highlight color
     fontSize: 12,
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: '#047857',
+    backgroundColor: '#61656b', // Company specified trim color
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 4,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#34d399',
+    backgroundColor: '#00912C', // Company specified primary green base
     borderRadius: 4,
   },
   amountBox: {
@@ -269,16 +269,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   amountLabel: {
-    color: '#a7f3d0',
+    color: '#c3c3c4', // Company specified subtle highlight color
     fontSize: 14,
     marginBottom: 4,
   },
   amountInput: {
-    backgroundColor: '#047857',
-    borderColor: '#10b981',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
+    borderColor: '#00912C', // Company specified primary green base
     borderWidth: 1,
     borderRadius: 8,
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     padding: 12,
     fontSize: 16,
     marginBottom: 4,
@@ -305,27 +305,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   methodRowActive: {
-    backgroundColor: '#047857',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
   },
   methodRowInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: 'rgba(97, 101, 107, 0.6)', // Company specified trim color with transparency
   },
   methodIconCircle: {
     height: 32,
     width: 32,
     borderRadius: 16,
-    backgroundColor: '#065f46',
+    backgroundColor: '#61656b', // Company specified trim color
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   methodName: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 15,
     fontWeight: 'bold',
   },
   methodDetails: {
-    color: '#6ee7b7',
+    color: '#929497', // Company specified highlight color
     fontSize: 12,
   },
   methodCheckCircle: {
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     width: 20,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#34d399',
+    borderColor: '#00912C', // Company specified primary green base
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -343,9 +343,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
     borderTopWidth: 1,
-    borderTopColor: '#10b981',
+    borderTopColor: '#00912C', // Company specified primary green base
     elevation: 10,
   },
   bottomButton: {
@@ -355,13 +355,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomButtonActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#00912C', // Company specified primary green base
   },
   bottomButtonInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: 'rgba(97, 101, 107, 0.6)', // Company specified trim color with transparency
   },
   bottomButtonText: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontWeight: 'bold',
     fontSize: 16,
   },
