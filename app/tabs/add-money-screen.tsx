@@ -3,9 +3,9 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { useState } from "react"
-import { Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
-import { useWallet } from '../lib/wallet-context'
-import { useStripe } from '../lib/stripe-context'
+import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native"
+import { useStripe } from '../../lib/stripe-context'
+import { useWallet } from '../../lib/wallet-context'
 
 interface AddMoneyScreenProps {
   onBack?: () => void

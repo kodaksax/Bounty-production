@@ -7,8 +7,8 @@ import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { SettingsScreen } from "../../components/settings-screen";
-import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
+import { SkillsetEditScreen } from "./skillset-edit-screen";
+import { SettingsScreen } from "./settings-screen";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {

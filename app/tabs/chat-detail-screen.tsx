@@ -5,9 +5,9 @@ import { Text, TouchableOpacity, View } from "react-native"
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import type { Conversation } from "../app/tabs/messenger-screen"
-import { useWallet } from '../lib/wallet-context'
-import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
+import { ChatMessage, StickyMessageInterface } from "../../components/sticky-message-interface"
+import { useWallet } from '../../lib/wallet-context'
+import type { Conversation } from "./messenger-screen"
 
 interface Message extends ChatMessage {
   time: string

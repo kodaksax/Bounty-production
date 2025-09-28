@@ -1,9 +1,9 @@
 
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useState, useEffect } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native";
-import { useWallet } from '../lib/wallet-context';
-import { useStripe } from '../lib/stripe-context';
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useStripe } from '../../lib/stripe-context';
+import { useWallet } from '../../lib/wallet-context';
 
 
 interface WithdrawScreenProps {

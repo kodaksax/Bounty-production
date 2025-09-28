@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import type React from "react"
 import { useState } from "react"
 import { Text, TextInput, TouchableOpacity, View } from "react-native"
-import { useWallet } from '../lib/wallet-context'
+import { useWallet } from '../../lib/wallet-context'
 
 interface EditProfileScreenProps {
   onBack: () => void

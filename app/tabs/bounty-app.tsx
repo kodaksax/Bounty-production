@@ -6,7 +6,7 @@ import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
 import { NetworkStatusBar } from 'components/network-status'
-import { SearchScreen } from "components/search-screen"
+import { SearchScreen } from "app/tabs/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
 import { BountyEmptyState } from 'components/ui/empty-state'
 import { FogEffect } from 'components/ui/fog-effect'
