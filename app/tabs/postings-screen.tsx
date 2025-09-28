@@ -71,16 +71,28 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
-  const AMOUNT_PRESETS = [5, 10, 15, 25, 50, 75]
   const { balance, deposit } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
-  const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
   // Deadline now simple text entry; dedicated screen removed
 
-  const handleChooseAmount = (val: number) => {
-    setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
+  // Navigate to amount screen (replaces sticky bottom amount selection)
+  const handleProceedToAmount = () => {
+    // Validate basic required fields first
+    const baseMissing = !formData.title || !formData.description
+    const locationMissing = formData.workType === 'in_person' && !formData.location
+    
+    if (baseMissing || locationMissing) {
+      let msg = 'Please complete required fields:'
+      if (baseMissing) msg += ' Title, Description;'
+      if (locationMissing) msg += ' Location;'
+      setValidationError(msg.trim())
+      return
+    }
+    
+    setValidationError(null)
+    setShowAddBountyAmount(true)
   }
 
   const tabs = [
@@ -162,7 +174,21 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
       amount,
       isForHonor,
     }))
+  }
+
+  // Navigate from amount screen to confirmation
+  const handleProceedToConfirmation = () => {
     setShowAddBountyAmount(false)
+    
+    // Final validation including deadline if time sensitive
+    const deadlineMissing = formData.isTimeSensitive && !formData.deadline
+    if (deadlineMissing) {
+      setValidationError('Enter a deadline to mark this as time sensitive.')
+      return
+    }
+    
+    setValidationError(null)
+    setShowConfirmationCard(true)
   }
 
   // Show confirmation card instead of directly posting
@@ -175,6 +201,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
     try {
       setIsSubmitting(true)
       setError(null)
+
+      // Check balance before proceeding
+      const lowBalance = !formData.isForHonor && formData.amount > balance
+      if (lowBalance) {
+        setShowConfirmationCard(false)
+        setShowAddMoney(true)
+        setIsSubmitting(false)
+        return
+      }
 
       // Prepare bounty data
     const bountyData: Omit<Bounty, "id" | "created_at"> & { attachments_json?: string } = {
@@ -289,7 +324,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
       <AddBountyAmountScreen
         onBack={() => setShowAddBountyAmount(false)}
         onAddAmount={handleAddBountyAmount}
+        onProceedToConfirmation={handleProceedToConfirmation}
         initialAmount={formData.amount}
+        showProceedButton={true}
       />
     )
   }
@@ -436,7 +473,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                   scrollEventThrottle={16}
                   showsVerticalScrollIndicator={false}
                 >
-                  <View className="space-y-3">
+                  <View className="space-y-4">
+                    {/* Progress Indicator */}
+                    <View className="bg-emerald-700/30 rounded-lg p-4 mb-2">
+                      <View className="flex-row items-center justify-between mb-2">
+                        <Text className="text-emerald-200 text-sm">Step 1 of 2: Basic Details</Text>
+                        <View className="flex-row space-x-2">
+                          <View className="w-2 h-2 rounded-full bg-emerald-400"></View>
+                          <View className="w-2 h-2 rounded-full bg-emerald-700"></View>
+                        </View>
+                      </View>
+                      <Text className="text-emerald-300/80 text-xs">
+                        Fill out your bounty details, then proceed to set the amount and confirm posting.
+                      </Text>
+                    </View>
+
+                    <View className="space-y-3">
                     <Text className="text-emerald-100/90 text-base">Title</Text>
                     <TextInput
                       value={formData.title}
@@ -622,6 +674,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                       </View>
                     )}
                   </View>
+                  </View>
                 </ScrollView>
               </View>
             ) : (
@@ -762,103 +815,41 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           </View>
         </View>
 
-        {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
+        {/* Sticky Bottom Actions - Simplified "Next" button */}
         {activeTab === "new" && (
           <View
             className="absolute left-0 right-0 bottom-0 bg-emerald-600/95 border-t border-emerald-500/30"
             style={{
-              paddingHorizontal: 12,
-              paddingTop: 8,
-              paddingBottom: insets.bottom - 3,
-              // Reserve more space for the chip row + CTA
-              minHeight: BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA,
-              // Pull slightly into the parent's bottom padding so it's closer to BottomNav
+              paddingHorizontal: 16,
+              paddingTop: 12,
+              paddingBottom: insets.bottom + 8,
+              minHeight: BOTTOM_ACTIONS_HEIGHT,
               bottom: -50,
             }}
           >
-            {/* Amount header row */}
-            <View className="flex-row items-center justify-between mb-2 px-2">
-              <Text className="text-white text-base font-medium">Bounty Amount</Text>
-              <Text className="text-emerald-200 text-sm">Current Balance: ${balance.toFixed(2)}</Text>
-            </View>
-
-            {/* Preset amount chips */}
-            <View className="flex-row flex-wrap gap-3 items-center px-2 mb-3">
-              {AMOUNT_PRESETS.map((amt) => {
-                const selected = formData.amount === amt && !formData.isForHonor
-                return (
-                  <TouchableOpacity
-                    key={amt}
-                    onPress={() => handleChooseAmount(amt)}
-                    className={cn(
-                      "px-4 py-2 rounded-full border",
-                      selected
-                        ? "bg-emerald-300 text-emerald-900 border-emerald-200"
-                        : "bg-emerald-900/40 border-emerald-500/40",
-                    )}
-                  >
-                    <Text className={cn("font-medium", selected ? "text-emerald-900" : "text-emerald-100")}>${amt}</Text>
-                  </TouchableOpacity>
-                )
-              })}
-              <TouchableOpacity
-                onPress={() => setShowAddBountyAmount(true)}
-                className={cn(
-                  "px-4 py-2 rounded-full border",
-                  otherSelected ? "bg-emerald-300 border-emerald-200" : "bg-emerald-900/40 border-emerald-500/40"
-                )}
-              >
-                <Text className={cn("font-medium", otherSelected ? "text-emerald-900" : "text-emerald-100")}>{otherSelected ? `$${formData.amount}` : "Other…"}</Text>
-              </TouchableOpacity>
-            </View>
             {validationError && (
-              <View className="mx-2 mb-2 p-2 bg-red-500/70 rounded-md">
-                <Text className="text-white text-xs">{validationError}</Text>
+              <View className="mb-3 p-3 bg-red-500/70 rounded-lg">
+                <Text className="text-white text-sm">{validationError}</Text>
               </View>
             )}
+            
             {formData.isTimeSensitive && !formData.deadline && !validationError && (
-              <View className="mx-2 mb-2 p-2 bg-amber-500/20 border border-amber-400/40 rounded-md">
-                <Text className="text-amber-200 text-[11px]">Enter a deadline (date/time or phrase) to mark this as urgent.</Text>
+              <View className="mb-3 p-3 bg-amber-500/20 border border-amber-400/40 rounded-lg">
+                <Text className="text-amber-200 text-sm">Enter a deadline to mark this as urgent.</Text>
               </View>
             )}
-            {(() => {
-              const baseMissing = !formData.title || !formData.description || !(formData.amount > 0 || formData.isForHonor)
-              const locationMissing = formData.workType === 'in_person' && !formData.location
-              const deadlineMissing = formData.isTimeSensitive && !formData.deadline
-              const requiredMissing = baseMissing || locationMissing || deadlineMissing
-              const lowBalance = !formData.isForHonor && formData.amount > balance
-              const label = lowBalance ? "Low Balance • Tap to Deposit" : "Post Bounty"
-              const handlePress = () => {
-                if (lowBalance) { setShowAddMoney(true); return }
-                if (requiredMissing) { 
-                  let msg = 'Missing required:'
-                  if (baseMissing) msg += ' Title, Description, Amount/For Honor;'
-                  if (locationMissing) msg += ' Location;'
-                  if (deadlineMissing) msg += ' Deadline;'
-                  setValidationError(msg.trim()); 
-                  return 
-                }
-                setValidationError(null)
-                handleShowConfirmation()
-              }
-              return (
-                <TouchableOpacity
-                  ref={postButtonRef}
-                  onPress={handlePress}
-                  className={cn(
-                    "self-center w-full px-8 py-4 rounded-2xl border",
-                    lowBalance ? "border-amber-400 bg-amber-500/20" : "border-emerald-300/50 bg-emerald-700/30",
-                    requiredMissing && !lowBalance ? "border-red-400/70" : ""
-                  )}
-                  activeOpacity={0.85}
-                >
-                  <View className="flex-row items-center justify-center gap-2">
-                    {isSubmitting && !lowBalance && <ActivityIndicator size="small" color="white" />}
-                    <Text className={cn("font-semibold", lowBalance ? "text-amber-300" : "text-white")}>{label}</Text>
-                  </View>
-                </TouchableOpacity>
-              )
-            })()}
+            
+            <TouchableOpacity
+              ref={postButtonRef}
+              onPress={handleProceedToAmount}
+              className="w-full px-8 py-4 rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/30"
+              activeOpacity={0.85}
+            >
+              <View className="flex-row items-center justify-center gap-3">
+                <Text className="font-bold text-white text-lg">Next: Set Amount</Text>
+                <MaterialIcons name="arrow-forward" size={22} color="white" />
+              </View>
+            </TouchableOpacity>
           </View>
         )}
 
