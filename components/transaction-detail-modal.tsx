@@ -39,15 +39,15 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   const getTransactionIcon = () => {
     switch (transaction.type) {
       case "deposit":
-        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#fffef5" />
       case "withdrawal":
-        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#fffef5" />
       case "bounty_posted":
-        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
       case "bounty_completed":
-        return <MaterialIcons name="check-circle" size={24} color="#60a5fa" />
+        return <MaterialIcons name="check-circle" size={24} color="#00912C" />
       case "bounty_received":
-        return <MaterialIcons name="credit-card" size={24} color="#a78bfa" />
+        return <MaterialIcons name="credit-card" size={24} color="#00912C" />
     }
   }
 
@@ -95,11 +95,11 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         {/* Header */}
         <View className="flex flex-row items-center justify-between p-4 bg-emerald-700">
           <View className="flex flex-row items-center">
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
             <Text className="text-lg font-bold text-white ml-2">Transaction Details</Text>
           </View>
           <TouchableOpacity onPress={handleClose} className="p-2 touch-target-min">
-            <MaterialIcons name="close" size={24} color="#000000" />
+            <MaterialIcons name="close" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
 
@@ -148,7 +148,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
 
             <View className="flex items-center">
               <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                <MaterialIcons name="calendar-today" size={24} color="#000000" />
+                <MaterialIcons name="calendar-today" size={16} color="#fffef5" />
               </View>
               <View className="flex-1">
                 <Text className="text-xs text-emerald-300">Date</Text>
@@ -193,7 +193,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
             {transaction.details.counterparty && (
               <View className="flex items-center">
                 <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
-                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                  <MaterialIcons name="gps-fixed" size={16} color="#fffef5" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs text-emerald-300">

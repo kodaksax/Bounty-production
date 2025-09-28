@@ -78,7 +78,7 @@ export function ArchivedBountyCard({
             <Text className="text-xs text-emerald-200">{username}</Text>
           </View>
           <TouchableOpacity onPress={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
-            <MaterialIcons name="more-vert" size={24} color="#000000" />
+            <MaterialIcons name="more-vert" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
 

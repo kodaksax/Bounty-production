@@ -317,10 +317,10 @@ export function AddBountyAmountScreen({
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.headerButton}>
-          <MaterialIcons name="close" size={24} color="#000000" />
+          <MaterialIcons name="close" size={24} color="#fffef5" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
         <View style={{ width: 24 }} /> {/* Empty view for spacing */}

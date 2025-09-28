@@ -171,7 +171,7 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
             <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
           </View>
           <TouchableOpacity 

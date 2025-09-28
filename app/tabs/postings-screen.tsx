@@ -431,7 +431,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           <View className="flex-row justify-between items-center px-4">
             {/* Left: icon + title aligned like messenger (no back icon) */}
             <View className="flex-row items-center gap-3">
-              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+              <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
               <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
             </View>
 

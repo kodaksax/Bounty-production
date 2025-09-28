@@ -50,7 +50,7 @@ export function BountyRequestItem({
               <View className="flex items-center gap-2">
                 <Text className="text-xs text-emerald-300">{timeAgo}</Text>
                 <TouchableOpacity onPress={onMenuClick} className="text-emerald-300">
-                  <MaterialIcons name="more-vert" size={24} color="#000000" />
+                  <MaterialIcons name="more-vert" size={24} color="#fffef5" />
                 </TouchableOpacity>
               </View>
             </View>
