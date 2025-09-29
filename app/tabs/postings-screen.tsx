@@ -7,7 +7,7 @@ import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
-import type { Bounty } from "lib/services/database.types"
+import type { Bounty, BountyRequest } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
@@ -252,7 +252,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
       // ANNOTATION: This API call should be transactional on your backend.
       const result = await bountyRequestService.acceptRequest(requestId)
 
-      if (!result || !result.request) {
+      if (!result) {
         throw new Error("Failed to accept request")
       }
 
