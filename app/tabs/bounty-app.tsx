@@ -100,22 +100,29 @@ function BountyAppInner() {
   }, [bounties, activeCategory])
 
   // Load bounties from backend
-  useEffect(() => {
-    const loadBounties = async () => {
-      setIsLoadingBounties(true)
-      try {
-        const fetchedBounties = await bountyService.getAll({ status: 'open' })
-        setBounties(fetchedBounties)
-      } catch (error) {
-        console.error('Error loading bounties:', error)
-        // Keep empty array as fallback
-      } finally {
-        setIsLoadingBounties(false)
-      }
+  const loadBounties = useCallback(async () => {
+    setIsLoadingBounties(true)
+    try {
+      const fetchedBounties = await bountyService.getAll({ status: 'open' })
+      setBounties(fetchedBounties)
+    } catch (error) {
+      console.error('Error loading bounties:', error)
+      // Keep empty array as fallback
+    } finally {
+      setIsLoadingBounties(false)
     }
-    
-    loadBounties()
   }, [])
+
+  useEffect(() => {
+    loadBounties()
+  }, [loadBounties])
+
+  // Reload bounties when returning to bounty screen from other screens
+  useEffect(() => {
+    if (activeScreen === "bounty") {
+      loadBounties()
+    }
+  }, [activeScreen, loadBounties])
 
   // Restore last-selected chip on mount
   useEffect(() => {
@@ -140,14 +147,13 @@ function BountyAppInner() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      const fetchedBounties = await bountyService.getAll({ status: 'open' })
-      setBounties(fetchedBounties)
+      await loadBounties()
     } catch (error) {
       console.error('Error refreshing bounties:', error)
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [loadBounties])
 
   // Ensure activeCategory matches available filters
   useEffect(() => {
@@ -258,6 +264,7 @@ function BountyAppInner() {
               username="@Jon_Doe"
               price={Number(item.amount)}
               distance={distance}
+              description={item.description}
             />
           )
         }}
@@ -279,7 +286,12 @@ function BountyAppInner() {
       ) : activeScreen === "wallet" ? (
         <WalletScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "postings" ? (
-        <PostingsScreen onBack={() => setActiveScreen("bounty")} activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
+        <PostingsScreen 
+          onBack={() => setActiveScreen("bounty")} 
+          activeScreen={activeScreen} 
+          setActiveScreen={setActiveScreen}
+          onBountyPosted={loadBounties} // Refresh bounties when a new one is posted
+        />
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (
