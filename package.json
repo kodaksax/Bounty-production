@@ -2,6 +2,10 @@
   "name": "bountyexpo",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -11,7 +15,11 @@
     "lint": "expo lint",
     "api": "node api/server.js",
     "db:init": "node scripts/init-db.js",
-    "test:api": "node scripts/test-api.js"
+    "test:api": "node scripts/test-api.js",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter api dev",
+    "dev:all": "pnpm -r --parallel dev",
+    "type-check": "pnpm -r type-check"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -80,8 +88,11 @@
     "@babel/core": "^7.25.2",
     "@types/react": "^19.1.13",
     "@types/react-native-vector-icons": "^6.4.18",
-    "eslint": "^9.25.0",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "eslint": "^8.54.0",
     "eslint-config-expo": "~10.0.0",
+    "prettier": "^3.1.0",
     "typescript": "~5.9.2"
   },
   "private": true,
