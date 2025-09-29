@@ -7,6 +7,10 @@ import { useNavigation } from "@react-navigation/native"
 import { Alert, AlertDescription } from "components/ui/alert"
 import { useState } from "react"
 
+export default function SignInRoute() {
+  return <SignInForm />
+}
+
 export function SignInForm() {
   const navigation = useNavigation<any>()
   const [email, setEmail] = useState("")

@@ -6,7 +6,7 @@ import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 
@@ -131,6 +131,23 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     setShowSettings(false)
   }
 
+  // Share the user's profile (name, about, skills and a shareable link)
+  // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
+  const shareProfile = async () => {
+    try {
+      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
+      const profileUrl = `https://example.com/u/${CURRENT_USER_ID}` // <-- Replace with your real profile URL
+      const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
+
+      await Share.share({
+        title: `${profileData.name} on Bounty`,
+        message,
+      })
+    } catch (err) {
+      console.error('Error sharing profile:', err)
+    }
+  }
+
   // Function to simulate completing a job (for testing)
   const simulateJobAccepted = () => {
     setStats((prev) => ({
@@ -218,13 +235,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
         <View className="flex-row items-center">
-          <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)}>
+          <TouchableOpacity className="p-2" onPress={shareProfile} accessibilityLabel="Share profile">
+            <MaterialIcons name="share" size={22} color="#000000" />
+          </TouchableOpacity>
+          <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)} accessibilityLabel="Open settings">
             <MaterialIcons name="settings" size={24} color="#000000" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <View className="flex-1 overflow-y-auto pb-40 hide-scrollbar">
+      <ScrollView className="flex-1 pb-40" contentContainerStyle={{ paddingBottom: 140 }}>
         {/* Stats + Profile Info (profile moved inside the stats card) */}
         <View className="px-4 py-4">
           <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
@@ -271,10 +291,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+  </View>
 
-        {/* Skills */}
-        <View className="px-4 py-2">
+  {/* Skills */}
+  <View className="px-4 py-2">
           {/* Header: title left, edit button right */}
           <View className="flex-row justify-between items-center mb-2">
             <Text className="text-sm font-medium">Skillsets</Text>
@@ -307,9 +327,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             ))}
           </View>
           </ScrollView>
-        </View>
+  </View>
 
-        <View className="px-4 py-4">
+  <View className="px-4 py-4">
           <Text className="text-sm font-medium mb-2">Activity</Text>
           <View className="space-y-4">
             {activities.length > 0 ? (
@@ -337,9 +357,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               </View>
             )}
           </View>
-        </View>
+  </View>
 
-        <View className="px-4 py-4">
+  <View className="px-4 py-4">
           <Text className="text-sm font-medium mb-2">Achievements</Text>
           <View className="grid grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => {
@@ -370,7 +390,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             })}
           </View>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Bottom navigation is now provided at app level; this spacer ensures content isn't obscured */}
     </View>
