@@ -26,6 +26,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.2",
     "expo": "~54.0.10",
     "expo-blur": "~15.0.7",
     "expo-constants": "~18.0.9",
@@ -40,7 +41,9 @@
     "expo-symbols": "~1.0.7",
     "expo-system-ui": "~6.0.7",
     "expo-web-browser": "~15.0.7",
+    "express": "^5.1.0",
     "lucide-react-native": "^0.544.0",
+    "mysql2": "^3.15.1",
     "nativewind": "^4.2.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -77,5 +80,6 @@
   "private": true,
   "overrides": {
     "react-native-safe-area-context": "~5.6.0"
-  }
+  },
+  "type": "module"
 }

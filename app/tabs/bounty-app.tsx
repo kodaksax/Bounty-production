@@ -221,10 +221,12 @@ function BountyAppInner() {
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 8, paddingBottom:  (insets.bottom + 40) }}
+        // Allow content to scroll underneath the BottomNav by removing large bottom padding.
+        // This makes the bottom of the list visually disappear behind the nav bar.
+        contentContainerStyle={{ paddingHorizontal: 17, paddingTop: HEADER_EXPANDED + headerTopPad + 0, paddingBottom: 0, marginTop: 1 }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
-        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 2.8 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
