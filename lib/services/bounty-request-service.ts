@@ -6,10 +6,8 @@ export type BountyRequestWithDetails = BountyRequest & {
   profile: Profile
 }
 
-// ANNOTATION: Define the base URL for your Hostinger API in a central configuration file.
-const API_BASE_URL = "https://your-hostinger-domain.com/api"
-
-
+// API Configuration
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
 export const bountyRequestService = {
   /**
@@ -17,8 +15,11 @@ export const bountyRequestService = {
    */
   async getById(id: number): Promise<BountyRequest | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/bounty-requests/${id}`)
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests/${id}`)
       if (!response.ok) {
+        if (response.status === 404) {
+          return null
+        }
         throw new Error(`Failed to fetch bounty request: ${response.statusText}`)
       }
       return await response.json()
@@ -30,35 +31,16 @@ export const bountyRequestService = {
   },
 
   /**
-   * Get a bounty request with details by ID
-   */
-  async getByIdWithDetails(id: number): Promise<BountyRequestWithDetails | null> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/bounty-requests/${id}?_embed=bounty,profile`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch bounty request with details: ${response.statusText}`)
-      }
-      return await response.json()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error fetching bounty request with details", { id, error })
-      return null
-    }
-  },
-
-  /**
-   * Get all bounty requests
+   * Get all bounty requests with optional filters
    */
   async getAll(options?: { status?: string; bountyId?: number; userId?: string }): Promise<BountyRequest[]> {
     try {
       const params = new URLSearchParams()
       if (options?.status) params.append("status", options.status)
-      if (options?.bountyId) params.append("bountyId", String(options.bountyId))
-      if (options?.userId) params.append("userId", options.userId)
-      params.append("orderBy", "created_at")
-      params.append("orderDirection", "desc")
+      if (options?.bountyId) params.append("bounty_id", String(options.bountyId))
+      if (options?.userId) params.append("user_id", options.userId)
 
-      const response = await fetch(`${API_BASE_URL}/bounty-requests?${params.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests?${params.toString()}`)
       if (!response.ok) {
         throw new Error(`Failed to fetch bounty requests: ${response.statusText}`)
       }
@@ -71,24 +53,18 @@ export const bountyRequestService = {
   },
 
   /**
-   * Get all bounty requests with details
+   * Get all bounty requests with details (bounty and profile data included)
    */
-  async getAllWithDetails(options?: { status?: string; bountyId?: number; userId?: string }): Promise<
-    BountyRequestWithDetails[]
-  > {
+  async getAllWithDetails(options?: { status?: string; bountyId?: number; userId?: string }): Promise<BountyRequestWithDetails[]> {
     try {
       const params = new URLSearchParams()
-      // ANNOTATION: Your API needs to support embedding related data.
-      params.append("_embed", "bounty,profile")
       if (options?.status) params.append("status", options.status)
-      if (options?.bountyId) params.append("bountyId", String(options.bountyId))
-      if (options?.userId) params.append("userId", options.userId)
-      params.append("orderBy", "created_at")
-      params.append("orderDirection", "desc")
+      if (options?.bountyId) params.append("bounty_id", String(options.bountyId))
+      if (options?.userId) params.append("user_id", options.userId)
 
-      const response = await fetch(`${API_BASE_URL}/bounty-requests?${params.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests?${params.toString()}`)
       if (!response.ok) {
-        throw new Error(`Failed to fetch bounty requests with details: ${response.statusText}`)
+        throw new Error(`Failed to fetch bounty requests: ${response.statusText}`)
       }
       return await response.json()
     } catch (err) {
@@ -103,13 +79,14 @@ export const bountyRequestService = {
    */
   async create(request: Omit<BountyRequest, "id" | "created_at">): Promise<BountyRequest | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/bounty-requests`, {
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       })
       if (!response.ok) {
-        throw new Error(`Failed to create bounty request: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to create bounty request: ${errorText}`)
       }
       return await response.json()
     } catch (err) {
@@ -124,13 +101,14 @@ export const bountyRequestService = {
    */
   async update(id: number, updates: Partial<Omit<BountyRequest, "id" | "created_at">>): Promise<BountyRequest | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/bounty-requests/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       })
       if (!response.ok) {
-        throw new Error(`Failed to update bounty request: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to update bounty request: ${errorText}`)
       }
       return await response.json()
     } catch (err) {
@@ -145,11 +123,12 @@ export const bountyRequestService = {
    */
   async delete(id: number): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE_URL}/bounty-requests/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests/${id}`, {
         method: "DELETE",
       })
       if (!response.ok) {
-        throw new Error(`Failed to delete bounty request: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to delete bounty request: ${errorText}`)
       }
       return true
     } catch (err) {
@@ -202,27 +181,10 @@ export const bountyRequestService = {
   },
 
   /**
-   * Accept a bounty request and update the bounty status
+   * Accept a bounty request
    */
-  async acceptRequest(requestId: number): Promise<{ request: BountyRequest | null; bounty: Bounty | null }> {
-    try {
-      // ANNOTATION: This should be a single atomic API call on your backend
-      // to ensure both the request and bounty are updated together in a transaction.
-      const response = await fetch(`${API_BASE_URL}/bounty-requests/${requestId}/accept`, {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to accept bounty request: ${await response.text()}`)
-      }
-
-      // ANNOTATION: Assuming the API returns an object like { request: {...}, bounty: {...} }
-      return await response.json()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error accepting bounty request", { requestId, error })
-      return { request: null, bounty: null }
-    }
+  async acceptRequest(requestId: number): Promise<BountyRequest | null> {
+    return this.updateStatus(requestId, "accepted")
   },
 
   /**

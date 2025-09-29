@@ -29,7 +29,7 @@ export function SignInForm() {
       setIsLoading(true)
 
       // TODO: Replace with your Hostinger backend API endpoint
-      const response = await fetch("https://your-hostinger-api.com/auth/sign-in", {
+      const response = await fetch(`${process.env.API_BASE_URL || 'http://localhost:3001'}/auth/sign-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

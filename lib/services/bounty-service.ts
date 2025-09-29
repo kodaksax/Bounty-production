@@ -1,6 +1,9 @@
 import type { Bounty } from "lib/services/database.types"
 import { logger } from "lib/utils/error-logger"
 
+// API Configuration
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+
 // Simple once-per-key logger to avoid spamming console when backend is offline
 const emitted: Record<string, boolean> = {}
 function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: any) {
@@ -23,11 +26,11 @@ export const bountyService = {
    */
   async getById(id: number): Promise<Bounty | null> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
-        // ANNOTATION: Add authentication headers if required.
-        // headers: { 'Authorization': `Bearer ${your_auth_token}` }
+        headers: {
+          'Content-Type': 'application/json',
+        }
       })
 
       if (!response.ok) {
@@ -50,48 +53,42 @@ export const bountyService = {
    */
   async getAll(options?: { status?: string; userId?: string; workType?: 'online' | 'in_person' }): Promise<Bounty[]> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const API_URL = `${API_BASE_URL}/api/bounties`
       const params = new URLSearchParams()
 
-  if (options?.status) params.append("status", options.status)
-  if (options?.workType) params.append('work_type', options.workType)
-    const response = await fetch(API_URL + "?" + params.toString())
-    if (!response.ok) {
-      throw new Error(`Failed to fetch bounties: ${response.statusText}`)
+      if (options?.status) params.append("status", options.status)
+      if (options?.userId) params.append("user_id", options.userId)
+      if (options?.workType) params.append('work_type', options.workType)
+      
+      const response = await fetch(`${API_URL}?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bounties: ${response.statusText}`)
+      }
+      return await response.json()
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Unknown error fetching bounties")
+      logOnce('bounties:getAll', 'error', 'Error fetching bounties (showing once until reload)', { options, error })
+      return []
     }
-    return await response.json()
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error("Unknown error fetching bounties")
-    logOnce('bounties:getAll', 'error', 'Error fetching bounties (showing once until reload)', { options, error })
-    return []
-  }
-},
+  },
 
   /**
    * Create a new bounty
    */
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
-      // NOTE: Optional enhanced fields supported if backend allows:
-      // work_type?: 'online' | 'in_person'
-      // is_time_sensitive?: boolean
-      // deadline?: string (ISO)
-      // attachments_json?: string (serialized attachment metadata)
+      const API_URL = `${API_BASE_URL}/api/bounties`
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // ANNOTATION: Add authentication headers if required.
-          // 'Authorization': `Bearer ${your_auth_token}`
         },
         body: JSON.stringify(bounty),
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to create bounty: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to create bounty: ${errorText}`)
       }
 
       return await response.json()
@@ -107,20 +104,18 @@ export const bountyService = {
    */
   async update(id: number, updates: Partial<Omit<Bounty, "id" | "created_at">>): Promise<Bounty | null> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
-        method: "PATCH", // or 'PUT'
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          // ANNOTATION: Add authentication headers if required.
-          // 'Authorization': `Bearer ${your_auth_token}`
         },
         body: JSON.stringify(updates),
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to update bounty: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to update bounty: ${errorText}`)
       }
 
       return await response.json()
@@ -136,16 +131,14 @@ export const bountyService = {
    */
   async delete(id: number): Promise<boolean> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         method: "DELETE",
-        // ANNOTATION: Add authentication headers if required.
-        // 'Authorization': `Bearer ${your_auth_token}`
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to delete bounty: ${await response.text()}`)
+        const errorText = await response.text()
+        throw new Error(`Failed to delete bounty: ${errorText}`)
       }
 
       return true
@@ -160,8 +153,6 @@ export const bountyService = {
    * Update a bounty's status
    */
   async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived"): Promise<Bounty | null> {
-    // This can be a specific endpoint or part of the general update method.
-    // Reusing the `update` method is a common pattern.
     return this.update(id, { status })
   },
 
@@ -178,6 +169,7 @@ export const bountyService = {
   async getOpenBounties(): Promise<Bounty[]> {
     return this.getAll({ status: "open" })
   },
+  
   /**
    * Get bounties by work type (online or in_person)
    */
