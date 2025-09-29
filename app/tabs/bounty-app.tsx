@@ -5,9 +5,10 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
-import { SearchScreen } from "components/search-screen"
+// Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
+import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -27,10 +28,11 @@ type Bounty = {
 
 
 function BountyAppInner() {
+  const router = useRouter()
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
   const [activeScreen, setActiveScreen] = useState("bounty")
   const [showBottomNav, setShowBottomNav] = useState(true)
-  const [showSearch, setShowSearch] = useState(false)
+  // Removed inline search overlay state; navigation now handles search route.
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { balance } = useWallet()
@@ -155,9 +157,7 @@ function BountyAppInner() {
     }
   }, [categories, activeCategory])
 
-  if (showSearch) {
-    return <SearchScreen onBack={() => setShowSearch(false)} />
-  }
+  // Removed early return of SearchScreen; will render as overlay so nav & state persist.
 
 
   // Render dashboard content when activeScreen is "bounty"
@@ -177,7 +177,12 @@ function BountyAppInner() {
         <Animated.View style={{ opacity: extraContentOpacity }}>
           {/* Search Bar */}
           <View style={styles.searchWrapper}>
-            <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Open search"
+              onPress={() => router.push('/tabs/search')}
+              style={styles.searchButton}
+            >
               <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
               <Text style={styles.searchText}>Search bounties or users...</Text>
             </TouchableOpacity>
@@ -217,11 +222,15 @@ function BountyAppInner() {
         />
       </Animated.View>
 
-      {/* Bounty List with scroll listener */}
+      {/* Bounty List with scroll listener (content extends under BottomNav) */}
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 8, paddingBottom:  (insets.bottom + 40) }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: HEADER_EXPANDED + headerTopPad + 8,
+          paddingBottom: 160, // large enough so last item scrolls beneath nav
+        }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
@@ -247,6 +256,12 @@ function BountyAppInner() {
             />
           )
         }}
+      />
+      {/* Subtle gradient fade behind BottomNav to imply depth */}
+      <LinearGradient
+        colors={["rgba(5,150,105,0)", "rgba(5,150,105,0.5)", "#059669"]}
+        style={styles.bottomFade}
+        pointerEvents="none"
       />
     </View>
   )
@@ -285,7 +300,7 @@ export function BountyApp() {
 
 // Styles (consolidated)
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative', paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
   dashboardArea: { flex: 1 },
   collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
@@ -302,4 +317,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#a7f3d0' },
   chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
   chipLabelActive: { color: '#052e1b' },
+  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
+  // searchOverlay removed (search is its own route now)
 })

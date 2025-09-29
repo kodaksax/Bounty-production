@@ -7,12 +7,12 @@ import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
-import type { Bounty, BountyRequest } from "lib/services/database.types"
+import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Animated, Easing, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -71,12 +71,39 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
-  const AMOUNT_PRESETS = [5, 10, 15, 25, 50, 75]
+  const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
+  const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
+  // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
+  const STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
   const { balance, deposit } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
+  // Animation refs
+  const lowBalanceAnim = useRef(new Animated.Value(0)).current
+  const prevLowBalance = useRef(false)
+
+  // Derived lowBalance (current) for animation trigger context (only for new tab)
+  const currentLowBalance = React.useMemo(() => !formData.isForHonor && formData.amount > balance, [formData.isForHonor, formData.amount, balance])
+
+  useEffect(() => {
+    if (activeTab !== 'new') return
+    // Trigger once when transitioning from not low -> low
+    if (!prevLowBalance.current && currentLowBalance) {
+      // Run a shake sequence
+      lowBalanceAnim.setValue(0)
+      const sequence = [
+        Animated.timing(lowBalanceAnim, { toValue: 1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
+        Animated.timing(lowBalanceAnim, { toValue: -1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
+        Animated.timing(lowBalanceAnim, { toValue: 1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
+        Animated.timing(lowBalanceAnim, { toValue: -1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
+        Animated.timing(lowBalanceAnim, { toValue: 0, duration: 40, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
+      ]
+      Animated.sequence(sequence).start()
+    }
+    prevLowBalance.current = currentLowBalance
+  }, [currentLowBalance, activeTab, lowBalanceAnim])
   // Deadline now simple text entry; dedicated screen removed
 
   const handleChooseAmount = (val: number) => {
@@ -439,9 +466,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                   keyboardDismissMode="on-drag"
                   className="flex-1 px-2"
                   // 3) Ensure the last inputs won’t be hidden by the sticky bar
-                  contentContainerStyle={{
-                    paddingBottom: insets.bottom + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + 12,
-                  }}
+                  // Ensure we can fully scroll the attachments area above the sticky bar
+                  contentContainerStyle={{ paddingBottom: STICKY_TOTAL_HEIGHT }}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
                     if (y > 2 && !showShadow) setShowShadow(true)
@@ -783,11 +809,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
             style={{
               paddingHorizontal: 12,
               paddingTop: 8,
-              paddingBottom: insets.bottom - 3,
+              // Ensure internal content has breathing room above device inset
+              paddingBottom: Math.max(insets.bottom, 12),
               // Reserve more space for the chip row + CTA
               minHeight: BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA,
-              // Pull slightly into the parent's bottom padding so it's closer to BottomNav
-              bottom: -50,
+              // Position above BottomNav instead of underneath it
+              bottom: BOTTOM_NAV_OFFSET
             }}
           >
             {/* Amount header row */}
@@ -796,10 +823,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               <Text className="text-emerald-200 text-sm">Current Balance: ${balance.toFixed(2)}</Text>
             </View>
 
-            {/* Preset amount chips */}
-            <View className="flex-row flex-wrap gap-3 items-center px-2 mb-3">
+            {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }} style={{ height: 48 }}>
+              <View className="flex-row items-center gap-3 mb-0">
               {AMOUNT_PRESETS.map((amt) => {
-                const selected = formData.amount === amt && !formData.isForHonor
+                const selected = formData.amount === amt && !formData.isForHonor;
+                const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
                 return (
                   <TouchableOpacity
                     key={amt}
@@ -807,24 +836,61 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                     className={cn(
                       "px-4 py-2 rounded-full border",
                       selected
-                        ? "bg-emerald-300 text-emerald-900 border-emerald-200"
+                        ? lowBalance
+                          ? "bg-amber-400/90 border-amber-200"
+                          : "bg-emerald-300 text-emerald-900 border-emerald-200"
                         : "bg-emerald-900/40 border-emerald-500/40",
                     )}
                   >
-                    <Text className={cn("font-medium", selected ? "text-emerald-900" : "text-emerald-100")}>${amt}</Text>
+                    <Text
+                      className={cn(
+                        "font-medium",
+                        selected
+                          ? lowBalance
+                            ? "text-amber-950"
+                            : "text-emerald-900"
+                          : "text-emerald-100"
+                      )}
+                    >
+                      ${amt}
+                    </Text>
                   </TouchableOpacity>
-                )
+                );
               })}
-              <TouchableOpacity
-                onPress={() => setShowAddBountyAmount(true)}
-                className={cn(
-                  "px-4 py-2 rounded-full border",
-                  otherSelected ? "bg-emerald-300 border-emerald-200" : "bg-emerald-900/40 border-emerald-500/40"
-                )}
-              >
-                <Text className={cn("font-medium", otherSelected ? "text-emerald-900" : "text-emerald-100")}>{otherSelected ? `$${formData.amount}` : "Other…"}</Text>
-              </TouchableOpacity>
-            </View>
+              {/* Other chip: only shows custom amount label when otherSelected is true */}
+              {(() => {
+                const lowBalance = !formData.isForHonor && formData.amount > balance;
+                const highlight = otherSelected || lowBalance;
+                const displayLabel = otherSelected ? `$${formData.amount}` : 'Other…';
+                return (
+                  <TouchableOpacity
+                    onPress={() => setShowAddBountyAmount(true)}
+                    className={cn(
+                      "px-4 py-2 rounded-full border",
+                      highlight
+                        ? lowBalance
+                          ? "bg-amber-400/90 border-amber-200"
+                          : "bg-emerald-300 border-emerald-200"
+                        : "bg-emerald-900/40 border-emerald-500/40"
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "font-medium",
+                        highlight
+                          ? lowBalance
+                            ? "text-amber-950"
+                            : "text-emerald-900"
+                          : "text-emerald-100"
+                      )}
+                    >
+                      {displayLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
+              </View>
+            </ScrollView>
             {validationError && (
               <View className="mx-2 mb-2 p-2 bg-red-500/70 rounded-md">
                 <Text className="text-white text-xs">{validationError}</Text>
@@ -841,7 +907,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
               const deadlineMissing = formData.isTimeSensitive && !formData.deadline
               const requiredMissing = baseMissing || locationMissing || deadlineMissing
               const lowBalance = !formData.isForHonor && formData.amount > balance
-              const label = lowBalance ? "Low Balance • Tap to Deposit" : "Post Bounty"
+              const label = lowBalance ? "LOW BALANCE • Tap to Deposit" : "Post Bounty"
               const handlePress = () => {
                 if (lowBalance) { setShowAddMoney(true); return }
                 if (requiredMissing) { 
@@ -855,22 +921,28 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
                 setValidationError(null)
                 handleShowConfirmation()
               }
+              const shakeTranslate = lowBalanceAnim.interpolate({
+                inputRange: [-1, 1],
+                outputRange: [-6, 6],
+              })
               return (
-                <TouchableOpacity
-                  ref={postButtonRef}
-                  onPress={handlePress}
-                  className={cn(
-                    "self-center w-full px-8 py-4 rounded-2xl border",
-                    lowBalance ? "border-amber-400 bg-amber-500/20" : "border-emerald-300/50 bg-emerald-700/30",
-                    requiredMissing && !lowBalance ? "border-red-400/70" : ""
-                  )}
-                  activeOpacity={0.85}
-                >
-                  <View className="flex-row items-center justify-center gap-2">
-                    {isSubmitting && !lowBalance && <ActivityIndicator size="small" color="white" />}
-                    <Text className={cn("font-semibold", lowBalance ? "text-amber-300" : "text-white")}>{label}</Text>
-                  </View>
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ translateX: shakeTranslate }] }}>
+                  <TouchableOpacity
+                    ref={postButtonRef}
+                    onPress={handlePress}
+                    className={cn(
+                      "self-center w-full px-8 py-4 rounded-2xl border",
+                      lowBalance ? "border-amber-400 bg-amber-500/25" : "border-emerald-300/50 bg-emerald-700/30",
+                      requiredMissing && !lowBalance ? "border-red-400/70" : ""
+                    )}
+                    activeOpacity={0.85}
+                  >
+                    <View className="flex-row items-center justify-center gap-2">
+                      {isSubmitting && !lowBalance && <ActivityIndicator size="small" color="white" />}
+                      <Text className={cn("font-semibold tracking-wide", lowBalance ? "text-amber-200" : "text-white")}>{label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
               )
             })()}
           </View>

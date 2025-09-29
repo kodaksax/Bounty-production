@@ -1,5 +1,5 @@
-import type { Bounty } from "lib/services/database.types"
-import { logger } from "lib/utils/error-logger"
+import type { Bounty } from "lib/services/database.types";
+import { logger } from "lib/utils/error-logger";
 
 // API Configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
@@ -67,7 +67,19 @@ export const bountyService = {
       return await response.json()
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error fetching bounties")
-      logOnce('bounties:getAll', 'error', 'Error fetching bounties (showing once until reload)', { options, error })
+      // Heuristics for network issues
+      const isNetworkError = error.message.includes('Network') || error.message.includes('fetch') || !(error as any).status
+      logOnce(
+        'bounties:getAll',
+        'error',
+        'Error fetching bounties (showing once until reload)',
+        {
+          options,
+          error: { message: error.message, stack: error.stack },
+          apiBase: API_BASE_URL,
+            hint: isNetworkError ? 'Check that the API server is running and device can reach the host (if on physical device, replace localhost with your machine LAN IP).' : undefined,
+        }
+      )
       return []
     }
   },

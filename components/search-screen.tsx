@@ -28,19 +28,24 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [allBounties, setAllBounties] = useState<Bounty[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [initialLoadTried, setInitialLoadTried] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const inputRef = useRef<TextInput | null>(null)
 
   // Fetch all bounties when the component mounts
   useEffect(() => {
     const fetchBounties = async () => {
       setIsLoading(true)
+      setLoadError(null)
       try {
         const bounties = await bountyService.getAll({ status: "open" })
         setAllBounties(bounties)
       } catch (error) {
         console.error("Error fetching bounties for search:", error)
+        setLoadError('network')
       } finally {
         setIsLoading(false)
+        setInitialLoadTried(true)
       }
     }
 
@@ -118,19 +123,22 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
 
   // Highlight matching text
   const highlightMatch = (text: string, query: string) => {
-    if (!query.trim()) return text
-
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi")
+    if (!query.trim()) {
+      return <Text>{text}</Text>
+    }
+    const safe = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const regex = new RegExp(`(${safe})`, 'gi')
     const parts = text.split(regex)
-
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <Text key={i} className="bg-yellow-300/30 text-white font-medium">
-          {part}
-        </Text>
-      ) : (
-        part
-      ),
+    return (
+      <Text>
+        {parts.map((part, i) =>
+          regex.test(part) ? (
+            <Text key={i} className="bg-yellow-300/30 text-white font-medium">{part}</Text>
+          ) : (
+            <Text key={i}>{part}</Text>
+          )
+        )}
+      </Text>
     )
   }
 
@@ -204,6 +212,19 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       <View className="flex-1 px-4 overflow-y-auto">
         {searchQuery.trim() === "" ? (
           <>
+            {initialLoadTried && allBounties.length === 0 && !isLoading && (
+              <View className="mb-4 p-3 rounded-lg bg-emerald-700/40">
+                <Text className="text-sm text-emerald-100 font-medium mb-1">No bounties loaded</Text>
+                <Text className="text-xs text-emerald-300/80 mb-2">
+                  {loadError === 'network'
+                    ? 'Could not reach API server. If on a physical device, ensure API_BASE_URL points to your computer\'s LAN IP (not localhost).'
+                    : 'There are currently no open bounties.'}
+                </Text>
+                <TouchableOpacity onPress={refreshBounties} className="bg-emerald-600 rounded-full px-3 py-1 self-start">
+                  <Text className="text-white text-xs">Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             {recentSearches.length > 0 && (
               <View className="mb-4">
                 <View className="flex justify-between items-center mb-2">
@@ -269,11 +290,11 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                     </AvatarFallback>
                   </Avatar>
                   <View>
-                    <View className="text-sm text-emerald-100">{highlightMatch(bounty.username, searchQuery)}</View>
+                    <Text className="text-sm text-emerald-100">{highlightMatch(bounty.username, searchQuery)}</Text>
                     <View className="text-xs text-emerald-300">{bounty.timeAgo}</View>
                   </View>
                 </View>
-                <View className="font-medium text-white mb-2">{highlightMatch(bounty.title, searchQuery)}</View>
+                <Text className="font-medium text-white mb-2">{highlightMatch(bounty.title, searchQuery)}</Text>
                 <View className="flex justify-between items-center">
                   <View className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">
                     ${bounty.amount}

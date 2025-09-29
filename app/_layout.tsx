@@ -1,10 +1,14 @@
 import { ThemeProvider } from "components/theme-provider";
+import { Asset } from 'expo-asset';
+import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
-import type React from "react";
+import * as SplashScreen from 'expo-splash-screen';
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { StripeProvider } from '../lib/stripe-context';
 import "../global.css";
+import { StripeProvider } from '../lib/stripe-context';
+import BrandedSplash from './auth/splash';
 
 export const metadata = {
   title: "Bounty App",
@@ -27,11 +31,54 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const [appIsReady, setAppIsReady] = useState(false);
+  // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
+  const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
+  const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
+
+  // Load any custom fonts (add family names if you have them)
+  const [fontsLoaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = Date.now();
+    (async () => {
+      try {
+        await SplashScreen.preventAutoHideAsync();
+        await Asset.loadAsync([ require('../assets/images/icon.png') ]);
+      } catch (e) {
+        console.warn('[Splash] preparation error', e);
+      } finally {
+        if (!cancelled) {
+          setAppIsReady(true);
+          setPhase('brand'); // immediately move to branded React splash
+          // Ensure native splash is hidden now that branded phase is active
+          SplashScreen.hideAsync().catch(()=>{});
+          // Enforce minimum branded duration
+          const elapsed = Date.now() - start;
+          const remaining = BRANDED_MIN_MS - elapsed;
+          if (remaining > 0) {
+            setTimeout(() => setPhase(p => p === 'brand' ? 'app' : p), remaining);
+          } else {
+            setPhase('app');
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Safety fallback: if something stalls, move to app after max 8s
+  useEffect(() => {
+    if (phase === 'app') return;
+    const safety = setTimeout(() => setPhase('app'), 8000);
+    return () => clearTimeout(safety);
+  }, [phase]);
+
+  const showBranded = phase === 'brand' || (phase !== 'app' && !fontsLoaded);
   // Runtime instrumentation: log presence of critical stubs once (development only)
   if (__DEV__) {
     try {
@@ -52,14 +99,18 @@ export default function RootLayout({
   }
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <StripeProvider>
-          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-            <View style={styles.inner}>
-              <Slot />
-            </View>
-          </ThemeProvider>
-        </StripeProvider>
+  <SafeAreaView style={styles.container}>
+        {showBranded ? (
+          <BrandedSplash />
+        ) : (
+          <StripeProvider>
+            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+              <View style={styles.inner}>
+                <Slot />
+              </View>
+            </ThemeProvider>
+          </StripeProvider>
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
