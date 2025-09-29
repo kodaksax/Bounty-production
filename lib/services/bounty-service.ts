@@ -1,5 +1,6 @@
 import type { Bounty } from "lib/services/database.types"
 import { logger } from "lib/utils/error-logger"
+import { API_CONFIG } from "lib/config/app-config"
 
 export const bountyService = {
   /**
@@ -7,8 +8,7 @@ export const bountyService = {
    */
   async getById(id: number): Promise<Bounty | null> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${API_CONFIG.baseUrl}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required.
         // headers: { 'Authorization': `Bearer ${your_auth_token}` }
@@ -34,8 +34,7 @@ export const bountyService = {
    */
   async getAll(options?: { status?: string; userId?: string }): Promise<Bounty[]> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const API_URL = `${API_CONFIG.baseUrl}/api/bounties`
       const params = new URLSearchParams()
 
        if (options?.status) params.append("status", options.status)
@@ -56,8 +55,7 @@ export const bountyService = {
    */
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
-      // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const API_URL = `${API_CONFIG.baseUrl}/api/bounties`
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {

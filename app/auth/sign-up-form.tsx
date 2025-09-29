@@ -10,6 +10,7 @@ import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
 import { Label } from "components/ui/label"
 import { useState } from "react"
+import { API_CONFIG } from "lib/config/app-config"
 
 export function SignUpForm(): React.ReactElement {
   const navigation = useNavigation()
@@ -35,8 +36,7 @@ export function SignUpForm(): React.ReactElement {
     try {
       setIsLoading(true)
 
-      // TODO: Replace with your Hostinger backend API endpoint
-      const response = await fetch("https://your-hostinger-api.com/auth/sign-up", {
+      const response = await fetch(`${API_CONFIG.authUrl}/auth/sign-up`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, username }),

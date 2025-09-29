@@ -32,8 +32,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.bountyexpo-workspace",
-          "publishableKey": "pk_live_51PGppVJekUCspsfJ6faxkQosXxBh9K4Srl9sWzCj4ZSkyPG2CJtU8T9WAhWIemp8ef2XXywb8vJODtlAVtKQU8Lo000ZVwbZee"
+          "merchantIdentifier": "merchant.com.bountyexpo-workspace"
         }
       ],
       [

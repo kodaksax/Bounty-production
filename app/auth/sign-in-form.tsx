@@ -1,5 +1,3 @@
-"use client"
-
 import type React from "react"
 import { View, Text, TouchableOpacity, TextInput, ActivityIndicator } from "react-native"
 
@@ -7,6 +5,7 @@ import { Alert, AlertDescription } from "components/ui/alert"
 import { MaterialIcons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 import { useState } from "react"
+import { API_CONFIG } from "lib/config/app-config"
 
 export function SignInForm() {
   const navigation = useNavigation<any>()
@@ -29,8 +28,7 @@ export function SignInForm() {
     try {
       setIsLoading(true)
 
-      // TODO: Replace with your Hostinger backend API endpoint
-      const response = await fetch("https://your-hostinger-api.com/auth/sign-in", {
+      const response = await fetch(`${API_CONFIG.authUrl}/auth/sign-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
