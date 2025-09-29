@@ -13,18 +13,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { bountyService } from '../../lib/services/bounty-service'
+import type { Bounty as BountyType } from '../../lib/services/database.types'
 
 // Calendar removed in favor of Profile as the last tab
 
-// Define the Bounty type here if not exported from data-utils
-type Bounty = {
-  id: string
-  user_id: string
-  title: string
-  amount: number | string
-  location?: string
-  description?: string
-}
+// Use the proper Bounty type from database types
+type Bounty = BountyType
 
 
 function BountyAppInner() {
@@ -34,7 +29,7 @@ function BountyAppInner() {
   const [showBottomNav, setShowBottomNav] = useState(true)
   // Removed inline search overlay state; navigation now handles search route.
   const [bounties, setBounties] = useState<Bounty[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const { balance } = useWallet()
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
@@ -64,13 +59,13 @@ function BountyAppInner() {
   })
   // list layout (single column)
 
-  // Filter chips per design
-  const categories = [
+  // Filter chips per design - memoized to prevent dependency issues
+  const categories = useMemo(() => [
     { id: "crypto", label: "Crypto", icon: "attach-money" as const },
     { id: "remote", label: "Remote", icon: "inventory" as const },
     { id: "highpaying", label: "High Paying", icon: "payments" as const },
     { id: "forkids", label: "For Honor", icon: "favorite" as const },
-  ]
+  ], [])
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
   const calculateDistance = (location: string) => {
@@ -104,21 +99,30 @@ function BountyAppInner() {
     return list
   }, [bounties, activeCategory])
 
-  // Placeholder data until backend is connected
-  useEffect(() => {
-    const placeholders: Bounty[] = [
-      { id: "1", user_id: "u1", title: "Mow My lawn!!!", amount: 60, location: "Downtown" },
-      { id: "2", user_id: "u2", title: "Delivering a Package", amount: 60, location: "Midtown" },
-      { id: "3", user_id: "u3", title: "Find my fathers murderer", amount: 500, location: "Uptown" },
-      { id: "4", user_id: "u4", title: "Help setting up crypto wallet", amount: 45, location: "Westside" },
-      { id: "5", user_id: "u5", title: "Coffee delivery service", amount: 15, location: "Eastside" },
-      { id: "6", user_id: "u6", title: "Birthday party helper", amount: 80, location: "Riverside" },
-      { id: "7", user_id: "u7", title: "Yard cleanup", amount: 55, location: "Lakeside" },
-      { id: "8", user_id: "u8", title: "Assemble furniture", amount: 70, location: "Heights" },
-    ]
-    setBounties(placeholders)
-    setIsLoading(false)
+  // Load bounties from backend
+  const loadBounties = useCallback(async () => {
+    setIsLoadingBounties(true)
+    try {
+      const fetchedBounties = await bountyService.getAll({ status: 'open' })
+      setBounties(fetchedBounties)
+    } catch (error) {
+      console.error('Error loading bounties:', error)
+      // Keep empty array as fallback
+    } finally {
+      setIsLoadingBounties(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadBounties()
+  }, [loadBounties])
+
+  // Reload bounties when returning to bounty screen from other screens
+  useEffect(() => {
+    if (activeScreen === "bounty") {
+      loadBounties()
+    }
+  }, [activeScreen, loadBounties])
 
   // Restore last-selected chip on mount
   useEffect(() => {
@@ -139,15 +143,17 @@ function BountyAppInner() {
     })()
   }, [activeCategory])
 
-  // Pull-to-refresh handler
-  const onRefresh = useCallback(() => {
+  // Pull-to-refresh handler - reload data from backend
+  const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    // Simulate network refresh; replace with real fetch later
-    setTimeout(() => {
-      // e.g., you could reshuffle placeholder order here
+    try {
+      await loadBounties()
+    } catch (error) {
+      console.error('Error refreshing bounties:', error)
+    } finally {
       setRefreshing(false)
-    }, 800)
-  }, [])
+    }
+  }, [loadBounties])
 
   // Ensure activeCategory matches available filters
   useEffect(() => {
@@ -225,7 +231,7 @@ function BountyAppInner() {
       {/* Bounty List with scroll listener (content extends under BottomNav) */}
       <Animated.FlatList
         data={filteredBounties}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: HEADER_EXPANDED + headerTopPad + 8,
@@ -237,22 +243,28 @@ function BountyAppInner() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-            <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-            <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-              <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-            </TouchableOpacity>
+            {isLoadingBounties ? (
+              <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
+            ) : (
+              <>
+                <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+                <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+                  <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
-          const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
             <BountyListItem
-              id={numericId}
+              id={item.id}
               title={item.title}
               username="@Jon_Doe"
               price={Number(item.amount)}
               distance={distance}
+              description={item.description}
             />
           )
         }}
@@ -274,7 +286,12 @@ function BountyAppInner() {
       ) : activeScreen === "wallet" ? (
         <WalletScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "postings" ? (
-        <PostingsScreen onBack={() => setActiveScreen("bounty")} activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
+        <PostingsScreen 
+          onBack={() => setActiveScreen("bounty")} 
+          activeScreen={activeScreen} 
+          setActiveScreen={setActiveScreen}
+          onBountyPosted={loadBounties} // Refresh bounties when a new one is posted
+        />
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (

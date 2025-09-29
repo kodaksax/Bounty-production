@@ -30,9 +30,10 @@ interface PostingsScreenProps {
   onBack?: () => void
   activeScreen: string
   setActiveScreen: (screen: string) => void
+  onBountyPosted?: () => void // Callback when a bounty is successfully posted
 }
 
-export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: PostingsScreenProps) {
+export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted }: PostingsScreenProps) {
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
@@ -236,6 +237,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
 
         // Set success state to trigger animations and UI updates
         setPostSuccess(true)
+
+        // Notify parent component that a bounty was posted successfully
+        onBountyPosted?.()
 
         // Reset form
         setFormData({
