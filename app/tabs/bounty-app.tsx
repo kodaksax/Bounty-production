@@ -29,7 +29,7 @@ function BountyAppInner() {
   const [showBottomNav, setShowBottomNav] = useState(true)
   // Removed inline search overlay state; navigation now handles search route.
   const [bounties, setBounties] = useState<Bounty[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const { balance } = useWallet()
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
@@ -59,13 +59,13 @@ function BountyAppInner() {
   })
   // list layout (single column)
 
-  // Filter chips per design
-  const categories = [
+  // Filter chips per design - memoized to prevent dependency issues
+  const categories = useMemo(() => [
     { id: "crypto", label: "Crypto", icon: "attach-money" as const },
     { id: "remote", label: "Remote", icon: "inventory" as const },
     { id: "highpaying", label: "High Paying", icon: "payments" as const },
     { id: "forkids", label: "For Honor", icon: "favorite" as const },
-  ]
+  ], [])
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
   const calculateDistance = (location: string) => {
@@ -102,7 +102,7 @@ function BountyAppInner() {
   // Load bounties from backend
   useEffect(() => {
     const loadBounties = async () => {
-      setIsLoading(true)
+      setIsLoadingBounties(true)
       try {
         const fetchedBounties = await bountyService.getAll({ status: 'open' })
         setBounties(fetchedBounties)
@@ -110,7 +110,7 @@ function BountyAppInner() {
         console.error('Error loading bounties:', error)
         // Keep empty array as fallback
       } finally {
-        setIsLoading(false)
+        setIsLoadingBounties(false)
       }
     }
     
@@ -237,10 +237,16 @@ function BountyAppInner() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-            <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-            <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-              <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-            </TouchableOpacity>
+            {isLoadingBounties ? (
+              <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
+            ) : (
+              <>
+                <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+                <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+                  <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
         renderItem={({ item }) => {
