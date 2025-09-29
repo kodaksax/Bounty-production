@@ -114,11 +114,11 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills }: SkillsetEd
       {/* Standard Header */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
           <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
         </View>
         <TouchableOpacity onPress={handleSave} className="p-2">
-          <MaterialIcons name="close" size={24} color="#000000" />
+          <MaterialIcons name="close" size={24} color="#fffef5" />
         </TouchableOpacity>
       </View>
 

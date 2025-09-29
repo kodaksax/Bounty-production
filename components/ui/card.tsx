@@ -118,52 +118,63 @@ interface CardStyles {
 
 const cardStyles = StyleSheet.create<CardStyles>({
   base: {
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  elevated: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald border
+    shadowColor: '#000000',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+    // Glass-morphism effect
+    overflow: 'hidden',
+  },
+  elevated: {
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+    // Add subtle glow for elevated cards
+    borderColor: 'rgba(16, 185, 129, 0.4)',
   },
   header: {
-    paddingTop: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 6,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 6,
+    letterSpacing: 0.3,
   },
   description: {
     fontSize: 14,
-    color: '#6b7280',
+    color: 'rgba(255, 255, 255, 0.7)',
+    lineHeight: 20,
   },
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 0,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 0,
-    paddingBottom: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 185, 129, 0.2)', // emerald border
+    marginTop: 12,
   },
 })
 

@@ -4,13 +4,13 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
-import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
-import { WithdrawScreen } from "../../components/withdraw-screen";
-import { useWallet } from '../../lib/wallet-context';
-import { useStripe } from '../../lib/stripe-context';
 import { stripeService } from '../../lib/services/stripe-service';
+import { useStripe } from '../../lib/stripe-context';
+import { useWallet } from '../../lib/wallet-context';
+import { AddMoneyScreen } from "./add-money-screen";
+import { TransactionHistoryScreen } from "./transaction-history-screen";
+import { WithdrawScreen } from "./withdraw-screen";
 
 
 interface WalletScreenProps {
@@ -53,7 +53,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
+          <MaterialIcons name="gps-fixed" size={20} color="#fffef5" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
       </View>
@@ -67,11 +67,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </View>
             <View style={styles.balanceActionsRow}>
               <TouchableOpacity style={styles.actionButton} onPress={() => setShowAddMoney(true)}>
-                <MaterialIcons name="add" size={20} color="#fff" />
+                <MaterialIcons name="add" size={20} color="#fffef5" />
                 <Text style={styles.actionButtonText}>Add Money</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={() => setShowWithdraw(true)}>
-                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" />
+                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fffef5" />
                 <Text style={styles.actionButtonText}>Withdraw</Text>
               </TouchableOpacity>
             </View>
@@ -104,7 +104,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 onPress={() => setShowPaymentMethods(true)}
               >
                 <View style={styles.accountIcon}>
-                  <MaterialIcons name="add" size={24} color="#fff" />
+                  <MaterialIcons name="add" size={24} color="#fffef5" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.accountName}>Add Payment Method</Text>
@@ -115,7 +115,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               paymentMethods.map((method, index) => (
                 <View key={method.id} style={styles.accountCard}>
                   <View style={styles.accountIcon}>
-                    <MaterialIcons name="credit-card" size={24} color="#fff" />
+                    <MaterialIcons name="credit-card" size={24} color="#fffef5" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.accountName}>
@@ -153,7 +153,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 <Text style={styles.bountyName}>{
                   tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
                 } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
-                <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+                <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#00912C' : '#dc2626'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
               </View>
             ))}
           </ScrollView>
@@ -169,7 +169,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#1a3d2e', // Updated to use new primary background
   },
   header: {
     flexDirection: 'row',
@@ -177,14 +177,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerTitle: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 1,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   balanceCard: {
-    backgroundColor: '#047857',
+    backgroundColor: '#2d5240', // Updated to use new secondary background
     borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
@@ -210,13 +210,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   balanceLabel: {
-    color: '#6ee7b7',
+    color: '#c3c3c4', // Company specified subtle highlight color
     fontSize: 14,
     textTransform: 'uppercase',
     fontWeight: 'bold',
   },
   balanceAmount: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 32,
     fontWeight: 'bold',
     marginTop: 4,
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#61656b', // Company specified trim color
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -249,19 +249,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 16,
     fontWeight: 'bold',
   },
   sectionManage: {
-    color: '#6ee7b7',
+    color: '#929497', // Company specified highlight color
     fontSize: 14,
     fontWeight: 'bold',
   },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: 'rgba(45, 82, 64, 0.8)', // Updated to use new secondary background with transparency
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -272,26 +272,26 @@ const styles = StyleSheet.create({
   accountIcon: {
     height: 48,
     width: 48,
-    backgroundColor: '#065f46',
+    backgroundColor: '#61656b', // Company specified trim color
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   accountName: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 16,
     fontWeight: 'bold',
   },
   accountSub: {
-    color: '#6ee7b7',
+    color: '#929497', // Company specified highlight color
     fontSize: 13,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: 'rgba(45, 82, 64, 0.8)', // Updated to use new secondary background with transparency
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -300,12 +300,12 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   bountyName: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 16,
     fontWeight: 'bold',
   },
   bountyAmount: {
-    color: '#fff',
+    color: '#fffef5', // Company specified header text/logos color
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyStateText: {
-    color: '#6ee7b7',
+    color: '#c3c3c4', // Company specified subtle highlight color
     fontSize: 14,
     opacity: 0.9,
   },

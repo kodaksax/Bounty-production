@@ -3,13 +3,13 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useState } from "react"
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native"
+import { ContactSupportScreen } from "../../components/settings/contact-support-screen"
+import { FAQScreen } from "../../components/settings/faq-screen"
+import { HelpSupportScreen } from "../../components/settings/help-support-screen"
+import { NotificationsCenterScreen } from "../../components/settings/notifications-center-screen"
+import { PrivacySecurityScreen } from "../../components/settings/privacy-security-screen"
+import { TermsPrivacyScreen } from "../../components/settings/terms-privacy-screen"
 import { EditProfileScreen } from "./edit-profile-screen"
-import { ContactSupportScreen } from "./settings/contact-support-screen"
-import { FAQScreen } from "./settings/faq-screen"
-import { HelpSupportScreen } from "./settings/help-support-screen"
-import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
-import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
-import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
 
 interface SettingsScreenProps { onBack?: () => void }
 
@@ -55,11 +55,11 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
       {/* Header */}
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-black">BOUNTY</Text>
+          <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color="#000" />
+          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
         </TouchableOpacity>
       </View>
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
@@ -125,7 +125,7 @@ function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
         {icon}
         <Text className="ml-3">{label}</Text>
       </View>
-      <MaterialIcons name="keyboard-arrow-right" size={24} color="#000" />
+      <MaterialIcons name="keyboard-arrow-right" size={24} color="#fffef5" />
     </TouchableOpacity>
   )
 }

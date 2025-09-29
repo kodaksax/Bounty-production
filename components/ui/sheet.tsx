@@ -63,7 +63,7 @@ const SheetContent = React.forwardRef<View, SheetContentProps>(({ side = "right"
     <View ref={ref} style={[{ backgroundColor: '#fff', padding: 16 }, style as any]} {...(props as any)}>
       {children}
       <SheetClose onPress={() => onOpenChange?.(false)} style={{ position: 'absolute', right: 16, top: 16 }}>
-        <MaterialIcons name="close" size={24} color="#000000" />
+        <MaterialIcons name="close" size={24} color="#61656b" />
         <Text style={{ position: 'absolute', left: -9999 }}>Close</Text>
       </SheetClose>
     </View>

@@ -7,7 +7,7 @@ import { cn } from "lib/utils"
 import { useWallet } from "lib/wallet-context"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
-import { TransactionDetailModal } from "./transaction-detail-modal"
+import { TransactionDetailModal } from "../../components/transaction-detail-modal"
 
 export interface Transaction {
   id: string
