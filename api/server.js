@@ -1,7 +1,19 @@
 // api/server.js
+require('dotenv').config(); // Load environment variables first
+
 const express = require('express');
 const cors = require('cors');
-const { connect } = require('../lib/db');
+
+// Choose database based on environment
+let connect;
+if (process.env.USE_SQLITE === 'true') {
+  console.log('🗄️  Using SQLite database (development/testing)');
+  connect = require('../lib/db-sqlite').connect;
+} else {
+  console.log('🗄️  Using MySQL database (production)');
+  connect = require('../lib/db').connect;
+}
+
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
