@@ -13,18 +13,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { bountyService } from '../../lib/services/bounty-service'
+import type { Bounty as BountyType } from '../../lib/services/database.types'
 
 // Calendar removed in favor of Profile as the last tab
 
-// Define the Bounty type here if not exported from data-utils
-type Bounty = {
-  id: string
-  user_id: string
-  title: string
-  amount: number | string
-  location?: string
-  description?: string
-}
+// Use the proper Bounty type from database types
+type Bounty = BountyType
 
 
 function BountyAppInner() {
@@ -104,20 +99,22 @@ function BountyAppInner() {
     return list
   }, [bounties, activeCategory])
 
-  // Placeholder data until backend is connected
+  // Load bounties from backend
   useEffect(() => {
-    const placeholders: Bounty[] = [
-      { id: "1", user_id: "u1", title: "Mow My lawn!!!", amount: 60, location: "Downtown" },
-      { id: "2", user_id: "u2", title: "Delivering a Package", amount: 60, location: "Midtown" },
-      { id: "3", user_id: "u3", title: "Find my fathers murderer", amount: 500, location: "Uptown" },
-      { id: "4", user_id: "u4", title: "Help setting up crypto wallet", amount: 45, location: "Westside" },
-      { id: "5", user_id: "u5", title: "Coffee delivery service", amount: 15, location: "Eastside" },
-      { id: "6", user_id: "u6", title: "Birthday party helper", amount: 80, location: "Riverside" },
-      { id: "7", user_id: "u7", title: "Yard cleanup", amount: 55, location: "Lakeside" },
-      { id: "8", user_id: "u8", title: "Assemble furniture", amount: 70, location: "Heights" },
-    ]
-    setBounties(placeholders)
-    setIsLoading(false)
+    const loadBounties = async () => {
+      setIsLoading(true)
+      try {
+        const fetchedBounties = await bountyService.getAll({ status: 'open' })
+        setBounties(fetchedBounties)
+      } catch (error) {
+        console.error('Error loading bounties:', error)
+        // Keep empty array as fallback
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadBounties()
   }, [])
 
   // Restore last-selected chip on mount
@@ -139,14 +136,17 @@ function BountyAppInner() {
     })()
   }, [activeCategory])
 
-  // Pull-to-refresh handler
-  const onRefresh = useCallback(() => {
+  // Pull-to-refresh handler - reload data from backend
+  const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    // Simulate network refresh; replace with real fetch later
-    setTimeout(() => {
-      // e.g., you could reshuffle placeholder order here
+    try {
+      const fetchedBounties = await bountyService.getAll({ status: 'open' })
+      setBounties(fetchedBounties)
+    } catch (error) {
+      console.error('Error refreshing bounties:', error)
+    } finally {
       setRefreshing(false)
-    }, 800)
+    }
   }, [])
 
   // Ensure activeCategory matches available filters
@@ -225,7 +225,7 @@ function BountyAppInner() {
       {/* Bounty List with scroll listener (content extends under BottomNav) */}
       <Animated.FlatList
         data={filteredBounties}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: HEADER_EXPANDED + headerTopPad + 8,
@@ -245,10 +245,9 @@ function BountyAppInner() {
         )}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
-          const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
             <BountyListItem
-              id={numericId}
+              id={item.id}
               title={item.title}
               username="@Jon_Doe"
               price={Number(item.amount)}
