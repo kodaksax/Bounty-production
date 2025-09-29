@@ -373,32 +373,46 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen }: Postin
           </View>
 
 
-          {/* Tabs - Scrollable for iPhone */}
-          <View className="px-4 mb-3 bg-emerald-600">
-            <View className="flex space-x-6 overflow-x-auto ios-scroll no-scrollbar">
-              {tabs.map((tab) => (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "py-2 px-1 text-base font-medium transition-colors whitespace-nowrap touch-target-min",
-                    activeTab === tab.id ? "text-white border-b-2 border-white" : "text-emerald-200/70",
-                  )}
-                >
-                  <Text className={cn(
-                    "text-base font-medium",
-                    activeTab === tab.id ? "text-white" : "text-emerald-200/70",
-                  )}>
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          {/* Tabs - Segmented Control Style */}
+          <View className="px-4 mb-4 bg-emerald-600">
+            <View className="flex-row items-center rounded-full bg-emerald-700/40 p-1 border border-emerald-500/30">
+              {tabs.map((tab, idx) => {
+                const isActive = activeTab === tab.id
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    onPress={() => setActiveTab(tab.id)}
+                    activeOpacity={0.85}
+                    className={cn(
+                      "flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min",
+                      isActive ? "bg-white" : "bg-transparent"
+                    )}
+                    style={{
+                      shadowColor: isActive ? '#000' : 'transparent',
+                      shadowOffset: { width: 0, height: isActive ? 2 : 0 },
+                      shadowOpacity: isActive ? 0.12 : 0,
+                      shadowRadius: isActive ? 3 : 0,
+                      elevation: isActive ? 2 : 0,
+                    }}
+                  >
+                    <Text
+                      className={cn(
+                        "text-xs font-semibold tracking-wide",
+                        isActive ? "text-emerald-700" : "text-emerald-200/70"
+                      )}
+                      numberOfLines={1}
+                    >
+                      {tab.label.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
             </View>
           </View>
         </View>
 
   {/* Scrollable Content Area - starts under visible bottom of header */}
-  <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - HEADER_TOP_OFFSET) }}>
+  <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
           {/* Error message */}
           {error && (
             <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">

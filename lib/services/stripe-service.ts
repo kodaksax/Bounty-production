@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 
 // Stripe API types
 export interface StripePaymentMethod {
@@ -39,9 +38,14 @@ class StripeService {
   private isInitialized: boolean = false;
 
   constructor() {
-    // In a real app, these would come from environment variables
-    // For demo purposes, using placeholder keys
-    this.publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder';
+    // Read from Expo public env (must be prefixed EXPO_PUBLIC_ to reach client bundle)
+    const key = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+    if (!key) {
+      console.warn('[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.');
+      this.publishableKey = '';
+    } else {
+      this.publishableKey = key;
+    }
   }
 
   async initialize(): Promise<void> {
@@ -50,7 +54,7 @@ class StripeService {
       
       // TODO: Initialize Stripe React Native SDK
       this.isInitialized = true;
-      console.log('Stripe service initialized');
+  console.log('Stripe service initialized with publishable key prefix:', this.publishableKey ? this.publishableKey.slice(0, 10) + '…' : 'NONE');
     } catch (error) {
       console.error('Failed to initialize Stripe:', error);
       throw new Error('Failed to initialize payment service');
