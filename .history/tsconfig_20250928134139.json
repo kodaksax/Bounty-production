@@ -7,16 +7,11 @@
       "@/*": [
         "components/*"
       ]
-      ,
-      "lib/*": [
-        "lib/*"
-      ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "**/*.d.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"

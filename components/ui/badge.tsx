@@ -1,5 +1,5 @@
 import * as React from "react"
-import { View, ViewProps } from "react-native"
+import { View, ViewProps, Text, StyleSheet } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "lib/utils"
@@ -16,6 +16,10 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        success:
+          "border-transparent bg-emerald-500 text-white",
+        warning:
+          "border-transparent bg-amber-500 text-white",
       },
     },
     defaultVariants: {
@@ -28,12 +32,96 @@ export interface BadgeProps
   extends ViewProps,
     VariantProps<typeof badgeVariants> {
   className?: string
+  children?: React.ReactNode
 }
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, children, style, ...props }: BadgeProps) {
   return (
-    <View className={cn(badgeVariants({ variant }), className)} {...props} />
+    <View 
+      className={cn(badgeVariants({ variant }), className)} 
+      style={[
+        badgeStyles.base,
+        badgeStyles[variant ?? "default"],
+        style
+      ]}
+      {...props} 
+    >
+      {typeof children === "string" ? (
+        <Text style={[
+          badgeStyles.text,
+          badgeStyles[`${variant ?? "default"}Text` as keyof typeof badgeStyles]
+        ]}>
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
+    </View>
   )
 }
+
+const badgeStyles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    // Add subtle shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  default: {
+    backgroundColor: '#10b981',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  secondary: {
+    backgroundColor: 'rgba(16, 20, 24, 0.8)',
+    borderColor: 'rgba(55, 65, 81, 0.4)',
+  },
+  destructive: {
+    backgroundColor: '#dc2626',
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+  },
+  outline: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255, 254, 245, 0.2)', // Using company specified header text color
+  },
+  success: {
+    backgroundColor: '#00912C', // Company specified primary green base
+    borderColor: 'rgba(0, 145, 44, 0.3)', // Using primary brand color
+  },
+  warning: {
+    backgroundColor: '#f59e0b',
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  text: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  defaultText: {
+    color: '#fffef5', // Company specified header text/logos color
+  },
+  secondaryText: {
+    color: 'rgba(255, 254, 245, 0.8)', // Derived from company specified header text
+  },
+  destructiveText: {
+    color: '#fffef5', // Company specified header text/logos color
+  },
+  outlineText: {
+    color: 'rgba(255, 254, 245, 0.9)', // Derived from company specified header text
+  },
+  successText: {
+    color: '#fffef5', // Company specified header text/logos color
+  },
+  warningText: {
+    color: '#fffef5', // Company specified header text/logos color
+  },
+});
 
 export { Badge, badgeVariants }

@@ -5,8 +5,12 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
-import { SearchScreen } from "components/search-screen"
+import { NetworkStatusBar } from 'components/network-status'
+import { SearchScreen } from "app/tabs/search-screen"
 import { BottomNav } from 'components/ui/bottom-nav'
+import { BountyEmptyState } from 'components/ui/empty-state'
+import { FogEffect } from 'components/ui/fog-effect'
+import { BountySkeleton } from 'components/ui/skeleton-loading'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -167,17 +171,30 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
             <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
           </View>
-          <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
+          <TouchableOpacity 
+            onPress={() => setActiveScreen('wallet')}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`Wallet balance: $${balance.toFixed(2)}`}
+            accessibilityHint="Tap to view wallet and transaction history"
+          >
             <Text style={styles.headerBalance}>$ {balance.toFixed(2)}</Text>
           </TouchableOpacity>
         </View>
         <Animated.View style={{ opacity: extraContentOpacity }}>
           {/* Search Bar */}
           <View style={styles.searchWrapper}>
-            <TouchableOpacity accessibilityRole="button" onPress={() => setShowSearch(true)} style={styles.searchButton}>
+            <TouchableOpacity 
+              accessibilityRole="button" 
+              onPress={() => setShowSearch(true)} 
+              style={styles.searchButton}
+              accessible={true}
+              accessibilityLabel="Search bounties and users"
+              accessibilityHint="Tap to open search screen"
+            >
               <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
               <Text style={styles.searchText}>Search bounties or users...</Text>
             </TouchableOpacity>
@@ -196,12 +213,18 @@ function BountyAppInner() {
                   <TouchableOpacity
                     onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
                     style={[styles.chip, isActive && styles.chipActive]}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${item.label}`}
+                    accessibilityState={{ selected: isActive }}
+                    accessibilityHint={isActive ? "Tap to clear filter" : `Filter bounties by ${item.label} category`}
                   >
                     <MaterialIcons
                       name={item.icon}
                       size={16}
-                      color={isActive ? '#052e1b' : '#d1fae5'}
+                      color={isActive ? '#1a3d2e' : '#c3c3c4'}
                       style={{ marginRight: 8 }}
+                      accessibilityElementsHidden={true}
                     />
                     <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
                   </TouchableOpacity>
@@ -218,13 +241,16 @@ function BountyAppInner() {
       </Animated.View>
 
       {/* Bounty List with scroll listener */}
+      <NetworkStatusBar />
       <Animated.FlatList
         data={filteredBounties}
         keyExtractor={(item) => item.id}
-  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: HEADER_EXPANDED + headerTopPad + 8, paddingBottom:  (insets.bottom + 40) }}
+        // Allow content to scroll underneath the BottomNav by removing large bottom padding.
+        // This makes the bottom of the list visually disappear behind the nav bar.
+        contentContainerStyle={{ paddingHorizontal: 17, paddingTop: HEADER_EXPANDED + headerTopPad + 0, paddingBottom: 0, marginTop: 1 }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
-        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 2.8 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
@@ -239,6 +265,7 @@ function BountyAppInner() {
           const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
           return (
             <BountyListItem
+              key={item.id} // Explicit key for better performance
               id={numericId}
               title={item.title}
               username="@Jon_Doe"
@@ -247,6 +274,15 @@ function BountyAppInner() {
             />
           )
         }}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={8}
+        windowSize={10}
+        getItemLayout={(data, index) => (
+          {length: 88, offset: 90 * index, index} // Approximate item height + margin
+        )}
       />
     </View>
   )
@@ -254,6 +290,35 @@ function BountyAppInner() {
 
   return (
     <View style={styles.container}>
+      {/* VANTA.FOG-like effect background */}
+      <FogEffect 
+        intensity={4}
+        speed={0.8}
+        color="#00912C"
+        opacity={0.12}
+      />
+
+      {/* Top gradient covering safe area (status bar) for consistent highlight */}
+      <LinearGradient
+        colors={["#2d5240", "#1a3d2e90", "#1a3d2e00"]}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: headerTopPad + 60, // cover status bar + slight fade
+          zIndex: 5,
+        }}
+        pointerEvents="none"
+      />
+
+      {/* Bottom fade so list items appear to disappear behind nav */}
+      <LinearGradient
+        colors={["rgba(26,61,46,0)", "rgba(26,61,46,0.75)", "#1a3d2e"]}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 50, height: 80, zIndex: 50 }}
+        pointerEvents="none"
+      />
+      
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -283,23 +348,127 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated)
+// Styles (consolidated) - Enhanced spy-like aesthetic with lighter green base for fog contrast
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative', paddingBottom: 100 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#1a3d2e', // Updated to use new primary background
+    position: 'relative'
+  },
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  headerBalance: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  searchWrapper: { paddingHorizontal: 16, marginBottom: 8 },
-  searchButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.35)', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
-  searchIcon: { marginRight: 8 },
-  searchText: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
-  filtersRow: { paddingVertical: 8 },
-  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 14, height: 36, borderRadius: 999, marginRight: 8 },
-  chipActive: { backgroundColor: '#a7f3d0' },
-  chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
-  chipLabelActive: { color: '#052e1b' },
+  collapsingHeader: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    top: 0, 
+    zIndex: 10, 
+    backgroundColor: '#2d5240', // Updated to use new secondary background
+    // Add subtle gradient overlay
+    shadowColor: '#00912C', // Company specified primary green base
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingBottom: 12 
+  },
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  headerTitle: { 
+    marginLeft: 8, 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#fffef5', // Company specified header text/logos color
+    letterSpacing: 1.2,
+    // Add subtle text shadow
+    textShadowColor: '#00912C', // Company specified primary green base
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  headerBalance: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#fffef5', // Company specified header text/logos color
+    // Add premium styling
+    backgroundColor: 'rgba(0, 145, 44, 0.1)', // Using company specified primary green
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  searchWrapper: { 
+    paddingHorizontal: 16, 
+    marginBottom: 12 
+  },
+  searchButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 97, 62, 0.6)', // lighter emerald with opacity for better fog contrast
+    borderRadius: 16, 
+    paddingVertical: 10, 
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)', // more visible emerald border
+    // Add glass-morphism effect
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  searchIcon: { 
+    marginRight: 10 
+  },
+  searchText: { 
+    color: 'rgba(255,255,255,0.75)', 
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  filtersRow: { 
+    paddingVertical: 10 
+  },
+  gradientSeparator: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    height: 10 
+  },
+  chip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(16, 97, 62, 0.5)', // lighter emerald base for better fog contrast
+    paddingHorizontal: 16, 
+    height: 28, 
+    borderRadius: 20, 
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.45)', // more visible emerald border
+    // Add subtle shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chipActive: { 
+    backgroundColor: 'rgba(0, 145, 44, 0.15)', // Using company specified primary green
+    borderColor: 'rgba(0, 145, 44, 0.4)', // Using company specified primary green
+    // Add glow effect for active state
+    shadowColor: '#00912C', // Company specified primary green base
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  chipLabel: { color: '#c3c3c4', fontSize: 14, fontWeight: '600' }, // Company specified subtle highlight color
+  chipLabelActive: { color: '#1a3d2e' }, // Updated to use new primary background
 })

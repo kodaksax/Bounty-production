@@ -3,9 +3,23 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { useState } from "react"
-import { Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
-import { useWallet } from '../lib/wallet-context'
-import { useStripe } from '../lib/stripe-context'
+import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native"
+import { useTheme } from '../../components/theme-provider'
+import { useStripe } from '../../lib/stripe-context'
+import { useWallet } from '../../lib/wallet-context'
+// Local fallback semantic colors (small subset used by this screen).
+// This avoids depending on path aliases or bundler resolution in dev envs.
+const fallbackSemantic = {
+  backgroundPrimary: '#1a3d2e',
+  backgroundSecondary: '#2d5240',
+  textPrimary: '#fffef5',
+  textSecondary: 'rgba(255, 254, 245, 0.8)',
+  textMuted: 'rgba(255, 254, 245, 0.6)',
+  accent: '#00912C',
+  accentSubtle: 'rgba(0,145,44,0.15)',
+  textInverted: '#1a3d2e',
+  borderMuted: 'rgba(0,145,44,0.2)'
+} as const
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -113,26 +127,31 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     }
   }
 
+  // Read theme safely — ThemeProviderState may not include `semanticColors`.
+  // Try `semanticColors`, then `colors`, then fall back to our lib/theme default.
+  const theme = useTheme() as any
+  const sc = theme?.semanticColors ?? theme?.colors ?? fallbackSemantic
+
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1" style={{ backgroundColor: sc.backgroundPrimary }}>
       {/* Header */}
-      <View className="sticky top-0 z-10 bg-emerald-600 px-4 pt-safe pb-2">
+      <View className="sticky top-0 z-10 px-4 pt-safe pb-2" style={{ backgroundColor: sc.backgroundPrimary }}>
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
-            <MaterialIcons name="close" size={24} color="#ffffff" />
+            <MaterialIcons name="close" size={24} color={sc.textPrimary} />
           </TouchableOpacity>
           <View className="flex-row items-center gap-2">
-            <MaterialIcons name="gps-fixed" size={22} color="#ffffff" />
-            <Text className="text-white font-bold tracking-wider">BOUNTY</Text>
+            <MaterialIcons name="gps-fixed" size={22} color={sc.textPrimary} />
+            <Text className="font-bold tracking-wider" style={{ color: sc.textPrimary }}>BOUNTY</Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
-        <Text className="text-white text-base text-center mt-1">Add Cash</Text>
+        <Text className="text-base text-center mt-1" style={{ color: sc.textSecondary }}>Add Cash</Text>
       </View>
 
       {/* Amount Display */}
       <View className="items-center justify-center py-6">
-        <Text className="text-white" style={{ fontSize: 56, fontWeight: '800' }}>${amount}</Text>
+        <Text style={{ fontSize: 56, fontWeight: '800', color: sc.textPrimary }}>${amount}</Text>
       </View>
 
       {/* Keypad */}
@@ -147,7 +166,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
                 onPress={() => handleNumberPress(num)}
                 activeOpacity={0.7}
               >
-                <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>{num}</Text>
+                <Text style={{ fontSize: 24, fontWeight: '600', color: sc.textPrimary }}>{num}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -155,53 +174,50 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         <View className="flex-row justify-between">
           <TouchableOpacity
             className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
+            style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
             onPress={handleDecimalPress}
             activeOpacity={0.7}
           >
-            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>.</Text>
+            <Text style={{ fontSize: 24, fontWeight: '600', color: sc.textPrimary }}>.</Text>
           </TouchableOpacity>
           <TouchableOpacity
             className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
+            style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
             onPress={() => handleNumberPress(0)}
             activeOpacity={0.7}
           >
-            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>0</Text>
+            <Text style={{ fontSize: 24, fontWeight: '600', color: sc.textPrimary }}>0</Text>
           </TouchableOpacity>
           <TouchableOpacity
             className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
+            style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
             onPress={handleDeletePress}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="backspace" size={26} color="#ffffff" />
+            <MaterialIcons name="backspace" size={26} color={sc.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Add Button - fixed above home indicator */}
-      <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 16 }}>
+      <View className="fixed left-0 right-0 pb-safe" style={{ position: 'absolute', bottom: 86, backgroundColor: sc.backgroundPrimary }}>
         <View className="px-4">
           <TouchableOpacity
             className={cn(
-              "w-full py-4 rounded-full flex-row items-center justify-center",
-              Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
+              "w-full py-4 rounded-full flex-row items-center justify-center"
             )}
+            style={{ backgroundColor: Number.parseFloat(amount) > 0 && !isProcessing ? sc.accent : sc.accentSubtle }}
             disabled={Number.parseFloat(amount) <= 0 || isProcessing}
             onPress={handleAddMoney}
             activeOpacity={0.8}
           >
             {isProcessing ? (
               <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                <Text className="text-center text-base font-medium text-white">Processing...</Text>
+                <ActivityIndicator size="small" color={sc.textInverted} style={{ marginRight: 8 }} />
+                <Text className="text-center text-base font-medium" style={{ color: sc.textInverted }}>Processing...</Text>
               </>
             ) : (
-              <Text className={cn(
-                "text-center text-base font-medium",
-                Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-              )}>Add Money</Text>
+              <Text className="text-center text-base font-medium" style={{ color: Number.parseFloat(amount) > 0 ? sc.textInverted : sc.textMuted }}>Add Money</Text>
             )}
           </TouchableOpacity>
         </View>

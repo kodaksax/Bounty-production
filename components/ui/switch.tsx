@@ -31,12 +31,17 @@ const Switch = React.forwardRef<any, SwitchProps>(
 
     const translateX = animatedValue.interpolate({
       inputRange: [0, 1],
-      outputRange: [2, 22],
+      outputRange: [2, 26], // Adjusted for larger switch
     });
 
     const backgroundColor = animatedValue.interpolate({
       inputRange: [0, 1],
-      outputRange: ['#e5e5e5', '#007AFF'],
+      outputRange: ['rgba(55, 65, 81, 0.6)', '#10b981'], // spy-border to spy-glow
+    });
+
+    const thumbShadow = animatedValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 0.4],
     });
 
     return (
@@ -50,9 +55,9 @@ const Switch = React.forwardRef<any, SwitchProps>(
           className
         )}
         style={{
-          width: 44,
-          height: 24,
-          borderRadius: 12,
+          width: 50,
+          height: 28,
+          borderRadius: 14,
           padding: 2,
           justifyContent: 'center',
         }}
@@ -60,18 +65,21 @@ const Switch = React.forwardRef<any, SwitchProps>(
       >
         <Animated.View
           style={{
-            width: 44,
-            height: 24,
-            borderRadius: 12,
+            width: 50,
+            height: 28,
+            borderRadius: 14,
             backgroundColor,
             position: 'absolute',
+            // Add glass-morphism border
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.1)',
           }}
         />
         <Animated.View
           style={{
-            width: 20,
-            height: 20,
-            borderRadius: 10,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
             backgroundColor: 'white',
             shadowColor: '#000',
             shadowOffset: {
@@ -82,6 +90,9 @@ const Switch = React.forwardRef<any, SwitchProps>(
             shadowRadius: 3.84,
             elevation: 5,
             transform: [{ translateX }],
+            // Add dynamic glow based on state
+            borderWidth: checked ? 2 : 1,
+            borderColor: checked ? 'rgba(16, 185, 129, 0.3)' : 'rgba(0, 0, 0, 0.1)',
           }}
         />
       </TouchableOpacity>

@@ -7,10 +7,18 @@ import { MaterialIcons } from "@expo/vector-icons"
 interface AddBountyAmountScreenProps {
   onBack: () => void
   onAddAmount: (amount: number, isForHonor: boolean) => void
+  onProceedToConfirmation?: () => void
   initialAmount?: number
+  showProceedButton?: boolean
 }
 
-export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
+export function AddBountyAmountScreen({ 
+  onBack, 
+  onAddAmount, 
+  onProceedToConfirmation,
+  initialAmount = 0,
+  showProceedButton = false
+}: AddBountyAmountScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
   const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
@@ -78,13 +86,18 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     const numAmount = Number.parseFloat(amount)
     if (!isNaN(numAmount)) {
       onAddAmount(numAmount, isForHonor)
+      
+      // If we should proceed to confirmation, do that instead of going back
+      if (showProceedButton && onProceedToConfirmation) {
+        onProceedToConfirmation()
+      }
     }
   }
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#059669', // emerald-600
+      backgroundColor: '#1a3d2e', // Updated to use new primary background
     },
     header: {
       flexDirection: 'row',
@@ -151,10 +164,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     toggleButtonActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
     toggleButtonInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#61656b', // Company specified trim color
     },
     toggleCircle: {
       position: 'absolute',
@@ -176,7 +189,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     },
     honorDescriptionText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#c3c3c4', // Company specified subtle highlight color
     },
     keypadContainer: {
       flex: 1,
@@ -217,18 +230,18 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     addButtonEnabled: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#2d5240', // Updated to use new secondary background
     },
     addButtonDisabled: {
-      backgroundColor: 'rgba(6, 95, 70, 0.5)', // emerald-800/50
+      backgroundColor: 'rgba(97, 101, 107, 0.5)', // Company specified trim color with transparency
     },
     addButtonText: {
       fontWeight: '500',
-      color: 'white',
+      color: '#fffef5', // Company specified header text/logos color
       fontSize: 16,
     },
     addButtonTextDisabled: {
-      color: '#6EE7B7', // emerald-300
+      color: '#929497', // Company specified highlight color
     },
     // Style aliases to match JSX usage
     toggle: {
@@ -239,10 +252,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       justifyContent: 'center',
     },
     toggleActive: {
-      backgroundColor: '#10B981', // emerald-400
+      backgroundColor: '#00912C', // Company specified primary green base
     },
     toggleInactive: {
-      backgroundColor: '#065F46', // emerald-800
+      backgroundColor: '#61656b', // Company specified trim color
     },
     toggleSlider: {
       position: 'absolute',
@@ -264,7 +277,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     },
     honorText: {
       fontSize: 12,
-      color: '#6EE7B7', // emerald-300
+      color: '#c3c3c4', // Company specified subtle highlight color
     },
     bottomButtonContainer: {
       padding: 16,
@@ -276,6 +289,27 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       borderRadius: 8,
       alignItems: 'center',
     },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 4,
+    },
+    progressText: {
+      fontSize: 12,
+      color: '#c3c3c4', // Company specified subtle highlight color
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    progressDotComplete: {
+      backgroundColor: '#00912C', // Company specified primary green base
+    },
+    progressDotActive: {
+      backgroundColor: '#00912C', // Company specified primary green base
+    },
   });
 
   return (
@@ -283,10 +317,10 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.headerButton}>
-          <MaterialIcons name="close" size={24} color="#000000" />
+          <MaterialIcons name="close" size={24} color="#fffef5" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+          <MaterialIcons name="gps-fixed" size={24} color="#fffef5" />
           <Text style={styles.headerTitle}>BOUNTY</Text>
         </View>
         <View style={{ width: 24 }} /> {/* Empty view for spacing */}
@@ -294,7 +328,18 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Title */}
       <View style={styles.titleContainer}>
-        <Text style={styles.title}>Add Bounty Amount</Text>
+        {showProceedButton && (
+          <View style={[styles.progressContainer, { marginBottom: 12 }]}>
+            <Text style={styles.progressText}>Step 2 of 2: Set Amount</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={[styles.progressDot, styles.progressDotComplete]}></View>
+              <View style={[styles.progressDot, styles.progressDotActive]}></View>
+            </View>
+          </View>
+        )}
+        <Text style={styles.title}>
+          {showProceedButton ? "Set Your Bounty Amount" : "Add Bounty Amount"}
+        </Text>
       </View>
 
       {/* Amount Display */}
@@ -379,7 +424,9 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           <Text style={[
             styles.addButtonText,
             !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
-          ]}>Add</Text>
+          ]}>
+            {showProceedButton ? "Continue" : "Add"}
+          </Text>
 
         </TouchableOpacity>
       </View>
