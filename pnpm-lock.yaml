@@ -250,6 +250,9 @@ importers:
       pg:
         specifier: ^8.11.3
         version: 8.16.3
+      stripe:
+        specifier: ^18.5.0
+        version: 18.5.0(@types/node@20.19.18)
     devDependencies:
       '@types/node':
         specifier: ^20.8.10
