@@ -3,14 +3,15 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useHapticFeedback } from "lib/haptic-feedback";
 
-export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile";
+export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
 interface BottomNavProps {
   activeScreen: string;
   onNavigate: (screen: ScreenKey) => void;
+  showAdmin?: boolean;
 }
 
-export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
+export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
@@ -120,16 +121,29 @@ export function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
         >
           <MaterialIcons name="search" color={activeScreen === "postings" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => handleNavigate("profile")} 
-          style={styles.navButton}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel="View and edit profile"
-          accessibilityState={{ selected: activeScreen === "profile" }}
-        >
-          <MaterialIcons name="person" color={activeScreen === "profile" ? "#fffef5" : "#c3c3c4"} size={24} />
-        </TouchableOpacity>
+        {showAdmin ? (
+          <TouchableOpacity 
+            onPress={() => handleNavigate("admin")} 
+            style={styles.navButton}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Admin panel"
+            accessibilityState={{ selected: activeScreen === "admin" }}
+          >
+            <MaterialIcons name="admin-panel-settings" color={activeScreen === "admin" ? "#00dc50" : "#c3c3c4"} size={24} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            onPress={() => handleNavigate("profile")} 
+            style={styles.navButton}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="View and edit profile"
+            accessibilityState={{ selected: activeScreen === "profile" }}
+          >
+            <MaterialIcons name="person" color={activeScreen === "profile" ? "#fffef5" : "#c3c3c4"} size={24} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
