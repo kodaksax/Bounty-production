@@ -94,18 +94,39 @@ Layout rules:
 - Cache-first (future enhancement) to allow degraded offline view.
 
 ## ⚙️ Development
+### Architecture
+BOUNTYExpo is a monorepo with the following structure:
+- **Frontend**: React Native + Expo app (main directory)
+- **Backend API**: Fastify + Drizzle ORM + PostgreSQL (`services/api/`)
+- **Shared Types**: Domain types package (`packages/domain-types/`)
+
+### Backend API
+The backend API (`services/api/`) provides:
+- **PostgreSQL Database**: Using Drizzle ORM for type-safe operations
+- **Supabase JWT Authentication**: Middleware for secure API access
+- **Auto-Migration System**: Database schema management
+- **User Management**: Automatic user creation on first authenticated request
+
+See `services/api/README.md` for detailed API documentation.
+
 ### Prereqs
 - Node 18+
 - Expo CLI (installed transiently via `npx`)
+- PostgreSQL (for backend API)
 
-### Install
+### Start Frontend
 ```bash
 npm install
+npx expo start
 ```
 
-### Start
+### Start Backend API
 ```bash
-npx expo start
+cd services/api
+npm install
+# Set up .env file with DATABASE_URL and Supabase credentials
+npm run db:setup  # Run migrations and seed
+npm run dev       # Start development server
 ```
 Use a device, emulator, or Expo Go. For weird bundler issues:
 ```bash
