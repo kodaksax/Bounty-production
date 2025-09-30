@@ -7,16 +7,26 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:setup": "npm run db:migrate && npm run db:seed"
   },
   "dependencies": {
-    "@bountyexpo/domain-types": "workspace:*",
+    "@bountyexpo/domain-types": "file:../../packages/domain-types",
     "fastify": "^4.24.3",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.29.0",
+    "pg": "^8.11.3",
+    "@supabase/supabase-js": "^2.38.5"
   },
   "devDependencies": {
     "@types/node": "^20.8.10",
     "tsx": "^4.6.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "drizzle-kit": "^0.20.0",
+    "@types/pg": "^8.10.9"
   }
 }
