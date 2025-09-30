@@ -37,4 +37,23 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Docker & Development
+docker-compose.override.yml
+.docker/
+postgres-data/
+
+# IDE & Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+.tmp/
+
 app-example
