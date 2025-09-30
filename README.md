@@ -93,6 +93,70 @@ Layout rules:
 - Inline error banners with dismiss `✕`.
 - Cache-first (future enhancement) to allow degraded offline view.
 
+## 🚀 First Run
+
+### Prerequisites
+- Node.js 18+ installed
+- PostgreSQL database (local or cloud)
+- Code editor of your choice
+
+### Setup Steps
+
+1. **Clone and Install Dependencies**
+```bash
+git clone https://github.com/kodaksax/bountyexpo.git
+cd bountyexpo
+npm install
+```
+
+2. **Configure Environment Variables**
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with your actual values:
+# - DATABASE_URL: Your PostgreSQL connection string
+# - SUPABASE_JWT_SECRET: Your Supabase JWT secret
+# - STRIPE_SECRET_KEY: Your Stripe secret key (for payments)
+# - API_BASE_URL: Your hosted API domain
+```
+
+3. **Start All Services**
+```bash
+# Start the backend API and frontend simultaneously
+npm run dev:all
+
+# Or start them separately:
+# Backend API only
+npm run dev
+
+# Frontend only (in another terminal)
+npx expo start
+```
+
+4. **API Client Package**
+
+The `@bountyexpo/api-client` package provides typed API wrappers and React hooks:
+
+```bash
+# Build all packages
+npm run build
+
+# Type check everything
+npm run type-check
+```
+
+5. **Access the Application**
+- **Frontend**: Expo Dev Tools will open in your browser
+- **Backend API**: Available at `http://localhost:3001`
+- **Database**: Migrations run automatically on API startup
+
+### Troubleshooting
+
+- **Database Connection Issues**: Ensure PostgreSQL is running and DATABASE_URL is correct
+- **Build Errors**: Run `npm run type-check` to identify TypeScript issues
+- **Metro Bundler Issues**: Clear cache with `npx expo start --clear`
+
 ## ⚙️ Development
 ### Architecture
 BOUNTYExpo is a monorepo with the following structure:
