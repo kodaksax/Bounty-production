@@ -17,12 +17,14 @@
   },
   "dependencies": {
     "@bountyexpo/domain-types": "file:../../packages/domain-types",
+    "@fastify/websocket": "^10.0.1",
     "@supabase/supabase-js": "^2.38.5",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.29.0",
     "fastify": "^4.24.3",
     "pg": "^8.11.3",
-    "stripe": "^18.5.0"
+    "stripe": "^18.5.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",

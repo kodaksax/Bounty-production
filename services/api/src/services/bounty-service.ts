@@ -3,6 +3,7 @@ import { bounties } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { outboxService } from './outbox-service';
 import { walletService } from './wallet-service';
+import { realtimeService } from './realtime-service';
 
 export class BountyService {
   /**
@@ -76,6 +77,9 @@ export class BountyService {
           status: 'pending',
         });
 
+        // Publish realtime event
+        await realtimeService.publishBountyStatusChange(bountyId, 'in_progress');
+
         return { success: true };
       });
     } catch (error) {
@@ -141,6 +145,9 @@ export class BountyService {
           },
           status: 'pending',
         });
+
+        // Publish realtime event
+        await realtimeService.publishBountyStatusChange(bountyId, 'completed');
 
         return { success: true };
       });

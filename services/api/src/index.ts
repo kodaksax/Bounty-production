@@ -6,6 +6,7 @@ import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from './
 import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
 import { stripeConnectService } from './services/stripe-connect-service';
+import { realtimeService } from './services/realtime-service';
 import { eq } from 'drizzle-orm';
 
 // Load environment variables
@@ -14,6 +15,28 @@ dotenv.config();
 const fastify = Fastify({
   logger: true
 });
+
+// Register WebSocket plugin
+const startServer = async () => {
+  await fastify.register(require('@fastify/websocket'));
+
+  // WebSocket route for realtime events - using any to avoid TypeScript complications
+  fastify.register(async function (fastify: any) {
+    fastify.get('/events/subscribe', { websocket: true }, (connection: any, req: any) => {
+      console.log('📡 New WebSocket connection for realtime events');
+      
+      // Add client to realtime service
+      realtimeService.addWebSocketClient(connection);
+      
+      // Send connection confirmation
+      connection.socket.send(JSON.stringify({
+        type: 'connection',
+        message: 'Connected to BountyExpo realtime events',
+        timestamp: new Date().toISOString()
+      }));
+    });
+  });
+};
 
 // Health check endpoint (no auth required)
 fastify.get('/health', async (request, reply) => {
@@ -193,6 +216,36 @@ fastify.get('/stripe/connect/status', {
   }
 });
 
+// Events subscription endpoint documentation
+fastify.get('/events/subscribe-info', async (request, reply) => {
+  return {
+    message: 'WebSocket endpoint for real-time events',
+    instructions: {
+      connection: 'Connect via WebSocket to ws://host:port/events/subscribe',
+      events: {
+        'bounty.status': {
+          description: 'Bounty status changes (accept/complete)',
+          payload: {
+            type: 'bounty.status',
+            id: 'bounty-id',
+            status: 'open | in_progress | completed | archived',
+            timestamp: 'ISO 8601 timestamp'
+          }
+        }
+      },
+      example: 'const ws = new WebSocket("ws://localhost:3001/events/subscribe")'
+    }
+  };
+});
+
+// Realtime service stats endpoint
+fastify.get('/events/stats', async (request, reply) => {
+  const stats = realtimeService.getStats();
+  return {
+    ...stats,
+    timestamp: new Date().toISOString()
+  };
+});
 // Root endpoint
 fastify.get('/', async (request, reply) => {
   return {
@@ -205,6 +258,9 @@ fastify.get('/', async (request, reply) => {
       completeBounty: '/bounties/:bountyId/complete (requires auth)',
       stripeOnboardingLink: '/stripe/connect/onboarding-link (requires auth)',
       stripeConnectStatus: '/stripe/connect/status (requires auth)',
+      eventsSubscribe: '/events/subscribe (WebSocket endpoint)',
+      eventsSubscribeInfo: '/events/subscribe-info',
+      eventsStats: '/events/stats',
     }
   };
 });
@@ -215,8 +271,10 @@ const start = async () => {
     const port = parseInt(process.env.PORT || '3001', 10);
     const host = process.env.HOST || '0.0.0.0';
     
+    await startServer();
     await fastify.listen({ port, host });
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
+    console.log(`📡 WebSocket server available at ws://${host}:${port}/events/subscribe`);
     
     // Start the outbox worker
     await outboxWorker.start(5000); // Process events every 5 seconds
