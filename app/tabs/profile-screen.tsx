@@ -1,6 +1,7 @@
 "use client"
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { EnhancedProfileSection } from "components/enhanced-profile-section";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
@@ -292,6 +293,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             </View>
           </View>
   </View>
+
+  {/* Enhanced Profile Section with Portfolio, Follow, etc. */}
+  <EnhancedProfileSection userId={CURRENT_USER_ID} isOwnProfile={true} />
 
   {/* Skills */}
   <View className="px-4 py-2">
