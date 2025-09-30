@@ -31,33 +31,6 @@ services:
     networks:
       - bountyexpo-network
 
-  # BountyExpo API Server
-  api:
-    build:
-      context: .
-      dockerfile: services/api/Dockerfile
-    container_name: bountyexpo-api
-    environment:
-      - DATABASE_URL=postgresql://bountyexpo:bountyexpo123@postgres:5432/bountyexpo
-      - PORT=3001
-      - HOST=0.0.0.0
-      - NODE_ENV=development
-      - STRIPE_SECRET_KEY=sk_test_123
-      - JWT_SECRET=your-development-jwt-secret-key
-    ports:
-      - "3001:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      stripe-mock:
-        condition: service_started
-    volumes:
-      - ./services/api:/app
-      - /app/node_modules
-    networks:
-      - bountyexpo-network
-    command: npm run dev
-
 volumes:
   postgres_data:
     driver: local

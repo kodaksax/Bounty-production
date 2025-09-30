@@ -2,20 +2,22 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY pnpm-lock.yaml* ./
-
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Install dependencies
-RUN pnpm install
+# Copy workspace files for dependency resolution
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/ ./packages/
+COPY services/api/package.json ./services/api/
 
-# Copy source code
-COPY . .
+# Install all dependencies at workspace root
+RUN pnpm install --frozen-lockfile
 
-# Build the application
+# Copy API source code
+COPY services/api/ ./services/api/
+
+# Build the API application
+WORKDIR /app/services/api
 RUN pnpm run build
 
 # Expose port

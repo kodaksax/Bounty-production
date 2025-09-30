@@ -139,13 +139,16 @@ cp .env.example .env
 
 3. **Start Development Stack**
 ```bash
-# Start all backend services (PostgreSQL + API + Stripe Mock)
+# Start infrastructure services (PostgreSQL + Stripe Mock)
 pnpm dev
 
-# This command will:
+# In a new terminal, start the API server  
+pnpm dev:api
+
+# This will:
 # ✅ Start PostgreSQL database on port 5432
-# ✅ Start BountyExpo API server on port 3001
 # ✅ Start Stripe Mock server on port 12111
+# ✅ Start BountyExpo API server on port 3001
 # ✅ Automatically run database migrations
 ```
 
@@ -198,7 +201,8 @@ After running `pnpm dev`, these services will be available:
 
 ```bash
 # Development
-pnpm dev          # Start all backend services
+pnpm dev          # Start infrastructure services (PostgreSQL + Stripe Mock)
+pnpm dev:api      # Start API server (run in separate terminal)
 pnpm start        # Start Expo development server
 pnpm dev:stop     # Stop all services
 pnpm dev:logs     # View service logs
@@ -289,8 +293,9 @@ BountyExpo uses a modern, scalable monorepo architecture:
 
 ```bash
 # Start everything (recommended)
-pnpm dev             # Backend services: PostgreSQL + API + Stripe Mock
-pnpm start          # Expo development server (separate terminal)
+pnpm dev             # Infrastructure: PostgreSQL + Stripe Mock  
+pnpm dev:api         # API server (separate terminal)
+pnpm start           # Expo development server (separate terminal)
 
 # Individual services
 pnpm dev:api        # API server only

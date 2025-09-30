@@ -17,10 +17,10 @@
     "db:init": "node scripts/init-db.js",
     "test:api": "node scripts/test-api.js",
     "build": "npm run build --workspaces",
-    "dev": "docker compose up -d && echo '🚀 BountyExpo development stack started!' && echo '📊 Services available:' && echo '  - PostgreSQL: localhost:5432' && echo '  - API Server: http://localhost:3001' && echo '  - Stripe Mock: http://localhost:12111' && echo '' && echo '📱 To start the Expo app, run: pnpm start'",
+    "dev": "docker compose up -d postgres stripe-mock && echo '🚀 BountyExpo infrastructure started!' && echo '📊 Services available:' && echo '  - PostgreSQL: localhost:5432' && echo '  - Stripe Mock: http://localhost:12111' && echo '' && echo '📱 To start the API server, run: pnpm dev:api' && echo '📱 To start the Expo app, run: pnpm start'",
     "dev:stop": "docker compose down",
     "dev:logs": "docker compose logs -f",
-    "dev:api": "npm run dev --workspace services/api",
+    "dev:api": "pnpm --filter @bountyexpo/api dev",
     "dev:all": "npm run dev --workspaces",
     "type-check": "npm run type-check --workspaces"
   },
