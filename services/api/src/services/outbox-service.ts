@@ -1,7 +1,26 @@
 import { db } from '../db/connection';
 import { outboxEvents } from '../db/schema';
-import { CreateOutboxEventInput, OutboxEvent, OutboxEventStatus } from '@bountyexpo/domain-types';
 import { eq, and } from 'drizzle-orm';
+
+// Define types directly here to avoid import issues
+export interface CreateOutboxEventInput {
+  type: 'BOUNTY_ACCEPTED' | 'BOUNTY_COMPLETED' | 'ESCROW_HOLD' | 'COMPLETION_RELEASE';
+  payload: Record<string, any>;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  retry_count?: number;
+  retry_metadata?: Record<string, any>;
+}
+
+export interface OutboxEvent {
+  id: string;
+  type: 'BOUNTY_ACCEPTED' | 'BOUNTY_COMPLETED' | 'ESCROW_HOLD' | 'COMPLETION_RELEASE';
+  payload: Record<string, any>;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  retry_count: number;
+  retry_metadata?: Record<string, any>;
+  created_at: string;
+  processed_at?: string;
+}
 
 export class OutboxService {
   /**
@@ -33,11 +52,11 @@ export class OutboxService {
 
     // Filter out events that are still in backoff period
     const readyEvents = events.filter(event => {
-      if (!event.retry_metadata?.next_retry_at) {
+      if (!event.retry_metadata || typeof event.retry_metadata !== 'object' || !('next_retry_at' in event.retry_metadata)) {
         return true; // First attempt, no backoff
       }
       
-      const nextRetryAt = new Date(event.retry_metadata.next_retry_at);
+      const nextRetryAt = new Date(event.retry_metadata.next_retry_at as string);
       return now >= nextRetryAt;
     });
 
@@ -103,7 +122,7 @@ export class OutboxService {
           status: 'failed',
           retry_count: retryCount,
           retry_metadata: {
-            ...event.retry_metadata,
+            ...(event.retry_metadata || {}),
             error,
             max_retries_reached: true,
             failed_at: new Date().toISOString(),
@@ -126,7 +145,7 @@ export class OutboxService {
         status: 'pending',
         retry_count: retryCount,
         retry_metadata: {
-          ...event.retry_metadata,
+          ...(event.retry_metadata || {}),
           error,
           next_retry_at: nextRetryAt.toISOString(),
           backoff_ms: backoffMs,

@@ -59,7 +59,6 @@ export class BountyService {
             bountyId: bountyId,
             type: 'escrow',
             amount: bounty.amount_cents / 100, // Convert cents to dollars
-            status: 'pending', // Mark as pending until PaymentIntent is confirmed
           });
         }
 
@@ -126,7 +125,6 @@ export class BountyService {
             bountyId: bountyId,
             type: 'release',
             amount: bounty.amount_cents / 100, // Convert cents to dollars
-            status: 'completed', // Mark as completed immediately for simplicity
           });
         }
 

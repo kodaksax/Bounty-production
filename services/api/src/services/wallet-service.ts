@@ -1,7 +1,28 @@
 import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
-import { CreateWalletTransactionInput, WalletTransaction } from '@bountyexpo/domain-types';
 import { eq } from 'drizzle-orm';
+
+// Define types locally to avoid import issues
+export interface CreateWalletTransactionInput {
+  user_id: string;
+  bountyId?: string;
+  type: string;
+  amount: number;
+}
+
+export interface WalletTransaction {
+  id: string;
+  user_id: string;
+  type: string;
+  amount: number;
+  bountyId?: string;
+  description?: string;
+  status: string;
+  stripe_transfer_id?: string;
+  platform_fee?: number;
+  createdAt: string;
+  completedAt?: string;
+}
 
 export class WalletService {
   /**
@@ -56,6 +77,8 @@ export class WalletService {
       bountyId: record.bounty_id,
       description: `${record.type} transaction`,
       status: 'completed', // For now, all transactions are immediately completed
+      stripe_transfer_id: record.stripe_transfer_id,
+      platform_fee: record.platform_fee_cents ? record.platform_fee_cents / 100 : undefined,
       createdAt: record.created_at.toISOString(),
       completedAt: record.created_at.toISOString(),
     };

@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp, uuid, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, boolean, timestamp, uuid, jsonb, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table as specified in requirements
@@ -13,6 +13,7 @@ export const users = pgTable('users', {
 export const bounties = pgTable('bounties', {
   id: uuid('id').primaryKey().defaultRandom(),
   creator_id: uuid('creator_id').references(() => users.id).notNull(),
+  hunter_id: uuid('hunter_id').references(() => users.id), // Who accepted/is working on the bounty
   title: text('title').notNull(),
   description: text('description').notNull(),
   amount_cents: integer('amount_cents').notNull().default(0),
@@ -30,8 +31,13 @@ export const walletTransactions = pgTable('wallet_transactions', {
   user_id: uuid('user_id').references(() => users.id).notNull(),
   type: text('type').notNull(), // escrow, release, refund, etc.
   amount_cents: integer('amount_cents').notNull(),
+  stripe_transfer_id: text('stripe_transfer_id'), // Store Stripe Transfer ID for release transactions
+  platform_fee_cents: integer('platform_fee_cents').default(0), // Platform fee for the transaction
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  // Unique constraint to prevent double releases
+  unique_bounty_release: unique().on(table.bounty_id, table.type),
+}));
 
 // Outbox events table for reliable event processing
 export const outboxEvents = pgTable('outbox_events', {
