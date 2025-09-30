@@ -177,6 +177,49 @@ Short Term:
 - Mock wallet flows (escrow → release)
 - Calendar summary pass
 
+## 📡 Realtime Events
+
+The API supports realtime bounty status updates via WebSocket or Supabase Realtime.
+
+### Subscribing to Events
+
+**WebSocket Connection:**
+```javascript
+const ws = new WebSocket('ws://localhost:3001/events/subscribe');
+
+ws.on('message', (data) => {
+  const event = JSON.parse(data);
+  console.log('Realtime event:', event);
+});
+```
+
+**Event Payload Format:**
+```json
+{
+  "type": "bounty.status",
+  "id": "bounty-id-123",
+  "status": "in_progress",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**Status Values:**
+- `open` - Bounty is available for acceptance
+- `in_progress` - Bounty has been accepted and is being worked on
+- `completed` - Bounty work has been completed
+- `archived` - Bounty has been archived/cancelled
+
+**Endpoint Documentation:**
+- GET `/events/subscribe-info` - WebSocket connection instructions
+- GET `/events/stats` - Current connection statistics
+- WebSocket `/events/subscribe` - Realtime event stream
+
+### Triggers
+
+Realtime events are published when:
+- A bounty is accepted (`open` → `in_progress`)
+- A bounty is completed (`in_progress` → `completed`)
+
 Mid Term:
 - Real escrow provider integration
 - Request lifecycle (apply / accept handshake)
