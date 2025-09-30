@@ -1,0 +1,181 @@
+ADMIN SECTION FILE STRUCTURE
+============================
+
+app/(admin)/                           # Admin route group (protected)
+├── _layout.tsx                        # Gating layout (redirects non-admin)
+├── index.tsx                          # Dashboard (metrics + quick links)
+├── bounties.tsx                       # Bounties list with filters
+├── bounty/
+│   └── [id].tsx                      # Bounty detail + status transitions
+├── users.tsx                          # Users list with filters
+├── user/
+│   └── [id].tsx                      # User detail with stats
+└── transactions.tsx                   # Transactions list (read-only)
+
+lib/
+├── admin-context.tsx                  # AdminProvider + useAdmin hook
+├── types-admin.ts                     # Admin-specific TypeScript types
+└── admin/
+    └── adminDataClient.ts            # Mock data + network simulation
+
+hooks/
+├── useAdminBounties.ts               # Bounties data with status updates
+├── useAdminUsers.ts                  # Users data
+├── useAdminTransactions.ts           # Transactions data
+└── useAdminMetrics.ts                # Dashboard metrics
+
+components/admin/
+├── AdminCard.tsx                     # Reusable card container
+├── AdminHeader.tsx                   # Header with ADMIN badge
+├── AdminStatRow.tsx                  # Key-value stat row
+└── AdminStatusBadge.tsx              # Color-coded status badges
+
+Integration Points:
+-------------------
+app/_layout.tsx                       # Wraps app in AdminProvider
+app/tabs/bounty-app.tsx              # Uses useAdmin + routes to admin
+components/ui/bottom-nav.tsx         # Conditional admin tab
+components/settings-screen.tsx       # Dev toggle for admin mode
+
+Documentation:
+--------------
+ADMIN_SECTION.md                     # Complete architecture guide
+ADMIN_STRUCTURE.txt                  # This file (visual structure)
+
+KEY FEATURES BY SCREEN
+======================
+
+AdminDashboard (/)
+- Metrics: bounties (by status), users, escrow volume, transactions
+- Quick access cards to main sections
+- Pull-to-refresh
+
+AdminBountiesList (/bounties)
+- Filter by status: all, open, in_progress, completed, archived
+- Shows flagged items with warning banner
+- Tap to view detail
+
+AdminBountyDetail (/bounty/[id])
+- Full bounty information
+- Status transition buttons with confirmation
+- Optimistic UI updates
+
+AdminUsersList (/users)
+- Filter by status: all, active, suspended, banned
+- Shows verification badges
+- Stats preview: posted, completed, balance
+
+AdminUserDetail (/user/[id])
+- Activity stats grid
+- Financial summary
+- Account information
+
+AdminTransactionsList (/transactions)
+- Filter by type: escrow, release, refund, deposit, withdrawal
+- Read-only view with status badges
+- Shows related bounty/user IDs
+
+FLOW DIAGRAM
+============
+
+1. User enables Admin Mode in Settings (dev toggle)
+   ↓
+2. Admin tab appears in BottomNav (replaces Profile)
+   ↓
+3. Tap admin tab → navigates to /(admin)/
+   ↓
+4. AdminLayout checks isAdmin via context
+   ↓
+5. If not admin → Redirect to /tabs/bounty-app
+   If admin → Show AdminDashboard
+   ↓
+6. From dashboard, access:
+   - Bounties → List → Detail (with actions)
+   - Users → List → Detail
+   - Transactions → List (read-only)
+
+DATA FLOW
+=========
+
+Screen Component
+    ↓
+useAdminX hook (e.g., useAdminBounties)
+    ↓
+adminDataClient method (e.g., fetchAdminBounties)
+    ↓
+Mock data + simulated network delay
+    ↓
+Returns data to hook
+    ↓
+Hook updates state (data, loading, error)
+    ↓
+Screen renders with data / loading / error UI
+
+TESTING CHECKLIST
+=================
+
+Access Control:
+☐ Non-admin redirected from /(admin) routes
+☐ Admin toggle in settings works
+☐ Admin tab visible when isAdmin=true
+☐ Admin tab hidden when isAdmin=false
+
+Navigation:
+☐ Dashboard quick links work
+☐ List → Detail navigation works
+☐ Back button returns to previous screen
+☐ BottomNav admin tab routes correctly
+
+Data Loading:
+☐ All lists show loading spinner initially
+☐ Pull-to-refresh works
+☐ Empty states display correctly
+☐ Error states show retry button
+
+Bounty Management:
+☐ Status filter works (all, open, in_progress, completed, archived)
+☐ Flagged bounties show warning
+☐ Detail screen loads individual bounty
+☐ Status transitions show confirmation
+☐ Status updates persist (optimistic UI)
+
+User Management:
+☐ Status filter works (all, active, suspended, banned)
+☐ User detail shows correct stats
+☐ Financial summary displays properly
+
+Transactions:
+☐ Type filter works
+☐ Transaction details display correctly
+
+UI/UX:
+☐ Consistent emerald theme throughout
+☐ Safe area insets respected
+☐ BottomNav not duplicated in admin screens
+☐ Scrolling works smoothly (FlatList)
+☐ No layout issues on iOS
+☐ No layout issues on Android
+
+TypeScript:
+☐ npx tsc --noEmit passes with no admin errors
+☐ No console errors during navigation
+
+NEXT STEPS (FUTURE)
+===================
+
+Short Term:
+- Replace mock client with real API
+- Add search functionality
+- Implement moderation queue
+
+Medium Term:
+- Analytics charts
+- Bulk actions
+- Audit logs
+- User actions (suspend, ban)
+
+Long Term:
+- Role-based permissions
+- Dispute resolution
+- Payment operations
+- Integration with external tools
