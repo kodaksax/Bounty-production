@@ -1,0 +1,21 @@
+{
+  "name": "@bountyexpo/domain-types",
+  "version": "1.0.0",
+  "description": "Domain types and Zod schemas for BountyExpo",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  },
+  "files": [
+    "dist/"
+  ]
+}

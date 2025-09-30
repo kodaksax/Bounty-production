@@ -1,0 +1,22 @@
+{
+  "name": "@bountyexpo/api",
+  "version": "1.0.0",
+  "description": "API service for BountyExpo",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bountyexpo/domain-types": "workspace:*",
+    "fastify": "^4.24.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "tsx": "^4.6.0",
+    "typescript": "~5.9.2"
+  }
+}
