@@ -11,10 +11,10 @@ import {
   TouchableOpacity, 
   View 
 } from "react-native";
-import { useFollow } from "../../hooks/useFollow";
-import { usePortfolio } from "../../hooks/usePortfolio";
-import { useProfile } from "../../hooks/useProfile";
-import type { PortfolioItem } from "../../lib/types";
+import { useFollow } from "hooks/useFollow";
+import { usePortfolio } from "hooks/usePortfolio";
+import { useProfile } from "hooks/useProfile";
+import type { PortfolioItem } from "lib/types";
 
 interface EnhancedProfileSectionProps {
   userId?: string;

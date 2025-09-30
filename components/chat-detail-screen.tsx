@@ -5,7 +5,7 @@ import { Text, TouchableOpacity, View } from "react-native"
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import type { Conversation } from "../app/tabs/messenger-screen"
+import type { Conversation } from "lib/types"
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
 
@@ -144,7 +144,7 @@ export function ChatDetailScreen({
           </Avatar>
           <View>
             <Text className="font-medium">{conversation.name}</Text>
-            <Text className="text-xs text-emerald-300">{conversation.status}</Text>
+            
           </View>
         </View>
         <View className="flex-row gap-3">
