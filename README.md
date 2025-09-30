@@ -96,42 +96,152 @@ Layout rules:
 ## 🚀 First Run
 
 ### Prerequisites
-- Node.js 18+ installed
-- PostgreSQL database (local or cloud)
-- Code editor of your choice
+- **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
+- **Docker & Docker Compose** - For running PostgreSQL and Stripe Mock locally
+- **pnpm** - Fast package manager (auto-installed if missing)
+- **Expo CLI** - For mobile development (installed on-demand)
 
-### Setup Steps
+### Quick Start (Recommended)
+
+#### Option 1: Automated Setup Script
+```bash
+# Clone the repository
+git clone https://github.com/kodaksax/bountyexpo.git
+cd bountyexpo
+
+# Run the automated setup script
+./scripts/setup.sh
+
+# Start all services with one command
+pnpm dev
+
+# In another terminal, start the Expo development server
+pnpm start
+```
+
+#### Option 2: Manual Setup
 
 1. **Clone and Install Dependencies**
 ```bash
 git clone https://github.com/kodaksax/bountyexpo.git
 cd bountyexpo
-npm install
+pnpm install
 ```
 
-2. **Configure Environment Variables**
+2. **Configure Environment**
 ```bash
-# Copy the example environment file
+# Copy environment template
 cp .env.example .env
 
-# Edit .env with your actual values:
-# - DATABASE_URL: Your PostgreSQL connection string
-# - SUPABASE_JWT_SECRET: Your Supabase JWT secret
-# - STRIPE_SECRET_KEY: Your Stripe secret key (for payments)
-# - API_BASE_URL: Your hosted API domain
+# Edit .env with your configuration (see Environment Variables section below)
+# For local development, the defaults work out of the box!
 ```
 
-3. **Start All Services**
+3. **Start Development Stack**
 ```bash
-# Start the backend API and frontend simultaneously
-npm run dev:all
+# Start all backend services (PostgreSQL + API + Stripe Mock)
+pnpm dev
 
-# Or start them separately:
-# Backend API only
-npm run dev
+# This command will:
+# ✅ Start PostgreSQL database on port 5432
+# ✅ Start BountyExpo API server on port 3001
+# ✅ Start Stripe Mock server on port 12111
+# ✅ Automatically run database migrations
+```
 
-# Frontend only (in another terminal)
-npx expo start
+4. **Start Mobile App**
+```bash
+# In a new terminal window
+pnpm start
+
+# Follow Expo CLI instructions to:
+# - Scan QR code with Expo Go app (iOS/Android)
+# - Press 'i' for iOS Simulator
+# - Press 'a' for Android Emulator
+# - Press 'w' for web browser
+```
+
+### Environment Variables
+
+Your `.env` file should contain these essential variables:
+
+```bash
+# Database (automatically configured for local Docker setup)
+DATABASE_URL="postgresql://bountyexpo:bountyexpo123@localhost:5432/bountyexpo"
+
+# Stripe (use test keys for development)
+STRIPE_SECRET_KEY="sk_test_your_key_here"
+EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_your_key_here"
+
+# Supabase (for authentication)
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_JWT_SECRET="your-jwt-secret"
+
+# API Configuration
+API_BASE_URL="http://localhost:3001"
+EXPO_PUBLIC_API_URL="http://localhost:3001"
+```
+
+### Service Status & URLs
+
+After running `pnpm dev`, these services will be available:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **API Server** | http://localhost:3001 | Main BountyExpo API |
+| **PostgreSQL** | localhost:5432 | Database server |
+| **Stripe Mock** | http://localhost:12111 | Mock payment processing |
+| **API Health** | http://localhost:3001/health | Health check endpoint |
+
+### Useful Commands
+
+```bash
+# Development
+pnpm dev          # Start all backend services
+pnpm start        # Start Expo development server
+pnpm dev:stop     # Stop all services
+pnpm dev:logs     # View service logs
+
+# Database
+pnpm db:init      # Initialize database (if needed)
+pnpm --filter @bountyexpo/api db:migrate  # Run migrations
+pnpm --filter @bountyexpo/api db:seed     # Seed with sample data
+
+# Code Quality
+pnpm type-check   # TypeScript checks across all packages
+pnpm lint         # Lint code
+```
+
+### Migration Instructions
+
+If you're updating from an older version:
+
+1. **Update Dependencies**
+```bash
+pnpm install
+```
+
+2. **Update Environment File**
+```bash
+# Compare your .env with the new .env.example
+# Add any missing variables
+```
+
+3. **Database Migrations**
+```bash
+# Stop existing services
+pnpm dev:stop
+
+# Start fresh with latest schema
+pnpm dev
+
+# The database will auto-migrate on startup
+```
+
+4. **Clear Metro Cache** (if experiencing issues)
+```bash
+pnpm start --clear
 ```
 
 4. **API Client Package**
@@ -158,44 +268,67 @@ npm run type-check
 - **Metro Bundler Issues**: Clear cache with `npx expo start --clear`
 
 ## ⚙️ Development
+
 ### Architecture
-BOUNTYExpo is a monorepo with the following structure:
+BountyExpo uses a modern, scalable monorepo architecture:
+
 - **Frontend**: React Native + Expo app (main directory)
 - **Backend API**: Fastify + Drizzle ORM + PostgreSQL (`services/api/`)
-- **Shared Types**: Domain types package (`packages/domain-types/`)
+- **Shared Types**: Cross-platform type definitions (`packages/domain-types/`)
+- **Docker Environment**: Containerized PostgreSQL + Stripe Mock for consistent development
 
-### Backend API
-The backend API (`services/api/`) provides:
-- **PostgreSQL Database**: Using Drizzle ORM for type-safe operations
-- **Supabase JWT Authentication**: Middleware for secure API access
-- **Auto-Migration System**: Database schema management
-- **User Management**: Automatic user creation on first authenticated request
+### Development Stack
+- **Mobile**: React Native 0.81+ with Expo 54+
+- **Backend**: Node.js + Fastify + TypeScript
+- **Database**: PostgreSQL 15 with Drizzle ORM
+- **Payments**: Stripe integration with local mock server
+- **Authentication**: Supabase JWT with automatic user provisioning
+- **Package Management**: pnpm with workspace configuration
+
+### Quick Development Commands
+
+```bash
+# Start everything (recommended)
+pnpm dev             # Backend services: PostgreSQL + API + Stripe Mock
+pnpm start          # Expo development server (separate terminal)
+
+# Individual services
+pnpm dev:api        # API server only
+pnpm dev:stop       # Stop all Docker services
+pnpm dev:logs       # View service logs
+
+# Code quality
+pnpm type-check     # TypeScript validation across all packages
+pnpm lint           # ESLint checks
+```
+
+### Development Workflow
+
+1. **Start Services**: `pnpm dev` (runs PostgreSQL, API, Stripe Mock)
+2. **Start Mobile App**: `pnpm start` (in separate terminal)
+3. **Make Changes**: Edit code with hot reloading
+4. **Check Types**: `pnpm type-check` before committing
+5. **View Logs**: `pnpm dev:logs` for debugging
+
+### Backend API Features
+- **Auto-Migration**: Database schema updates automatically
+- **JWT Authentication**: Secure endpoints with Supabase integration  
+- **Type Safety**: End-to-end TypeScript with Drizzle ORM
+- **Real-time Events**: WebSocket support for live updates
+- **Stripe Integration**: Payment processing with local mock server
+
+### Database Management
+```bash
+# Direct database access (when services are running)
+psql postgresql://bountyexpo:bountyexpo123@localhost:5432/bountyexpo
+
+# API-specific database commands
+pnpm --filter @bountyexpo/api db:migrate    # Run migrations
+pnpm --filter @bountyexpo/api db:seed       # Add sample data  
+pnpm --filter @bountyexpo/api db:studio     # Drizzle Studio UI
+```
 
 See `services/api/README.md` for detailed API documentation.
-
-### Prereqs
-- Node 18+
-- Expo CLI (installed transiently via `npx`)
-- PostgreSQL (for backend API)
-
-### Start Frontend
-```bash
-npm install
-npx expo start
-```
-
-### Start Backend API
-```bash
-cd services/api
-npm install
-# Set up .env file with DATABASE_URL and Supabase credentials
-npm run db:setup  # Run migrations and seed
-npm run dev       # Start development server
-```
-Use a device, emulator, or Expo Go. For weird bundler issues:
-```bash
-npx expo start --clear
-```
 
 ### Type Check (required before PR)
 ```bash
@@ -295,11 +428,116 @@ Long Term:
 - Dispute mediation tooling
 - Multi-currency support
 
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**"Docker not found" or service won't start**
+```bash
+# Ensure Docker is running
+docker --version
+docker-compose --version
+
+# Check if ports are available
+lsof -i :5432  # PostgreSQL
+lsof -i :3001  # API server
+```
+
+**"Database connection failed"**
+```bash
+# Check if PostgreSQL container is running
+docker ps
+
+# Restart database service
+pnpm dev:stop
+pnpm dev
+
+# Check database logs
+docker logs bountyexpo-postgres
+```
+
+**"Expo build fails" or Metro bundler issues**
+```bash
+# Clear Metro cache
+pnpm start --clear
+
+# Clean node_modules and reinstall
+rm -rf node_modules
+pnpm install
+```
+
+**"TypeScript errors in IDE"**
+```bash
+# Run type checking manually
+pnpm type-check
+
+# Restart TypeScript language server in your IDE
+# VS Code: Cmd/Ctrl + Shift + P → "TypeScript: Restart TS Server"
+```
+
+**"API endpoints return 401/403 errors"**
+- Check your `.env` file has correct Supabase credentials
+- Verify JWT tokens are being sent from the mobile app
+- Check API server logs: `pnpm dev:logs`
+
+**"Stripe payments not working"**
+- Ensure you're using test keys (start with `sk_test_` and `pk_test_`)
+- Verify Stripe Mock server is running on port 12111
+- Check the console for payment-related errors
+
+### Getting Help
+
+1. **Check the logs**: `pnpm dev:logs` shows all service logs
+2. **Verify services**: All services should show as "UP" in `docker ps`
+3. **Health check**: Visit http://localhost:3001/health
+4. **Reset everything**: `pnpm dev:stop` then `pnpm dev`
+5. **Open an issue**: If problems persist, create a GitHub issue with:
+   - Your OS and Node.js version
+   - Complete error messages
+   - Steps to reproduce
+
 ## 🤝 Contributing
-1. Fork & branch: `feat/<slug>`
-2. Keep commits scoped & conventional style (e.g. `feat: add bounty list filtering`).
-3. Run `npx tsc --noEmit` before pushing.
-4. Open PR with: problem summary, screenshots (if UI), and testing notes.
+
+### Getting Started
+1. **Fork & Clone**: Fork the repo and create a feature branch
+```bash
+git checkout -b feat/your-feature-name
+```
+
+2. **Set up Development Environment**: 
+```bash
+./scripts/setup.sh  # Automated setup
+# OR follow the "First Run" section above
+```
+
+3. **Make Your Changes**: Edit code with hot reloading enabled
+
+4. **Test Your Changes**:
+```bash
+pnpm type-check     # TypeScript validation
+pnpm lint           # Code style checks
+pnpm dev:logs       # Check for errors in services
+```
+
+5. **Commit & Push**:
+```bash
+git add .
+git commit -m "feat: add your feature description"
+git push origin feat/your-feature-name
+```
+
+6. **Open Pull Request**: Include:
+   - **Problem Summary**: What issue does this solve?
+   - **Screenshots**: For UI changes
+   - **Testing Notes**: How to verify the changes work
+   - **Breaking Changes**: Any API or schema changes
+
+### Development Guidelines
+- **Commit Style**: Use conventional commits (`feat:`, `fix:`, `docs:`, etc.)
+- **TypeScript**: All code must pass `pnpm type-check`
+- **Code Style**: Follow existing patterns, use provided linting
+- **Testing**: Test your changes locally with `pnpm dev` + `pnpm start`
+- **Documentation**: Update README.md for significant changes
 
 ## 🧩 AI Collaboration Guidelines
 When using AI assistance:
