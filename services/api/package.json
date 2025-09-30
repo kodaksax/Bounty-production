@@ -17,17 +17,18 @@
   },
   "dependencies": {
     "@bountyexpo/domain-types": "file:../../packages/domain-types",
-    "fastify": "^4.24.3",
+    "@supabase/supabase-js": "^2.38.5",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.29.0",
+    "fastify": "^4.24.3",
     "pg": "^8.11.3",
-    "@supabase/supabase-js": "^2.38.5"
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.8.10",
-    "tsx": "^4.6.0",
-    "typescript": "~5.9.2",
+    "@types/pg": "^8.10.9",
     "drizzle-kit": "^0.20.0",
-    "@types/pg": "^8.10.9"
+    "tsx": "^4.6.0",
+    "typescript": "~5.9.2"
   }
 }

@@ -5,6 +5,7 @@ import { users } from './db/schema';
 import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from './middleware/auth';
 import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
+import { stripeConnectService } from './services/stripe-connect-service';
 import { eq } from 'drizzle-orm';
 
 // Load environment variables
@@ -142,6 +143,56 @@ fastify.post('/bounties/:bountyId/complete', {
   }
 });
 
+// Stripe Connect onboarding link endpoint
+fastify.post('/stripe/connect/onboarding-link', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const { refreshUrl, returnUrl } = request.body as {
+      refreshUrl?: string;
+      returnUrl?: string;
+    };
+
+    const result = await stripeConnectService.createOnboardingLink({
+      userId: request.userId,
+      refreshUrl,
+      returnUrl,
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Error in /stripe/connect/onboarding-link endpoint:', error);
+    const message = error instanceof Error ? error.message : 'Failed to create onboarding link';
+    return reply.code(500).send({ 
+      error: message 
+    });
+  }
+});
+
+// Stripe Connect status endpoint
+fastify.get('/stripe/connect/status', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const status = await stripeConnectService.getConnectStatus(request.userId);
+    return status;
+  } catch (error) {
+    console.error('Error in /stripe/connect/status endpoint:', error);
+    const message = error instanceof Error ? error.message : 'Failed to get connect status';
+    return reply.code(500).send({ 
+      error: message 
+    });
+  }
+});
+
 // Root endpoint
 fastify.get('/', async (request, reply) => {
   return {
@@ -152,6 +203,8 @@ fastify.get('/', async (request, reply) => {
       me: '/me (requires auth)',
       acceptBounty: '/bounties/:bountyId/accept (requires auth)',
       completeBounty: '/bounties/:bountyId/complete (requires auth)',
+      stripeOnboardingLink: '/stripe/connect/onboarding-link (requires auth)',
+      stripeConnectStatus: '/stripe/connect/status (requires auth)',
     }
   };
 });
