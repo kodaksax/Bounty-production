@@ -1,6 +1,8 @@
-// lib/utils/data-utils.ts
+// lib/types.ts - Authoritative type definitions
+export type Money = number; // USD for now
+
+// Bounty Form Values
 export interface BountyFormValues {
-  // Define the properties of BountyFormValues here
   title: string;
   description: string;
   amount: number;
@@ -9,4 +11,74 @@ export interface BountyFormValues {
   timeline: string;
   skills_required: string;
   status: string;
+}
+
+// User Profile
+export interface UserProfile {
+  id: string;
+  username: string;
+  name?: string;
+  avatar?: string;
+  title?: string; // e.g., "Full Stack Developer"
+  languages?: string[]; // e.g., ["English", "Spanish"]
+  skills?: string[]; // e.g., ["React", "Node.js"]
+  joinDate: string; // ISO date
+  bio?: string;
+  verificationStatus?: 'unverified' | 'pending' | 'verified';
+  followerCount?: number;
+  followingCount?: number;
+}
+
+// Follow relationship
+export interface Follow {
+  id: string;
+  followerId: string; // user doing the following
+  followingId: string; // user being followed
+  createdAt: string;
+}
+
+// Portfolio item
+export interface PortfolioItem {
+  id: string;
+  userId: string;
+  type: 'image' | 'video';
+  url: string;
+  thumbnail?: string;
+  title?: string;
+  description?: string;
+  createdAt: string;
+}
+
+// Message
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  text: string;
+  createdAt: string;
+  replyTo?: string; // ID of message being replied to
+  mediaUrl?: string;
+  status?: 'sending' | 'sent' | 'failed';
+}
+
+// Conversation
+export interface Conversation {
+  id: string;
+  bountyId?: string;
+  isGroup: boolean;
+  name: string;
+  avatar?: string;
+  lastMessage?: string;
+  updatedAt?: string;
+  participantIds?: string[];
+  unread?: number;
+}
+
+// Wallet Transaction
+export interface WalletTransaction {
+  id: string;
+  type: "escrow" | "release" | "refund";
+  amount: Money;
+  bountyId?: string;
+  createdAt: string;
 }
