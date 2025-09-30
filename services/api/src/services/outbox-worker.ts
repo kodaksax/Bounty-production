@@ -1,6 +1,6 @@
-import { outboxService } from './outbox-service';
+import { outboxService, OutboxEvent } from './outbox-service';
 import { stripeConnectService } from './stripe-connect-service';
-import { OutboxEvent } from '@bountyexpo/domain-types';
+import { completionReleaseService } from './completion-release-service';
 
 export class OutboxWorker {
   private isRunning = false;
@@ -115,6 +115,10 @@ export class OutboxWorker {
         await this.handleEscrowHold(event);
         break;
       
+      case 'COMPLETION_RELEASE':
+        await this.handleCompletionRelease(event);
+        break;
+      
       default:
         console.warn(`⚠️  Unknown event type: ${event.type}`);
     }
@@ -161,6 +165,38 @@ export class OutboxWorker {
       
     } catch (error) {
       console.error(`❌ Failed to create escrow for bounty ${bountyId}:`, error);
+      throw error; // Re-throw to trigger retry mechanism
+    }
+  }
+
+  /**
+   * Handle COMPLETION_RELEASE events - Transfer funds to hunter
+   */
+  private async handleCompletionRelease(event: OutboxEvent): Promise<void> {
+    const { bountyId, hunterId, paymentIntentId, title } = event.payload;
+    
+    console.log(`💸 COMPLETION_RELEASE: Processing release for bounty "${title}" (${bountyId})`);
+    console.log(`🎯 Hunter: ${hunterId}, PaymentIntent: ${paymentIntentId}`);
+    
+    try {
+      // Check if already released to prevent double processing
+      const alreadyReleased = await completionReleaseService.isAlreadyReleased(bountyId);
+      if (alreadyReleased) {
+        console.log(`⚠️  Bounty ${bountyId} already released, skipping`);
+        return;
+      }
+
+      // Process the completion release
+      const success = await completionReleaseService.processCompletionReleaseFromOutbox(event.payload);
+      
+      if (success) {
+        console.log(`✅ COMPLETION_RELEASED: Funds transferred for bounty ${bountyId}`);
+      } else {
+        throw new Error('Failed to process completion release');
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to process completion release for bounty ${bountyId}:`, error);
       throw error; // Re-throw to trigger retry mechanism
     }
   }

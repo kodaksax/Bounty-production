@@ -8,6 +8,13 @@
       "when": 1759193781269,
       "tag": "0000_bitter_kylun",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1759199631884,
+      "tag": "0001_sloppy_stellaris",
+      "breakpoints": true
     }
   ]
 }

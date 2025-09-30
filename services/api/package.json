@@ -25,6 +25,7 @@
     "stripe": "^18.5.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.3",
     "@types/node": "^20.8.10",
     "@types/pg": "^8.10.9",
     "drizzle-kit": "^0.20.0",

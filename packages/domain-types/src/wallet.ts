@@ -14,6 +14,8 @@ export interface WalletTransaction {
   bountyId?: string;
   description?: string;
   status: "pending" | "completed" | "failed" | "cancelled";
+  stripe_transfer_id?: string; // Stripe Transfer ID for release transactions
+  platform_fee?: Money; // Platform fee amount
   createdAt: string;
   completedAt?: string;
 }
@@ -62,7 +64,7 @@ export const WalletSchema = z.object({
 });
 
 // Outbox event types for reliable event processing
-export type OutboxEventType = "BOUNTY_ACCEPTED" | "BOUNTY_COMPLETED" | "ESCROW_HOLD";
+export type OutboxEventType = "BOUNTY_ACCEPTED" | "BOUNTY_COMPLETED" | "ESCROW_HOLD" | "COMPLETION_RELEASE";
 
 export type OutboxEventStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -78,7 +80,7 @@ export interface OutboxEvent {
 }
 
 // Zod schemas for outbox events
-export const OutboxEventTypeSchema = z.enum(["BOUNTY_ACCEPTED", "BOUNTY_COMPLETED", "ESCROW_HOLD"]);
+export const OutboxEventTypeSchema = z.enum(["BOUNTY_ACCEPTED", "BOUNTY_COMPLETED", "ESCROW_HOLD", "COMPLETION_RELEASE"]);
 
 export const OutboxEventStatusSchema = z.enum(["pending", "processing", "completed", "failed"]);
 
