@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, boolean, timestamp, uuid, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table as specified in requirements
@@ -22,14 +22,47 @@ export const bounties = pgTable('bounties', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Wallet transactions table for tracking financial movements
+export const walletTransactions = pgTable('wallet_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  bounty_id: uuid('bounty_id').references(() => bounties.id),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  type: text('type').notNull(), // escrow, release, refund, etc.
+  amount_cents: integer('amount_cents').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Outbox events table for reliable event processing
+export const outboxEvents = pgTable('outbox_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: text('type').notNull(), // BOUNTY_ACCEPTED, BOUNTY_COMPLETED, etc.
+  payload: jsonb('payload').notNull(),
+  status: text('status').notNull().default('pending'), // pending, processing, completed, failed
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  processed_at: timestamp('processed_at', { withTimezone: true }),
+});
+
 // Define relations
 export const usersRelations = relations(users, ({ many }) => ({
   bounties: many(bounties),
+  walletTransactions: many(walletTransactions),
 }));
 
-export const bountiesRelations = relations(bounties, ({ one }) => ({
+export const bountiesRelations = relations(bounties, ({ one, many }) => ({
   creator: one(users, {
     fields: [bounties.creator_id],
     references: [users.id],
+  }),
+  walletTransactions: many(walletTransactions),
+}));
+
+export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
+  user: one(users, {
+    fields: [walletTransactions.user_id],
+    references: [users.id],
+  }),
+  bounty: one(bounties, {
+    fields: [walletTransactions.bounty_id],
+    references: [bounties.id],
   }),
 }));

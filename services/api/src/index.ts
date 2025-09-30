@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import { db } from './db/connection';
 import { users } from './db/schema';
 import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from './middleware/auth';
+import { bountyService } from './services/bounty-service';
+import { outboxWorker } from './services/outbox-worker';
 import { eq } from 'drizzle-orm';
 
 // Load environment variables
@@ -88,6 +90,58 @@ fastify.get('/me', {
   }
 });
 
+// Accept bounty endpoint
+fastify.post('/bounties/:bountyId/accept', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const result = await bountyService.acceptBounty(bountyId, request.userId);
+    
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    return { message: 'Bounty accepted successfully', bountyId };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/accept endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to accept bounty' 
+    });
+  }
+});
+
+// Complete bounty endpoint
+fastify.post('/bounties/:bountyId/complete', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const result = await bountyService.completeBounty(bountyId, request.userId);
+    
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    return { message: 'Bounty completed successfully', bountyId };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/complete endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to complete bounty' 
+    });
+  }
+});
+
 // Root endpoint
 fastify.get('/', async (request, reply) => {
   return {
@@ -96,6 +150,8 @@ fastify.get('/', async (request, reply) => {
     endpoints: {
       health: '/health',
       me: '/me (requires auth)',
+      acceptBounty: '/bounties/:bountyId/accept (requires auth)',
+      completeBounty: '/bounties/:bountyId/complete (requires auth)',
     }
   };
 });
@@ -108,6 +164,9 @@ const start = async () => {
     
     await fastify.listen({ port, host });
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
+    
+    // Start the outbox worker
+    await outboxWorker.start(5000); // Process events every 5 seconds
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
@@ -117,6 +176,10 @@ const start = async () => {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  
+  // Stop the outbox worker
+  outboxWorker.stop();
+  
   await fastify.close();
   process.exit(0);
 });
