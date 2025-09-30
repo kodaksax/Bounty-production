@@ -4,6 +4,14 @@ require('dotenv').config(); // Load environment variables first
 const express = require('express');
 const cors = require('cors');
 
+// Import domain logic for bounty transitions and validation
+const {
+  transitionBounty,
+  bountyCreateSchema,
+  bountyUpdateSchema,
+  bountyFilterSchema
+} = require('../lib/domain/bounty-transitions');
+
 // Choose database based on environment
 let connect;
 if (process.env.USE_SQLITE === 'true') {
@@ -128,24 +136,33 @@ app.get('/api/bounties', async (req, res) => {
   try {
     conn = await connect();
     
+    // Validate query parameters using Zod schema
+    const validation = bountyFilterSchema.safeParse(req.query);
+    if (!validation.success) {
+      return res.status(400).json({ 
+        error: 'Invalid query parameters',
+        details: validation.error.errors
+      });
+    }
+    
     let query = 'SELECT * FROM bounties';
     const conditions = [];
     const params = [];
     
     // Add filters
-    if (req.query.status) {
+    if (validation.data.status) {
       conditions.push('status = ?');
-      params.push(req.query.status);
+      params.push(validation.data.status);
     }
     
-    if (req.query.user_id) {
+    if (validation.data.user_id) {
       conditions.push('user_id = ?');
-      params.push(req.query.user_id);
+      params.push(validation.data.user_id);
     }
     
-    if (req.query.work_type) {
+    if (validation.data.work_type) {
       conditions.push('work_type = ?');
-      params.push(req.query.work_type);
+      params.push(validation.data.work_type);
     }
     
     if (conditions.length > 0) {
@@ -204,6 +221,15 @@ app.post('/api/bounties', async (req, res) => {
   try {
     conn = await connect();
     
+    // Validate request data using Zod schema
+    const validation = bountyCreateSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: validation.error.errors
+      });
+    }
+    
     const {
       title,
       description,
@@ -217,15 +243,9 @@ app.post('/api/bounties', async (req, res) => {
       is_time_sensitive,
       deadline,
       attachments_json
-    } = req.body;
+    } = validation.data;
     
-    // Validation
-    if (!title || !description || !user_id) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: title, description, user_id' 
-      });
-    }
-    
+    // Additional business logic validation
     if (!is_for_honor && (!amount || amount <= 0)) {
       return res.status(400).json({ 
         error: 'Amount must be greater than 0 for paid bounties' 
@@ -236,12 +256,12 @@ app.post('/api/bounties', async (req, res) => {
       INSERT INTO bounties (
         title, description, amount, is_for_honor, location, 
         timeline, skills_required, user_id, work_type, 
-        is_time_sensitive, deadline, attachments_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_time_sensitive, deadline, attachments_json, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       title, description, amount || 0, is_for_honor || false, location,
       timeline, skills_required, user_id, work_type || 'online',
-      is_time_sensitive || false, deadline, attachments_json
+      is_time_sensitive || false, deadline, attachments_json, 'open'
     ]);
     
     // Fetch and return the created bounty
@@ -262,7 +282,17 @@ app.patch('/api/bounties/:id', async (req, res) => {
     conn = await connect();
     
     const bountyId = req.params.id;
-    const updates = req.body;
+    
+    // Validate request data using Zod schema
+    const validation = bountyUpdateSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: validation.error.errors
+      });
+    }
+    
+    const updates = validation.data;
     
     // Build dynamic update query
     const updateFields = [];
@@ -316,6 +346,161 @@ app.delete('/api/bounties/:id', async (req, res) => {
     res.json({ success: true, message: 'Bounty deleted successfully' });
   } catch (error) {
     handleError(res, error, 'Failed to delete bounty');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// ==================== BOUNTY TRANSITION ENDPOINTS ====================
+
+// Accept a bounty (transition from open to in_progress)
+app.post('/api/bounties/:id/accept', async (req, res) => {
+  let conn;
+  try {
+    conn = await connect();
+    
+    // Get current bounty
+    const [rows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+    
+    const bounty = rows[0];
+    const transitionResult = transitionBounty(bounty.status, 'accept');
+    
+    if (!transitionResult.success) {
+      return res.status(409).json({ 
+        error: 'Invalid state transition',
+        details: transitionResult.error,
+        currentStatus: bounty.status
+      });
+    }
+    
+    // Update bounty status
+    const [updateResult] = await conn.execute(
+      'UPDATE bounties SET status = ? WHERE id = ?',
+      [transitionResult.newStatus, req.params.id]
+    );
+    
+    if (updateResult.affectedRows === 0) {
+      return res.status(500).json({ error: 'Failed to update bounty status' });
+    }
+    
+    // Fetch and return updated bounty
+    const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    res.json({
+      success: true,
+      bounty: updatedRows[0],
+      transition: 'accept',
+      previousStatus: bounty.status,
+      newStatus: transitionResult.newStatus
+    });
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to accept bounty');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Complete a bounty (transition from in_progress to completed)
+app.post('/api/bounties/:id/complete', async (req, res) => {
+  let conn;
+  try {
+    conn = await connect();
+    
+    // Get current bounty
+    const [rows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+    
+    const bounty = rows[0];
+    const transitionResult = transitionBounty(bounty.status, 'complete');
+    
+    if (!transitionResult.success) {
+      return res.status(409).json({ 
+        error: 'Invalid state transition',
+        details: transitionResult.error,
+        currentStatus: bounty.status
+      });
+    }
+    
+    // Update bounty status
+    const [updateResult] = await conn.execute(
+      'UPDATE bounties SET status = ? WHERE id = ?',
+      [transitionResult.newStatus, req.params.id]
+    );
+    
+    if (updateResult.affectedRows === 0) {
+      return res.status(500).json({ error: 'Failed to update bounty status' });
+    }
+    
+    // Fetch and return updated bounty
+    const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    res.json({
+      success: true,
+      bounty: updatedRows[0],
+      transition: 'complete',
+      previousStatus: bounty.status,
+      newStatus: transitionResult.newStatus
+    });
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to complete bounty');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Archive a bounty (transition to archived from any status)
+app.post('/api/bounties/:id/archive', async (req, res) => {
+  let conn;
+  try {
+    conn = await connect();
+    
+    // Get current bounty
+    const [rows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+    
+    const bounty = rows[0];
+    const transitionResult = transitionBounty(bounty.status, 'archive');
+    
+    if (!transitionResult.success) {
+      return res.status(409).json({ 
+        error: 'Invalid state transition',
+        details: transitionResult.error,
+        currentStatus: bounty.status
+      });
+    }
+    
+    // Update bounty status
+    const [updateResult] = await conn.execute(
+      'UPDATE bounties SET status = ? WHERE id = ?',
+      [transitionResult.newStatus, req.params.id]
+    );
+    
+    if (updateResult.affectedRows === 0) {
+      return res.status(500).json({ error: 'Failed to update bounty status' });
+    }
+    
+    // Fetch and return updated bounty
+    const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    res.json({
+      success: true,
+      bounty: updatedRows[0],
+      transition: 'archive',
+      previousStatus: bounty.status,
+      newStatus: transitionResult.newStatus
+    });
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to archive bounty');
   } finally {
     if (conn) try { await conn.end(); } catch {}
   }
