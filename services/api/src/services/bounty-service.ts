@@ -40,13 +40,26 @@ export class BountyService {
           .where(eq(bounties.id, bountyId));
 
         // Create escrow transaction if bounty has amount
-        if (bounty.amount_cents > 0) {
+        if (bounty.amount_cents > 0 && !bounty.is_for_honor) {
+          // Create ESCROW_HOLD outbox event for PaymentIntent creation
+          await outboxService.createEvent({
+            type: 'ESCROW_HOLD',
+            payload: {
+              bountyId,
+              creatorId: bounty.creator_id,
+              amount: bounty.amount_cents,
+              title: bounty.title,
+            },
+            status: 'pending',
+          });
+
+          // Create escrow transaction record
           await walletService.createTransaction({
             user_id: bounty.creator_id,
             bountyId: bountyId,
             type: 'escrow',
             amount: bounty.amount_cents / 100, // Convert cents to dollars
-            status: 'completed', // Mark as completed immediately for simplicity
+            status: 'pending', // Mark as pending until PaymentIntent is confirmed
           });
         }
 

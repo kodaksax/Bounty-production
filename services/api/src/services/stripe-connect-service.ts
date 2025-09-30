@@ -1,7 +1,15 @@
 import Stripe from 'stripe';
 import { db } from '../db/connection';
-import { users } from '../db/schema';
+import { users, bounties } from '../db/schema';
 import { eq } from 'drizzle-orm';
+
+export interface EscrowPaymentIntentResponse {
+  paymentIntentId: string;
+  clientSecret: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
 
 export interface OnboardingLinkRequest {
   userId: string;
@@ -161,6 +169,63 @@ class StripeConnectService {
       if (error instanceof Stripe.errors.StripeError) {
         throw new Error(`Stripe error: ${error.message}`);
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Create a PaymentIntent for escrow (capture funds on platform)
+   */
+  async createEscrowPaymentIntent(bountyId: string): Promise<EscrowPaymentIntentResponse> {
+    this.ensureConfigured();
+
+    try {
+      // Get bounty details
+      const bountyRecord = await db
+        .select()
+        .from(bounties)
+        .where(eq(bounties.id, bountyId))
+        .limit(1);
+
+      if (!bountyRecord.length) {
+        throw new Error('Bounty not found');
+      }
+
+      const bounty = bountyRecord[0];
+
+      if (bounty.is_for_honor) {
+        throw new Error('Cannot create escrow for honor-only bounties');
+      }
+
+      if (bounty.amount_cents <= 0) {
+        throw new Error('Cannot create escrow for zero amount bounties');
+      }
+
+      // For testing, create a mock PaymentIntent
+      // In production, this would call Stripe API
+      const mockPaymentIntent: EscrowPaymentIntentResponse = {
+        paymentIntentId: `pi_escrow_${Date.now()}_${bountyId.slice(-8)}`,
+        clientSecret: `pi_escrow_${Date.now()}_${bountyId.slice(-8)}_secret_mock`,
+        amount: bounty.amount_cents,
+        currency: 'usd',
+        status: 'requires_payment_method',
+      };
+
+      // Update bounty with payment intent ID
+      await db
+        .update(bounties)
+        .set({ 
+          payment_intent_id: mockPaymentIntent.paymentIntentId,
+          updated_at: new Date(),
+        })
+        .where(eq(bounties.id, bountyId));
+
+      console.log(`✅ Created escrow PaymentIntent ${mockPaymentIntent.paymentIntentId} for bounty ${bountyId} (${bounty.amount_cents} cents)`);
+
+      return mockPaymentIntent;
+
+    } catch (error) {
+      console.error(`❌ Error creating escrow PaymentIntent for bounty ${bountyId}:`, error);
       throw error;
     }
   }

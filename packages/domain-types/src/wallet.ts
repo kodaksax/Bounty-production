@@ -62,7 +62,7 @@ export const WalletSchema = z.object({
 });
 
 // Outbox event types for reliable event processing
-export type OutboxEventType = "BOUNTY_ACCEPTED" | "BOUNTY_COMPLETED";
+export type OutboxEventType = "BOUNTY_ACCEPTED" | "BOUNTY_COMPLETED" | "ESCROW_HOLD";
 
 export type OutboxEventStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -71,12 +71,14 @@ export interface OutboxEvent {
   type: OutboxEventType;
   payload: Record<string, any>;
   status: OutboxEventStatus;
+  retry_count: number;
+  retry_metadata?: Record<string, any>;
   created_at: string;
   processed_at?: string;
 }
 
 // Zod schemas for outbox events
-export const OutboxEventTypeSchema = z.enum(["BOUNTY_ACCEPTED", "BOUNTY_COMPLETED"]);
+export const OutboxEventTypeSchema = z.enum(["BOUNTY_ACCEPTED", "BOUNTY_COMPLETED", "ESCROW_HOLD"]);
 
 export const OutboxEventStatusSchema = z.enum(["pending", "processing", "completed", "failed"]);
 
@@ -85,6 +87,8 @@ export const OutboxEventSchema = z.object({
   type: OutboxEventTypeSchema,
   payload: z.record(z.any()),
   status: OutboxEventStatusSchema,
+  retry_count: z.number().default(0),
+  retry_metadata: z.record(z.any()).optional(),
   created_at: z.string(),
   processed_at: z.string().optional(),
 });
@@ -95,6 +99,7 @@ export const CreateOutboxEventSchema = OutboxEventSchema.omit({
   processed_at: true,
 }).extend({
   status: OutboxEventStatusSchema.optional().default("pending"),
+  retry_count: z.number().optional().default(0),
 });
 
 // Type inference from schemas
