@@ -108,6 +108,26 @@ CREATE TABLE IF NOT EXISTS bounty_requests (
  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create wallet_transactions table
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ bounty_id UUID,
+ user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+ type TEXT NOT NULL,
+ amount_cents INTEGER NOT NULL,
+ created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create outbox_events table  
+CREATE TABLE IF NOT EXISTS outbox_events (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ type TEXT NOT NULL,
+ payload JSONB NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+ created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+ processed_at TIMESTAMP WITH TIME ZONE
+);
+
 -- IMPORTANT: Always insert the default user first to avoid foreign key constraints
 INSERT INTO profiles (id, username, avatar_url, about, phone, balance)
 VALUES 

@@ -61,7 +61,45 @@ export const WalletSchema = z.object({
   updatedAt: z.string(),
 });
 
+// Outbox event types for reliable event processing
+export type OutboxEventType = "BOUNTY_ACCEPTED" | "BOUNTY_COMPLETED";
+
+export type OutboxEventStatus = "pending" | "processing" | "completed" | "failed";
+
+export interface OutboxEvent {
+  id: string;
+  type: OutboxEventType;
+  payload: Record<string, any>;
+  status: OutboxEventStatus;
+  created_at: string;
+  processed_at?: string;
+}
+
+// Zod schemas for outbox events
+export const OutboxEventTypeSchema = z.enum(["BOUNTY_ACCEPTED", "BOUNTY_COMPLETED"]);
+
+export const OutboxEventStatusSchema = z.enum(["pending", "processing", "completed", "failed"]);
+
+export const OutboxEventSchema = z.object({
+  id: z.string(),
+  type: OutboxEventTypeSchema,
+  payload: z.record(z.any()),
+  status: OutboxEventStatusSchema,
+  created_at: z.string(),
+  processed_at: z.string().optional(),
+});
+
+export const CreateOutboxEventSchema = OutboxEventSchema.omit({
+  id: true,
+  created_at: true,
+  processed_at: true,
+}).extend({
+  status: OutboxEventStatusSchema.optional().default("pending"),
+});
+
 // Type inference from schemas
 export type WalletTransactionInput = z.infer<typeof WalletTransactionSchema>;
 export type CreateWalletTransactionInput = z.infer<typeof CreateWalletTransactionSchema>;
 export type WalletInput = z.infer<typeof WalletSchema>;
+export type OutboxEventInput = z.infer<typeof OutboxEventSchema>;
+export type CreateOutboxEventInput = z.infer<typeof CreateOutboxEventSchema>;
