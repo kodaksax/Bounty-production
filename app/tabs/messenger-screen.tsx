@@ -4,22 +4,31 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import React, { useState } from "react"
-import { ScrollView, Text, TouchableOpacity, View } from "react-native"
-import { ChatDetailScreen } from "../../components/chat-detail-screen"
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native"
+import { useConversations } from "../../hooks/useConversations"
+import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
+import { ChatDetailScreen } from "./chat-detail-screen"
 
-
-export interface Conversation {
-  id: string
-  name: string
-  avatar?: string
-  lastMessage: string
-  time: string
-  unread: number
-  isTyping?: boolean
-  isGroup?: boolean
-  isRead?: boolean
-  status?: string
+// Helper to format conversation time
+function formatConversationTime(updatedAt?: string): string {
+  if (!updatedAt) return '';
+  
+  const date = new Date(updatedAt);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+  
+  if (diffHrs < 1) {
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return 'Just now';
+    return `${diffMins}m ago`;
+  }
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
 }
 
 export function MessengerScreen({
@@ -31,43 +40,12 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
-  const [conversations, setConversations] = useState<Conversation[]>([
-    {
-      id: "1",
-      name: "Olivia Grant",
-      avatar: undefined,
-      lastMessage: "Olivia is typing...",
-      time: "12:30",
-      unread: 3,
-      isTyping: true,
-      status: "Online now",
-    },
-    {
-      id: "2",
-      name: "Product design",
-      lastMessage: "When is the meeting scheduled ?",
-      time: "12:34",
-      unread: 2,
-      isGroup: true,
-      status: "5 members",
-    },
-    {
-      id: "3",
-      name: "John Alfaro",
-      avatar: undefined,
-      lastMessage: "Nice work, I love it 👍",
-      time: "12:30",
-      unread: 0,
-      isRead: true,
-      status: "Last seen today",
-    },
-  ])
-
+  const { conversations, loading, error, markAsRead, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const { balance } = useWallet()
-  // activeScreen is received from props (lifted state)
-  const handleConversationClick = (id: string) => {
-    setConversations((prev) => prev.map((conv) => (conv.id === id ? { ...conv, unread: 0, isRead: true } : conv)))
+
+  const handleConversationClick = async (id: string) => {
+    await markAsRead(id)
     setActiveConversation(id)
     onConversationModeChange?.(true)
   }
@@ -75,13 +53,14 @@ export function MessengerScreen({
   const handleBackToInbox = () => {
     setActiveConversation(null)
     onConversationModeChange?.(false)
+    refresh() // Refresh conversation list when returning
   }
-
-// Removed unused StyleSheet (styles)
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
-    if (conversation) return <ChatDetailScreen conversation={conversation} onBack={handleBackToInbox} />
+    if (conversation) {
+      return <ChatDetailScreen conversation={conversation} onBack={handleBackToInbox} />
+    }
   }
 
   return (
@@ -99,20 +78,44 @@ export function MessengerScreen({
       <View className="px-4 py-2 flex-row justify-between items-center">
         <Text className="text-xl font-bold">INBOX</Text>
         <View className="flex-row gap-4">
-          <TouchableOpacity>
-            <Text className="text-sm">Edit</Text>
+          <TouchableOpacity onPress={refresh}>
+            <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>
           <TouchableOpacity>
             <Text className="text-sm">New Group</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {error && (
+        <View className="mx-4 mb-2 p-3 bg-red-500/20 border border-red-500 rounded">
+          <Text className="text-sm text-red-100">{error}</Text>
+        </View>
+      )}
     
-      <ScrollView className="flex-1 px-2 pb-24">
-         {conversations.map((conversation) => (
-           <ConversationItem key={conversation.id} conversation={conversation} onPress={() => handleConversationClick(conversation.id)} />
-         ))}
-       </ScrollView>
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#ffffff" />
+        </View>
+      ) : conversations.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-4">
+          <MaterialIcons name="chat-bubble-outline" size={64} color="rgba(255,255,255,0.3)" />
+          <Text className="text-lg mt-4 text-center text-emerald-200">No conversations yet</Text>
+          <Text className="text-sm mt-2 text-center text-emerald-300">
+            Start a conversation from a bounty posting
+          </Text>
+        </View>
+      ) : (
+        <ScrollView className="flex-1 px-2 pb-24">
+          {conversations.map((conversation) => (
+            <ConversationItem 
+              key={conversation.id} 
+              conversation={conversation} 
+              onPress={() => handleConversationClick(conversation.id)} 
+            />
+          ))}
+        </ScrollView>
+      )}
 
       {/* Bottom navigation is provided by the app container (BountyApp) */}
     </View>
@@ -128,6 +131,8 @@ interface ConversationItemProps {
 }
 
 function ConversationItem({ conversation, onPress }: ConversationItemProps) {
+  const time = formatConversationTime(conversation.updatedAt);
+  
   return (
     <TouchableOpacity className="flex-row items-center p-3 rounded-lg" onPress={onPress}>
       <View className="relative">
@@ -146,17 +151,17 @@ function ConversationItem({ conversation, onPress }: ConversationItemProps) {
       <View className="ml-3 flex-1 min-w-0">
         <View className="flex-row justify-between items-center">
           <Text className="font-medium">{conversation.name}</Text>
-          <Text className="text-xs text-emerald-300">{conversation.time}</Text>
+          <Text className="text-xs text-emerald-300">{time}</Text>
         </View>
         <View className="flex-row justify-between items-center mt-1">
-          <Text className={cn("text-sm truncate max-w-[200px]", conversation.isTyping ? "text-emerald-300" : "text-emerald-200")}>{conversation.lastMessage}</Text>
-          {conversation.unread > 0 ? (
+          <Text className={cn("text-sm truncate max-w-[200px]", "text-emerald-200")}>
+            {conversation.lastMessage || 'No messages yet'}
+          </Text>
+          {(conversation.unread ?? 0) > 0 && (
             <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
               <Text className="text-white text-xs">{conversation.unread}</Text>
             </View>
-          ) : conversation.isRead ? (
-            <MaterialIcons name="check" size={16} color="#10b981" />
-          ) : null}
+          )}
         </View>
       </View>
     </TouchableOpacity>

@@ -1,0 +1,159 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           BOUNTYEXPO - PROFILE & MESSAGING FEATURE ARCHITECTURE            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                             UI LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────────┐   │
+│  │ MessengerScreen │  │ ChatDetailScreen │  │ EnhancedProfile     │   │
+│  │                 │  │                  │  │ Section             │   │
+│  │ • Conversation  │  │ • Message list   │  │ • User info         │   │
+│  │   list          │  │ • Send messages  │  │ • Portfolio grid    │   │
+│  │ • Unread counts │  │ • Retry failed   │  │ • Follow button     │   │
+│  │ • Loading state │  │ • Status icons   │  │ • Verification      │   │
+│  └────────┬────────┘  └────────┬─────────┘  └──────────┬──────────┘   │
+│           │                    │                         │               │
+└───────────┼────────────────────┼─────────────────────────┼──────────────┘
+            │                    │                         │
+            ▼                    ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           HOOKS LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────┐  ┌─────────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │useConversations│  │ useMessages │  │useProfile│  │  useFollow   │  │
+│  │                │  │             │  │          │  │              │  │
+│  │• conversations │  │ • messages  │  │ • profile│  │ • isFollowing│  │
+│  │• markAsRead()  │  │ • send()    │  │ • update │  │ • toggle()   │  │
+│  │• refresh()     │  │ • retry()   │  │ • refresh│  │ • counts     │  │
+│  └───────┬────────┘  └──────┬──────┘  └────┬─────┘  └──────┬───────┘  │
+│          │                  │               │                │           │
+│  ┌───────┴──────────────────┴───────────────┴────────────────┴───────┐ │
+│  │                      usePortfolio                                  │ │
+│  │  • items  • addItem()  • deleteItem()                             │ │
+│  └────────────────────────────────┬────────────────────────────────┘  │
+│                                   │                                     │
+└───────────────────────────────────┼─────────────────────────────────────┘
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         SERVICES LAYER                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────┐  ┌─────────────────┐  ┌────────────────────────┐  │
+│  │messageService  │  │userProfileService│  │  followService         │  │
+│  │                │  │                  │  │                        │  │
+│  │ getConversations│ │ getProfile()     │  │ follow()               │  │
+│  │ getMessages()   │ │ updateProfile()  │  │ unfollow()             │  │
+│  │ sendMessage()   │ │ searchProfiles() │  │ getFollowers()         │  │
+│  │ retryMessage()  │ │                  │  │ getFollowing()         │  │
+│  │ markAsRead()    │ │                  │  │ • Optimistic updates   │  │
+│  │                 │ │                  │  │ • Auto rollback        │  │
+│  │ • 10% fail rate │ │                  │  │ • 5% fail rate         │  │
+│  └────────┬────────┘ └────────┬─────────┘  └───────────┬────────────┘  │
+│           │                   │                         │                │
+│  ┌────────┴─────────┐  ┌──────┴──────────┐  ┌──────────┴────────────┐ │
+│  │portfolioService  │  │ wsAdapter       │  │  Mock Data Store      │ │
+│  │                  │  │                 │  │                       │ │
+│  │ getItems()       │  │ connect()       │  │ • Users: 3            │ │
+│  │ addItem()        │  │ disconnect()    │  │ • Conversations: 3    │ │
+│  │ deleteItem()     │  │ on()/off()      │  │ • Messages: 15+       │ │
+│  │                  │  │ send()          │  │ • Portfolios: 9       │ │
+│  │ • 5% fail rate   │  │ • Event bus     │  │ • Follows: 3          │ │
+│  └──────────────────┘  └─────────────────┘  └───────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ▲
+                                    │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           TYPE LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                          lib/types.ts                                    │
+│                                                                          │
+│  UserProfile │ Message │ Conversation │ Follow │ PortfolioItem          │
+│  • id        │ • id    │ • id         │ • id   │ • id                   │
+│  • username  │ • text  │ • name       │ • ...  │ • type                 │
+│  • title     │ • ...   │ • isGroup    │        │ • url                  │
+│  • skills    │         │ • ...        │        │ • ...                  │
+│  • ...       │         │              │        │                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         DATA FLOW EXAMPLE                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  User sends message                                                      │
+│         │                                                                │
+│         ▼                                                                │
+│  ChatDetailScreen.handleSendMessage()                                    │
+│         │                                                                │
+│         ▼                                                                │
+│  useMessages.sendMessage()                                               │
+│         │                                                                │
+│         ├─► Optimistic UI update (status: 'sending')                    │
+│         │                                                                │
+│         ▼                                                                │
+│  messageService.sendMessage()                                            │
+│         │                                                                │
+│         ├─► Add to in-memory store                                      │
+│         ├─► Simulate network (1s delay)                                 │
+│         │                                                                │
+│         ├─► 90% success ─► status: 'sent' ✓                            │
+│         └─► 10% failure ─► status: 'failed' ⚠️ (show retry button)     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       OPTIMISTIC UPDATE PATTERN                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  1. User Action                                                          │
+│     │                                                                    │
+│     ▼                                                                    │
+│  2. Immediate UI Update (optimistic)                                     │
+│     │                                                                    │
+│     ▼                                                                    │
+│  3. Call Service                                                         │
+│     │                                                                    │
+│     ├─► Success? → Keep optimistic state                                │
+│     │                                                                    │
+│     └─► Failure? → Rollback + Show error                                │
+│                                                                          │
+│  Used in:                                                                │
+│  • Message sending                                                       │
+│  • Follow/Unfollow                                                       │
+│  • Portfolio delete                                                      │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         FEATURE CHECKLIST                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ✅ Profile System                                                       │
+│     • User profiles with verification                                    │
+│     • Follow/unfollow functionality                                      │
+│     • Portfolio with image/video                                         │
+│     • Languages and skills display                                       │
+│                                                                          │
+│  ✅ Messaging System                                                     │
+│     • Conversation list                                                  │
+│     • 1:1 and group chats                                               │
+│     • Optimistic message sending                                         │
+│     • Failed message retry                                               │
+│                                                                          │
+│  ✅ Architecture                                                         │
+│     • Type-safe implementation                                           │
+│     • Mock services with seed data                                       │
+│     • Custom hooks for state                                             │
+│     • WebSocket adapter ready                                            │
+│                                                                          │
+│  ✅ UI/UX                                                                │
+│     • Mobile-first design                                                │
+│     • Loading states                                                     │
+│     • Error handling                                                     │
+│     • No duplicate navigation                                            │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
