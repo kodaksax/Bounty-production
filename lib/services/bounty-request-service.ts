@@ -184,7 +184,17 @@ export const bountyRequestService = {
    * Accept a bounty request
    */
   async acceptRequest(requestId: number): Promise<BountyRequest | null> {
-    return this.updateStatus(requestId, "accepted")
+    console.log(`🎯 Accepting bounty request ${requestId}...`);
+    console.log(`💡 Note: If this is a paid bounty, escrow PaymentIntent creation will be triggered`);
+    
+    const result = await this.updateStatus(requestId, "accepted");
+    
+    if (result) {
+      console.log(`✅ Bounty request ${requestId} accepted successfully`);
+      console.log(`🔒 Escrow process initiated for paid bounties via outbox event processing`);
+    }
+    
+    return result;
   },
 
   /**

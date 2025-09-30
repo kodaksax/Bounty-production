@@ -18,6 +18,7 @@ export const bounties = pgTable('bounties', {
   amount_cents: integer('amount_cents').notNull().default(0),
   is_for_honor: boolean('is_for_honor').default(false).notNull(),
   status: text('status').notNull().default('open'),
+  payment_intent_id: text('payment_intent_id'), // Store Stripe PaymentIntent ID for escrow
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -35,9 +36,11 @@ export const walletTransactions = pgTable('wallet_transactions', {
 // Outbox events table for reliable event processing
 export const outboxEvents = pgTable('outbox_events', {
   id: uuid('id').primaryKey().defaultRandom(),
-  type: text('type').notNull(), // BOUNTY_ACCEPTED, BOUNTY_COMPLETED, etc.
+  type: text('type').notNull(), // BOUNTY_ACCEPTED, BOUNTY_COMPLETED, ESCROW_HOLD, etc.
   payload: jsonb('payload').notNull(),
   status: text('status').notNull().default('pending'), // pending, processing, completed, failed
+  retry_count: integer('retry_count').notNull().default(0), // For exponential backoff
+  retry_metadata: jsonb('retry_metadata'), // Store retry-specific data like next_retry_at
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   processed_at: timestamp('processed_at', { withTimezone: true }),
 });

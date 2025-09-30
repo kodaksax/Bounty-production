@@ -1,4 +1,5 @@
 import { outboxService } from './outbox-service';
+import { stripeConnectService } from './stripe-connect-service';
 import { OutboxEvent } from '@bountyexpo/domain-types';
 
 export class OutboxWorker {
@@ -92,8 +93,8 @@ export class OutboxWorker {
     } catch (error) {
       console.error(`❌ Error processing event ${event.id}:`, error);
       
-      // Mark event as failed
-      await outboxService.markFailed(event.id);
+      // Mark event as failed with retry logic
+      await outboxService.markFailedWithRetry(event.id, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -108,6 +109,10 @@ export class OutboxWorker {
       
       case 'BOUNTY_COMPLETED':
         await this.handleBountyCompleted(event);
+        break;
+      
+      case 'ESCROW_HOLD':
+        await this.handleEscrowHold(event);
         break;
       
       default:
@@ -133,6 +138,31 @@ export class OutboxWorker {
     
     // For now, just log the event
     console.log(`📝 Logged BOUNTY_ACCEPTED event for bounty ${bountyId}`);
+  }
+
+  /**
+   * Handle ESCROW_HOLD events - Create PaymentIntent for bounty escrow
+   */
+  private async handleEscrowHold(event: OutboxEvent): Promise<void> {
+    const { bountyId, creatorId, amount, title } = event.payload;
+    
+    console.log(`🔒 ESCROW_HOLD: Creating PaymentIntent for bounty "${title}" (${bountyId})`);
+    console.log(`💰 Amount: ${amount > 0 ? `$${amount / 100}` : 'Zero amount'}`);
+    
+    try {
+      // Create PaymentIntent for escrow
+      const paymentIntent = await stripeConnectService.createEscrowPaymentIntent(bountyId);
+      
+      console.log(`✅ ESCROW_HELD: PaymentIntent ${paymentIntent.paymentIntentId} created for bounty ${bountyId}`);
+      console.log(`🎯 Status: ${paymentIntent.status}, Amount: $${paymentIntent.amount / 100}`);
+      
+      // Log success event
+      console.log(`📝 Logged ESCROW_HELD event for bounty ${bountyId}`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to create escrow for bounty ${bountyId}:`, error);
+      throw error; // Re-throw to trigger retry mechanism
+    }
   }
 
   /**
