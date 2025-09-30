@@ -25,21 +25,31 @@ export interface ConnectStatusResponse {
 }
 
 class StripeConnectService {
-  private stripe: Stripe;
+  private stripe: Stripe | null = null;
+  private isConfigured: boolean = false;
 
   constructor() {
     const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-      throw new Error('STRIPE_SECRET_KEY environment variable is required');
+    if (secretKey) {
+      this.stripe = new Stripe(secretKey);
+      this.isConfigured = true;
+    } else {
+      console.warn('[StripeConnectService] STRIPE_SECRET_KEY not configured. Service will be disabled.');
     }
+  }
 
-    this.stripe = new Stripe(secretKey);
+  private ensureConfigured() {
+    if (!this.isConfigured || !this.stripe) {
+      throw new Error('Stripe service not configured. Set STRIPE_SECRET_KEY environment variable.');
+    }
   }
 
   /**
    * Create a Stripe Connect onboarding link for Express accounts
    */
   async createOnboardingLink(request: OnboardingLinkRequest): Promise<OnboardingLinkResponse> {
+    this.ensureConfigured();
+    
     try {
       const { userId, refreshUrl, returnUrl } = request;
 
@@ -59,7 +69,7 @@ class StripeConnectService {
 
       // Create Stripe Express account if doesn't exist
       if (!stripeAccountId) {
-        const account = await this.stripe.accounts.create({
+        const account = await this.stripe!.accounts.create({
           type: 'express',
           capabilities: {
             card_payments: { requested: true },
@@ -86,7 +96,7 @@ class StripeConnectService {
       }
 
       // Create onboarding link
-      const accountLink = await this.stripe.accountLinks.create({
+      const accountLink = await this.stripe!.accountLinks.create({
         account: stripeAccountId,
         refresh_url: refreshUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/refresh`,
         return_url: returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/return`,
@@ -110,6 +120,8 @@ class StripeConnectService {
    * Get the onboarding/account status for a user
    */
   async getConnectStatus(userId: string): Promise<ConnectStatusResponse> {
+    this.ensureConfigured();
+    
     try {
       // Get user record
       const userRecord = await db
@@ -132,7 +144,7 @@ class StripeConnectService {
       }
 
       // Get account details from Stripe
-      const account = await this.stripe.accounts.retrieve(stripeAccountId);
+      const account = await this.stripe!.accounts.retrieve(stripeAccountId);
 
       return {
         hasStripeAccount: true,
@@ -163,7 +175,7 @@ class StripeConnectService {
         throw new Error('STRIPE_WEBHOOK_SECRET not configured');
       }
 
-      const event = this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+      const event = this.stripe!.webhooks.constructEvent(payload, signature, webhookSecret);
 
       console.log(`📨 Received Stripe webhook: ${event.type}`);
 
