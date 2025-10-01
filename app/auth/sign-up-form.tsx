@@ -268,6 +268,8 @@ export function SignUpForm(): React.ReactElement {
               <Animated.View style={{ transform: [
                 { scale: Animated.multiply(pulse.interpolate({ inputRange: [0,1], outputRange: [1, 1.035] }), pressScale) }
               ], shadowOpacity: canSubmit ? 0.35 : 0, shadowRadius: 12, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 } }}>
+                
+                {/* Create Account Button */}
                 <Button
                   onPressIn={() => {
                     Animated.spring(pressScale, { toValue: 0.94, useNativeDriver: true, speed: 40, bounciness: 4 }).start();

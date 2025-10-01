@@ -11,6 +11,8 @@ process.on('uncaughtException', (err) => {
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
 
 // Import domain logic for bounty transitions and validation
 const {
@@ -79,6 +81,53 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
   }
 } else {
   console.warn('[SupabaseAdmin] Missing SUPABASE_URL or SERVICE_ROLE_KEY (checked variants SUPABASE_SERVICE_ROLE_KEY | SUPABASE_SERVICE_KEY | SERVICE_ROLE_KEY, and SUPABASE_URL | PUBLIC_SUPABASE_URL | EXPO_PUBLIC_SUPABASE_URL ); /auth/register disabled.');
+}
+
+// --------------------- AUTO-MIGRATION (core tables) ---------------------
+// Light-weight safeguard: if running on MySQL and core table 'profiles' is missing,
+// execute the schema.sql file to create required tables. Can be disabled with SKIP_AUTOMIGRATE=1.
+let autoMigrationPromise = Promise.resolve();
+if (process.env.SKIP_AUTOMIGRATE === '1') {
+  console.log('[auto-migrate] Skipped due to SKIP_AUTOMIGRATE=1');
+} else if (process.env.USE_SQLITE === 'true') {
+  console.log('[auto-migrate] Skipped (using SQLite dev mode)');
+} else {
+  autoMigrationPromise = (async () => {
+    let conn;
+    try {
+      conn = await connect();
+      const [rows] = await conn.query("SHOW TABLES LIKE 'profiles'");
+      if (rows.length) {
+        console.log('[auto-migrate] Core table profiles already exists; no migration needed');
+        return 'exists';
+      }
+      console.warn('[auto-migrate] profiles table missing. Applying schema.sql ...');
+      const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
+      const sqlRaw = fs.readFileSync(schemaPath, 'utf8');
+      // Split statements on semicolons that end a line; ignore comments & empty lines
+      const statements = sqlRaw
+        .split(/;\s*\n/)
+        .map(s => s.trim())
+        .filter(s => s.length && !s.startsWith('--'));
+      let applied = 0;
+      for (const stmt of statements) {
+        try {
+          await conn.query(stmt);
+          applied++;
+        } catch (e) {
+          // Non-fatal: log and continue (e.g., duplicate index creation)
+          console.warn('[auto-migrate] statement failed (continuing):', e.code || e.message);
+        }
+      }
+      console.log(`[auto-migrate] Completed. Statements attempted: ${statements.length}, applied (no error): ${applied}`);
+      return 'migrated';
+    } catch (e) {
+      console.error('[auto-migrate] failed:', e.message);
+      return 'failed';
+    } finally {
+      if (conn) try { await conn.end(); } catch {}
+    }
+  })();
 }
 
 // Middleware
@@ -796,6 +845,7 @@ app.delete('/api/bounty-requests/:id', async (req, res) => {
 });
 
 // ==================== AUTH ENDPOINTS ====================
+const VERBOSE = process.env.API_VERBOSE_ERRORS === '1';
 
 // Backend-driven registration (Option B)
 app.post('/auth/register', async (req, res) => {
@@ -829,7 +879,12 @@ app.post('/auth/register', async (req, res) => {
     });
     if (error) {
       console.error('[auth/register] supabase createUser error', error);
-      return res.status(400).json({ error: error.message });
+      return res.status(400).json({ 
+        error: 'Supabase user creation failed',
+        message: error.message,
+        code: error.status || error.code,
+        ...(VERBOSE ? { full: error } : {})
+      });
     }
     if (!data?.user?.id) {
       console.error('[auth/register] no user id returned from supabase');
@@ -845,10 +900,27 @@ app.post('/auth/register', async (req, res) => {
     return res.status(201).json({ success: true, userId, email, username, confirmationRequired: true });
   } catch (e) {
     console.error('[auth/register] error', e);
-    return res.status(500).json({ error: 'Registration failed' });
+    return res.status(500).json({ 
+      error: 'Registration failed',
+      message: e.message,
+      ...(VERBOSE ? { stack: e.stack } : {})
+    });
   } finally {
     if (conn) try { await conn.end(); } catch {}
   }
+});
+
+// DB schema diagnostics - lists profiles columns (no row data)
+app.get('/diagnostics/db', async (req,res) => {
+  let conn;
+  try {
+    conn = await connect();
+    const [cols] = await conn.query('SHOW COLUMNS FROM profiles');
+    res.json({ ok: true, profiles: cols.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default })) });
+  } catch (e) {
+    console.error('[diagnostics/db] error', e);
+    res.status(500).json({ ok: false, error: e.message, ...(VERBOSE ? { stack: e.stack } : {}) });
+  } finally { if (conn) try { await conn.end(); } catch {} }
 });
 
 // Lightweight diagnostics (no secrets) to verify admin config
@@ -996,8 +1068,9 @@ app.delete('/users/:id', async (req, res) => {
 
 // ==================== SERVER STARTUP ====================
 
-const PORT = process.env.API_PORT || process.env.PORT || 3001;
-console.log('[startup] PORT raw value:', JSON.stringify(PORT), 'type:', typeof PORT);
+const RAW_PORT = process.env.API_PORT || process.env.PORT || 3001;
+const PORT = Number(String(RAW_PORT).trim().replace(/^"|"$/g,'').replace(/^'|'$/g,'')) || 3001;
+console.log('[startup] PORT raw value:', JSON.stringify(RAW_PORT), 'normalized:', PORT);
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API server listening on http://127.0.0.1:${PORT}`);

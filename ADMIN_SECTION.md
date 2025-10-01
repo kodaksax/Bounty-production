@@ -178,6 +178,59 @@ Network errors are simulated randomly when `DEBUG_SIMULATE_FAILURES = true` in `
 
 ## Development Notes
 
+### Centralized Route Constants (`lib/routes.ts`)
+Navigation paths used by admin and tab screens are now defined in a single source of truth:
+
+```ts
+import { ROUTES } from 'lib/routes';
+
+router.push(ROUTES.ADMIN.BOUNTIES);
+router.push(ROUTES.ADMIN.BOUNTY_DETAIL(id));
+router.replace(ROUTES.ROOT);
+router.push(ROUTES.TABS.PROFILE);
+```
+
+Benefits:
+- Eliminates hardcoded string typos across screens
+- Enables future refactors (folder or segment changes) in one place
+- Provides discoverability of available routes via IntelliSense
+
+Structure Overview:
+```
+ROUTES.ROOT
+ROUTES.AUTH.SIGN_IN / SIGN_UP
+ROUTES.TABS.(BOUNTY_APP|MESSENGER|POSTINGS|WALLET|PROFILE|SEARCH)
+ROUTES.ADMIN.(INDEX|BOUNTIES|BOUNTY_DETAIL(id)|USERS|USER_DETAIL(id)|TRANSACTIONS)
+```
+
+When adding a new screen, add its path (and a factory for dynamic segments) to `lib/routes.ts` then consume the constant—avoid inline paths.
+
+### AdminHeader Action Icons
+`AdminHeader` now includes two global action icons on the right:
+
+| Icon | Action | Behavior |
+|------|--------|----------|
+| settings | Open Settings/Profile | Navigates to `ROUTES.TABS.PROFILE` (where Settings UI lives) |
+| admin-panel-settings | Exit Admin Mode | Prompts confirmation, disables admin (via `setIsAdmin(false)`), then `router.replace(ROUTES.ROOT)` |
+
+Customization:
+- Pass a custom `actions` prop to inject additional buttons; existing icons still render after your custom nodes.
+- To hide either default icon, we can extend the component with props (e.g. `hideSettings`, `hideExit`)—not added yet; request if needed.
+- Back arrow still appears only when `onBack` is provided (or `showBack` if future usage demands).
+
+Edge Cases / Notes:
+- If a route path changes, only update `lib/routes.ts`.
+- Exit admin replaces the stack to avoid returning to restricted screens via the hardware back button.
+- If settings require a distinct route later (e.g. `/tabs/settings`), update the constant and the header logic stays valid.
+
+### Adding New Admin Routes
+1. Create the file in `app/(admin)/`.
+2. Add a constant to `ROUTES.ADMIN` (plus a factory if it has `[id]`).
+3. Use that constant in navigation calls.
+4. (Optional) Add quick link on dashboard using the route constant.
+
+---
+
 ### Adding New Screens
 1. Create screen file in `app/(admin)/`
 2. Follow existing patterns (AdminHeader, error handling, FlatList)

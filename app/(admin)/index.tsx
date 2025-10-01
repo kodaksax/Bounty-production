@@ -2,20 +2,21 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatRow } from '../../components/admin/AdminStatRow';
 import { useAdminMetrics } from '../../hooks/useAdminMetrics';
+import { ROUTES } from '../../lib/routes';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { metrics, isLoading, error, refetch } = useAdminMetrics();
 
   const quickLinks = [
-    { id: 'bounties', title: 'Bounties', icon: 'work', route: '/(admin)/bounties' },
-    { id: 'users', title: 'Users', icon: 'people', route: '/(admin)/users' },
-    { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: '/(admin)/transactions' },
+    { id: 'bounties', title: 'Bounties', icon: 'work', route: ROUTES.ADMIN.BOUNTIES },
+    { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
+    { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
   ];
 
   if (error && !metrics) {

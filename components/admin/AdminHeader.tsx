@@ -1,22 +1,49 @@
 // components/admin/AdminHeader.tsx - Header component for admin screens
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
+import React, { useCallback } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdmin } from '../../lib/admin-context';
+import { ROUTES } from '../../lib/routes';
 
 interface AdminHeaderProps {
   title: string;
   onBack?: () => void;
   actions?: React.ReactNode;
+  showBack?: boolean; // explicit control if needed
 }
 
-export function AdminHeader({ title, onBack, actions }: AdminHeaderProps) {
+export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { setIsAdmin } = useAdmin();
+
+  const handleGoSettings = useCallback(() => {
+    try {
+      router.push(ROUTES.TABS.PROFILE);
+    } catch (e) {
+      console.warn('[AdminHeader] settings nav failed', e);
+    }
+  }, []);
+
+  const handleExitAdmin = useCallback(() => {
+    Alert.alert('Exit Admin Mode', 'Disable admin mode and return to app settings?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disable', style: 'destructive', onPress: async () => {
+          await setIsAdmin(false);
+          try {
+            router.replace(ROUTES.ROOT);
+          } catch {}
+        }
+      }
+    ]);
+  }, [setIsAdmin]);
 
   return (
     <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
       <View style={styles.row}>
-        {onBack && (
+        {(onBack || showBack) && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
@@ -27,7 +54,17 @@ export function AdminHeader({ title, onBack, actions }: AdminHeaderProps) {
             <Text style={styles.adminBadgeText}>ADMIN</Text>
           </View>
         </View>
-        {actions && <View style={styles.actions}>{actions}</View>}
+        <View style={styles.actions}>
+          {actions}
+          {/* Settings icon */}
+          <TouchableOpacity onPress={handleGoSettings} style={styles.iconButton} accessibilityLabel="Settings" accessibilityRole="button">
+            <MaterialIcons name="settings" size={22} color="#c8ffe0" />
+          </TouchableOpacity>
+          {/* Exit admin */}
+            <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Exit admin mode" accessibilityRole="button">
+              <MaterialIcons name="admin-panel-settings" size={22} color="#ffddb5" />
+            </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -78,4 +115,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  iconButton: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)'
+  }
 });

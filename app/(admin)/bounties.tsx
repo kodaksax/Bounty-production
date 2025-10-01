@@ -2,10 +2,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
 import { useAdminBounties } from '../../hooks/useAdminBounties';
+import { ROUTES } from '../../lib/routes';
 import type { AdminBounty, AdminBountyFilters } from '../../lib/types-admin';
 
 export default function AdminBountiesScreen() {
@@ -18,7 +19,7 @@ export default function AdminBountiesScreen() {
   const renderBountyItem = ({ item }: { item: AdminBounty }) => (
     <TouchableOpacity
       style={styles.bountyCard}
-      onPress={() => router.push(`/(admin)/bounty/${item.id}` as any)}
+      onPress={() => router.push(ROUTES.ADMIN.BOUNTY_DETAIL(item.id))}
     >
       <View style={styles.bountyHeader}>
         <Text style={styles.bountyTitle} numberOfLines={1}>
