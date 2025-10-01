@@ -943,7 +943,7 @@ app.post('/auth/identifier-sign-up', async (req, res) => {
       if (userRows.length > 0) return res.status(409).json({ error: 'Username already taken' });
     }
     // Create profile record (mock password handling; no hashing for now)
-    const id = require('uuid').v4();
+    const id = uuidv4();
     const emailValue = looksEmail ? identifier : `${username}+placeholder@placeholder.local`;
     await conn.execute(
       'INSERT INTO profiles (id, username, email, balance) VALUES (?, ?, ?, ?)',

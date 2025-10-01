@@ -30,7 +30,14 @@ export function SignUpForm(): React.ReactElement {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  const canSubmit = email.length > 5 && username.length >= 3 && password.length >= 6 && confirmPassword === password && !isLoading;
+  function isFormValid() {
+    const emailValid = email.length > 5;
+    const usernameValid = username.length >= 3;
+    const passwordValid = password.length >= 6;
+    const passwordsMatch = confirmPassword === password;
+    return emailValid && usernameValid && passwordValid && passwordsMatch && !isLoading;
+  }
+  const canSubmit = isFormValid();
 
   // Animated pulse for primed submit button
   const pulse = useRef(new Animated.Value(0)).current;
@@ -75,8 +82,11 @@ export function SignUpForm(): React.ReactElement {
       return
     }
     if (password !== confirmPassword) {
-      setErrors({ confirmPassword: 'Passwords do not match' })
-      return
+      // Use environment variable or fallback to platform-specific localhost for development
+      const LOCAL_HOST_ANDROID = process.env.LOCAL_HOST_ANDROID || '10.0.2.2';
+      const LOCAL_HOST_IOS = process.env.LOCAL_HOST_IOS || 'localhost';
+      const localHost = Platform.OS === 'android' ? LOCAL_HOST_ANDROID : LOCAL_HOST_IOS;
+      const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
     }
 
     try {

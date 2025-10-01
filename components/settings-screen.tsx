@@ -11,11 +11,14 @@ import { NotificationsCenterScreen } from "./settings/notifications-center-scree
 import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
 import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
 
-interface SettingsScreenProps { onBack?: () => void }
+interface SettingsScreenProps {
+  onBack?: () => void
+  navigation?: any // Accept navigation prop for navigation actions
+}
 
 type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'help' | 'contact' | 'terms' | 'faq'
 
-export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
+export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const [profileData, setProfileData] = useState({
     name: '@jon_Doe',
@@ -104,11 +107,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
           onSecondary={() => {
             // Developer shortcut to go directly to SignUp screen
             try {
-              // Using global navigation object if react-navigation is set up
-              // Fallback: attempt expo-router navigation via dynamic import
-              const maybeNav: any = (global as any)?.navigation;
-              if (maybeNav && typeof maybeNav.navigate === 'function') {
-                maybeNav.navigate('SignUp');
+              if (navigation && typeof navigation.navigate === 'function') {
+                navigation.navigate('SignUp');
               } else {
                 // Lazy import to avoid bundling if not needed
                 try {

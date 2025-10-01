@@ -22,7 +22,8 @@ export function ResetPasswordScreen() {
     if (!email) { setError('Email required'); return }
     try {
       setLoading(true)
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: 'https://your-app.com/auth/callback' })
+      const redirectTo = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL || 'https://your-app.com/auth/callback'
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
       if (error) { setError(error.message); return }
       setMessage('If that email exists, a reset link was sent.')
     } catch (e) {
