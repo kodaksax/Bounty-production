@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useAdmin } from '../../lib/admin-context'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
@@ -24,6 +25,7 @@ type Bounty = BountyType
 
 function BountyAppInner() {
   const router = useRouter()
+  const { isAdmin } = useAdmin()
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
   const [activeScreen, setActiveScreen] = useState("bounty")
   const [showBottomNav, setShowBottomNav] = useState(true)
@@ -300,9 +302,15 @@ function BountyAppInner() {
           onNavigate={setActiveScreen}
           onConversationModeChange={(inConv) => setShowBottomNav(!inConv)}
         />
+      ) : activeScreen === "admin" && isAdmin ? (
+        // Navigate to admin route when admin tab is selected
+        (() => {
+          router.push('/(admin)/');
+          return null;
+        })()
       ) : null}
 
-      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} />}
+      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={isAdmin} />}
     </View>
   )
 }

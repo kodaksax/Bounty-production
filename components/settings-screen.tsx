@@ -2,7 +2,8 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useState } from "react"
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native"
+import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
+import { useAdmin } from "../lib/admin-context"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -20,12 +21,22 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'help' | 'co
 
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
+  const { isAdmin, setIsAdmin } = useAdmin()
   const [profileData, setProfileData] = useState({
     name: '@jon_Doe',
     about: 'Russian opportunist',
     phone: '+998 90 943 32 00',
     avatar: '/placeholder.svg?height=48&width=48',
   })
+
+  const handleAdminToggle = async (value: boolean) => {
+    await setIsAdmin(value)
+    Alert.alert(
+      value ? 'Admin Mode Enabled' : 'Admin Mode Disabled',
+      value ? 'You now have access to the admin panel.' : 'Admin access has been removed.',
+      [{ text: 'OK' }]
+    )
+  }
 
   const handleProfileSave = (data: { name: string; about: string; phone: string }) => {
     setProfileData(prev => ({ ...prev, ...data }))
@@ -98,6 +109,31 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           onPrimary={() => setPanel('help')}
           icon="help-center"
         />
+        
+        {/* Dev Tools Section (only visible in __DEV__ mode) */}
+        {__DEV__ && (
+          <View className="mt-6 mb-4">
+            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">Developer Tools</Text>
+            <View className="bg-emerald-700/50 rounded-lg p-4 border border-emerald-500/30">
+              <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons name="admin-panel-settings" size={20} color="#00dc50" />
+                  <Text className="text-white font-semibold">Admin Mode</Text>
+                </View>
+                <Switch
+                  value={isAdmin}
+                  onValueChange={handleAdminToggle}
+                  trackColor={{ false: '#374151', true: '#00912C' }}
+                  thumbColor={isAdmin ? '#00dc50' : '#9ca3af'}
+                />
+              </View>
+              <Text className="text-white/60 text-xs leading-5">
+                Enable admin access to view and manage bounties, users, and transactions.
+              </Text>
+            </View>
+          </View>
+        )}
+        
         <SettingsCard
           title="Log Out"
           description="Sign out of the application securely and end your current session."

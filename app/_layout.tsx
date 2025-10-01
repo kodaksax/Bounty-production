@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import "../global.css";
+import { AdminProvider } from '../lib/admin-context';
 import { StripeProvider } from '../lib/stripe-context';
 import BrandedSplash from './auth/splash';
 
@@ -103,13 +104,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {showBranded ? (
           <BrandedSplash />
         ) : (
-          <StripeProvider>
-            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-              <View style={styles.inner}>
-                <Slot />
-              </View>
-            </ThemeProvider>
-          </StripeProvider>
+          <AdminProvider>
+            <StripeProvider>
+              <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                <View style={styles.inner}>
+                  <Slot />
+                </View>
+              </ThemeProvider>
+            </StripeProvider>
+          </AdminProvider>
         )}
       </SafeAreaView>
     </SafeAreaProvider>
