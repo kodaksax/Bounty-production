@@ -99,7 +99,28 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
           title="Log Out"
           description="Sign out of the application securely and end your current session."
           primaryLabel="Confirm Log Out"
+          secondaryLabel="devSignOut"
           onPrimary={() => Alert.alert('Logged Out', 'Session ended (placeholder).')}
+          onSecondary={() => {
+            // Developer shortcut to go directly to SignUp screen
+            try {
+              // Using global navigation object if react-navigation is set up
+              // Fallback: attempt expo-router navigation via dynamic import
+              const maybeNav: any = (global as any)?.navigation;
+              if (maybeNav && typeof maybeNav.navigate === 'function') {
+                maybeNav.navigate('SignUp');
+              } else {
+                // Lazy import to avoid bundling if not needed
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-var-requires
+                  const router = require('expo-router').router;
+                  if (router) router.push('/auth/sign-up-form');
+                } catch {}
+              }
+            } catch (e) {
+              console.warn('[devSignOut] navigation failed', e);
+            }
+          }}
           icon="logout"
         />
         <View className="mt-6 mb-10">

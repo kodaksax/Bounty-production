@@ -1,0 +1,11 @@
+
+> bountyexpo@1.0.0 api
+> node api/server.js
+
+[dotenv@17.2.3] injecting env (13) from .env -- tip: ≡ƒôí add observability to secrets: https://dotenvx.com/ops
+≡ƒùä∩╕Å  Using MySQL database (production)
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ≡ƒöä add secrets lifecycle management: https://dotenvx.com/ops
+[SupabaseAdmin] initialized for URL: https://xwlwqzzphmmhghiqvkeu.supabase.co
+≡ƒÜÇ API server listening on http://localhost:3001
+≡ƒôï Health check: http://localhost:3001/health
+[SupabaseAdmin] connectivity OK (listUsers)

@@ -1,11 +1,10 @@
 import { connect } from "../lib/db.js";
 
-async function fetchUsers() {
+export async function fetchUsers() {
   try {
     const connection = await connect();
     const [rows] = await connection.execute('SELECT * FROM users');
     await connection.end();
-    console.log(rows);
     return rows;
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -13,4 +12,4 @@ async function fetchUsers() {
   }
 }
 
-fetchUsers()
+// Note: removed automatic invocation to avoid startup side-effects.

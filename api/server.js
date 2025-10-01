@@ -1,8 +1,16 @@
 // api/server.js
 require('dotenv').config(); // Load environment variables first
+// ---- Added runtime instrumentation for debugging server availability ----
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
 
 const express = require('express');
 const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
 
 // Import domain logic for bounty transitions and validation
 const {
@@ -26,10 +34,81 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
+console.log('[env] platform:', process.platform, 'pid:', process.pid, 'node:', process.version);
+// Quick check whether another process already bound intended port using a raw net attempt (we'll close immediately)
+try {
+  const precheckNet = require('net').createServer();
+  precheckNet.once('error', (e) => {
+    console.error('[pre-bind check] error attempting temporary bind on', PORT, e.code || e.message);
+  });
+  precheckNet.listen(0, () => { // ephemeral test just to ensure binding works at all
+    const addr = precheckNet.address();
+    console.log('[pre-bind check] ephemeral bind succeeded on', addr);
+    precheckNet.close();
+  });
+} catch (e) {
+  console.error('[pre-bind check] unexpected failure', e);
+}
+
+// Supabase admin client (used for Option B backend-driven registration)
+// Allow multiple env fallbacks for flexibility across build systems
+let supabaseAdmin = null;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+  try {
+    supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+    console.log('[SupabaseAdmin] initialized for URL:', SUPABASE_URL);
+    // connectivity test (non-fatal)
+    (async () => {
+      try {
+        const test = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
+        if (test.error) {
+          console.warn('[SupabaseAdmin] listUsers test error:', test.error.message);
+        } else {
+          console.log('[SupabaseAdmin] connectivity OK (listUsers)');
+        }
+      } catch (e) {
+        console.warn('[SupabaseAdmin] connectivity test failed:', e.message);
+      }
+    })();
+  } catch (e) {
+    console.error('[SupabaseAdmin] init failed', e);
+  }
+} else {
+  console.warn('[SupabaseAdmin] Missing SUPABASE_URL or SERVICE_ROLE_KEY (checked variants SUPABASE_SERVICE_ROLE_KEY | SUPABASE_SERVICE_KEY | SERVICE_ROLE_KEY, and SUPABASE_URL | PUBLIC_SUPABASE_URL | EXPO_PUBLIC_SUPABASE_URL ); /auth/register disabled.');
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Auth middleware using Supabase access token (Bearer) to populate req.user
+// Requires a valid access token obtained client-side via supabase.auth.signInWithPassword
+const authRequired = async (req, res, next) => {
+  try {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
+      return res.status(401).json({ error: 'Missing bearer token' });
+    }
+    const token = auth.substring(7).trim();
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: 'Auth not configured' });
+    }
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data?.user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    req.user = data.user;
+    next();
+  } catch (e) {
+    console.error('[authRequired] error', e);
+    return res.status(500).json({ error: 'Auth verification failed' });
+  }
+};
 
 // Basic error handler
 const handleError = (res, error, customMessage = 'Internal server error') => {
@@ -69,24 +148,16 @@ app.get('/api/profiles/:id', async (req, res) => {
   }
 });
 
-// Get current user profile (for authenticated requests)
-app.get('/api/profile', async (req, res) => {
-  // For now, return default test user
-  // In production, extract user ID from JWT token
-  const userId = '00000000-0000-0000-0000-000000000001';
-  
+// Get current user profile (auth required)
+app.get('/api/profile', authRequired, async (req, res) => {
   let conn;
   try {
+    const userId = req.user.id;
     conn = await connect();
-    const [rows] = await conn.execute(
-      'SELECT * FROM profiles WHERE id = ?',
-      [userId]
-    );
-    
+    const [rows] = await conn.execute('SELECT * FROM profiles WHERE id = ?', [userId]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Profile not found' });
     }
-    
     res.json(rows[0]);
   } catch (error) {
     handleError(res, error, 'Failed to fetch profile');
@@ -726,21 +797,99 @@ app.delete('/api/bounty-requests/:id', async (req, res) => {
 
 // ==================== AUTH ENDPOINTS ====================
 
+// Backend-driven registration (Option B)
+app.post('/auth/register', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase admin not configured' });
+  }
+  let conn;
+  const started = Date.now();
+  try {
+    const { email, username, password } = req.body || {};
+    if (!email || !username || !password) {
+      return res.status(400).json({ error: 'email, username, password required' });
+    }
+    const emailRegex = /.+@.+\..+/;
+    if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email' });
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: 'Invalid username format' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password too short (min 6)' });
+
+    conn = await connect();
+    const [emailRows] = await conn.execute('SELECT id FROM profiles WHERE email = ?', [email]);
+    if (emailRows.length) return res.status(409).json({ error: 'Email already registered' });
+    const [userRows] = await conn.execute('SELECT id FROM profiles WHERE username = ?', [username]);
+    if (userRows.length) return res.status(409).json({ error: 'Username already taken' });
+
+    console.log('[auth/register] creating supabase user', { email, username });
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: email.trim(),
+      password,
+      email_confirm: true, // mark confirmed so client can sign in immediately
+      user_metadata: { username }
+    });
+    if (error) {
+      console.error('[auth/register] supabase createUser error', error);
+      return res.status(400).json({ error: error.message });
+    }
+    if (!data?.user?.id) {
+      console.error('[auth/register] no user id returned from supabase');
+      return res.status(500).json({ error: 'User creation failed (no id)' });
+    }
+    const userId = data.user.id;
+
+    await conn.execute(
+      'INSERT INTO profiles (id, username, email, balance) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), email=VALUES(email)',
+      [userId, username, email, 0]
+    );
+    console.log('[auth/register] success', { userId, ms: Date.now() - started });
+    return res.status(201).json({ success: true, userId, email, username, confirmationRequired: true });
+  } catch (e) {
+    console.error('[auth/register] error', e);
+    return res.status(500).json({ error: 'Registration failed' });
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Lightweight diagnostics (no secrets) to verify admin config
+app.get('/auth/diagnostics', (req, res) => {
+  res.json({
+    adminConfigured: Boolean(supabaseAdmin),
+    urlPresent: Boolean(SUPABASE_URL),
+    serviceKeyPresent: Boolean(SUPABASE_SERVICE_KEY),
+    // DO NOT return actual keys
+  });
+});
+
+// Active Supabase ping (calls listUsers) to ensure live connectivity
+app.get('/auth/ping', async (req, res) => {
+  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: 'admin client not configured' });
+  try {
+    const r = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
+    if (r.error) return res.status(500).json({ ok: false, error: r.error.message });
+    return res.json({ ok: true, count: r.data?.users?.length ?? 0 });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Simple sign-in (mock implementation)
 app.post('/auth/sign-in', async (req, res) => {
   let conn;
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const { email, password, identifier } = req.body;
+    const idValue = identifier || email;
+    if (!idValue || !password) {
+      return res.status(400).json({ error: 'Identifier and password are required' });
     }
-    
+    const looksEmail = /.+@.+\..+/.test(idValue);
     conn = await connect();
-    const [rows] = await conn.execute(
-      'SELECT * FROM profiles WHERE email = ?',
-      [email]
-    );
+    let rows;
+    if (looksEmail) {
+      [rows] = await conn.execute('SELECT * FROM profiles WHERE email = ?', [idValue]);
+    } else {
+      [rows] = await conn.execute('SELECT * FROM profiles WHERE username = ?', [idValue]);
+    }
     
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -763,6 +912,46 @@ app.post('/auth/sign-in', async (req, res) => {
     
   } catch (error) {
     handleError(res, error, 'Authentication failed');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Identifier-based sign-up (mock without Supabase server-side; would delegate to Supabase or internal user table)
+app.post('/auth/identifier-sign-up', async (req, res) => {
+  let conn;
+  try {
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Identifier and password are required' });
+    }
+    const looksEmail = /.+@.+\..+/.test(identifier);
+    const username = looksEmail ? identifier.split('@')[0] : identifier;
+    if (!looksEmail) {
+      // username charset validation
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+        return res.status(400).json({ error: 'Invalid username format' });
+      }
+    }
+    conn = await connect();
+    // Check uniqueness
+    if (looksEmail) {
+      const [emailRows] = await conn.execute('SELECT id FROM profiles WHERE email = ?', [identifier]);
+      if (emailRows.length > 0) return res.status(409).json({ error: 'Email already registered' });
+    } else {
+      const [userRows] = await conn.execute('SELECT id FROM profiles WHERE username = ?', [username]);
+      if (userRows.length > 0) return res.status(409).json({ error: 'Username already taken' });
+    }
+    // Create profile record (mock password handling; no hashing for now)
+    const id = require('uuid').v4();
+    const emailValue = looksEmail ? identifier : `${username}+placeholder@placeholder.local`;
+    await conn.execute(
+      'INSERT INTO profiles (id, username, email, balance) VALUES (?, ?, ?, ?)',
+      [id, username, emailValue, 0]
+    );
+    res.status(201).json({ success: true, id, username, email: emailValue, confirmationRequired: looksEmail });
+  } catch (error) {
+    handleError(res, error, 'Identifier sign-up failed');
   } finally {
     if (conn) try { await conn.end(); } catch {}
   }
@@ -808,10 +997,28 @@ app.delete('/users/:id', async (req, res) => {
 // ==================== SERVER STARTUP ====================
 
 const PORT = process.env.API_PORT || process.env.PORT || 3001;
+console.log('[startup] PORT raw value:', JSON.stringify(PORT), 'type:', typeof PORT);
 
-app.listen(PORT, () => {
-  console.log(`🚀 API server listening on http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 API server listening on http://127.0.0.1:${PORT}`);
+  console.log(`📋 Health check: http://127.0.0.1:${PORT}/health`);
+  try {
+    console.log('[startup] server.address():', server.address());
+  } catch (e) {
+    console.error('[startup] error reading server.address', e);
+  }
+});
+
+setInterval(() => {
+  if (server.listening) {
+    process.stdout.write('.');
+  } else {
+    console.warn('\n[heartbeat] server.listening is FALSE');
+  }
+}, 5000);
+
+server.on('error', (e) => {
+  console.error('[server error]', e);
 });
 
 module.exports = app;
