@@ -207,7 +207,7 @@ app.post('/app/auth/sign-up-form', async(req, res) => {
   if (error) {
     return res.status(400).json({ error: error.message });
   }
-  return res.redirect('/app/auth/sign-in-form');
+  return res.json({ message: "Successfully signed up" + data });
 });
 
 // Get user profile by ID

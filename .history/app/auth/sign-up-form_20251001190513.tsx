@@ -279,7 +279,7 @@ export function SignUpForm(): React.ReactElement {
                   }}
                   onPress={handleSubmit}
                   className="w-full"
-                  // disabled={!canSubmit || isLoading}
+                  disabled={!canSubmit || isLoading}
                 >
                   {isLoading ? (
                     <>
