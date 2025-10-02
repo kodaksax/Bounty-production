@@ -5,9 +5,7 @@ import { AlertDescription, Alert as BannerAlert } from "components/ui/alert"
 import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
 import { Label } from "components/ui/label"
-import * as SecureStore from 'expo-secure-store'
 import { useRouter } from 'expo-router'
-import { supabase } from "lib/supabase"
 import React, { useEffect, useRef, useState } from "react"
 import { Animated, Easing, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native"
 
@@ -82,61 +80,31 @@ export function SignUpForm(): React.ReactElement {
       return
     }
     if (password !== confirmPassword) {
-      // Use environment variable or fallback to platform-specific localhost for development
-      const LOCAL_HOST_ANDROID = process.env.LOCAL_HOST_ANDROID || '10.0.2.2';
-      const LOCAL_HOST_IOS = process.env.LOCAL_HOST_IOS || 'localhost';
-      const localHost = Platform.OS === 'android' ? LOCAL_HOST_ANDROID : LOCAL_HOST_IOS;
-      const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
+      setErrors({ confirmPassword: 'Passwords do not match' })
+      return
     }
 
     try {
       setIsLoading(true)
-      // Attempt backend first
+      
+      // Call backend sign-up endpoint
       const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
+      
+      const response = await fetch(`${baseUrl}/app/auth/sign-up-form`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), username: username.trim(), password })
+      });
 
-      let backendSucceeded = false;
-      try {
-        const resp = await fetch(`${baseUrl}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), username: username.trim(), password })
-        });
-        const json = await resp.json();
-        if (resp.ok) {
-          backendSucceeded = true;
-          if (!json.confirmationRequired) {
-            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-            if (signInErr) {
-              console.warn('[signUp] immediate sign-in failed', signInErr.message);
-            } else if (signInData?.session?.access_token) {
-              await SecureStore.setItemAsync('sb-access-token', signInData.session.access_token);
-            }
-          }
-        } else {
-          console.warn('[signUp] backend register failed, will consider fallback', json);
-          if (json?.error === 'Supabase admin not configured') {
-            // explicit fallback
-            backendSucceeded = false;
-          } else {
-            // non-config error should be surfaced
-            setAuthError(json.error || 'Registration failed');
-          }
-        }
-      } catch (netErr) {
-        console.warn('[signUp] backend unreachable, falling back to direct supabase signup');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAuthError(data.error || 'Failed to create account');
+        return;
       }
 
-      if (!backendSucceeded) {
-        // Fallback direct client signUp (will send confirmation email based on project settings)
-        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { username } } });
-        if (error) {
-          setAuthError(error.message);
-          return;
-        }
-      }
-
-      // Clear fields after successful registration (either path)
+      // Success - clear form and show success message
       setEmail("");
       setUsername("");
       setPassword("");

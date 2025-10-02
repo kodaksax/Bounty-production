@@ -193,21 +193,148 @@ app.get('/app/tabs/bounty-app', async(req, res) => {
 
 // Sign Up and Supabase Registration
 app.post('/app/auth/sign-up-form', async(req, res) => {
-  const { email, username, password } = req.body;
-  const { data, error } = await supabaseAdmin.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        username
-      }
-    }
-  });
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase admin not configured' });
   }
-  return res.redirect('/app/auth/sign-in-form');
+  
+  let conn;
+  try {
+    const { email, username, password } = req.body;
+    
+    // Validate input
+    if (!email || !username || !password) {
+      return res.status(400).json({ error: 'Email, username, and password are required' });
+    }
+    
+    const emailRegex = /.+@.+\..+/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-24 characters (letters, numbers, underscore)' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    
+    // Check if email or username already exists in profiles
+    conn = await connect();
+    const [emailRows] = await conn.execute('SELECT id FROM profiles WHERE email = ?', [email]);
+    if (emailRows.length) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+    
+    const [userRows] = await conn.execute('SELECT id FROM profiles WHERE username = ?', [username]);
+    if (userRows.length) {
+      return res.status(409).json({ error: 'Username already taken' });
+    }
+    
+    // Create user in Supabase
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: email.trim(),
+      password,
+      email_confirm: true,
+      user_metadata: { username }
+    });
+
+    if (error) {
+      console.error('[sign-up] Supabase createUser error:', error);
+      return res.status(400).json({ error: error.message || 'Failed to create account' });
+    }
+    
+    if (!data?.user?.id) {
+      return res.status(500).json({ error: 'User creation failed' });
+    }
+    
+    const userId = data.user.id;
+    
+    // Create profile in database
+    await conn.execute(
+      'INSERT INTO profiles (id, username, email, balance) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), email=VALUES(email)',
+      [userId, username, email, 40.00]
+    );
+    
+    console.log('[sign-up] User created successfully:', { userId, email, username });
+    
+    // Return success response
+    return res.status(201).json({ 
+      success: true, 
+      message: 'Account created successfully',
+      userId,
+      requiresConfirmation: false
+    });
+    
+  } catch (error) {
+    console.error('[sign-up] Error:', error);
+    return res.status(500).json({ error: 'Failed to create account' });
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Sign In and Verify Credentials
+app.post('/app/auth/sign-in-form', async(req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase admin not configured' });
+  }
+  
+  let conn;
+  try {
+    const { email, password } = req.body;
+    
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    // Sign in using Supabase Auth
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+
+    if (error) {
+      console.error('[sign-in] Supabase signIn error:', error);
+      return res.status(401).json({ error: error.message || 'Invalid credentials' });
+    }
+    
+    if (!data?.user) {
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
+    
+    // Check if user profile exists in database
+    conn = await connect();
+    const [rows] = await conn.execute('SELECT * FROM profiles WHERE id = ?', [data.user.id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User profile not found' });
+    }
+    
+    const profile = rows[0];
+    
+    console.log('[sign-in] User signed in successfully:', { userId: data.user.id, email: data.user.email });
+    
+    // Return success with user data and session
+    return res.status(200).json({ 
+      success: true,
+      message: 'Signed in successfully',
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        username: profile.username
+      },
+      session: data.session,
+      redirectTo: '/app/tabs/bounty-app'
+    });
+    
+  } catch (error) {
+    console.error('[sign-in] Error:', error);
+    return res.status(500).json({ error: 'Authentication failed' });
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
 });
 
 // Get user profile by ID
