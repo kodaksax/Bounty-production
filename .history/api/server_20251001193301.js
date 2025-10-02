@@ -8,20 +8,12 @@ process.on('uncaughtException', (err) => {
   console.error('[uncaughtException]', err);
 });
 
-const SECRET_KEY = process.env.SECRET_KEY;
-
 const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
-
-app.use(session({ secret: SECRET_KEY,
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: true }
-})); 
 
 // Import domain logic for bounty transitions and validation
 const {
@@ -183,13 +175,6 @@ app.get('/health', (req, res) => {
 });
 
 // ==================== PROFILES ENDPOINTS ====================
-
-// Initialize App Screen
-app.get('/app/tabs/bounty-app', async(req, res) => {
-  if (!session.user) {
-    return res.redirect('/app/auth/sign-up-form')
-  }
-});
 
 // Get user profile by ID
 app.get('/api/profiles/:id', async (req, res) => {

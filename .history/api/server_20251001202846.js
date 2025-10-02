@@ -191,6 +191,8 @@ app.get('/app/tabs/bounty-app', async(req, res) => {
   }
 });
 
+app.post
+
 // Get user profile by ID
 app.get('/api/profiles/:id', async (req, res) => {
   let conn;

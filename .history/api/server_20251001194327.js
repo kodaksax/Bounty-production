@@ -16,7 +16,6 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
-
 app.use(session({ secret: SECRET_KEY,
   resave: false,
   saveUninitialized: true,
@@ -185,10 +184,11 @@ app.get('/health', (req, res) => {
 // ==================== PROFILES ENDPOINTS ====================
 
 // Initialize App Screen
-app.get('/app/tabs/bounty-app', async(req, res) => {
-  if (!session.user) {
-    return res.redirect('/app/auth/sign-up-form')
+app.get('/', async(req, res) => {
+  if (session.user) {
+    res.redirect('/app/tabs/profile-screen')
   }
+  res.json({ message: 'BountyExpo API is running.' });
 });
 
 // Get user profile by ID

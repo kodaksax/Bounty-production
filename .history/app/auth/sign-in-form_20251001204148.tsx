@@ -4,8 +4,8 @@ import { MaterialIcons } from '@expo/vector-icons'
 import type React from "react"
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 
-import { Alert, AlertDescription } from "components/ui/alert"
 import { useRouter } from "expo-router"
+import { Alert, AlertDescription } from "components/ui/alert"
 import * as SecureStore from 'expo-secure-store'
 import { supabase } from 'lib/supabase'
 import { useState } from "react"
