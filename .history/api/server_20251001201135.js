@@ -16,7 +16,6 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
-
 app.use(session({ secret: SECRET_KEY,
   resave: false,
   saveUninitialized: true,
@@ -187,7 +186,9 @@ app.get('/health', (req, res) => {
 // Initialize App Screen
 app.get('/app/tabs/bounty-app', async(req, res) => {
   if (!session.user) {
-    return res.redirect('/app/auth/sign-up-form')
+    res.redirect('/app/tabs/profile-screen')
+  } else {
+    res.redirect('/app/auth/sign-in-form')
   }
 });
 

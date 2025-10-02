@@ -7,7 +7,6 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, Te
 import { Alert, AlertDescription } from "components/ui/alert"
 import { useRouter } from "expo-router"
 import * as SecureStore from 'expo-secure-store'
-import { useRouter } from 'expo-router'
 import { supabase } from 'lib/supabase'
 import { useState } from "react"
 
@@ -69,10 +68,8 @@ export function SignInForm() {
         await SecureStore.setItemAsync('sb-access-token', signInData.session.access_token);
       }
 
-
       // Navigate after success
       router.push('/tabs/bounty-app');
-
       
     } catch (err) {
       setAuthError("An unexpected error occurred")

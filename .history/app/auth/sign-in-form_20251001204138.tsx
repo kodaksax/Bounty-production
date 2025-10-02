@@ -4,10 +4,9 @@ import { MaterialIcons } from '@expo/vector-icons'
 import type React from "react"
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 
-import { Alert, AlertDescription } from "components/ui/alert"
 import { useRouter } from "expo-router"
+import { Alert, AlertDescription } from "components/ui/alert"
 import * as SecureStore from 'expo-secure-store'
-import { useRouter } from 'expo-router'
 import { supabase } from 'lib/supabase'
 import { useState } from "react"
 
@@ -69,10 +68,9 @@ export function SignInForm() {
         await SecureStore.setItemAsync('sb-access-token', signInData.session.access_token);
       }
 
-
       // Navigate after success
-      router.push('/tabs/bounty-app');
-
+      // @ts-ignore
+      navigation.navigate('Dashboard');
       
     } catch (err) {
       setAuthError("An unexpected error occurred")

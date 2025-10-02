@@ -187,7 +187,7 @@ app.get('/health', (req, res) => {
 // Initialize App Screen
 app.get('/app/tabs/bounty-app', async(req, res) => {
   if (!session.user) {
-    return res.redirect('/app/auth/sign-up-form')
+    return res.redirect('/app/auth/sign-in-form')
   }
 });
 

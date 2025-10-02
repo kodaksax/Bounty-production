@@ -4,31 +4,32 @@ import { MaterialIcons } from '@expo/vector-icons'
 import type React from "react"
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 
+import { useNavigation } from "@react-navigation/native"
 import { Alert, AlertDescription } from "components/ui/alert"
-import { useRouter } from "expo-router"
 import * as SecureStore from 'expo-secure-store'
-import { useRouter } from 'expo-router'
 import { supabase } from 'lib/supabase'
 import { useState } from "react"
 
 // Added The Next Line For Testing
+import { Button } from 'components/ui/button'
+import { navigate } from 'expo-router/build/global-state/routing'
+
+const navigateForTesting = () => {
+  navigate('../tabs/bounty-app');
+}
 
 export default function SignInRoute() {
   return <SignInForm />
 }
 
 export function SignInForm() {
-  const router = useRouter()
+  const navigation = useNavigation<any>()
   const [identifier, setIdentifier] = useState("") // email or username
   const [password, setPassword] = useState("")
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [authError, setAuthError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-
-  const navigateToSignUp = () => {
-    router.push("/auth/sign-up-form")
-  }
 
   const handleSubmit = async () => {
     setErrors({})
@@ -69,10 +70,9 @@ export function SignInForm() {
         await SecureStore.setItemAsync('sb-access-token', signInData.session.access_token);
       }
 
-
       // Navigate after success
-      router.push('/tabs/bounty-app');
-
+      // @ts-ignore
+      navigation.navigate('Dashboard');
       
     } catch (err) {
       setAuthError("An unexpected error occurred")
@@ -98,7 +98,7 @@ export function SignInForm() {
           <View className="flex-row mb-6 rounded-full overflow-hidden bg-black/30">
             <TouchableOpacity
               className="flex-1 py-2 items-center justify-center"
-              onPress={() => router.push('/auth/sign-up-form')}
+              onPress={() => navigation.navigate('SignUp')}
             >
               <Text className="text-white/70 font-medium text-sm">Register</Text>
             </TouchableOpacity>
@@ -138,7 +138,7 @@ export function SignInForm() {
             <View>
               <View className="flex-row items-center justify-between mb-1">
                 <Text className="text-sm text-white/80">Password</Text>
-                <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
+                <TouchableOpacity onPress={() => navigation.navigate('ResetPassword')}>
                   <Text className="text-[11px] text-emerald-200">Forgot?</Text>
                 </TouchableOpacity>
               </View>
@@ -177,11 +177,12 @@ export function SignInForm() {
 
             <View className="items-center mt-2">
               <Text className="text-sm text-white/80">Don't have an account?</Text>
-              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')} className="mt-1">
+              <TouchableOpacity onPress={() => navigation.navigate('SignUp')} className="mt-1">
                 <Text className="text-emerald-200 text-sm font-medium">Register</Text>
               </TouchableOpacity>
             </View>
           </View>
+          <Button onClick={navigateForTesting}></Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
