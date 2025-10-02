@@ -1,12 +1,12 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
 import { AlertDescription, Alert as BannerAlert } from "components/ui/alert"
 import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
 import { Label } from "components/ui/label"
 import * as SecureStore from 'expo-secure-store'
+import { useRouter } from 'expo-router'
 import { supabase } from "lib/supabase"
 import React, { useEffect, useRef, useState } from "react"
 import { Animated, Easing, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native"
@@ -18,7 +18,7 @@ export default function SignUpRoute() {
 }
 
 export function SignUpForm(): React.ReactElement {
-  const navigation = useNavigation()
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -175,7 +175,7 @@ export function SignUpForm(): React.ReactElement {
             </TouchableOpacity>
             <TouchableOpacity
               className="flex-1 py-2 items-center justify-center"
-              onPress={() => (navigation as any).navigate('SignIn')}
+              onPress={() => router.push('/auth/sign-in-form')}
             >
               <Text className="text-white/70 font-medium text-sm">Login</Text>
             </TouchableOpacity>
@@ -188,7 +188,7 @@ export function SignUpForm(): React.ReactElement {
                   Check your email for a confirmation link. You&apos;ll need to confirm before signing in.
                 </AlertDescription>
               </BannerAlert>
-              <Button onPress={() => (navigation as any).navigate('SignIn')} className="mt-3 w-full">Go to Sign In</Button>
+              <Button onPress={() => router.push('/auth/sign-in-form')} className="mt-3 w-full">Go to Sign In</Button>
             </View>
           )}
 
@@ -298,7 +298,7 @@ export function SignUpForm(): React.ReactElement {
 
               <View className="items-center mt-2">
                 <Text className="text-sm text-white/80">Have an account? </Text>
-                <TouchableOpacity onPress={() => (navigation as any).navigate('SignIn')} className="mt-1">
+                <TouchableOpacity onPress={() => router.push('/auth/sign-in-form')} className="mt-1">
                   <Text className="text-emerald-200 text-sm font-medium">Login</Text>
                 </TouchableOpacity>
               </View>

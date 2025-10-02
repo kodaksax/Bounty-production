@@ -1,9 +1,9 @@
 "use client"
-import { useNavigation } from '@react-navigation/native'
 import { Alert, AlertDescription } from 'components/ui/alert'
 import { Button } from 'components/ui/button'
 import { Input } from 'components/ui/input'
 import { Label } from 'components/ui/label'
+import { useRouter } from 'expo-router'
 import { supabase } from 'lib/supabase'
 import React, { useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
@@ -11,7 +11,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
 export function ResetPasswordScreen() {
-  const navigation = useNavigation<any>()
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export function ResetPasswordScreen() {
             <Button disabled={loading} onPress={handleReset} className="w-full">
               {loading ? 'Sending...' : 'Send Reset Link'}
             </Button>
-            <Button variant="link" onPress={() => navigation.goBack()} className="mt-2">Back</Button>
+            <Button variant="link" onPress={() => router.push('/auth/sign-in-form')} className="mt-2">Back to Sign In</Button>
           </View>
         </View>
       </ScrollView>

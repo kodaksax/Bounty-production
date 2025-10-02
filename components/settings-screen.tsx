@@ -139,7 +139,32 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           description="Sign out of the application securely and end your current session."
           primaryLabel="Confirm Log Out"
           secondaryLabel="devSignOut"
-          onPrimary={() => Alert.alert('Logged Out', 'Session ended (placeholder).')}
+          onPrimary={async () => {
+            try {
+              // Sign out from Supabase
+              const { supabase } = require('../lib/supabase');
+              const SecureStore = require('expo-secure-store');
+              
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                console.error('[Logout] Supabase signout error:', error);
+              }
+              // Clear any stored tokens
+              await SecureStore.deleteItemAsync('sb-access-token').catch(() => {});
+              
+              // Navigate to sign-in screen
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const router = require('expo-router').router;
+                if (router) router.replace('/auth/sign-in-form');
+              } catch {}
+              
+              Alert.alert('Logged Out', 'You have been signed out successfully.');
+            } catch (e) {
+              console.error('[Logout] Error:', e);
+              Alert.alert('Error', 'Failed to log out properly.');
+            }
+          }}
           onSecondary={() => {
             // Developer shortcut to go directly to SignUp screen
             try {
