@@ -54,7 +54,6 @@ export function SignUpForm(): React.ReactElement {
     }
   }, [canSubmit, pulse]);
 
-  // Remove legacy nested component
 
   const handleSubmit = async () => {
     setErrors({})
@@ -89,7 +88,7 @@ export function SignUpForm(): React.ReactElement {
       
       // Call backend sign-up endpoint
       const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
+      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || `http://${localHost}:3001`;
       
       const response = await fetch(`${baseUrl}/app/auth/sign-up-form`, {
         method: 'POST',

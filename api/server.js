@@ -11,16 +11,23 @@ process.on('uncaughtException', (err) => {
 const SECRET_KEY = process.env.SECRET_KEY;
 
 const express = require('express');
-const session = require('express-session');
+const session = require('express-session'); // ensure express-session
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 
-app.use(session({ secret: SECRET_KEY,
+// Initialize Express BEFORE any app.use(...)
+const app = express();
+
+// Core middlewares
+app.use(cors());
+app.use(express.json());
+app.use(session({
+  secret: SECRET_KEY || 'dev-fallback',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: true }
+  cookie: { secure: process.env.NODE_ENV === 'production' }
 })); 
 
 // Import domain logic for bounty transitions and validation
@@ -42,8 +49,6 @@ if (process.env.USE_SQLITE === 'true') {
 }
 
 const { v4: uuidv4 } = require('uuid');
-
-const app = express();
 
 console.log('[env] platform:', process.platform, 'pid:', process.pid, 'node:', process.version);
 // Quick check whether another process already bound intended port using a raw net attempt (we'll close immediately)
@@ -1099,9 +1104,9 @@ app.get('/auth/diagnostics', (req, res) => {
 app.get('/auth/ping', async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ ok: false, error: 'admin client not configured' });
   try {
-    const r = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-    if (r.error) return res.status(500).json({ ok: false, error: r.error.message });
-    return res.json({ ok: true, count: r.data?.users?.length ?? 0 });
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    return res.json({ ok: true, count: data?.users?.length ?? 0 });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
@@ -1194,7 +1199,7 @@ app.post('/auth/identifier-sign-up', async (req, res) => {
 // Get current user ID (for auth)
 app.get('/api/user-id', (req, res) => {
   // In production, extract from JWT token
-  res.text('00000000-0000-0000-0000-000000000001');
+  res.type('text').send('00000000-0000-0000-0000-000000000001');
 });
 
 // ==================== LEGACY USERS ENDPOINTS ====================
