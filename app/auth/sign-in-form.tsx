@@ -7,8 +7,6 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, Te
 import { Alert, AlertDescription } from "components/ui/alert"
 import { useRouter } from "expo-router"
 import * as SecureStore from 'expo-secure-store'
-import { useRouter } from 'expo-router'
-import { supabase } from 'lib/supabase'
 import { useState } from "react"
 
 // Added The Next Line For Testing
@@ -36,43 +34,37 @@ export function SignInForm() {
 
     // Basic frontend validation
     if (!identifier || !password) {
-      setErrors({ general: "Credentials required." })
+      setErrors({ general: "Email and password are required." })
       return
     }
 
     try {
       setIsLoading(true)
 
-      // First attempt Supabase sign-in: if identifier looks like email use email, else treat as username by fetching profile email
-      let emailForLogin = identifier;
-      const looksEmail = /.+@.+\..+/.test(identifier);
-      if (!looksEmail) {
-        // fetch username -> email mapping from backend (public endpoint could be added; for now attempt sign-in with placeholder will fail)
-        // Fallback: call backend mock sign-in to resolve email
-        const resolveResp = await fetch(`${process.env.API_BASE_URL || 'http://localhost:3001'}/auth/sign-in`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, password })
-        });
-        const resolveJson = await resolveResp.json();
-        if (resolveResp.ok && resolveJson.user?.email) {
-          emailForLogin = resolveJson.user.email;
-        }
-      }
+      // Call backend sign-in endpoint
+      const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+      const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
+      
+      const response = await fetch(`${baseUrl}/app/auth/sign-in-form`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: identifier.trim(), password })
+      });
 
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email: emailForLogin, password });
-      if (signInErr) {
-        setAuthError(signInErr.message || 'Failed to sign in');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAuthError(data.error || 'Failed to sign in');
         return;
       }
-      if (signInData?.session?.access_token) {
-        await SecureStore.setItemAsync('sb-access-token', signInData.session.access_token);
+
+      // Store the access token if provided
+      if (data.session?.access_token) {
+        await SecureStore.setItemAsync('sb-access-token', data.session.access_token);
       }
 
-
-      // Navigate after success
+      // Navigate to the app
       router.push('/tabs/bounty-app');
-
       
     } catch (err) {
       setAuthError("An unexpected error occurred")
