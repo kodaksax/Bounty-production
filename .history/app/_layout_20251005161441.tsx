@@ -11,9 +11,6 @@ import { AdminProvider } from '../lib/admin-context';
 import { StripeProvider } from '../lib/stripe-context';
 import BrandedSplash from './auth/splash';
 
-import { SplashScreenController } from '../components/splash-screen-controller';
-import { useAuthContext } from '../hooks/use-auth-context';
-import AuthProvider from '../providers/auth-provider';
 
 export const metadata = {
   title: "Bounty App",
@@ -41,9 +38,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
-
-  //Supabase auth
-  const { isLoggedIn } = useAuthContext()
 
   // Load any custom fonts (add family names if you have them)
   const [fontsLoaded] = useFonts({
@@ -111,8 +105,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {showBranded ? (
           <BrandedSplash />
         ) : (
-          <AuthProvider>
-            <SplashScreenController />
           <AdminProvider>
             <StripeProvider>
               <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
@@ -122,7 +114,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </ThemeProvider>
             </StripeProvider>
           </AdminProvider>
-          </AuthProvider>
         )}
       </SafeAreaView>
     </SafeAreaProvider>
