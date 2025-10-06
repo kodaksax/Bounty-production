@@ -35,6 +35,7 @@
           "merchantIdentifier": "merchant.com.bountyexpo-workspace"
         }
       ],
+      ["@react-native-google-signin/google-signin"],
       [
         "expo-splash-screen",
         {
