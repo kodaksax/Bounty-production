@@ -108,6 +108,28 @@ The TypeScript services in `lib/services/` now connect to real API endpoints:
 - `profile-service.ts` - User profile management  
 - `bounty-request-service.ts` - Bounty request handling
 
+## Testing Authentication
+
+Use the test script to verify authentication endpoints:
+
+```bash
+# Make sure the API server is running first
+npm run api
+
+# In another terminal, run the test
+node scripts/test-auth-endpoints.js
+
+# Or specify a custom API URL
+node scripts/test-auth-endpoints.js http://localhost:3001
+```
+
+The test script will:
+1. Check server health
+2. Verify Supabase configuration
+3. Create a test user account
+4. Sign in with the test credentials
+5. Verify invalid credentials are rejected
+
 ## Error Handling
 
 - Services include comprehensive error logging
