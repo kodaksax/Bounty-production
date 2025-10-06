@@ -8,14 +8,14 @@ import { BountyListItem } from 'components/bounty-list-item'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAdmin } from '../../lib/admin-context'
-import { WalletProvider, useWallet } from '../../lib/wallet-context'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
+import { WalletProvider, useWallet } from '../../lib/wallet-context'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -25,9 +25,12 @@ type Bounty = BountyType
 
 function BountyAppInner() {
   const router = useRouter()
+  const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin } = useAdmin()
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
-  const [activeScreen, setActiveScreen] = useState("bounty")
+  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'create', 'admin'])
+  const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
+  const [activeScreen, setActiveScreen] = useState(paramScreen)
   const [showBottomNav, setShowBottomNav] = useState(true)
   // Removed inline search overlay state; navigation now handles search route.
   const [bounties, setBounties] = useState<Bounty[]>([])
@@ -305,8 +308,8 @@ function BountyAppInner() {
       ) : activeScreen === "admin" && isAdmin ? (
         // Navigate to admin route when admin tab is selected
         (() => {
-          router.push('/(admin)/');
-          return null;
+          router.push('/(admin)')
+          return null
         })()
       ) : null}
 
@@ -345,3 +348,6 @@ const styles = StyleSheet.create({
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
   // searchOverlay removed (search is its own route now)
 })
+export default function BountyAppRoute() {
+  return <BountyApp />
+}

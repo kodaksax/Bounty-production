@@ -1,10 +1,10 @@
-import { outboxService, OutboxEvent } from './outbox-service';
-import { stripeConnectService } from './stripe-connect-service';
 import { completionReleaseService } from './completion-release-service';
+import { OutboxEvent, outboxService } from './outbox-service';
+import { stripeConnectService } from './stripe-connect-service';
 
 export class OutboxWorker {
   private isRunning = false;
-  private intervalId: NodeJS.Timeout | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Start the worker loop

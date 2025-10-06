@@ -1,19 +1,16 @@
 "use client"
+import { MaterialIcons } from '@expo/vector-icons'
+import * as AppleAuthentication from 'expo-apple-authentication'
+import { makeRedirectUri, ResponseType } from 'expo-auth-session'
+import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
+import { useRouter } from 'expo-router'
+import * as WebBrowser from 'expo-web-browser'
+import React, { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { ROUTES } from '../../lib/routes'
 
-import { MaterialIcons } from '@expo/vector-icons';
-import { Alert, AlertDescription } from "components/ui/alert";
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { makeRedirectUri, ResponseType } from 'expo-auth-session';
-import {
-  useIdTokenAuthRequest as useGoogleIdTokenAuthRequest,
-} from 'expo-auth-session/providers/google';
-import { useRouter } from "expo-router";
-import * as SecureStore from 'expo-secure-store';
-import * as WebBrowser from 'expo-web-browser';
-import type { SignInResponse } from 'lib/types/auth';
-import type React from "react";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+WebBrowser.maybeCompleteAuthSession()
 
 export default function SignInRoute() {
   return <SignInForm />
@@ -21,17 +18,14 @@ export default function SignInRoute() {
 
 export function SignInForm() {
   const router = useRouter()
-  const [identifier, setIdentifier] = useState("") // email or username
-  const [password, setPassword] = useState("")
+  const [identifier, setIdentifier] = useState('') // email or username
+  const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [authError, setAuthError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  // Complete auth session for iOS standalone/browser
-  WebBrowser.maybeCompleteAuthSession()
-
-  // Configure Google auth (Expo Auth Session)
+  // Google config (safe placeholders keep the app from crashing)
   const iosGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id'
   const androidGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 'placeholder-android-client-id'
   const webGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'placeholder-web-client-id'
@@ -40,184 +34,124 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
-  const expoRedirectUri = makeRedirectUri({
-    // native scheme may be auto configured by expo
-    // preferReturningParams: true,
-  })
-  const [request, response, promptAsync] = useGoogleIdTokenAuthRequest({
+  const redirectUri = useMemo(() => makeRedirectUri({}), [])
+
+  // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
+  const [request, response, promptAsync] = useIdTokenAuthRequest({
     responseType: ResponseType.IdToken,
     clientId: Platform.select({
       ios: iosGoogleClientId,
       android: androidGoogleClientId,
       default: webGoogleClientId,
-    }),
+    })!,
     iosClientId: iosGoogleClientId,
     androidClientId: androidGoogleClientId,
     webClientId: webGoogleClientId,
-    redirectUri: expoRedirectUri,
-    // select which scopes you need; openid provides id_token
+    redirectUri,
     scopes: ['openid', 'email', 'profile'],
   })
 
-  const navigateToSignUp = () => {
-    router.push("/auth/sign-up-form")
-  }
+  const getFieldError = (field: string) => errors[field]
 
   const handleSubmit = async () => {
     setErrors({})
     setAuthError(null)
 
-    // Basic frontend validation
-    if (!identifier || !password) {
-      setErrors({ general: "Email and password are required." })
+    if (!identifier) {
+      setErrors(e => ({ ...e, identifier: 'Email is required' }))
+      return
+    }
+    if (!password) {
+      setErrors(e => ({ ...e, password: 'Password is required' }))
+      return
+    }
+    if (!isSupabaseConfigured) {
+      setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
       return
     }
 
     try {
       setIsLoading(true)
-
-      // Call Supabase backend sign-in endpoint
-      const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
-      
-      const response = await fetch(`${baseUrl}/app/auth/sign-in-form`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: identifier.trim(), password })
-      });
-
-      const data: SignInResponse = await response.json();
-
-      if (!response.ok) {
-        // Handle specific error messages from backend
-        const errorMessage = data.error || 'Failed to sign in';
-        setAuthError(errorMessage);
-        return;
+      // If identifier may be username, your backend should resolve username -> email.
+      // Here we assume email sign-in:
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: identifier.trim(),
+        password,
+      })
+      if (error) throw error
+      if (data.session) {
+        router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+      } else {
+        setAuthError('No session returned from Supabase.')
       }
-
-      // Store the access token if provided by Supabase
-      if (data.session?.access_token) {
-        await SecureStore.setItemAsync('sb-access-token', data.session.access_token);
-        console.log('[sign-in] Access token stored successfully');
-      }
-
-      // Navigate to the app
-      router.push('/tabs/bounty-app');
-      
-    } catch (err) {
-      // Handle network errors
-      const errorMessage = err instanceof Error && err.message.includes('fetch')
-        ? 'Network error. Please check your connection and try again.'
-        : 'An unexpected error occurred. Please try again.';
-      setAuthError(errorMessage);
-      console.error('[sign-in] Error:', err);
+    } catch (err: any) {
+      setAuthError(err?.message || 'Sign-in failed')
+      console.error('[sign-in] Error:', err)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const getFieldError = (field: string) => {
-    return errors[field]
-  }
-
-  // When Google auth completes, exchange idToken with your backend
+  // Handle Google auth completion -> exchange id_token with Supabase
   useEffect(() => {
-    const handleGoogleResponse = async () => {
-      if (!response) return
+    const run = async () => {
       if (!isGoogleConfigured) return
-      if (response.type === 'success') {
-        const idToken = (response.params as any)?.id_token || (response.authentication as any)?.idToken
-        if (!idToken) {
-          setAuthError('Google sign-in failed: missing id_token')
-          return
+      if (response?.type !== 'success') return
+      const idToken = response.params.id_token
+      if (!idToken) {
+        setAuthError('Google did not return id_token')
+        return
+      }
+      if (!isSupabaseConfigured) {
+        setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+        return
+      }
+      try {
+        setIsLoading(true)
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        })
+        if (error) throw error
+        if (data.session) {
+          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+        } else {
+          setAuthError('No session returned after Google sign-in.')
         }
-        try {
-          setIsLoading(true)
-          const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost'
-          const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`
-          const res = await fetch(`${baseUrl}/auth/google/callback`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken }),
-          })
-          const data = await res.json()
-          if (!res.ok) {
-            const errorMessage = data?.error || 'Failed to sign in with Google'
-            setAuthError(errorMessage)
-            return
-          }
-          if (data.session?.access_token) {
-            await SecureStore.setItemAsync('sb-access-token', data.session.access_token)
-            console.log('[google-auth] Access token stored successfully')
-          }
-          router.push('/tabs/bounty-app')
-        } catch (e) {
-          const errorMessage = e instanceof Error && e.message.includes('fetch')
-            ? 'Network error during Google sign-in. Please try again.'
-            : 'Google sign-in failed. Please try again.';
-          setAuthError(errorMessage)
-          console.error('[google-auth] Error:', e)
-        } finally {
-          setIsLoading(false)
-        }
-      } else if (response.type === 'error') {
-        setAuthError(response.error?.message || 'Google sign-in canceled')
+      } catch (e: any) {
+        setAuthError(e?.message || 'Google sign-in failed')
+        console.error('[google] Error:', e)
+      } finally {
+        setIsLoading(false)
       }
     }
-    handleGoogleResponse()
+    run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [response, isGoogleConfigured])
-
+  }, [response])
+  
+  
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
-          <View className="items-center mb-10">
-            <Text className="text-white font-extrabold text-3xl tracking-widest mt-2">BOUNTY</Text>
+          <View className="flex-row items-center justify-center mb-10">
+            <MaterialIcons name="gps-fixed" size={40} color="#fff" />
+            <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
           </View>
-
-          {/* Segmented Toggle */}
-          <View className="flex-row mb-6 rounded-full overflow-hidden bg-black/30">
-            <TouchableOpacity
-              className="flex-1 py-2 items-center justify-center"
-              onPress={() => router.push('/auth/sign-up-form')}
-            >
-              <Text className="text-white/70 font-medium text-sm">Register</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-1 py-2 items-center justify-center bg-emerald-500"
-              onPress={() => { /* already here */ }}
-              disabled
-            >
-              <Text className="text-white font-medium text-sm">Login</Text>
-            </TouchableOpacity>
-          </View>
-
-          {authError && (
-            <View className="mb-4">
-              <Alert variant="destructive">
-                <View className="flex-row items-start justify-between">
-                  <AlertDescription className="flex-1 pr-2">{authError}</AlertDescription>
-                  <TouchableOpacity 
-                    onPress={() => setAuthError(null)}
-                    accessibilityLabel="Dismiss error"
-                    accessibilityRole="button"
-                  >
-                    <MaterialIcons name="close" size={18} color="#fca5a5" />
-                  </TouchableOpacity>
-                </View>
-              </Alert>
-            </View>
-          )}
-
           <View className="gap-5">
+            {authError ? (
+              <View className="bg-red-500/20 border border-red-400 rounded p-3">
+                <Text className="text-red-200 text-sm">{authError}</Text>
+              </View>
+            ) : null}
+
             <View>
-              <Text className="text-sm text-white/80 mb-1">Email or Username</Text>
+              <Text className="text-sm text-white/80 mb-1">Email</Text>
               <TextInput
                 nativeID="identifier"
                 value={identifier}
                 onChangeText={setIdentifier}
-                placeholder="you@example.com or username"
+                placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 editable={!isLoading}
@@ -226,6 +160,7 @@ export function SignInForm() {
               />
               {getFieldError('identifier') && <Text className="text-xs text-red-400 mt-1">{getFieldError('identifier')}</Text>}
             </View>
+
             <View>
               <View className="flex-row items-center justify-between mb-1">
                 <Text className="text-sm text-white/80">Password</Text>
@@ -259,78 +194,65 @@ export function SignInForm() {
               {isLoading ? (
                 <>
                   <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  <Text className="text-white">Signing in...</Text>
                 </>
               ) : (
                 <Text className="text-white font-medium">Sign In</Text>
               )}
             </TouchableOpacity>
 
-{Platform.OS === 'ios' && (
-  <View style={{ marginTop: 12 }}>
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-      cornerRadius={8}
-      style={{ width: '100%', height: 44 }}
-      onPress={async () => {
-        try {
-          const credential = await AppleAuthentication.signInAsync({
-            requestedScopes: [
-              AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-              AppleAuthentication.AppleAuthenticationScope.EMAIL,
-            ],
-          })
-          // TODO: send credential.authorizationCode/idToken to your backend
-        } catch (e: any) {
-          if (e?.code !== 'ERR_REQUEST_CANCELED') {
-            setAuthError('Apple sign-in failed')
-          }
-        }
-      }}
-    />
-  </View>
-)}
-
-            
-            <TouchableOpacity
-              disabled={!request || isLoading || !isGoogleConfigured}
-              onPress={() => {
-                if (!isGoogleConfigured) {
-                  setAuthError('Google Sign-In not configured. Add EXPO_PUBLIC_GOOGLE_*_CLIENT_ID envs to enable.')
-                  return
-                }
-                promptAsync()
-              }}
-              className="w-full bg-white rounded py-3 items-center flex-row justify-center"
-              style={{ marginTop: 12 }}
-            >
-              {isLoading ? (
-                <>
-                  <ActivityIndicator color="#000" style={{ marginRight: 8 }} />
-                  <Text className="text-black">Connecting...</Text>
-                </>
-              ) : (
-                <>
-                  <MaterialIcons name="login" size={18} color="#000" style={{ marginRight: 8 }} />
-                  <Text className="text-black font-medium">{isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {!isGoogleConfigured && (
-              <View className="mt-2 items-center">
-                <Text className="text-white/70 text-xs">
-                  Set EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID / ANDROID / WEB in env to enable Google login.
-                </Text>
+            {Platform.OS === 'ios' && (
+              <View style={{ marginTop: 12 }}>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={8}
+                  style={{ width: '100%', height: 44 }}
+                  onPress={async () => {
+                    try {
+                      const credential = await AppleAuthentication.signInAsync({
+                        requestedScopes: [
+                          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                        ],
+                      })
+                      if (!credential.identityToken) {
+                        setAuthError('No Apple identity token')
+                        return
+                      }
+                      if (!isSupabaseConfigured) {
+                        setAuthError('Supabase is not configured.')
+                        return
+                      }
+                      const { data, error } = await supabase.auth.signInWithIdToken({
+                        provider: 'apple',
+                        token: credential.identityToken,
+                      })
+                      if (error) throw error
+                      if (data.session) router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                    } catch (e: any) {
+                      if (e?.code !== 'ERR_REQUEST_CANCELED') {
+                        setAuthError('Apple sign-in failed')
+                        console.error(e)
+                      }
+                    }
+                  }}
+                />
               </View>
             )}
 
-            <View className="items-center mt-2">
-              <Text className="text-sm text-white/80">Don't have an account?</Text>
-              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')} className="mt-1">
-                <Text className="text-emerald-200 text-sm font-medium">Register</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              disabled={!isGoogleConfigured || isLoading || !request}
+              onPress={() => promptAsync()}
+              className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
+            >
+              <Text className="text-black font-medium">
+                {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
+              <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

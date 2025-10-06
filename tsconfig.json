@@ -6,6 +6,12 @@
     "paths": {
       "@/*": [
         "components/*"
+      ],
+      "@bountyexpo/domain-types": [
+        "packages/domain-types/src/index.ts"
+      ],
+      "@bountyexpo/domain-types/*": [
+        "packages/domain-types/src/*"
       ]
     }
   },
