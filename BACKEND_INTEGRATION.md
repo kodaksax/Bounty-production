@@ -4,7 +4,7 @@ This document covers the live data backend integration implemented for BountyExp
 
 ## Overview
 
-The app now uses a MySQL database with Express.js API server instead of mock data. All frontend services connect to real API endpoints.
+The app uses a **Supabase** backend for authentication and user management, along with a **PostgreSQL** database and **Express.js API server** for bounty data and business logic. All frontend services connect to real API endpoints.
 
 ## Architecture
 
@@ -14,9 +14,15 @@ Frontend (React Native/Expo)
 Service Layer (TypeScript)
     ↓ (REST API calls) 
 Express.js API Server
-    ↓ (MySQL queries)
-MySQL Database
+    ↓ (Supabase Auth + PostgreSQL queries)
+Supabase (Authentication) + PostgreSQL Database
 ```
+
+## Authentication Flow
+
+- **Sign-Up**: Frontend → API Server → Supabase Admin API → Creates user + profile in database
+- **Sign-In**: Frontend → API Server → Supabase Auth → Returns JWT token → Stored in SecureStore
+- **Protected Routes**: Frontend includes JWT token in Authorization header → API verifies with Supabase
 
 ## Database Schema
 
@@ -88,9 +94,11 @@ npm run test:api
 - `POST /api/bounty-requests` - Create new request
 - `PATCH /api/bounty-requests/:id` - Update request status
 
-### Authentication
-- `POST /auth/sign-in` - User authentication
+### Authentication (Supabase-backed)
+- `POST /app/auth/sign-up-form` - User registration (creates Supabase user + profile)
+- `POST /app/auth/sign-in-form` - User authentication (validates with Supabase)
 - `GET /api/user-id` - Get current user ID
+- `GET /auth/diagnostics` - Check Supabase configuration status
 
 ## Service Layer
 
@@ -99,6 +107,28 @@ The TypeScript services in `lib/services/` now connect to real API endpoints:
 - `bounty-service.ts` - Bounty CRUD operations
 - `profile-service.ts` - User profile management  
 - `bounty-request-service.ts` - Bounty request handling
+
+## Testing Authentication
+
+Use the test script to verify authentication endpoints:
+
+```bash
+# Make sure the API server is running first
+npm run api
+
+# In another terminal, run the test
+node scripts/test-auth-endpoints.js
+
+# Or specify a custom API URL
+node scripts/test-auth-endpoints.js http://localhost:3001
+```
+
+The test script will:
+1. Check server health
+2. Verify Supabase configuration
+3. Create a test user account
+4. Sign in with the test credentials
+5. Verify invalid credentials are rejected
 
 ## Error Handling
 

@@ -176,9 +176,15 @@ DATABASE_URL="postgresql://bountyexpo:bountyexpo123@localhost:5432/bountyexpo"
 STRIPE_SECRET_KEY="sk_test_your_key_here"
 EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_your_key_here"
 
-# Supabase (for authentication)
+# Supabase (for authentication - REQUIRED)
+# Get these from your Supabase project settings:
+# 1. Go to https://supabase.com/dashboard
+# 2. Select your project > Settings > API
 SUPABASE_URL="https://your-project.supabase.co"
+EXPO_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 SUPABASE_ANON_KEY="your-anon-key"
+EXPO_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"  # Keep secret, server-side only!
 SUPABASE_JWT_SECRET="your-jwt-secret"
 
 # API Configuration
@@ -206,6 +212,10 @@ pnpm dev:api      # Start API server (run in separate terminal)
 pnpm start        # Start Expo development server
 pnpm dev:stop     # Stop all services
 pnpm dev:logs     # View service logs
+
+# Testing
+pnpm test:auth    # Test authentication endpoints (sign-up/sign-in)
+pnpm test:api     # Test API endpoints
 
 # Database
 pnpm db:init      # Initialize database (if needed)
@@ -248,7 +258,42 @@ pnpm dev
 pnpm start --clear
 ```
 
-4. **API Client Package**
+### Authentication Setup (Supabase)
+
+BountyExpo uses **Supabase** for authentication. To set it up:
+
+1. **Create a Supabase Project**
+   - Go to [supabase.com](https://supabase.com)
+   - Create a new project
+   - Wait for database to be provisioned
+
+2. **Get API Credentials**
+   - Navigate to Settings > API in your Supabase dashboard
+   - Copy the Project URL and API keys
+   - Update your `.env` file with these values
+
+3. **Test Authentication**
+   ```bash
+   # Make sure API server is running
+   pnpm dev:api
+   
+   # Run auth tests
+   pnpm test:auth
+   ```
+   
+   You should see:
+   - ✅ Health check passed
+   - ✅ Supabase configuration valid
+   - ✅ Sign-up successful
+   - ✅ Sign-in successful
+
+4. **Troubleshooting Auth Issues**
+   - Check `.env` has all required Supabase variables
+   - Verify `SUPABASE_SERVICE_ROLE_KEY` (not ANON_KEY) is set for server
+   - Ensure both server and client keys are configured
+   - Check Supabase dashboard for user creation logs
+
+5. **API Client Package**
 
 The `@bountyexpo/api-client` package provides typed API wrappers and React hooks:
 

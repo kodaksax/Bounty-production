@@ -6,10 +6,9 @@ import { Button } from "components/ui/button"
 import { Input } from "components/ui/input"
 import { Label } from "components/ui/label"
 import { useRouter } from 'expo-router'
+import type { SignUpResponse } from 'lib/types/auth'
 import React, { useEffect, useRef, useState } from "react"
 import { Animated, Easing, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native"
-
-// (legacy helper removed; inlined in handleSubmit)
 
 export default function SignUpRoute() {
   
@@ -88,7 +87,7 @@ export function SignUpForm(): React.ReactElement {
     try {
       setIsLoading(true)
       
-      // Call backend sign-up endpoint
+      // Call Supabase backend sign-up endpoint
       const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || `http://${localHost}:3001`;
       
@@ -98,10 +97,12 @@ export function SignUpForm(): React.ReactElement {
         body: JSON.stringify({ email: email.trim(), username: username.trim(), password })
       });
 
-      const data = await response.json();
+      const data: SignUpResponse = await response.json();
 
       if (!response.ok) {
-        setAuthError(data.error || 'Failed to create account');
+        // Handle specific error messages from backend
+        const errorMessage = data.error || 'Failed to create account';
+        setAuthError(errorMessage);
         return;
       }
 
@@ -112,8 +113,12 @@ export function SignUpForm(): React.ReactElement {
       setConfirmPassword("");
       setSuccess(true);
     } catch (err) {
-      setAuthError('An unexpected error occurred')
-      console.error(err)
+      // Handle network errors
+      const errorMessage = err instanceof Error && err.message.includes('fetch')
+        ? 'Network error. Please check your connection and try again.'
+        : 'An unexpected error occurred. Please try again.';
+      setAuthError(errorMessage);
+      console.error('[sign-up] Error:', err);
     } finally {
       setIsLoading(false)
     }
@@ -164,7 +169,16 @@ export function SignUpForm(): React.ReactElement {
           {authError && !success && (
             <View className="mb-4">
               <BannerAlert variant="destructive">
-                <AlertDescription>{authError}</AlertDescription>
+                <View className="flex-row items-start justify-between">
+                  <AlertDescription className="flex-1 pr-2">{authError}</AlertDescription>
+                  <TouchableOpacity 
+                    onPress={() => setAuthError(null)}
+                    accessibilityLabel="Dismiss error"
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="close" size={18} color="#fca5a5" />
+                  </TouchableOpacity>
+                </View>
               </BannerAlert>
             </View>
           )}
