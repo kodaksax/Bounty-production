@@ -10,11 +10,10 @@ import {
 import { useRouter } from "expo-router";
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
+import type { SignInResponse } from 'lib/types/auth';
 import type React from "react";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
-
-// Added The Next Line For Testing
 
 export default function SignInRoute() {
   return <SignInForm />
@@ -77,7 +76,7 @@ export function SignInForm() {
     try {
       setIsLoading(true)
 
-      // Call backend sign-in endpoint
+      // Call Supabase backend sign-in endpoint
       const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const baseUrl = process.env.API_BASE_URL || `http://${localHost}:3001`;
       
@@ -87,24 +86,31 @@ export function SignInForm() {
         body: JSON.stringify({ email: identifier.trim(), password })
       });
 
-      const data = await response.json();
+      const data: SignInResponse = await response.json();
 
       if (!response.ok) {
-        setAuthError(data.error || 'Failed to sign in');
+        // Handle specific error messages from backend
+        const errorMessage = data.error || 'Failed to sign in';
+        setAuthError(errorMessage);
         return;
       }
 
-      // Store the access token if provided
+      // Store the access token if provided by Supabase
       if (data.session?.access_token) {
         await SecureStore.setItemAsync('sb-access-token', data.session.access_token);
+        console.log('[sign-in] Access token stored successfully');
       }
 
       // Navigate to the app
       router.push('/tabs/bounty-app');
       
     } catch (err) {
-      setAuthError("An unexpected error occurred")
-      console.error(err)
+      // Handle network errors
+      const errorMessage = err instanceof Error && err.message.includes('fetch')
+        ? 'Network error. Please check your connection and try again.'
+        : 'An unexpected error occurred. Please try again.';
+      setAuthError(errorMessage);
+      console.error('[sign-in] Error:', err);
     } finally {
       setIsLoading(false)
     }
@@ -136,16 +142,21 @@ export function SignInForm() {
           })
           const data = await res.json()
           if (!res.ok) {
-            setAuthError(data?.error || 'Failed to sign in with Google')
+            const errorMessage = data?.error || 'Failed to sign in with Google'
+            setAuthError(errorMessage)
             return
           }
           if (data.session?.access_token) {
             await SecureStore.setItemAsync('sb-access-token', data.session.access_token)
+            console.log('[google-auth] Access token stored successfully')
           }
           router.push('/tabs/bounty-app')
         } catch (e) {
-          console.error(e)
-          setAuthError('Google sign-in failed')
+          const errorMessage = e instanceof Error && e.message.includes('fetch')
+            ? 'Network error during Google sign-in. Please try again.'
+            : 'Google sign-in failed. Please try again.';
+          setAuthError(errorMessage)
+          console.error('[google-auth] Error:', e)
         } finally {
           setIsLoading(false)
         }
@@ -185,7 +196,16 @@ export function SignInForm() {
           {authError && (
             <View className="mb-4">
               <Alert variant="destructive">
-                <AlertDescription>{authError}</AlertDescription>
+                <View className="flex-row items-start justify-between">
+                  <AlertDescription className="flex-1 pr-2">{authError}</AlertDescription>
+                  <TouchableOpacity 
+                    onPress={() => setAuthError(null)}
+                    accessibilityLabel="Dismiss error"
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="close" size={18} color="#fca5a5" />
+                  </TouchableOpacity>
+                </View>
               </Alert>
             </View>
           )}
