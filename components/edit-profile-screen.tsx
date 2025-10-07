@@ -32,6 +32,7 @@ export function EditProfileScreen({
   const [avatar, setAvatar] = useState(initialAvatar)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const { balance } = useWallet()
 
   const handleSave = () => {
@@ -81,21 +82,38 @@ export function EditProfileScreen({
           // Update avatar with the uploaded URL
           setAvatar(uploaded.remoteUri || selectedImage.uri)
           setIsUploadingAvatar(false)
+          setUploadMessage('Profile picture uploaded successfully!')
+          setTimeout(() => setUploadMessage(null), 3000)
         } catch (uploadError) {
           console.error('Failed to upload avatar:', uploadError)
           setIsUploadingAvatar(false)
           // Still set the local URI so user can see their selection
           setAvatar(selectedImage.uri)
+          setUploadMessage('Upload failed - using local image')
+          setTimeout(() => setUploadMessage(null), 3000)
         }
       }
     } catch (error) {
       console.error('Error picking image:', error)
       setIsUploadingAvatar(false)
+      setUploadMessage('Failed to select image')
+      setTimeout(() => setUploadMessage(null), 3000)
     }
   }
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+      {/* Upload Status Banner */}
+      {uploadMessage && (
+        <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
+          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+            <Text className="text-white text-sm flex-1">{uploadMessage}</Text>
+            <TouchableOpacity onPress={() => setUploadMessage(null)}>
+              <MaterialIcons name="close" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* Fixed Header */}
       <View className="sticky top-0 z-10 bg-emerald-600">
         {/* Header */}
