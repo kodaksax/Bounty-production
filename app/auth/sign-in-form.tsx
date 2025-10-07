@@ -20,10 +20,12 @@ export function SignInForm() {
   const router = useRouter()
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({})
   const [authError, setAuthError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [loginAttempts, setLoginAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
 
   // Google config (safe placeholders keep the app from crashing)
   const iosGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id'
@@ -51,20 +53,36 @@ export function SignInForm() {
     scopes: ['openid', 'email', 'profile'],
   })
 
-  const getFieldError = (field: string) => errors[field]
+  const getFieldError = (field: string) => fieldErrors[field]
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {}
+    
+    if (!identifier || identifier.trim().length === 0) {
+      errors.identifier = 'Email is required'
+    }
+    
+    if (!password) {
+      errors.password = 'Password is required'
+    }
+    
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   const handleSubmit = async () => {
-    setErrors({})
+    setFieldErrors({})
     setAuthError(null)
 
-    if (!identifier) {
-      setErrors(e => ({ ...e, identifier: 'Email is required' }))
+    // Check for lockout
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      setAuthError(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
       return
     }
-    if (!password) {
-      setErrors(e => ({ ...e, password: 'Password is required' }))
-      return
-    }
+
+    if (!validateForm()) return
+    
     if (!isSupabaseConfigured) {
       setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
       return
@@ -75,17 +93,45 @@ export function SignInForm() {
       // If identifier may be username, your backend should resolve username -> email.
       // Here we assume email sign-in:
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: identifier.trim(),
+        email: identifier.trim().toLowerCase(), // Normalize email
         password,
       })
-      if (error) throw error
+      
+      if (error) {
+        // Track failed login attempts
+        const newAttempts = loginAttempts + 1
+        setLoginAttempts(newAttempts)
+        
+        // Lock out after 5 failed attempts for 5 minutes
+        if (newAttempts >= 5) {
+          const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
+          setLockoutUntil(lockout)
+          setAuthError('Too many failed attempts. Please try again in 5 minutes.')
+          return
+        }
+        
+        // Handle specific error cases
+        if (error.message.includes('Invalid login credentials')) {
+          setAuthError('Invalid email or password. Please try again.')
+        } else if (error.message.includes('Email not confirmed')) {
+          setAuthError('Please confirm your email address before signing in.')
+        } else {
+          setAuthError(error.message)
+        }
+        return
+      }
+      
+      // Reset login attempts on success
+      setLoginAttempts(0)
+      setLockoutUntil(null)
+      
       if (data.session) {
         router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
       } else {
-        setAuthError('No session returned from Supabase.')
+        setAuthError('Authentication failed. Please try again.')
       }
     } catch (err: any) {
-      setAuthError(err?.message || 'Sign-in failed')
+      setAuthError(err?.message || 'An unexpected error occurred. Please try again.')
       console.error('[sign-in] Error:', err)
     } finally {
       setIsLoading(false)
@@ -150,12 +196,18 @@ export function SignInForm() {
               <TextInput
                 nativeID="identifier"
                 value={identifier}
-                onChangeText={setIdentifier}
+                onChangeText={(text) => {
+                  setIdentifier(text)
+                  if (fieldErrors.identifier) {
+                    setFieldErrors(prev => ({ ...prev, identifier: '' }))
+                  }
+                }}
                 placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
                 editable={!isLoading}
-                className="w-full bg-white/5 rounded px-3 py-3 text-white"
+                className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
               />
               {getFieldError('identifier') && <Text className="text-xs text-red-400 mt-1">{getFieldError('identifier')}</Text>}
@@ -172,11 +224,17 @@ export function SignInForm() {
                 <TextInput
                   nativeID="password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => {
+                    setPassword(text)
+                    if (fieldErrors.password) {
+                      setFieldErrors(prev => ({ ...prev, password: '' }))
+                    }
+                  }}
                   placeholder="Password"
                   secureTextEntry={!showPassword}
+                  autoComplete="password"
                   editable={!isLoading}
-                  className="w-full bg-white/5 rounded px-3 py-3 text-white"
+                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                 />
                 <TouchableOpacity

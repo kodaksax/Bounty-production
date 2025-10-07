@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { validateEmail, validatePassword } from '../../lib/utils/auth-validation'
+import { ValidationPatterns } from '../../hooks/use-form-validation'
 
 export default function SignUpRoute() {
   return <SignUpForm />
@@ -15,24 +17,60 @@ export function SignUpForm() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {}
+    
+    // Validate email
+    const emailError = validateEmail(email)
+    if (emailError) errors.email = emailError
+    
+    // Validate password - must meet strong password requirements
+    if (!password) {
+      errors.password = 'Password is required'
+    } else if (!ValidationPatterns.strongPassword.test(password)) {
+      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&)'
+    }
+    
+    // Validate password match
+    if (password && confirmPassword && password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match'
+    } else if (!confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password'
+    }
+    
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   const handleSubmit = async () => {
     setAuthError(null)
+    setFieldErrors({})
 
-    if (!email) return setAuthError('Email is required')
-    if (!password) return setAuthError('Password is required')
-    if (password.length < 6) return setAuthError('Password must be at least 6 characters')
-    if (password !== confirmPassword) return setAuthError('Passwords do not match')
+    if (!validateForm()) return
     if (!isSupabaseConfigured) return setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
 
     try {
       setIsLoading(true)
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(), // Normalize email
         password,
       })
-      if (error) throw error
+      if (error) {
+        // Handle specific error cases
+        if (error.message.includes('already registered')) {
+          setAuthError('This email is already registered. Please sign in instead.')
+        } else if (error.message.includes('rate limit')) {
+          setAuthError('Too many attempts. Please try again later.')
+        } else {
+          setAuthError(error.message)
+        }
+        return
+      }
 
       // If email confirmations are enabled, session may be null until user verifies email
       if (data.session) {
@@ -42,7 +80,7 @@ export function SignUpForm() {
         setAuthError('Check your email to confirm your account, then sign in.')
       }
     } catch (e: any) {
-      setAuthError(e?.message || 'Sign-up failed')
+      setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
       console.error('[sign-up] Error:', e)
     } finally {
       setIsLoading(false)
@@ -68,40 +106,80 @@ export function SignUpForm() {
               <Text className="text-sm text-white/80 mb-1">Email</Text>
               <TextInput
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text)
+                  if (fieldErrors.email) {
+                    setFieldErrors(prev => ({ ...prev, email: '' }))
+                  }
+                }}
                 placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
                 editable={!isLoading}
-                className="w-full bg-white/5 rounded px-3 py-3 text-white"
+                className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.email ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
               />
+              {fieldErrors.email && <Text className="text-xs text-red-400 mt-1">{fieldErrors.email}</Text>}
             </View>
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Password</Text>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                secureTextEntry
-                editable={!isLoading}
-                className="w-full bg-white/5 rounded px-3 py-3 text-white"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-              />
+              <View className="relative">
+                <TextInput
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text)
+                    if (fieldErrors.password) {
+                      setFieldErrors(prev => ({ ...prev, password: '' }))
+                    }
+                  }}
+                  placeholder="At least 8 characters"
+                  secureTextEntry={!showPassword}
+                  autoComplete="password-new"
+                  editable={!isLoading}
+                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              {fieldErrors.password && <Text className="text-xs text-red-400 mt-1">{fieldErrors.password}</Text>}
+              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, number, and special character</Text>
             </View>
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Confirm Password</Text>
-              <TextInput
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm password"
-                secureTextEntry
-                editable={!isLoading}
-                className="w-full bg-white/5 rounded px-3 py-3 text-white"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-              />
+              <View className="relative">
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text)
+                    if (fieldErrors.confirmPassword) {
+                      setFieldErrors(prev => ({ ...prev, confirmPassword: '' }))
+                    }
+                  }}
+                  placeholder="Confirm password"
+                  secureTextEntry={!showConfirmPassword}
+                  autoComplete="password-new"
+                  editable={!isLoading}
+                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  <MaterialIcons name={showConfirmPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              {fieldErrors.confirmPassword && <Text className="text-xs text-red-400 mt-1">{fieldErrors.confirmPassword}</Text>}
             </View>
 
             <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
