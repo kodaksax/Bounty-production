@@ -37,6 +37,9 @@ export interface Follow {
   createdAt: string;
 }
 
+// Alias for Follow (used in some contexts)
+export type FollowEdge = Follow;
+
 // Portfolio item
 export interface PortfolioItem {
   id: string;
