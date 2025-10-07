@@ -15,6 +15,11 @@ import { SplashScreenController } from '../components/splash-screen-controller';
 import { useAuthContext } from '../hooks/use-auth-context';
 import AuthProvider from '../providers/auth-provider';
 
+// Load test utilities in development
+if (__DEV__) {
+  require('../lib/utils/test-profile-utils');
+}
+
 export const metadata = {
   title: "Bounty App",
   description: "Find and complete bounties near you",
