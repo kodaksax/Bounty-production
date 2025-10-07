@@ -57,7 +57,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     });
   };
 
-  const changePassword = () => {
+  const changePassword = async () => {
     if (!state.passwordCurrent || !state.passwordNew) {
       Alert.alert('Incomplete', 'Fill in current and new password.');
       return;
@@ -66,9 +66,45 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       Alert.alert('Mismatch', 'New password & confirmation differ.');
       return;
     }
-    // Placeholder: integrate backend password change
-    Alert.alert('Password Updated', 'Your password was changed (mock).');
-    persist({ passwordCurrent: '', passwordNew: '', passwordConfirm: '' });
+    
+    // Validate strong password
+    const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!strongPasswordPattern.test(state.passwordNew)) {
+      Alert.alert(
+        'Weak Password', 
+        'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&).'
+      );
+      return;
+    }
+    
+    try {
+      // Import supabase here to avoid circular dependencies
+      const { supabase } = require('../../lib/supabase');
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        Alert.alert('Error', 'Unable to verify current user.');
+        return;
+      }
+      
+      // Update password using Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: state.passwordNew
+      });
+      
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to update password.');
+        return;
+      }
+      
+      Alert.alert('Success', 'Your password has been updated successfully.');
+      persist({ passwordCurrent: '', passwordNew: '', passwordConfirm: '' });
+      
+    } catch (err) {
+      console.error('Password change error:', err);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    }
   };
 
   const revokeSession = (id: string) => {
