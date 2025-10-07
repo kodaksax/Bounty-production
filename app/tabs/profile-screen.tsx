@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
+import { useUserProfile } from "../../hooks/useUserProfile";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -21,6 +22,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     avatar: "/placeholder.svg?height=80&width=80",
   })
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
+  
+  // Use new profile service
+  const { profile: userProfile } = useUserProfile()
 
   // Add state for statistics
   const [stats, setStats] = useState({
@@ -93,29 +97,49 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // with your Hostinger backend. The component now only fetches data once on load.
   // The "Test" buttons will still update the UI state locally for demonstration.
 
-  // Listen for changes from settings screen
+  // Listen for changes from settings screen and sync with new profile service
   useEffect(() => {
     const load = async () => {
       try {
-        const storedProfile = await AsyncStorage.getItem("profileData")
-        if (storedProfile) setProfileData(JSON.parse(storedProfile))
+        // Try to load from new profile service first
+        if (userProfile) {
+          setProfileData({
+            name: userProfile.displayName ? `${userProfile.displayName} (@${userProfile.username})` : `@${userProfile.username}`,
+            about: userProfile.location || "Bounty user",
+            avatar: userProfile.avatar || "/placeholder.svg?height=80&width=80",
+          })
+        } else {
+          // Fallback to old storage
+          const storedProfile = await AsyncStorage.getItem("profileData")
+          if (storedProfile) setProfileData(JSON.parse(storedProfile))
+        }
+        
         const storedSkills = await AsyncStorage.getItem('profileSkills')
         if (storedSkills) {
           const parsed = JSON.parse(storedSkills)
           if (Array.isArray(parsed)) setSkills(parsed)
         } else {
-          setSkills([
-            { id: '1', icon: 'code', text: 'Knows English, Spanish' },
-            { id: '2', icon: 'gps-fixed', text: 'Private Investigator Certification' },
-            { id: '3', icon: 'favorite', text: 'Joined December 28th 2024' },
-          ])
+          // Generate skills from new profile if available
+          const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = []
+          
+          if (userProfile?.location) {
+            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${userProfile.location}` })
+          }
+          
+          if (userProfile?.phone) {
+            defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' })
+          }
+          
+          defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
+          
+          setSkills(defaultSkills)
         }
       } catch (error) {
         console.error('Error fetching stored profile/skills:', error)
       }
     }
     load()
-  }, [showSettings])
+  }, [showSettings, userProfile])
 
   const getIconComponent = (iconName: string) => {
     const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }

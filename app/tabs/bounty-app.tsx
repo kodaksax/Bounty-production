@@ -16,6 +16,7 @@ import { useAdmin } from '../../lib/admin-context'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { useUserProfile } from '../../hooks/useUserProfile'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -43,6 +44,10 @@ function BountyAppInner() {
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
+  
+  // Check if onboarding is needed
+  const { isComplete, loading: profileLoading } = useUserProfile()
+  const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false)
 
   // Collapsing header config
   const HEADER_EXPANDED = 150
@@ -128,6 +133,17 @@ function BountyAppInner() {
       loadBounties()
     }
   }, [activeScreen, loadBounties])
+
+  // Check if onboarding is needed and redirect
+  useEffect(() => {
+    if (!profileLoading && !hasCheckedOnboarding) {
+      setHasCheckedOnboarding(true)
+      if (!isComplete) {
+        // Profile is incomplete, redirect to onboarding
+        router.push('/onboarding/username')
+      }
+    }
+  }, [profileLoading, isComplete, hasCheckedOnboarding, router])
 
   // Restore last-selected chip on mount
   useEffect(() => {
