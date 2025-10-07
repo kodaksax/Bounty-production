@@ -2,9 +2,11 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import * as DocumentPicker from 'expo-document-picker'
 import type React from "react"
 import { useState } from "react"
-import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { Text, TextInput, TouchableOpacity, View, ActivityIndicator } from "react-native"
+import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
 
 interface EditProfileScreenProps {
@@ -13,7 +15,7 @@ interface EditProfileScreenProps {
   initialAbout?: string
   initialPhone?: string  // DEPRECATED: Phone should not be passed or edited here
   initialAvatar?: string
-  onSave: (data: { name: string; about: string; phone: string }) => void  // TODO: Remove phone from this interface
+  onSave: (data: { name: string; about: string; phone: string; avatar?: string }) => void
 }
 
 export function EditProfileScreen({
@@ -28,6 +30,9 @@ export function EditProfileScreen({
   const [about, setAbout] = useState(initialAbout)
   const [phone, setPhone] = useState(initialPhone)
   const [avatar, setAvatar] = useState(initialAvatar)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const { balance } = useWallet()
 
   const handleSave = () => {
@@ -35,20 +40,88 @@ export function EditProfileScreen({
       name,
       about,
       phone,
+      avatar,
     })
   }
 
-  const handleAvatarClick = () => {
-    // In React Native, we would use react-native-image-picker
-    // For now, this is a placeholder
-    console.log("Avatar click - would open image picker")
-  }
+  const handleAvatarClick = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'image/*',
+        copyToCacheDirectory: true,
+      })
 
-  // Removed handleFileChange as it's not applicable in React Native
-  // In React Native, use react-native-image-picker for file selection
+      if (result.canceled) return
+
+      if (result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0]
+        
+        // Validate file size (5MB limit)
+        const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+        if (selectedImage.size && selectedImage.size > MAX_FILE_SIZE) {
+          setUploadMessage('Image too large. Maximum size is 5MB')
+          setTimeout(() => setUploadMessage(null), 3000)
+          return
+        }
+        
+        // Set uploading state
+        setIsUploadingAvatar(true)
+        setUploadProgress(0)
+
+        // Create attachment metadata
+        const attachment = {
+          id: `avatar-${Date.now()}`,
+          name: selectedImage.name || 'avatar.jpg',
+          uri: selectedImage.uri,
+          mimeType: selectedImage.mimeType,
+          size: selectedImage.size,
+          status: 'uploading' as const,
+          progress: 0,
+        }
+
+        try {
+          // Upload using attachment service
+          const uploaded = await attachmentService.upload(attachment, {
+            onProgress: (progress) => {
+              setUploadProgress(progress)
+            },
+          })
+
+          // Update avatar with the uploaded URL
+          setAvatar(uploaded.remoteUri || selectedImage.uri)
+          setIsUploadingAvatar(false)
+          setUploadMessage('Profile picture uploaded successfully!')
+          setTimeout(() => setUploadMessage(null), 3000)
+        } catch (uploadError) {
+          console.error('Failed to upload avatar:', uploadError)
+          setIsUploadingAvatar(false)
+          // Still set the local URI so user can see their selection
+          setAvatar(selectedImage.uri)
+          setUploadMessage('Upload failed - using local image')
+          setTimeout(() => setUploadMessage(null), 3000)
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error)
+      setIsUploadingAvatar(false)
+      setUploadMessage('Failed to select image')
+      setTimeout(() => setUploadMessage(null), 3000)
+    }
+  }
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+      {/* Upload Status Banner */}
+      {uploadMessage && (
+        <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
+          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+            <Text className="text-white text-sm flex-1">{uploadMessage}</Text>
+            <TouchableOpacity onPress={() => setUploadMessage(null)}>
+              <MaterialIcons name="close" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* Fixed Header */}
       <View className="sticky top-0 z-10 bg-emerald-600">
         {/* Header */}
@@ -96,15 +169,29 @@ export function EditProfileScreen({
             <TouchableOpacity
               style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
               onPress={handleAvatarClick}
+              disabled={isUploadingAvatar}
             >
-              <MaterialIcons name="camera-alt" size={16} color="white" />
+              {isUploadingAvatar ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <MaterialIcons name="camera-alt" size={16} color="white" />
+              )}
             </TouchableOpacity>
-            {/* Removed HTML file input - not applicable in React Native */}
           </View>
           <Text className="text-xs text-center text-gray-300 max-w-[200px]">
-            Enter your name and add an optional profile picture
+            {isUploadingAvatar 
+              ? `Uploading... ${Math.round(uploadProgress * 100)}%`
+              : "Enter your name and add an optional profile picture"}
           </Text>
-          <TouchableOpacity className="mt-2 text-emerald-300 text-sm">Edit</TouchableOpacity>
+          <TouchableOpacity 
+            className="mt-2 text-emerald-300 text-sm"
+            onPress={handleAvatarClick}
+            disabled={isUploadingAvatar}
+          >
+            <Text className="text-emerald-300 text-sm">
+              {isUploadingAvatar ? 'Uploading...' : 'Edit'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Name Field */}
