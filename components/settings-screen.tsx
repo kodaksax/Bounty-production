@@ -38,7 +38,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     )
   }
 
-  const handleProfileSave = (data: { name: string; about: string; phone: string }) => {
+  const handleProfileSave = (data: { name: string; about: string; phone: string; avatar?: string }) => {
     setProfileData(prev => ({ ...prev, ...data }))
     setPanel('root')
   }
