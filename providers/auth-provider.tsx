@@ -1,7 +1,14 @@
 import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
 import type { Session } from '@supabase/supabase-js'
-import { PropsWithChildren, useEffect, useState } from 'react'
+import { PropsWithChildren, use, useContext, useEffect, useState } from 'react'
+
+type AuthData = {
+  session: Session | null | undefined
+  isLoading: boolean
+  profile: any
+  isLoggedIn: boolean
+}
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | undefined | null>()
@@ -34,11 +41,12 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       console.log('Auth state changed:', { event: _event, session })
       setSession(session)
     })
-
+    console.log('AuthProvider mounted')
     // Cleanup subscription on unmount
     return () => {
       subscription.unsubscribe()
     }
+    
   }, [])
 
   // Fetch the profile when the session changes
@@ -77,3 +85,5 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     </AuthContext.Provider>
   )
 }
+
+export const useAuth = () => useContext(AuthContext);
