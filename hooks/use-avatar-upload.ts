@@ -46,6 +46,12 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
       const selectedImage = result.assets[0]
 
+      // Validate file size (5MB limit)
+      const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+      if (selectedImage.size && selectedImage.size > MAX_FILE_SIZE) {
+        throw new Error('Image too large. Maximum size is 5MB')
+      }
+
       // Update state to uploading
       setState((prev) => ({
         ...prev,

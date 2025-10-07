@@ -11,6 +11,7 @@ Allow profile picture uploads in the BountyExpo application.
    - ✅ Image-only file picker using expo-document-picker
    - ✅ Automatic copying to cache directory
    - ✅ Support for all image formats (JPEG, PNG, WebP, etc.)
+   - ✅ File size validation (5MB maximum)
 
 2. **Upload with Progress Tracking**
    - ✅ Real-time progress indicator (0-100%)
@@ -89,11 +90,13 @@ $ node tests/avatar-upload.test.js
 ✓ should handle different image file types
 ✓ should delete avatar from profile
 ✓ should handle upload errors gracefully
+✓ should reject files larger than 5MB
+✓ should accept files under 5MB
 
 📊 Test Results:
-   Passed: 6
+   Passed: 8
    Failed: 0
-   Total:  6
+   Total:  8
 ```
 
 ## 🎨 UI Components

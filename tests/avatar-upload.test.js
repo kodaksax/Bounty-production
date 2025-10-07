@@ -251,6 +251,36 @@ test('should handle upload errors gracefully', async () => {
   expect(result.error.message).toContain('Network error');
 });
 
+// Test 7: Validate file size limit (5MB)
+test('should reject files larger than 5MB', async () => {
+  const avatarService = createAvatarService(mockAttachmentService, mockProfileService);
+  
+  const largeFileSize = 6 * 1024 * 1024; // 6MB
+  const result = await avatarService.uploadAvatar('file:///path/to/large-avatar.jpg', {
+    fileName: 'large-avatar.jpg',
+    size: largeFileSize,
+  });
+
+  expect(result.avatarUrl).toBe(null);
+  expect(result.error).toBeTruthy();
+  expect(result.error.message).toContain('too large');
+  expect(result.error.message).toContain('5MB');
+});
+
+// Test 8: Allow files under 5MB
+test('should accept files under 5MB', async () => {
+  const avatarService = createAvatarService(mockAttachmentService, mockProfileService);
+  
+  const validFileSize = 3 * 1024 * 1024; // 3MB
+  const result = await avatarService.uploadAvatar('file:///path/to/avatar.jpg', {
+    fileName: 'avatar.jpg',
+    size: validFileSize,
+  });
+
+  expect(result.error).toBe(null);
+  expect(result.avatarUrl).toBeTruthy();
+});
+
 // Summary
 console.log(`\n📊 Test Results:`);
 console.log(`   Passed: ${testsPassed}`);

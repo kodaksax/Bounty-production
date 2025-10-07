@@ -109,6 +109,7 @@ async function uploadAvatar() {
 - Uses `expo-document-picker` with `type: 'image/*'` filter
 - Only allows image files (JPEG, PNG, etc.)
 - Automatically copies to cache directory
+- **File size limit: 5MB maximum**
 
 ### 2. Upload Progress
 - Real-time progress tracking (0-100%)
@@ -248,7 +249,7 @@ async upload(attachment: AttachmentMeta, opts = {}) {
 ## Security Considerations
 
 - Validate file types on the server
-- Enforce file size limits
+- ✅ Client-side file size limit enforced (5MB)
 - Sanitize file names
 - Use secure URLs (HTTPS)
 - Implement access control

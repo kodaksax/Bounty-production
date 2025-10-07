@@ -127,7 +127,7 @@ A  tests/avatar-upload.test.js            (260 lines)
 │  ┌─────────────────────────────────────┐   │
 │  │  expo-document-picker               │   │
 │  │  - Image selection                  │   │
-│  │  - File validation                  │   │
+│  │  - File validation (5MB max)        │   │
 │  └─────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
 ```
@@ -174,15 +174,18 @@ $ node tests/avatar-upload.test.js
 ✓ should handle different image file types
 ✓ should delete avatar from profile
 ✓ should handle upload errors gracefully
+✓ should reject files larger than 5MB
+✓ should accept files under 5MB
 
 📊 Test Results:
-   Passed: 6
+   Passed: 8
    Failed: 0
-   Total:  6
+   Total:  8
 ```
 
 ### Test Coverage Areas
 - ✅ Upload functionality (basic)
+- ✅ File size validation (5MB limit)
 - ✅ Profile integration
 - ✅ Progress tracking
 - ✅ File type support
@@ -304,7 +307,7 @@ function MyComponent() {
 ## 🚀 Production Readiness
 
 ### ✅ Ready
-- Image selection with validation
+- Image selection with validation (5MB file size limit)
 - Upload progress tracking
 - Error handling with user feedback
 - Profile integration
@@ -313,7 +316,7 @@ function MyComponent() {
 
 ### 🔜 Recommended for Production
 - [ ] Server-side file type validation
-- [ ] File size limits (5MB recommended)
+- [x] Client-side file size limit (5MB enforced)
 - [ ] Image compression before upload
 - [ ] Rate limiting (10 uploads/hour)
 - [ ] Cloud storage integration (S3/Cloudinary)

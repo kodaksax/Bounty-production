@@ -56,6 +56,14 @@ export function EditProfileScreen({
       if (result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0]
         
+        // Validate file size (5MB limit)
+        const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+        if (selectedImage.size && selectedImage.size > MAX_FILE_SIZE) {
+          setUploadMessage('Image too large. Maximum size is 5MB')
+          setTimeout(() => setUploadMessage(null), 3000)
+          return
+        }
+        
         // Set uploading state
         setIsUploadingAvatar(true)
         setUploadProgress(0)
