@@ -1,5 +1,6 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { makeRedirectUri, ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
@@ -7,6 +8,7 @@ import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Checkbox } from '../../components/ui/checkbox'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { ROUTES } from '../../lib/routes'
 
@@ -26,6 +28,7 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [rememberMe, setRememberMe] = useState(false)
 
   // Google config (safe placeholders keep the app from crashing)
   const iosGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id'
@@ -52,6 +55,22 @@ export function SignInForm() {
     redirectUri,
     scopes: ['openid', 'email', 'profile'],
   })
+
+  // Load saved email on mount
+  useEffect(() => {
+    const loadSavedEmail = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem('rememberMeEmail')
+        if (savedEmail) {
+          setIdentifier(savedEmail)
+          setRememberMe(true)
+        }
+      } catch (error) {
+        console.error('[sign-in] Failed to load saved email:', error)
+      }
+    }
+    loadSavedEmail()
+  }, [])
 
   const getFieldError = (field: string) => fieldErrors[field]
 
@@ -124,6 +143,17 @@ export function SignInForm() {
       // Reset login attempts on success
       setLoginAttempts(0)
       setLockoutUntil(null)
+      
+      // Handle remember me preference
+      try {
+        if (rememberMe) {
+          await AsyncStorage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
+        } else {
+          await AsyncStorage.removeItem('rememberMeEmail')
+        }
+      } catch (error) {
+        console.error('[sign-in] Failed to save remember me preference:', error)
+      }
       
       if (data.session) {
         router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
@@ -246,6 +276,20 @@ export function SignInForm() {
                 </TouchableOpacity>
               </View>
               {getFieldError('password') && <Text className="text-xs text-red-400 mt-1">{getFieldError('password')}</Text>}
+            </View>
+
+            <View className="flex-row items-center">
+              <Checkbox 
+                checked={rememberMe} 
+                onCheckedChange={setRememberMe}
+                disabled={isLoading}
+              />
+              <TouchableOpacity 
+                onPress={() => !isLoading && setRememberMe(!rememberMe)}
+                disabled={isLoading}
+              >
+                <Text className="text-white/80 text-sm ml-2">Remember me</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
