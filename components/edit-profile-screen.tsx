@@ -11,9 +11,9 @@ interface EditProfileScreenProps {
   onBack: () => void
   initialName?: string
   initialAbout?: string
-  initialPhone?: string
+  initialPhone?: string  // DEPRECATED: Phone should not be passed or edited here
   initialAvatar?: string
-  onSave: (data: { name: string; about: string; phone: string }) => void
+  onSave: (data: { name: string; about: string; phone: string }) => void  // TODO: Remove phone from this interface
 }
 
 export function EditProfileScreen({
@@ -117,15 +117,12 @@ export function EditProfileScreen({
           />
         </View>
 
-        {/* Phone Field */}
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="Enter phone number"
-            keyboardType="phone-pad"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
-          />
+        {/* Phone Field - DEPRECATED: Phone number should be private and not displayed in UI
+            TODO: Remove this field in next PR. Phone is managed in onboarding only. */}
+        <View className="px-4 py-4 bg-gray-700/80 mt-1" style={{ opacity: 0.5 }}>
+          <Text className="text-xs text-emerald-300 mb-1">Phone (Private)</Text>
+          <Text className="text-white text-sm">***-***-****</Text>
+          <Text className="text-xs text-gray-400 mt-1">Phone is private and managed separately</Text>
         </View>
 
         {/* About Field */}
