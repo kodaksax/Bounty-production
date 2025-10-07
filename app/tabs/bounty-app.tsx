@@ -12,11 +12,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
-import { useUserProfile } from '../../hooks/useUserProfile'
 
 // Calendar removed in favor of Profile as the last tab
 
@@ -36,6 +36,9 @@ function BountyAppInner() {
   // Removed inline search overlay state; navigation now handles search route.
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoadingBounties, setIsLoadingBounties] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
@@ -110,27 +113,44 @@ function BountyAppInner() {
   }, [bounties, activeCategory])
 
   // Load bounties from backend
-  const loadBounties = useCallback(async () => {
-    setIsLoadingBounties(true)
+  const PAGE_SIZE = 20
+  const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
+    if (reset) {
+      setIsLoadingBounties(true)
+    } else {
+      setLoadingMore(true)
+    }
     try {
-      const fetchedBounties = await bountyService.getAll({ status: 'open' })
-      setBounties(fetchedBounties)
+      const pageOffset = reset ? 0 : offset
+      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+      if (reset) {
+        setBounties(fetchedBounties)
+      } else {
+        setBounties(prev => [...prev, ...fetchedBounties])
+      }
+      setOffset(pageOffset + fetchedBounties.length)
+      setHasMore(fetchedBounties.length === PAGE_SIZE)
     } catch (error) {
       console.error('Error loading bounties:', error)
-      // Keep empty array as fallback
+      if (reset) {
+        setBounties([])
+        setHasMore(false)
+      }
     } finally {
       setIsLoadingBounties(false)
+      setLoadingMore(false)
     }
-  }, [])
+  }, [offset])
 
   useEffect(() => {
-    loadBounties()
+    loadBounties({ reset: true })
   }, [loadBounties])
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === "bounty") {
-      loadBounties()
+      // Refresh when returning to the bounty tab
+      loadBounties({ reset: true })
     }
   }, [activeScreen, loadBounties])
 
@@ -168,7 +188,10 @@ function BountyAppInner() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await loadBounties()
+      // Reset pagination and reload first page
+      setOffset(0)
+      setHasMore(true)
+      await loadBounties({ reset: true })
     } catch (error) {
       console.error('Error refreshing bounties:', error)
     } finally {
@@ -260,6 +283,12 @@ function BountyAppInner() {
         }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
+        onEndReachedThreshold={0.5}
+        onEndReached={() => {
+          if (!isLoadingBounties && !loadingMore && hasMore) {
+            loadBounties()
+          }
+        }}
         ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
         ListEmptyComponent={() => (
@@ -276,6 +305,13 @@ function BountyAppInner() {
             )}
           </View>
         )}
+        ListFooterComponent={() => (
+          loadingMore ? (
+            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+              <Text style={{ color: '#e5e7eb' }}>Loading more...</Text>
+            </View>
+          ) : null
+        )}
         renderItem={({ item }) => {
           const distance = calculateDistance(item.location || '')
           return (
@@ -286,6 +322,7 @@ function BountyAppInner() {
               price={Number(item.amount)}
               distance={distance}
               description={item.description}
+              isForHonor={Boolean(item.is_for_honor)}
             />
           )
         }}
