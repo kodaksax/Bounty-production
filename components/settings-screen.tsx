@@ -141,24 +141,42 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           secondaryLabel="devSignOut"
           onPrimary={async () => {
             try {
-              // Sign out from Supabase
+              // Lazy imports to avoid bundling server-only code
+              // Use the shared supabase client
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
               const { supabase } = require('../lib/supabase');
+              // SecureStore to clear tokens
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
               const SecureStore = require('expo-secure-store');
-              
+
+              // Sign out from Supabase
               const { error } = await supabase.auth.signOut();
               if (error) {
                 console.error('[Logout] Supabase signout error:', error);
+                Alert.alert('Sign Out Failed', 'Unable to sign out. Please try again.');
+                return;
               }
-              // Clear any stored tokens
-              await SecureStore.deleteItemAsync('sb-access-token').catch(() => {});
-              
-              // Navigate to sign-in screen
+
+              // Clear any stored tokens (best-effort)
+              try {
+                await SecureStore.deleteItemAsync('sb-access-token');
+                await SecureStore.deleteItemAsync('sb-refresh-token');
+              } catch (e) {
+                // Not critical; log and continue
+                console.warn('[Logout] SecureStore cleanup failed', e);
+              }
+
+              // Route to sign-in screen using expo-router
               try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const router = require('expo-router').router;
-                if (router) router.replace('/auth/sign-in-form');
-              } catch {}
-              
+                const { router } = require('expo-router');
+                if (router && typeof router.replace === 'function') {
+                  router.replace('/auth/sign-in-form');
+                }
+              } catch (e) {
+                console.warn('[Logout] Router navigation failed', e);
+              }
+
               Alert.alert('Logged Out', 'You have been signed out successfully.');
             } catch (e) {
               console.error('[Logout] Error:', e);

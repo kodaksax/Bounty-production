@@ -7,11 +7,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  View,
+  Animated,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Animated,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -42,8 +42,8 @@ export default function DoneScreen() {
   }, []);
 
   const handleContinue = () => {
-    // Navigate to the main app (will show Profile screen)
-    router.replace('/');
+    // Navigate to the Bounty app dashboard
+    router.replace('/tabs/bounty-app');
   };
 
   return (
