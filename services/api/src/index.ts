@@ -7,6 +7,7 @@ import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
 import { stripeConnectService } from './services/stripe-connect-service';
 import { realtimeService } from './services/realtime-service';
+import { registerAdminRoutes } from './routes/admin';
 import { eq } from 'drizzle-orm';
 
 // Load environment variables
@@ -19,6 +20,9 @@ const fastify = Fastify({
 // Register WebSocket plugin
 const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
+  
+  // Register admin routes with security middleware
+  await registerAdminRoutes(fastify);
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {

@@ -15,21 +15,51 @@ export function ResetPasswordScreen() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const validateEmail = (email: string): boolean => {
+    setFieldError(null)
+    if (!email || email.trim().length === 0) {
+      setFieldError('Email is required')
+      return false
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setFieldError('Please enter a valid email address')
+      return false
+    }
+    return true
+  }
+
   const handleReset = async () => {
-    setMessage(null); setError(null)
-    if (!email) { setError('Email required'); return }
+    setMessage(null)
+    setError(null)
+    setFieldError(null)
+    
+    if (!validateEmail(email)) return
+    
     try {
       setLoading(true)
       const redirectTo = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL || 'https://your-app.com/auth/callback'
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
-      if (error) { setError(error.message); return }
-      setMessage('If that email exists, a reset link was sent.')
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo })
+      
+      if (error) {
+        if (error.message.includes('rate limit')) {
+          setError('Too many requests. Please try again later.')
+        } else {
+          setError(error.message)
+        }
+        return
+      }
+      
+      setMessage('If that email exists, a reset link was sent. Please check your inbox.')
     } catch (e) {
-      setError('Unexpected error')
+      setError('An unexpected error occurred. Please try again.')
       console.error(e)
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -47,7 +77,19 @@ export function ResetPasswordScreen() {
           <View className="gap-5">
             <View>
               <Label>Email</Label>
-              <Input value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
+              <Input 
+                value={email} 
+                onChangeText={(text) => {
+                  setEmail(text)
+                  if (fieldError) setFieldError(null)
+                }} 
+                placeholder="you@example.com" 
+                autoCapitalize="none" 
+                autoComplete="email"
+                keyboardType="email-address"
+                editable={!loading}
+              />
+              {fieldError && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{fieldError}</Text>}
             </View>
             <Button disabled={loading} onPress={handleReset} className="w-full">
               {loading ? 'Sending...' : 'Send Reset Link'}
