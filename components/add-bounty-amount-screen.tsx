@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
+import { useState } from "react"
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -268,7 +268,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     },
     bottomButtonContainer: {
       padding: 16,
-      paddingBottom: 32,
+      paddingBottom: 100,
     },
     bottomButton: {
       width: '100%',
