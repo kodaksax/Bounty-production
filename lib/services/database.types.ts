@@ -40,6 +40,8 @@ export type Profile = {
   created_at: string
   email?: string
   updated_at?: string
+  display_name?: string
+  location?: string
 }
 
 export type Skill = {
