@@ -5,7 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import * as DocumentPicker from 'expo-document-picker'
 import type React from "react"
 import { useState } from "react"
-import { Text, TextInput, TouchableOpacity, View, ActivityIndicator } from "react-native"
+import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useUserProfile } from '../hooks/useUserProfile'
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
 
@@ -26,22 +27,73 @@ export function EditProfileScreen({
   initialAvatar = "/placeholder.svg?height=80&width=80",
   onSave,
 }: EditProfileScreenProps) {
-  const [name, setName] = useState(initialName)
-  const [about, setAbout] = useState(initialAbout)
+  const { profile, updateProfile } = useUserProfile()
+  const [name, setName] = useState(profile?.displayName || initialName)
+  const [about, setAbout] = useState(profile?.location || initialAbout)
   const [phone, setPhone] = useState(initialPhone)
-  const [avatar, setAvatar] = useState(initialAvatar)
+  const [avatar, setAvatar] = useState(profile?.avatar || initialAvatar)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
+  const [bio, setBio] = useState(profile?.location || "")
   const { balance } = useWallet()
 
+  const validateName = (value: string) => {
+    const trimmed = (value || '').trim()
+    if (!trimmed) return 'Name cannot be empty'
+    if (trimmed.length > 60) return 'Name is too long (max 60)'
+    return null
+  }
+
+  const isSafeImageUri = (uri?: string | null) => {
+    if (!uri) return true
+    const u = uri.trim()
+    if (!u) return true
+    // Block javascript: URIs
+    if (/^javascript:/i.test(u)) return false
+    // Allow common RN-safe schemes and data images
+    if (/^(https?:|file:|content:)/i.test(u)) return true
+    if (/^data:image\//i.test(u)) return true
+    // Allow internal placeholders without a scheme (no colon)
+    if (!u.includes(':')) return true
+    return false
+  }
+
   const handleSave = () => {
-    onSave({
-      name,
-      about,
-      phone,
-      avatar,
-    })
+    // Validation
+    const nameError = validateName(name)
+    if (nameError) {
+      setUploadMessage(nameError)
+      setTimeout(() => setUploadMessage(null), 2000)
+      return
+    }
+    if (!isSafeImageUri(avatar)) {
+      setUploadMessage('Invalid avatar URL')
+      setTimeout(() => setUploadMessage(null), 2000)
+      return
+    }
+
+    // Persist via profile service, mapping fields to canonical keys.
+    // Use bio (wired) as the persisted about/location field.
+    updateProfile({ displayName: name.trim(), location: (bio || about || '').trim(), avatar: avatar?.trim() })
+      .then((res) => {
+        if (!res.success) {
+          setUploadMessage(res.error || 'Failed to save')
+          setTimeout(() => setUploadMessage(null), 2500)
+          return
+        }
+        // Also notify parent legacy state if provided
+        onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
+        setUploadMessage('Profile updated')
+        setTimeout(() => setUploadMessage(null), 1200)
+        // Return to previous screen after a short delay
+        setTimeout(() => onBack && onBack(), 300)
+      })
+      .catch((e) => {
+        console.error('[EditProfile] save error', e)
+        setUploadMessage('Error saving profile')
+        setTimeout(() => setUploadMessage(null), 2500)
+      })
   }
 
   const handleAvatarClick = async () => {
@@ -109,8 +161,13 @@ export function EditProfileScreen({
     }
   }
 
+  const handleBack = () => {
+    // Save then navigate back
+    handleSave()
+  }
+
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex-1 bg-emerald-600">
       {/* Upload Status Banner */}
       {uploadMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
@@ -122,43 +179,25 @@ export function EditProfileScreen({
           </View>
         </View>
       )}
-      {/* Fixed Header */}
-      <View className="sticky top-0 z-10 bg-emerald-600">
-        {/* Header */}
-        <View className="p-4 pt-8 pb-2">
-          <View className="flex justify-between items-center">
-            <View className="flex items-center">
-              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-              <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
-            </View>
-            <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
-          </View>
-          <View className="h-px bg-emerald-500/50 my-2"></View>
+      {/* Header */}
+      <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
+        <View className="flex-row items-center">
+          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
+          <Text className="text-white font-extrabold text-lg tracking-widest ml-2">BOUNTY</Text>
         </View>
-
-        {/* Settings Header */}
-        <View className="px-4 py-2 flex items-center justify-between bg-emerald-700/30">
-          <View className="flex items-center">
-            <TouchableOpacity onPress={onBack} className="mr-2">
-              <MaterialIcons name="arrow-back" size={24} color="#000000" />
-            </TouchableOpacity>
-            <Text className="text-lg">Settings</Text>
-          </View>
-          <TouchableOpacity className="text-sm font-medium bg-emerald-700/50 px-3 py-1 rounded-md" onPress={handleSave}>
-            Save
-          </TouchableOpacity>
-        </View>
-
-        {/* Edit Profile Title */}
-        <View className="px-4 py-3 bg-emerald-700/30">
-          <Text className="text-xl font-bold">Edit Profile</Text>
-        </View>
+        <TouchableOpacity onPress={handleBack} accessibilityLabel="Back" className="p-2">
+          <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
+        </TouchableOpacity>
       </View>
 
       {/* Scrollable Content */}
-      <View className="flex-1 overflow-y-auto pb-20">
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Screen Title */}
+        <View className="px-4 py-3 bg-emerald-700/30 border-b border-emerald-500/20">
+          <Text className="text-white text-xl font-semibold">Edit Profile</Text>
+        </View>
         {/* Profile Picture */}
-        <View className="px-4 py-6 bg-gray-700/80 flex flex-col items-center">
+        <View className="px-4 py-6 bg-emerald-900/40 flex flex-col items-center">
           <View className="relative mb-2">
             <Avatar className="h-20 w-20 border-2 border-emerald-500">
               <AvatarImage src={avatar} alt="Profile" />
@@ -178,7 +217,7 @@ export function EditProfileScreen({
               )}
             </TouchableOpacity>
           </View>
-          <Text className="text-xs text-center text-gray-300 max-w-[200px]">
+          <Text className="text-xs text-center text-emerald-100/80 max-w-[220px]">
             {isUploadingAvatar 
               ? `Uploading... ${Math.round(uploadProgress * 100)}%`
               : "Enter your name and add an optional profile picture"}
@@ -192,10 +231,10 @@ export function EditProfileScreen({
               {isUploadingAvatar ? 'Uploading...' : 'Edit'}
             </Text>
           </TouchableOpacity>
-        </View>
+  </View>
 
         {/* Name Field */}
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <TextInput
             value={name}
             onChangeText={setName}
@@ -206,14 +245,14 @@ export function EditProfileScreen({
 
         {/* Phone Field - DEPRECATED: Phone number should be private and not displayed in UI
             TODO: Remove this field in next PR. Phone is managed in onboarding only. */}
-        <View className="px-4 py-4 bg-gray-700/80 mt-1" style={{ opacity: 0.5 }}>
+        <View className="px-4 py-4 bg-emerald-900/30 mt-1" style={{ opacity: 0.5 }}>
           <Text className="text-xs text-emerald-300 mb-1">Phone (Private)</Text>
           <Text className="text-white text-sm">***-***-****</Text>
           <Text className="text-xs text-gray-400 mt-1">Phone is private and managed separately</Text>
         </View>
 
         {/* About Field */}
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <TextInput
             value={about}
             onChangeText={setAbout}
@@ -224,7 +263,7 @@ export function EditProfileScreen({
         </View>
 
         {/* Additional Fields for Scrolling */}
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <Text className="text-xs text-emerald-300 block mb-1">Email</Text>
           <TextInput
             placeholder="your.email@example.com"
@@ -234,7 +273,7 @@ export function EditProfileScreen({
           />
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <Text className="text-xs text-emerald-300 block mb-1">Location</Text>
           <TextInput
             placeholder="City, Country"
@@ -242,7 +281,7 @@ export function EditProfileScreen({
           />
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <Text className="text-xs text-emerald-300 block mb-1">Website</Text>
           <TextInput
             placeholder="https://yourwebsite.com"
@@ -252,7 +291,7 @@ export function EditProfileScreen({
           />
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <Text className="text-xs text-emerald-300 block mb-1">Birthday</Text>
           <TextInput
             placeholder="MM/DD/YYYY"
@@ -260,7 +299,7 @@ export function EditProfileScreen({
           />
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
           <Text className="text-xs text-emerald-300 block mb-1">Languages</Text>
           <TextInput
             placeholder="English, Spanish, etc."
@@ -268,13 +307,16 @@ export function EditProfileScreen({
           />
         </View>
 
-        <View className="px-4 py-6 bg-gray-700/80 mt-1">
-          <label className="text-xs text-emerald-300 block mb-2">Bio</label>
-          <textarea
+        <View className="px-4 py-6 bg-emerald-900/40 mt-1">
+          <Text className="text-xs text-emerald-300 mb-2">Bio</Text>
+          <TextInput
             placeholder="Tell us more about yourself..."
-            rows={4}
-            className="w-full bg-emerald-700/50 border-none rounded-md p-3 text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 resize-none"
-          ></textarea>
+            multiline
+            numberOfLines={4}
+            value={bio}
+            onChangeText={setBio}
+            className="w-full bg-emerald-700/50 rounded-md p-3 text-white"
+          />
         </View>
 
         {/* Privacy Section */}
@@ -282,20 +324,20 @@ export function EditProfileScreen({
           <Text className="text-lg font-medium">Privacy</Text>
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1 flex items-center justify-between">
           <Text>Show phone number</Text>
           <View className="h-6 w-10 bg-emerald-700 rounded-full p-1 flex items-center">
             <View className="h-4 w-4 bg-white rounded-full"></View>
           </View>
         </View>
 
-        <View className="px-4 py-4 bg-gray-700/80 mt-1 flex items-center justify-between">
+        <View className="px-4 py-4 bg-emerald-900/40 mt-1 flex items-center justify-between">
           <Text>Show profile photo</Text>
           <View className="h-6 w-10 bg-emerald-500 rounded-full p-1 flex justify-end items-center">
             <View className="h-4 w-4 bg-white rounded-full"></View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   )
 }
