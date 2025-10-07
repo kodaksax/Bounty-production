@@ -286,6 +286,7 @@ function BountyAppInner() {
               price={Number(item.amount)}
               distance={distance}
               description={item.description}
+              user_id={item.user_id}
             />
           )
         }}

@@ -4,8 +4,10 @@ import React, { useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import type { Conversation } from "lib/types"
+import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
 
@@ -72,10 +74,13 @@ export function ChatDetailScreen({
   onBack,
   onNavigate,
 }: ChatDetailScreenProps) {
-
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>(() => getConversationMessages(conversation.id))
   const { balance } = useWallet()
   // no manual scroll ref needed; handled by StickyMessageInterface
+  
+  // Get the other participant's ID (not the current user)
+  const otherUserId = conversation.participantIds?.find(id => id !== CURRENT_USER_ID)
 
   const handleSendMessage = (text: string) => {
     const newMsg: Message = {
@@ -136,16 +141,26 @@ export function ChatDetailScreen({
 >
   <MaterialIcons name="arrow-back" size={24} color="#000000" />
 </TouchableOpacity>
-          <Avatar className="h-10 w-10 mr-2">
-            <AvatarImage src={conversation.avatar} alt={conversation.name} />
-            <AvatarFallback className="bg-emerald-700 text-emerald-200">
-              {conversation.name.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <View>
-            <Text className="font-medium">{conversation.name}</Text>
-            
-          </View>
+          <TouchableOpacity 
+            className="flex-row items-center"
+            onPress={() => {
+              if (otherUserId) {
+                router.push(`/profile/${otherUserId}`)
+              }
+            }}
+            disabled={!otherUserId}
+          >
+            <Avatar className="h-10 w-10 mr-2">
+              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarFallback className="bg-emerald-700 text-emerald-200">
+                {conversation.name.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <View>
+              <Text className="font-medium">{conversation.name}</Text>
+              
+            </View>
+          </TouchableOpacity>
         </View>
         <View className="flex-row gap-3">
           <TouchableOpacity className="text-white">

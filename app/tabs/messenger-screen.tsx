@@ -1,8 +1,10 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
+import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import React, { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native"
 import { useConversations } from "../../hooks/useConversations"
@@ -131,22 +133,35 @@ interface ConversationItemProps {
 }
 
 function ConversationItem({ conversation, onPress }: ConversationItemProps) {
+  const router = useRouter()
   const time = formatConversationTime(conversation.updatedAt);
+  
+  // Get the other participant's ID (not the current user)
+  const otherUserId = conversation.participantIds?.find(id => id !== CURRENT_USER_ID)
+  
+  const handleAvatarPress = (e: any) => {
+    e.stopPropagation()
+    if (otherUserId) {
+      router.push(`/profile/${otherUserId}`)
+    }
+  }
   
   return (
     <TouchableOpacity className="flex-row items-center p-3 rounded-lg" onPress={onPress}>
-      <View className="relative">
-        {conversation.isGroup ? (
-          <GroupAvatar />
-        ) : (
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={conversation.avatar} alt={conversation.name} />
-            <AvatarFallback className="bg-emerald-700 text-emerald-200">
-              {conversation.name.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </View>
+      <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
+        <View className="relative">
+          {conversation.isGroup ? (
+            <GroupAvatar />
+          ) : (
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarFallback className="bg-emerald-700 text-emerald-200">
+                {conversation.name.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </View>
+      </TouchableOpacity>
 
       <View className="ml-3 flex-1 min-w-0">
         <View className="flex-row justify-between items-center">

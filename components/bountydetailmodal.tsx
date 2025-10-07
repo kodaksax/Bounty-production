@@ -1,4 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
+import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import React, { useEffect, useRef, useState } from "react"
 import {
@@ -20,6 +21,7 @@ interface BountyDetailModalProps {
     price: number
     distance: number
     description?: string
+    user_id?: string // Add optional user_id
     attachments?: {
       id: string
       type: "image" | "document"
@@ -38,6 +40,7 @@ interface Message {
 }
 
 export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
@@ -144,8 +147,16 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
         >
           <View style={styles.bountyCard}>
             <View style={styles.cardContent}>
-              {/* User info */}
-              <View style={styles.userInfo}>
+              {/* User info - Clickable to navigate to profile */}
+              <TouchableOpacity 
+                style={styles.userInfo}
+                onPress={() => {
+                  if (bounty.user_id) {
+                    router.push(`/profile/${bounty.user_id}`)
+                  }
+                }}
+                disabled={!bounty.user_id}
+              >
                 <Avatar style={styles.avatar}>
                   <AvatarImage src="/placeholder.svg?height=40&width=40" alt={bounty.username} />
                   <AvatarFallback style={styles.avatarFallback}>
@@ -154,11 +165,14 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
                     </Text>
                   </AvatarFallback>
                 </Avatar>
-                <View>
+                <View style={styles.userTextInfo}>
                   <Text style={styles.username}>{bounty.username}</Text>
                   <Text style={styles.postTime}>Posted 2h ago</Text>
                 </View>
-              </View>
+                {bounty.user_id && (
+                  <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                )}
+              </TouchableOpacity>
 
               {/* Title */}
               <Text style={styles.title}>{bounty.title}</Text>
@@ -357,6 +371,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: 12,
+  },
+  userTextInfo: {
+    flex: 1,
   },
   avatar: {
     width: 40,
