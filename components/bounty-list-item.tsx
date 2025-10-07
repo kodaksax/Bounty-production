@@ -12,10 +12,10 @@ export interface BountyListItemProps {
   price: number
   distance: number
   description?: string
-  user_id?: string
+  isForHonor?: boolean
 }
 
-export function BountyListItem({ id, title, username, price, distance, description, user_id }: BountyListItemProps) {
+export function BountyListItem({ id, title, username, price, distance, description, user_id, isForHonor }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
 
   return (
@@ -42,7 +42,14 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
         {/* Trailing price and chevron */}
         <View style={styles.trailing}>
-          <Text style={styles.price}>${price}</Text>
+          {isForHonor ? (
+            <View style={styles.honorBadge}>
+              <MaterialIcons name="favorite" size={12} color="#052e1b" />
+              <Text style={styles.honorText}>For Honor</Text>
+            </View>
+          ) : (
+            <Text style={styles.price}>${price}</Text>
+          )}
           <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
         </View>
       </TouchableOpacity>
@@ -117,6 +124,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 16,
     marginBottom: 2,
+  },
+  honorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#a7f3d0',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+    marginBottom: 2,
+  },
+  honorText: {
+    color: '#052e1b',
+    fontWeight: '800',
+    fontSize: 12,
+    marginLeft: 4,
   },
 })
 

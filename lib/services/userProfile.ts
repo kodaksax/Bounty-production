@@ -5,7 +5,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Profile } from './database.types';
 
 const STORAGE_KEY = 'BE:userProfile';
 const PROFILES_KEY = 'BE:allProfiles'; // For username uniqueness check
@@ -147,7 +146,8 @@ export const userProfileService = {
       }
 
       // Check uniqueness
-      const isUnique = await isUsernameUnique(data.username);
+      // Pass a stable current user id so the same user can keep their username
+      const isUnique = await isUsernameUnique(data.username, 'current-user');
       if (!isUnique) {
         return { success: false, error: 'Username is already taken' };
       }
@@ -181,7 +181,11 @@ export const userProfileService = {
     try {
       const current = await this.getProfile();
       if (!current) {
-        return { success: false, error: 'No profile found' };
+        // No existing profile: treat this as a create (upsert)
+        if (!updates.username) {
+          return { success: false, error: 'Username is required to create profile' };
+        }
+        return await this.saveProfile(updates as ProfileData);
       }
 
       const updated = { ...current, ...updates };
@@ -198,6 +202,20 @@ export const userProfileService = {
   async clearProfile(): Promise<void> {
     try {
       await AsyncStorage.removeItem(STORAGE_KEY);
+      // Also remove from the uniqueness index
+      const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
+      if (profilesJson) {
+        const profiles = JSON.parse(profilesJson);
+        if (profiles && typeof profiles === 'object') {
+          delete profiles['current-user'];
+          // If no profiles remain, remove the index key entirely
+          if (Object.keys(profiles).length === 0) {
+            await AsyncStorage.removeItem(PROFILES_KEY);
+          } else {
+            await AsyncStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+          }
+        }
+      }
       console.log('[userProfile] Profile cleared');
     } catch (error) {
       console.error('[userProfile] Error clearing profile:', error);
