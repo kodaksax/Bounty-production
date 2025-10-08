@@ -2,16 +2,17 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import React, { useState, useRef, useCallback } from "react"
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View, StyleSheet, Alert } from "react-native"
-import { useMessages } from "../../hooks/useMessages"
-import type { Conversation, Message } from "../../lib/types"
-import { useWallet } from '../../lib/wallet-context'
-import { MessageBubble } from "../../components/MessageBubble"
+import React, { useCallback, useRef, useState } from "react"
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageActions } from "../../components/MessageActions"
+import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { TypingIndicator } from "../../components/TypingIndicator"
-import { useTypingIndicator, socketStub } from "../../hooks/useSocketStub"
+import { useMessages } from "../../hooks/useMessages"
+import { useTypingIndicator } from "../../hooks/useSocketStub"
+import type { Conversation, Message } from "../../lib/types"
+import { useWallet } from '../../lib/wallet-context'
 
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -45,8 +46,12 @@ export function ChatDetailScreen({
   const { balance } = useWallet()
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
+  const [showComposer, setShowComposer] = useState(false)
+  const [composerText, setComposerText] = useState('')
   const listRef = useRef<FlatList<Message>>(null)
   const typingUsersRef = useTypingIndicator(conversation.id)
+  const insets = useSafeAreaInsets()
+  const BOTTOM_NAV_OFFSET = 60 // height of BottomNav
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text)
@@ -214,26 +219,12 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10), bottom: BOTTOM_NAV_OFFSET }] }>
               <TouchableOpacity 
                 style={styles.inputButton}
                 onPress={() => {
-                  Alert.prompt(
-                    'Send Message',
-                    'Type your message:',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Send', 
-                        onPress: (text) => {
-                          if (text?.trim()) {
-                            handleSendMessage(text.trim())
-                          }
-                        }
-                      },
-                    ],
-                    'plain-text'
-                  )
+                  setComposerText('')
+                  setShowComposer(true)
                 }}
               >
                 <Text style={styles.inputPlaceholder}>Type a message...</Text>
@@ -253,6 +244,56 @@ export function ChatDetailScreen({
         onReport={handleReport}
         isPinned={selectedMessage?.isPinned}
       />
+
+      {/* Composer Modal raised above BottomNav and keyboard */}
+      <Modal
+        visible={showComposer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowComposer(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowComposer(false)} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
+            style={{ width: '100%' }}
+          >
+            <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12), marginBottom: BOTTOM_NAV_OFFSET }] }>
+              <Text style={styles.sheetTitle}>Send Message</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  value={composerText}
+                  onChangeText={setComposerText}
+                  placeholder="Type your message..."
+                  placeholderTextColor="rgba(209,250,229,0.5)"
+                  multiline
+                  autoFocus
+                  style={styles.textArea}
+                />
+              </View>
+              <View style={styles.sheetButtons}>
+                <TouchableOpacity style={[styles.sheetBtn, styles.cancelBtn]} onPress={() => setShowComposer(false)}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sheetBtn, styles.sendBtn]}
+                  onPress={async () => {
+                    const t = composerText.trim()
+                    if (t.length === 0) return
+                    setShowComposer(false)
+                    setComposerText('')
+                    await handleSendMessage(t)
+                  }}
+                >
+                  <MaterialIcons name="send" size={18} color="#052e1b" />
+                  <Text style={styles.sendText}>Send</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -261,7 +302,7 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: 80, // Space for input
+    paddingBottom: 80 + 60, // Space for input + BottomNav
   },
   inputContainer: {
     position: 'absolute',
@@ -287,5 +328,68 @@ const styles = StyleSheet.create({
   inputPlaceholder: {
     color: '#d1fae5',
     fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#065f46',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  sheetTitle: {
+    color: '#e5fff7',
+    fontWeight: '600',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    backgroundColor: 'rgba(4,120,87,0.6)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  textArea: {
+    color: '#ffffff',
+    minHeight: 80,
+    fontSize: 15,
+  },
+  sheetButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  sheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  cancelBtn: {
+    backgroundColor: 'rgba(6,95,70,0.5)',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.25)'
+  },
+  cancelText: {
+    color: '#d1fae5',
+    fontWeight: '600',
+  },
+  sendBtn: {
+    backgroundColor: '#a7f3d0',
+    marginLeft: 8,
+  },
+  sendText: {
+    color: '#052e1b',
+    fontWeight: '700',
+    marginLeft: 6,
   },
 })
