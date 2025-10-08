@@ -75,7 +75,7 @@ function BountyAppInner() {
   ]
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
-  const calculateDistance = (location: string) => {
+  const calculateDistance = useCallback((location: string) => {
     // More deterministic mock distance calculation based on location string
     if (!location) return 20 // Default for empty locations
 
@@ -85,7 +85,7 @@ function BountyAppInner() {
 
     // Generate a distance between 1 and 15 miles
     return 1 + ((hash % seed) % 15)
-  }
+  }, [])
 
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
@@ -158,6 +158,33 @@ function BountyAppInner() {
       setActiveCategory("all")
     }
   }, [categories, activeCategory])
+
+  // Optimized render functions (extracted to avoid inline recreation)
+  const ItemSeparator = useCallback(() => <View style={{ height: 2.8 }} />, [])
+  
+  const EmptyListComponent = useCallback(() => (
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
+      <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+      <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+        <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+      </TouchableOpacity>
+    </View>
+  ), [])
+
+  const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
+    const distance = calculateDistance(item.location || '')
+    const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
+    return (
+      <BountyListItem
+        key={item.id}
+        id={numericId}
+        title={item.title}
+        username="@Jon_Doe"
+        price={Number(item.amount)}
+        distance={distance}
+      />
+    )
+  }, [calculateDistance])
 
   if (showSearch) {
     return <SearchScreen onBack={() => setShowSearch(false)} />
@@ -250,30 +277,10 @@ function BountyAppInner() {
         contentContainerStyle={{ paddingHorizontal: 17, paddingTop: HEADER_EXPANDED + headerTopPad + 0, paddingBottom: 0, marginTop: 1 }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
-        ItemSeparatorComponent={() => <View style={{ height: 2.8 }} />}
+        ItemSeparatorComponent={ItemSeparator}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListEmptyComponent={() => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-            <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-            <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-              <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        renderItem={({ item }) => {
-          const distance = calculateDistance(item.location || '')
-          const numericId = typeof item.id === 'number' ? item.id : Number(String(item.id).replace(/\D/g, '')) || Math.abs([...String(item.id)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0))
-          return (
-            <BountyListItem
-              key={item.id} // Explicit key for better performance
-              id={numericId}
-              title={item.title}
-              username="@Jon_Doe"
-              price={Number(item.amount)}
-              distance={distance}
-            />
-          )
-        }}
+        ListEmptyComponent={EmptyListComponent}
+        renderItem={renderBountyItem}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}

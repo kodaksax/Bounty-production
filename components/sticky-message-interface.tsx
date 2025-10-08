@@ -59,14 +59,16 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
     setAtBottom(distanceFromBottom < 24); // threshold
   };
 
-  const renderItem = ({ item }: { item: ChatMessage }) => (
+  const renderItem = React.useCallback(({ item }: { item: ChatMessage }) => (
     <View className={cn('mb-3 px-3 max-w-[80%]', item.isUser ? 'ml-auto' : 'mr-auto')}
       style={{ opacity: 1 }}>
       <View className={cn('px-3 py-2 rounded-2xl', item.isUser ? 'bg-white rounded-br-none' : 'bg-emerald-700/60 rounded-bl-none')}> 
         <Text className={cn('text-sm', item.isUser ? 'text-gray-900' : 'text-white')}>{item.text}</Text>
       </View>
     </View>
-  );
+  ), []);
+
+  const keyExtractor = React.useCallback((m: ChatMessage) => m.id, []);
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.select({ ios: 'padding', android: undefined })}>
@@ -75,11 +77,15 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           ref={listRef}
           data={messages}
           renderItem={renderItem}
-          keyExtractor={(m) => m.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: bottomInset + 110, paddingHorizontal: 12 }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={20}
+          windowSize={10}
+          initialNumToRender={20}
         />
 
         {/* Sticky composer */}

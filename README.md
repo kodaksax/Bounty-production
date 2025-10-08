@@ -82,6 +82,36 @@ Layout rules:
 - Favor helpful empty states over spinners (action-oriented copy + 1 primary button).
 - Respect safe areas; no content hidden behind nav.
 
+## ⚡ Performance & Optimization
+### Images
+- **Always use `OptimizedImage`** from `lib/components/OptimizedImage` for better caching and memory management
+- For list items: specify `width` and `height` to enable thumbnail optimization
+- For detail views: set `useThumbnail={false}` for full resolution
+- Leverages `expo-image` for automatic memory-disk caching
+
+### Lists
+- **Use FlatList, not ScrollView with .map()** for any list with >10 items
+- Extract `renderItem` and `keyExtractor` to `useCallback` to avoid recreating functions
+- Add performance props: `removeClippedSubviews`, `maxToRenderPerBatch`, `windowSize`, `initialNumToRender`
+- Example:
+  ```tsx
+  const renderItem = useCallback(({ item }) => <ItemComponent {...item} />, [deps]);
+  const keyExtractor = useCallback((item) => item.id, []);
+  
+  <FlatList
+    data={items}
+    renderItem={renderItem}
+    keyExtractor={keyExtractor}
+    removeClippedSubviews={true}
+    maxToRenderPerBatch={10}
+    windowSize={5}
+  />
+  ```
+
+### Monitoring
+- See `PERFORMANCE.md` for comprehensive performance audit checklist
+- Run `npm run audit-deps` monthly to check dependencies
+
 ## 🧩 State & Data Practices
 - Lift navigation state to root only. Pass via props: `<BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} />`.
 - Avoid shadow local `activeScreen` states.

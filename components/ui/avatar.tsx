@@ -1,5 +1,6 @@
 import * as React from "react"
-import { View, Text, Image, ViewProps, ImageProps, TextProps } from "react-native"
+import { View, Text, ViewProps, TextProps } from "react-native"
+import { OptimizedImage } from "lib/components/OptimizedImage"
 
 import { cn } from "lib/utils"
 
@@ -28,13 +29,13 @@ const Avatar = React.forwardRef<View, AvatarProps>(
 );
 Avatar.displayName = "Avatar";
 
-interface AvatarImageProps extends Omit<ImageProps, 'source'> {
+interface AvatarImageProps {
   src?: string;
   alt?: string;
   className?: string;
 }
 
-const AvatarImage = React.forwardRef<Image, AvatarImageProps>(
+const AvatarImage = React.forwardRef<View, AvatarImageProps>(
   ({ className, src, alt, ...props }, ref) => {
     const [hasError, setHasError] = React.useState(false);
     
@@ -43,11 +44,14 @@ const AvatarImage = React.forwardRef<Image, AvatarImageProps>(
     }
 
     return (
-      <Image
-        ref={ref}
+      <OptimizedImage
         source={{ uri: src }}
         onError={() => setHasError(true)}
-        className={cn("aspect-square h-full w-full", className)}
+        alt={alt}
+        width={40}
+        height={40}
+        useThumbnail={true}
+        priority="low"
         style={{
           width: '100%',
           height: '100%',
