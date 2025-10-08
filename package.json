@@ -15,6 +15,8 @@
     "lint": "expo lint",
     "api": "node api/server.js",
     "db:init": "node scripts/init-db.js",
+    "test": "npx ts-node tests/CreateBounty.validation.test.ts",
+    "test:watch": "npx nodemon --watch tests --exec 'npm test'",
     "test:api": "node scripts/test-api.js",
     "test:auth": "node scripts/test-auth-endpoints.js",
     "build": "npm run build --workspaces",
