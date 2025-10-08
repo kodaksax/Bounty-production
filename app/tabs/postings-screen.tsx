@@ -2,6 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
+import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BinaryToggle } from 'components/ui/binary-toggle'
 import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
@@ -38,6 +39,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
   const [showConfirmationCard, setShowConfirmationCard] = useState(false)
+  const [showMultiStepFlow, setShowMultiStepFlow] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
   const [formData, setFormData] = useState({
@@ -465,6 +467,20 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             {activeTab === "new" ? (
               // 2) Make the wrapper fill space and let the ScrollView expand
               <View className="flex-1">
+                {/* Multi-step flow toggle button */}
+                {!showMultiStepFlow && (
+                  <TouchableOpacity
+                    onPress={() => setShowMultiStepFlow(true)}
+                    className="mb-4 bg-emerald-500 py-3 rounded-lg flex-row items-center justify-center"
+                    accessibilityLabel="Use guided multi-step form"
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="assistant" size={20} color="#fff" />
+                    <Text className="text-white font-semibold ml-2">
+                      Use Guided Multi-Step Form
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode="on-drag"
@@ -974,6 +990,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         </View>
       )}
       {/* Deadline screen removed; using inline text input */}
+
+      {/* Multi-Step Create Bounty Flow */}
+      {showMultiStepFlow && (
+        <View className="absolute inset-0 z-50 bg-emerald-600">
+          <CreateBountyFlow
+            onComplete={(bountyId) => {
+              console.log('Bounty created:', bountyId);
+              setShowMultiStepFlow(false);
+              setActiveTab('myPostings');
+              loadMyBounties();
+              onBountyPosted?.();
+            }}
+            onCancel={() => setShowMultiStepFlow(false)}
+          />
+        </View>
+      )}
     </View>
     </TouchableWithoutFeedback>
   )
