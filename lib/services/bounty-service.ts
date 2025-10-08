@@ -1,9 +1,17 @@
 import type { Bounty } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from "lib/utils/error-logger";
+import { getReachableApiBaseUrl } from 'lib/utils/network';
 
 // API Configuration
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+function getApiBaseUrl() {
+  const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
+    || (process.env.API_BASE_URL as string | undefined)
+    || 'http://localhost:3001'
+  const base = getReachableApiBaseUrl(preferred, 3001)
+  logOnce('bounties:apiBase', 'warn', `Using API base: ${base}`)
+  return base
+}
 
 // Simple once-per-key logger to avoid spamming console when backend is offline
 const emitted: Record<string, boolean> = {}
@@ -39,7 +47,7 @@ export const bountyService = {
         return (data as unknown as Bounty) ?? null
       }
 
-      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
+  const API_URL = `${getApiBaseUrl()}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +102,7 @@ export const bountyService = {
         return (data as unknown as Bounty[]) ?? []
       }
 
-      const API_URL = `${API_BASE_URL}/api/bounties`
+  const API_URL = `${getApiBaseUrl()}/api/bounties`
       const params = new URLSearchParams()
 
       if (options?.status) params.append("status", options.status)
@@ -104,7 +112,7 @@ export const bountyService = {
       if (options?.offset != null) params.append('offset', String(options.offset))
       // archived filtering handled client-side if API doesn't support it
       
-      const response = await fetch(`${API_URL}?${params.toString()}`)
+  const response = await fetch(`${API_URL}?${params.toString()}`)
       if (!response.ok) {
         throw new Error(`Failed to fetch bounties: ${response.statusText}`)
       }
@@ -128,7 +136,7 @@ export const bountyService = {
         {
           options,
           error: { message: error.message, stack: error.stack },
-          apiBase: API_BASE_URL,
+          apiBase: getApiBaseUrl(),
             hint: isNetworkError ? 'Check that the API server is running and device can reach the host (if on physical device, replace localhost with your machine LAN IP).' : undefined,
         }
       )
@@ -142,17 +150,62 @@ export const bountyService = {
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
       if (isSupabaseConfigured) {
+        // Try direct Supabase insert first (works if RLS permits anon/session)
         const { data, error } = await supabase
           .from('bounties')
           .insert(bounty as any)
           .select('*')
           .single()
 
-        if (error) throw error
-        return (data as unknown as Bounty) ?? null
+        if (!error) {
+          return (data as unknown as Bounty) ?? null
+        }
+        // If direct insert failed, decide whether to fallback to relay or bubble up
+        {
+          const msg = typeof error.message === 'string' ? error.message : String(error)
+          // Fallback to relay for RLS/permission errors; otherwise rethrow
+          const isPolicy = /row level security|RLS|permission denied|not authorized/i.test(msg)
+          if (!isPolicy) {
+            let hint: string | undefined
+            if (/violates foreign key|foreign key constraint/i.test(msg)) {
+              hint = 'Foreign key constraint failed. Ensure user_id references an existing profiles row, or adjust FK/policies.'
+            }
+            const rich = hint ? `${msg}\n\nHint: ${hint}` : msg
+            throw new Error(rich)
+          }
+        }
+
+        // No session (or direct insert failed before), use server relay (service role) to insert into Supabase
+        try {
+          const relayResp = await fetch(`${getApiBaseUrl()}/api/supabase/bounties`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...bounty,
+              // Defaults to reduce DB constraint issues
+              status: (bounty as any).status || 'open',
+              timeline: (bounty as any).timeline ?? '',
+              skills_required: (bounty as any).skills_required ?? '',
+              work_type: (bounty as any).work_type || 'online',
+            }),
+          })
+          if (!relayResp.ok) {
+            const text = await relayResp.text()
+            throw new Error(`Relay insert failed: ${text}`)
+          }
+          const json = await relayResp.json()
+          return json as Bounty
+        } catch (e: any) {
+          const msg = e?.message || String(e)
+          if (/Network request failed|timed out|TypeError/i.test(msg)) {
+            const hint = `Device could not reach API at ${getApiBaseUrl()}. If on a physical device, ensure both are on the same Wi‑Fi and Windows firewall allows inbound on port 3001. Alternatively set EXPO_PUBLIC_API_BASE_URL to your machine LAN IP (e.g., http://192.168.x.x:3001).`
+            throw new Error(`${msg}\n\nHint: ${hint}`)
+          }
+          throw e
+        }
       }
 
-      const API_URL = `${API_BASE_URL}/api/bounties`
+  const API_URL = `${getApiBaseUrl()}/api/bounties`
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -169,8 +222,9 @@ export const bountyService = {
       return await response.json()
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logOnce('bounties:create', 'error', 'Error creating bounty (showing once until reload)', { bounty, error })
-      return null
+      logOnce('bounties:create', 'error', 'Error creating bounty (showing once until reload)', { bounty, error: { message: error.message, stack: error.stack } })
+      // Re-throw so callers can present actionable messages to the user
+      throw error
     }
   },
 
@@ -191,7 +245,7 @@ export const bountyService = {
         return (data as unknown as Bounty) ?? null
       }
 
-      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
+  const API_URL = `${getApiBaseUrl()}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         method: "PATCH",
         headers: {
@@ -228,7 +282,7 @@ export const bountyService = {
         return true
       }
 
-      const API_URL = `${API_BASE_URL}/api/bounties/${id}`
+  const API_URL = `${getApiBaseUrl()}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         method: "DELETE",
       })

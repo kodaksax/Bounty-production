@@ -562,6 +562,78 @@ app.post('/api/bounties', async (req, res) => {
   }
 });
 
+// Relay: Insert bounty into Supabase (service role)
+app.post('/api/supabase/bounties', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase admin not configured' });
+  }
+
+  try {
+    const input = req.body || {}
+    // Normalize fields and provide safe defaults
+    const record = {
+      title: String(input.title || '').trim(),
+      description: String(input.description || ''),
+      amount: Number(input.is_for_honor ? 0 : (input.amount || 0)),
+      is_for_honor: Boolean(input.is_for_honor),
+      location: String(input.location || ''),
+      timeline: String(input.timeline || ''),
+      skills_required: String(input.skills_required || ''),
+      user_id: String(input.user_id || '').trim(),
+      status: input.status || 'open',
+      work_type: input.work_type || 'online',
+      is_time_sensitive: Boolean(input.is_time_sensitive || false),
+      deadline: input.deadline || null,
+      attachments_json: input.attachments_json || null,
+    }
+
+    if (!record.title) return res.status(400).json({ error: 'title is required' })
+    if (!record.description) return res.status(400).json({ error: 'description is required' })
+    if (!record.is_for_honor && (!record.amount || record.amount <= 0)) return res.status(400).json({ error: 'amount must be > 0 for paid bounties' })
+    if (!record.user_id) return res.status(400).json({ error: 'user_id is required' })
+
+    // Ensure profile exists to satisfy potential FK constraints
+    try {
+      const { data: prof, error: profErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('id', record.user_id)
+        .maybeSingle()
+      if (profErr) {
+        console.warn('[relay] profiles lookup error (non-fatal):', profErr.message)
+      }
+      if (!prof) {
+        const defaultProfile = {
+          id: record.user_id,
+          username: '@Jon_Doe',
+          balance: 40.0,
+        }
+        const { error: createProfErr } = await supabaseAdmin.from('profiles').insert(defaultProfile)
+        if (createProfErr) {
+          console.warn('[relay] profile autocreate failed (continuing):', createProfErr.message)
+        }
+      }
+    } catch (e) {
+      console.warn('[relay] profile ensure failed (continuing):', e?.message)
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('bounties')
+      .insert(record)
+      .select('*')
+      .single()
+
+    if (error) {
+      return res.status(400).json({ error: error.message })
+    }
+
+    return res.status(201).json(data)
+  } catch (e) {
+    console.error('[relay supabase/bounties] insert failed:', e)
+    return res.status(500).json({ error: 'Relay insert failed', details: e?.message })
+  }
+})
+
 // Update bounty
 app.patch('/api/bounties/:id', async (req, res) => {
   let conn;

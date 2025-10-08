@@ -1,6 +1,7 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
+import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { CURRENT_USER_ID } from 'lib/utils/data-utils';
 
 export interface CreateBountyPayload {
@@ -22,6 +23,20 @@ export const bountyService = {
    */
   async createBounty(draft: BountyDraft): Promise<Bounty | null> {
     try {
+      // Enforce posting to Supabase only for this guided flow
+      if (!isSupabaseConfigured) {
+        const reasons: string[] = []
+        if (!supabaseEnv.hasUrl) reasons.push('EXPO_PUBLIC_SUPABASE_URL is missing')
+        if (!supabaseEnv.hasKey) reasons.push('EXPO_PUBLIC_SUPABASE_ANON_KEY is missing')
+        if (supabaseEnv.mismatch) reasons.push('Project ref mismatch between URL and key')
+        throw new Error(
+          `Supabase is not configured. This action requires posting directly to Supabase.\n\n` +
+          `Please set the following environment variables and restart the app:\n` +
+          `- EXPO_PUBLIC_SUPABASE_URL\n- EXPO_PUBLIC_SUPABASE_ANON_KEY\n\n` +
+          (reasons.length ? `Detected issues: ${reasons.join('; ')}` : '')
+        )
+      }
+
       const payload: Omit<Bounty, 'id' | 'created_at'> = {
         title: draft.title,
         description: draft.description,
@@ -29,8 +44,8 @@ export const bountyService = {
         is_for_honor: draft.isForHonor,
         location: draft.workType === 'in_person' ? draft.location : '',
         work_type: draft.workType,
-        timeline: draft.timeline || null,
-        skills_required: draft.skills || null,
+        timeline: draft.timeline || '',
+        skills_required: draft.skills || '',
         user_id: CURRENT_USER_ID,
         status: 'open',
       };

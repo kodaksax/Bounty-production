@@ -1,19 +1,19 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { StepperHeader } from 'app/components/StepperHeader';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
-import { bountyService } from 'app/services/bountyService';
 import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
 import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
 import { StepReview } from 'app/screens/CreateBounty/StepReview';
 import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
+import { bountyService } from 'app/services/bountyService';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
   onCancel?: () => void;
+  onStepChange?: (step: number) => void;
 }
 
 const TOTAL_STEPS = 5;
@@ -25,7 +25,7 @@ const STEP_TITLES = [
   'Review & Confirm',
 ];
 
-export function CreateBountyFlow({ onComplete, onCancel }: CreateBountyFlowProps) {
+export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -41,13 +41,15 @@ export function CreateBountyFlow({ onComplete, onCancel }: CreateBountyFlowProps
 
   const handleNext = () => {
     if (currentStep < TOTAL_STEPS) {
-      setCurrentStep(currentStep + 1);
+      const next = currentStep + 1;
+      setCurrentStep(next);
     }
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+      const prev = currentStep - 1;
+      setCurrentStep(prev);
     }
   };
 
@@ -125,6 +127,11 @@ export function CreateBountyFlow({ onComplete, onCancel }: CreateBountyFlowProps
     }
   };
 
+  // Notify consumer on initial mount and whenever currentStep changes.
+  useEffect(() => {
+    onStepChange?.(currentStep);
+  }, [currentStep, onStepChange]);
+
   if (isLoading) {
     return (
       <View className="flex-1 bg-emerald-600 items-center justify-center">
@@ -141,24 +148,8 @@ export function CreateBountyFlow({ onComplete, onCancel }: CreateBountyFlowProps
       keyboardVerticalOffset={insets.top}
     >
       <View className="flex-1">
-        {/* Header */}
-        <View
-          className="bg-emerald-700 px-4 border-b border-emerald-600"
-          style={{ paddingTop: insets.top + 12, paddingBottom: 12 }}
-        >
-          <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center">
-              <MaterialIcons name="gps-fixed" size={24} color="#000" />
-              <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
-            </View>
-            <TouchableOpacity
-              onPress={handleCancel}
-              accessibilityLabel="Cancel and exit"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="close" size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
+        {/* Inline Stepper (no duplicate app header) */}
+        <View className="px-0" style={{ paddingTop: 8, paddingBottom: 8 }}>
           <StepperHeader
             currentStep={currentStep}
             totalSteps={TOTAL_STEPS}

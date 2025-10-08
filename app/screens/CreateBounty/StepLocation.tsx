@@ -3,6 +3,7 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StepLocationProps {
   draft: BountyDraft;
@@ -14,6 +15,8 @@ interface StepLocationProps {
 export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const insets = useSafeAreaInsets();
+  const BOTTOM_NAV_OFFSET = 60;
 
   const validateLocation = (location: string, workType: string): string | null => {
     if (workType === 'in_person') {
@@ -65,7 +68,11 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
   return (
     <View className="flex-1 bg-emerald-600">
-      <ScrollView className="flex-1 px-4 pt-6" keyboardShouldPersistTaps="handled">
+      <ScrollView
+        className="flex-1 px-4 pt-2"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+      >
         {/* Work Type Selection */}
         <View className="mb-6">
           <Text className="text-emerald-100 text-base font-semibold mb-3">
@@ -213,7 +220,10 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
       </ScrollView>
 
       {/* Navigation Buttons */}
-      <View className="px-4 pb-6 pt-4 bg-emerald-600 border-t border-emerald-700/50">
+      <View
+        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+      >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}

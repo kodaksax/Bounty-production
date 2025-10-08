@@ -3,8 +3,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
-import { BinaryToggle } from 'components/ui/binary-toggle'
-import { attachmentService } from 'lib/services/attachment-service'
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -13,7 +11,7 @@ import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Animated, Easing, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -32,14 +30,16 @@ interface PostingsScreenProps {
   activeScreen: string
   setActiveScreen: (screen: string) => void
   onBountyPosted?: () => void // Callback when a bounty is successfully posted
+  setShowBottomNav?: (show: boolean) => void
 }
 
-export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted }: PostingsScreenProps) {
+export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
   const [showConfirmationCard, setShowConfirmationCard] = useState(false)
-  const [showMultiStepFlow, setShowMultiStepFlow] = useState(false)
+  // Always use guided multi-step flow on New tab
+  const [showMultiStepFlow, setShowMultiStepFlow] = useState(true)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
   const [formData, setFormData] = useState({
@@ -87,6 +87,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
   const prevLowBalance = useRef(false)
 
+  // Ensure BottomNav is visible while on Postings screen and during create steps
+  useEffect(() => {
+    setShowBottomNav?.(true)
+  }, [setShowBottomNav])
+
   // Derived lowBalance (current) for animation trigger context (only for new tab)
   const currentLowBalance = React.useMemo(() => !formData.isForHonor && formData.amount > balance, [formData.isForHonor, formData.amount, balance])
 
@@ -109,6 +114,54 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [currentLowBalance, activeTab, lowBalanceAnim])
   // Deadline now simple text entry; dedicated screen removed
 
+  // ---- Data Loaders (refreshed after post and when opening screen) ----
+  const loadRequestsForMyBounties = React.useCallback(async (bounties: Bounty[]) => {
+    try {
+      if (!bounties?.length) {
+        setBountyRequests([])
+        setIsLoading((prev) => ({ ...prev, requests: false }))
+        return
+      }
+      setIsLoading((prev) => ({ ...prev, requests: true }))
+      const requestsPromises = bounties.map((b) => bountyRequestService.getAllWithDetails({ bountyId: b.id }))
+      const requestsArrays = await Promise.all(requestsPromises)
+      setBountyRequests(requestsArrays.flat())
+    } catch (e: any) {
+      console.error('Error loading bounty requests:', e)
+      setError('Failed to load bounty requests')
+    } finally {
+      setIsLoading((prev) => ({ ...prev, requests: false }))
+    }
+  }, [])
+
+  const loadMyBounties = React.useCallback(async () => {
+    try {
+      setIsLoading((prev) => ({ ...prev, myBounties: true }))
+      const mine = await bountyService.getByUserId(CURRENT_USER_ID)
+      setMyBounties(mine)
+      setIsLoading((prev) => ({ ...prev, myBounties: false }))
+      // Load related requests
+      await loadRequestsForMyBounties(mine)
+    } catch (e: any) {
+      console.error('Error loading my bounties:', e)
+      setError('Failed to load your bounties')
+      setIsLoading((prev) => ({ ...prev, myBounties: false }))
+    }
+  }, [loadRequestsForMyBounties])
+
+  const loadInProgress = React.useCallback(async () => {
+    try {
+      setIsLoading((prev) => ({ ...prev, inProgress: true }))
+      const data = await bountyService.getAll({ status: 'in_progress' })
+      setInProgressBounties(data)
+    } catch (e: any) {
+      console.error('Error loading in-progress bounties:', e)
+      setError('Failed to load in-progress bounties')
+    } finally {
+      setIsLoading((prev) => ({ ...prev, inProgress: false }))
+    }
+  }, [])
+
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
   }
@@ -122,55 +175,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
-    const fetchData = async () => {
-      setError(null)
-
-      try {
-        // Fetch my bounties
-        setIsLoading((prev) => ({ ...prev, myBounties: true }))
-        const myBountiesData = await bountyService.getByUserId(CURRENT_USER_ID)
-        setMyBounties(myBountiesData)
-        setIsLoading((prev) => ({ ...prev, myBounties: false }))
-
-        // Fetch bounty requests for the bounties I own
-        if (myBountiesData.length > 0) {
-          setIsLoading((prev) => ({ ...prev, requests: true }))
-          // ANNOTATION: This fetches requests for each of your bounties.
-          // For performance, your API could support fetching all requests for a given owner ID in one call.
-          // e.g., GET /api/bounty-requests?bountyOwnerId=${CURRENT_USER_ID}
-          const requestsPromises = myBountiesData.map((b) => bountyRequestService.getAllWithDetails({ bountyId: b.id }))
-          const requestsArrays = await Promise.all(requestsPromises)
-          const allRequests = requestsArrays.flat()
-          setBountyRequests(allRequests)
-          setIsLoading((prev) => ({ ...prev, requests: false }))
-        } else {
-          setBountyRequests([])
-          setIsLoading((prev) => ({ ...prev, requests: false }))
-        }
-      } catch (err: any) {
-        console.error("Error fetching my bounties:", err)
-        setError("Failed to load your bounties")
-        setIsLoading((prev) => ({ ...prev, myBounties: false }))
-      }
-
-      try {
-        // Fetch in-progress bounties
-        setIsLoading((prev) => ({ ...prev, inProgress: true }))
-        // ANNOTATION: This fetches all in-progress bounties.
-        // If this should only be bounties assigned to the current user,
-        // your API will need to support that query.
-        const inProgressData = await bountyService.getAll({ status: "in_progress" })
-        setInProgressBounties(inProgressData)
-      } catch (err: any) {
-        console.error("Error fetching in-progress bounties:", err)
-        setError("Failed to load in-progress bounties")
-      } finally {
-        setIsLoading((prev) => ({ ...prev, inProgress: false }))
-      }
-    }
-
-    fetchData()
-  }, [postSuccess]) // Re-fetch after a successful post
+    setError(null)
+    // Load in parallel
+    loadMyBounties()
+    loadInProgress()
+  }, [postSuccess, loadMyBounties, loadInProgress]) // Re-fetch after a successful post
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
   // To re-implement real-time updates, you would need to use a technology
@@ -237,11 +246,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       if (bounty) {
         setMyBounties((prevBounties) => [bounty, ...prevBounties])
 
-        // Set success state to trigger animations and UI updates
-        setPostSuccess(true)
+  // Set success state to trigger animations and UI updates
+  setPostSuccess(true)
 
-        // Notify parent component that a bounty was posted successfully
-        onBountyPosted?.()
+  // Notify parent to refresh public feed
+  onBountyPosted?.()
 
         // Reset form
         setFormData({
@@ -261,10 +270,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         // Close confirmation card
         setShowConfirmationCard(false)
 
-        // Switch to My Postings tab AFTER updating state
-        setTimeout(() => {
-          setActiveTab("myPostings")
-        }, 100)
+        // Navigate to the main bounty feed so the new bounty is visible
+        setActiveScreen?.('bounty')
 
         // Reset success state after a delay
         setTimeout(() => {
@@ -273,7 +280,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       }
     } catch (err: any) {
       console.error("Error posting bounty:", err)
-      setError(err.message || "Failed to post bounty")
+      const msg = err instanceof Error ? err.message : (err?.message || 'Failed to post bounty')
+      setError(msg)
       setShowConfirmationCard(false)
     } finally {
       setIsSubmitting(false)
@@ -465,355 +473,175 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
           <View className="flex-1 px-4">
             {activeTab === "new" ? (
-              // 2) Make the wrapper fill space and let the ScrollView expand
               <View className="flex-1">
-                {/* Multi-step flow toggle button */}
-                {!showMultiStepFlow && (
-                  <TouchableOpacity
-                    onPress={() => setShowMultiStepFlow(true)}
-                    className="mb-4 bg-emerald-500 py-3 rounded-lg flex-row items-center justify-center"
-                    accessibilityLabel="Use guided multi-step form"
-                    accessibilityRole="button"
-                  >
-                    <MaterialIcons name="assistant" size={20} color="#fff" />
-                    <Text className="text-white font-semibold ml-2">
-                      Use Guided Multi-Step Form
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                  className="flex-1 px-2"
-                  // 3) Ensure the last inputs won’t be hidden by the sticky bar
-                  // Ensure we can fully scroll the attachments area above the sticky bar
-                  contentContainerStyle={{ paddingBottom: STICKY_TOTAL_HEIGHT }}
+                <CreateBountyFlow
+                  onComplete={(bountyId) => {
+                    // After creation, go to main feed and refresh publicly visible list
+                    setShowBottomNav?.(true)
+                    setActiveScreen('bounty')
+                    onBountyPosted?.()
+                  }}
+                  onCancel={() => {
+                    // Exit flow: return to postings tabs, show nav, and reset to step 1 by remounting
+                    setShowBottomNav?.(true)
+                    setActiveTab('myPostings')
+                    // force remount when user returns to New tab by toggling state
+                    setShowMultiStepFlow(false)
+                    setTimeout(() => setShowMultiStepFlow(true), 0)
+                  }}
+                  onStepChange={() => {
+                    // Keep BottomNav visible on all steps
+                    setShowBottomNav?.(true)
+                  }}
+                />
+              </View>
+            ) : (
+              activeTab === "inProgress" ? (
+                <FlatList
+                  data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
+                  keyExtractor={(item) => item.id.toString()}
+                  ListHeaderComponent={(
+                    <View className="flex-row gap-2 mb-1">
+                      {(['all','online','in_person'] as const).map(f => {
+                        const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                        const selected = workTypeFilter === f
+                        return (
+                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                            <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  )}
+                  renderItem={({ item: bounty }) => (
+                    <InProgressBountyItem
+                      username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
+                      title={bounty.title}
+                      amount={Number(bounty.amount)}
+                      distance={calculateDistance(bounty.location || "")}
+                      timeAgo={formatTimeAgo(bounty.created_at)}
+                      workType={bounty.work_type}
+                    />
+                  )}
+                  ListEmptyComponent={
+                    isLoading.inProgress ? (
+                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
+                    ) : (
+                      <View className="text-center py-10 text-emerald-200"><Text>No bounties in progress</Text></View>
+                    )
+                  }
+                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
                     if (y > 2 && !showShadow) setShowShadow(true)
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
                   scrollEventThrottle={16}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Title</Text>
-                    <TextInput
-                      value={formData.title}
-                      onChangeText={(text) => handleInputChange({ target: { name: 'title', value: text } })}
-                      placeholder="A brief description of the job you need done"
-                      className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                      placeholderTextColor="#6ee7b7"
-                    />
-                  </View>
-
-                  <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Bounty description</Text>
-                    <TextInput
-                      value={formData.description}
-                      onChangeText={(text) => handleInputChange({ target: { name: 'description', value: text } })}
-                      placeholder="This is the long form description of the task and this can be anything from commissioning an art design to having something delivered to hunting down your fathers killer"
-                      className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base min-h-[150px] touch-target-min"
-                      placeholderTextColor="#6ee7b7"
-                      multiline
-                      numberOfLines={6}
-                    />
-                  </View>
-
-                  {/* Work Type Toggle */}
-                  <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Work Type</Text>
-                    <BinaryToggle
-                      value={formData.workType}
-                      onChange={(v) => setFormData(prev => ({ ...prev, workType: v }))}
-                      options={[
-                        { id: 'online', label: 'Online' },
-                        { id: 'in_person', label: 'In Person' },
-                      ] as const}
-                    />
-                  </View>
-
-                  {formData.workType === 'in_person' && (
-                    <View className="space-y-3">
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-emerald-100/90 text-base">Location <Text className="text-red-300">*</Text></Text>
-                        <Text className="text-xs text-emerald-300">Required for in-person</Text>
-                      </View>
-                      <TextInput
-                        value={formData.location}
-                        onChangeText={(text) => handleInputChange({ target: { name: 'location', value: text } })}
-                        placeholder="Where will this task occur?"
-                        className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                        placeholderTextColor="#6ee7b7"
-                      />
-                    </View>
-                  )}
-
-                  {/* Bounty Amount moved to sticky bottom action bar */}
-
-                  <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Timeline</Text>
-                    <TextInput
-                      value={formData.timeline}
-                      onChangeText={(text) => handleInputChange({ target: { name: 'timeline', value: text } })}
-                      placeholder="When does this need to be completed by?"
-                      className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                      placeholderTextColor="#6ee7b7"
-                    />
-                  </View>
-
-                  <View className="space-y-3">
-
-                    <Text className="text-emerald-100/90 text-base">Skills Required</Text>
-                    <TextInput
-                      value={formData.skills}
-                      onChangeText={(text) => handleInputChange({ target: { name: 'skills', value: text } })}
-                      placeholder="What skills are needed for this bounty?"
-                      className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base touch-target-min"
-                      placeholderTextColor="#6ee7b7"
-                    />
-                  </View>
-
-                  {/* Time Sensitive Toggle */}
-                  <View className="space-y-3">
-                    <Text className="text-emerald-100/90 text-base">Is the bounty time sensitive?</Text>
-                    <BinaryToggle
-                      value={formData.isTimeSensitive ? 'yes' : 'no'}
-                      onChange={(v) => {
-                        if (v === 'yes') {
-                          setFormData(prev => ({ ...prev, isTimeSensitive: true }))
-                        } else {
-                          setFormData(prev => ({ ...prev, isTimeSensitive: false, deadline: '' }))
-                        }
-                      }}
-                      options={[
-                        { id: 'no', label: 'No' },
-                        { id: 'yes', label: 'Yes' },
-                      ] as const}
-                      className="max-w-[200px]"
-                    />
-                    {formData.isTimeSensitive && (
-                      <View className="mt-2 bg-emerald-900/40 border border-emerald-600/60 rounded-lg p-3">
-                        <Text className="text-emerald-200 text-xs leading-5">
-                          Time sensitive bounties show an urgency badge and may be prioritized in feeds. Make sure the
-                          deadline is realistic. Hunters will see a countdown so choose carefully.
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {formData.isTimeSensitive && (
-                    <View className="space-y-3">
-                      <View className="flex-row items-center justify-between mb-1">
-                        <Text className="text-emerald-100/90 text-base">Deadline <Text className="text-red-300">*</Text></Text>
-                        {formData.deadline ? (
-                          <View className="bg-red-500/20 px-2 py-0.5 rounded-full border border-red-400/30">
-                            <Text className="text-red-300 text-[10px] font-semibold tracking-wide">URGENCY</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <TextInput
-                        value={formData.deadline}
-                        onChangeText={(text) => setFormData(prev => ({ ...prev, deadline: text }))}
-                        placeholder="e.g. 2025-10-12 5:00 PM or 'End of week'"
-                        className="w-full bg-emerald-700/50 rounded-lg p-4 text-white border-none focus:ring-1 focus:ring-white text-base"
-                        placeholderTextColor="#6ee7b7"
-                      />
-                    </View>
-                  )}
-
-                  {/* Attachments */}
-                  <View className="space-y-3 mb-4">
-                    <Text className="text-emerald-100/90 text-base">Attachments</Text>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        try {
-                          const picker = await import('expo-document-picker')
-                          const result = await picker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true, type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*'] })
-                          if (result.assets && result.assets.length) {
-                            const mapped = result.assets.map(a => ({
-                              id: (a.uri + a.name + a.size).replace(/[^a-zA-Z0-9]/g,'').slice(0,24) || Math.random().toString(36).slice(2),
-                              name: a.name || 'file',
-                              uri: a.uri,
-                              mimeType: a.mimeType,
-                              size: a.size,
-                              status: 'pending' as const,
-                              progress: 0,
-                            }))
-                            setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...mapped] }))
-                            for (const att of mapped) {
-                              setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, status: 'uploading', progress: 0 } : a) }))
-                              try {
-                                const uploaded = await attachmentService.upload(att, { onProgress: (p) => {
-                                  setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, progress: p } : a) }))
-                                } })
-                                setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, ...uploaded } : a) }))
-                              } catch (e) {
-                                setFormData(prev => ({ ...prev, attachments: prev.attachments.map(a => a.id === att.id ? { ...a, status: 'failed' } : a) }))
-                              }
-                            }
-                          }
-                        } catch (e) {
-                          console.warn('Attachment pick failed', e)
-                        }
-                      }}
-                      className="px-4 py-3 rounded-lg border border-emerald-500/40 bg-emerald-800/40"
-                    >
-                      <Text className="text-emerald-100">Add File</Text>
-                    </TouchableOpacity>
-                    {formData.attachments.length > 0 && (
-                      <View className="space-y-2">
-                        {formData.attachments.map(att => (
-                          <View key={att.id} className="flex-row items-center gap-2 bg-emerald-900/40 rounded-md px-3 py-2">
-                            <View className="flex-1">
-                              <Text className="text-emerald-100 text-sm" numberOfLines={1}>{att.name}</Text>
-                              <View className="h-1 bg-emerald-800 rounded mt-1 overflow-hidden">
-                                <View style={{ width: `${Math.round((att.progress || (att.status==='uploaded'?1:0))*100)}%` }} className={cn('h-full', att.status==='failed' ? 'bg-red-400' : 'bg-emerald-400')} />
-                              </View>
-                              <Text className="text-[10px] text-emerald-300 mt-0.5">{att.status === 'uploaded' ? 'Uploaded' : att.status === 'failed' ? 'Failed' : att.status === 'uploading' ? `Uploading ${(Math.round((att.progress||0)*100))}%` : 'Pending'}</Text>
-                            </View>
-                            {att.status !== 'uploading' && (
-                              <TouchableOpacity onPress={() => setFormData(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== att.id) }))}>
-                                <Text className="text-red-300 text-xs px-2">Remove</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                </ScrollView>
-              </View>
-            ) : (
-              activeTab === "inProgress" ? (
-                <View className="space-y-3">
-                  {/* Work Type Filter */}
-                  <View className="flex-row gap-2 mb-1">
-                    {(['all','online','in_person'] as const).map(f => {
-                      const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                      const selected = workTypeFilter === f
-                      return (
-                        <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
-                          <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-                  {isLoading.inProgress ? (
-                    <View className="flex justify-center items-center py-10">
-                      <ActivityIndicator size="large" color="white" />
-                    </View>
-                  ) : inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).length === 0 ? (
-                    <View className="text-center py-10 text-emerald-200">
-                      <Text>No bounties in progress</Text>
-                    </View>
-                  ) : (
-                    inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).map((bounty) => (
-                      <InProgressBountyItem
-                        key={bounty.id}
-                        username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
-                        title={bounty.title}
-                        amount={Number(bounty.amount)}
-                        distance={calculateDistance(bounty.location || "")}
-                        timeAgo={formatTimeAgo(bounty.created_at)}
-                        workType={bounty.work_type}
-                      />
-                    ))
-                  )}
-                </View>
+                />
               ) : activeTab === "requests" ? (
-                <View className="space-y-3">
-                  {isLoading.requests ? (
-                    <View className="flex justify-center items-center py-10">
-                      <ActivityIndicator size="large" color="white" />
-                    </View>
-                  ) : bountyRequests.length === 0 ? (
-                    <View className="text-center py-10 text-emerald-200">
-                      <Text>No bounty requests</Text>
-                    </View>
-                  ) : (
-                    bountyRequests.map((request) =>
-                        <BountyRequestItem
-                          key={request.id}
-                          username={request.profile.username}
-                          title={request.bounty.title}
-                          amount={Number(request.bounty.amount)}
-                          distance={calculateDistance(request.bounty.location || "")}
-                          timeAgo={formatTimeAgo(request.created_at)}
-                          avatarSrc={request.profile.avatar_url || undefined}
-                          onMenuClick={() => console.log(`Menu clicked for request ${request.id}`)}
-                          onAccept={() => handleAcceptRequest(request.id)}
-                          onReject={() => handleRejectRequest(request.id)}
-                          status={request.status}
-                          workType={request.bounty.work_type}
-                          deadline={request.bounty.deadline}
-                        />
-                    )
+                <FlatList
+                  data={bountyRequests}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item: request }) => (
+                    <BountyRequestItem
+                      username={request.profile.username}
+                      title={request.bounty.title}
+                      amount={Number(request.bounty.amount)}
+                      distance={calculateDistance(request.bounty.location || "")}
+                      timeAgo={formatTimeAgo(request.created_at)}
+                      avatarSrc={request.profile.avatar_url || undefined}
+                      onMenuClick={() => console.log(`Menu clicked for request ${request.id}`)}
+                      onAccept={() => handleAcceptRequest(request.id)}
+                      onReject={() => handleRejectRequest(request.id)}
+                      status={request.status}
+                      workType={request.bounty.work_type}
+                      deadline={request.bounty.deadline}
+                    />
                   )}
-                </View>
+                  ListEmptyComponent={
+                    isLoading.requests ? (
+                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
+                    ) : (
+                      <View className="text-center py-10 text-emerald-2 00"><Text>No bounty requests</Text></View>
+                    )
+                  }
+                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  showsVerticalScrollIndicator={false}
+                  onScroll={(e) => {
+                    const y = e.nativeEvent.contentOffset.y || 0
+                    if (y > 2 && !showShadow) setShowShadow(true)
+                    else if (y <= 2 && showShadow) setShowShadow(false)
+                  }}
+                  scrollEventThrottle={16}
+                />
               ) : activeTab === "myPostings" ? (
-                <View className="space-y-3">
-                  {/* Work Type Filter */}
-                  <View className="flex-row gap-2 mb-1">
-                    {(['all','online','in_person'] as const).map(f => {
-                      const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                      const selected = workTypeFilter === f
-                      return (
-                        <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
-                          <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-                  {isLoading.myBounties ? (
-                    <View className="flex justify-center items-center py-10">
-                      <ActivityIndicator size="large" color="white" />
+                <FlatList
+                  data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
+                  keyExtractor={(item) => item.id.toString()}
+                  ListHeaderComponent={(
+                    <View className="flex-row gap-2 mb-1">
+                      {(['all','online','in_person'] as const).map(f => {
+                        const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                        const selected = workTypeFilter === f
+                        return (
+                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                            <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
                     </View>
-                  ) : myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).length === 0 ? (
-                    <View className="text-center py-10 text-emerald-200">
-                      <Text>You haven't posted any bounties yet</Text>
-                      <TouchableOpacity
-                        onPress={() => setActiveTab("new")}
-                        className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min"
-                      >
-                        <Text className="text-white text-base">Create Your First Bounty</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter).map((bounty) => (
-                      <View
-                        key={bounty.id}
-                        className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md"
-                      >
-                        <View className="p-4">
-                          <View className="flex justify-between items-center mb-2">
-                            <Text className="text-base font-medium text-emerald-100">
-                              Bounty #{bounty.id}
-                              {bounty.status !== "open" && (
-                                <Text className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
-                                  {bounty.status}
-                                </Text>
-                              )}
-                              {bounty.work_type && (
-                                <Text className="ml-2 px-2 py-0.5 bg-emerald-900/70 rounded-full text-xs text-emerald-300">
-                                  {bounty.work_type === 'online' ? 'Online' : 'In Person'}
-                                </Text>
-                              )}
-                            </Text>
-                            <Text className="text-sm text-emerald-300">{formatTimeAgo(bounty.created_at)}</Text>
+                  )}
+                  renderItem={({ item: bounty }) => (
+                    <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md">
+                      <View className="p-4">
+                        <View className="flex justify-between items-center mb-2">
+                          <Text className="text-base font-medium text-emerald-100">
+                            Bounty #{bounty.id}
+                            {bounty.status !== "open" && (
+                              <Text className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
+                                {bounty.status}
+                              </Text>
+                            )}
+                            {bounty.work_type && (
+                              <Text className="ml-2 px-2 py-0.5 bg-emerald-900/70 rounded-full text-xs text-emerald-300">
+                                {bounty.work_type === 'online' ? 'Online' : 'In Person'}
+                              </Text>
+                            )}
+                          </Text>
+                          <Text className="text-sm text-emerald-300">{formatTimeAgo(bounty.created_at)}</Text>
+                        </View>
+                        <Text className="text-white font-medium mt-0.5 text-base">{bounty.title}</Text>
+                        <View className="flex justify-between items-center mt-3">
+                          <View className="bg-emerald-900/50 px-3 py-1.5 rounded text-emerald-400 font-bold text-base">
+                            {bounty.is_for_honor ? "For Honor" : `$${Number(bounty.amount).toLocaleString()}`}
                           </View>
-                          <Text className="text-white font-medium mt-0.5 text-base">{bounty.title}</Text>
-                          <View className="flex justify-between items-center mt-3">
-                            <View className="bg-emerald-900/50 px-3 py-1.5 rounded text-emerald-400 font-bold text-base">
-                              {bounty.is_for_honor ? "For Honor" : `$${Number(bounty.amount).toLocaleString()}`}
-                            </View>
-                            <View className="text-base text-emerald-200">{calculateDistance(bounty.location || "")} mi</View>
-                          </View>
+                          <View className="text-base text-emerald-200">{calculateDistance(bounty.location || "")} mi</View>
                         </View>
                       </View>
-                    ))
+                    </View>
                   )}
-                </View>
+                  ListEmptyComponent={
+                    isLoading.myBounties ? (
+                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
+                    ) : (
+                      <View className="text-center py-10 text-emerald-200">
+                        <Text>You haven't posted any bounties yet</Text>
+                        <TouchableOpacity onPress={() => setActiveTab('new')} className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min">
+                          <Text className="text-white text-base">Create Your First Bounty</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )
+                  }
+                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  showsVerticalScrollIndicator={false}
+                  onScroll={(e) => {
+                    const y = e.nativeEvent.contentOffset.y || 0
+                    if (y > 2 && !showShadow) setShowShadow(true)
+                    else if (y <= 2 && showShadow) setShowShadow(false)
+                  }}
+                  scrollEventThrottle={16}
+                />
               ) : (
                 <View className="flex items-center justify-center h-full">
                   <Text className="text-emerald-200 text-center">Content will appear here</Text>
@@ -823,7 +651,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         </View>
 
         {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
-        {activeTab === "new" && (
+        {activeTab === "new" && !showMultiStepFlow && (
           <View
             className="absolute left-0 right-0 bottom-0 bg-emerald-600/95 border-t border-emerald-500/30"
             style={{
@@ -991,21 +819,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       )}
       {/* Deadline screen removed; using inline text input */}
 
-      {/* Multi-Step Create Bounty Flow */}
-      {showMultiStepFlow && (
-        <View className="absolute inset-0 z-50 bg-emerald-600">
-          <CreateBountyFlow
-            onComplete={(bountyId) => {
-              console.log('Bounty created:', bountyId);
-              setShowMultiStepFlow(false);
-              setActiveTab('myPostings');
-              loadMyBounties();
-              onBountyPosted?.();
-            }}
-            onCancel={() => setShowMultiStepFlow(false)}
-          />
-        </View>
-      )}
+      {/* Multi-Step flow is rendered inline above for the New tab */}
     </View>
     </TouchableWithoutFeedback>
   )

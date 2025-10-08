@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StepReviewProps {
   draft: BountyDraft;
@@ -12,6 +13,8 @@ interface StepReviewProps {
 
 export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReviewProps) {
   const [showEscrowModal, setShowEscrowModal] = useState(false);
+  const insets = useSafeAreaInsets();
+  const BOTTOM_NAV_OFFSET = 60;
 
   const handleSubmit = async () => {
     setShowEscrowModal(false);
@@ -20,144 +23,99 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
   return (
     <View className="flex-1 bg-emerald-600">
-      <ScrollView className="flex-1 px-4 pt-6">
-        {/* Review Header */}
-        <View className="mb-6">
-          <Text className="text-emerald-100 text-xl font-bold mb-2">
-            Review Your Bounty
-          </Text>
-          <Text className="text-emerald-200/70 text-sm">
-            Double-check everything before posting
-          </Text>
-        </View>
-
-        {/* Title & Category */}
-        <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-emerald-200/70 text-xs uppercase tracking-wide">
-              Title & Category
-            </Text>
-          </View>
-          <Text className="text-white text-lg font-semibold mb-1">
-            {draft.title}
-          </Text>
-          {draft.category && (
-            <Text className="text-emerald-300 text-sm capitalize">
-              {draft.category}
-            </Text>
-          )}
-        </View>
-
-        {/* Description */}
-        <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-          <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">
-            Description
-          </Text>
-          <Text className="text-white text-base">
-            {draft.description}
-          </Text>
-        </View>
-
-        {/* Compensation */}
-        <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-          <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">
-            Compensation
-          </Text>
-          <View className="flex-row items-center">
-            <View className="bg-emerald-500 px-4 py-2 rounded-lg">
-              <Text className="text-white text-lg font-bold">
-                {draft.isForHonor ? 'For Honor' : `$${draft.amount}`}
-              </Text>
-            </View>
-            {!draft.isForHonor && (
-              <View className="ml-3 flex-1">
-                <Text className="text-emerald-200 text-sm">
-                  Funds held in escrow until completion
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Location */}
-        <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-          <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">
-            Work Type & Location
-          </Text>
-          <View className="flex-row items-center">
-            <MaterialIcons
-              name={draft.workType === 'online' ? 'language' : 'place'}
-              size={20}
-              color="#fff"
-            />
-            <Text className="text-white text-base ml-2">
-              {draft.workType === 'online' ? 'Online / Remote' : draft.location}
-            </Text>
-          </View>
-        </View>
-
-        {/* Optional Fields */}
-        {(draft.timeline || draft.skills) && (
-          <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-            <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">
-              Additional Details
-            </Text>
-            {draft.timeline && (
-              <View className="mb-2">
-                <Text className="text-emerald-300 text-sm">Timeline:</Text>
-                <Text className="text-white text-base">{draft.timeline}</Text>
-              </View>
-            )}
-            {draft.skills && (
-              <View>
-                <Text className="text-emerald-300 text-sm">Skills:</Text>
-                <Text className="text-white text-base">{draft.skills}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Escrow Info Banner */}
-        {!draft.isForHonor && (
-          <TouchableOpacity
-            onPress={() => setShowEscrowModal(true)}
-            className="mb-6 bg-emerald-500/20 rounded-lg p-4 border border-emerald-400/30"
-            accessibilityLabel="View escrow information"
-            accessibilityRole="button"
-          >
-            <View className="flex-row items-start">
-              <MaterialIcons
-                name="security"
-                size={24}
-                color="rgba(52, 211, 153, 0.9)"
-                style={{ marginRight: 12 }}
-              />
-              <View className="flex-1">
-                <Text className="text-emerald-100 font-semibold mb-1">
-                  Escrow Protection Active
-                </Text>
-                <Text className="text-emerald-200/70 text-sm mb-2">
-                  ${draft.amount} will be held securely until you approve completion
-                </Text>
-                <View className="flex-row items-center">
-                  <Text className="text-emerald-300 text-sm font-medium">
-                    Learn how it works
-                  </Text>
-                  <MaterialIcons
-                    name="arrow-forward"
-                    size={16}
-                    color="rgba(52, 211, 153, 0.9)"
-                    style={{ marginLeft: 4 }}
-                  />
+      {/* Use FlatList to ensure reliable scrolling inside available area */}
+      {/** build sections dynamically so list can scroll properly **/}
+      <FlatList
+        data={useMemo(() => {
+          const sections: string[] = ['header', 'title', 'description', 'compensation', 'location'];
+          if (draft.timeline || draft.skills) sections.push('optional');
+          if (!draft.isForHonor) sections.push('escrow');
+          return sections;
+        }, [draft])}
+        keyExtractor={(item) => item}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        renderItem={({ item }) => {
+          switch (item) {
+            case 'header':
+              return (
+                <View className="mb-6">
+                  <Text className="text-emerald-100 text-xl font-bold mb-2">Review Your Bounty</Text>
+                  <Text className="text-emerald-200/70 text-sm">Double-check everything before posting</Text>
                 </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
-      </ScrollView>
+              );
+            case 'title':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <View className="flex-row items-center justify-between mb-2">
+                    <Text className="text-emerald-200/70 text-xs uppercase tracking-wide">Title & Category</Text>
+                  </View>
+                  <Text className="text-white text-lg font-semibold mb-1">{draft.title}</Text>
+                  {draft.category && <Text className="text-emerald-300 text-sm capitalize">{draft.category}</Text>}
+                </View>
+              );
+            case 'description':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Description</Text>
+                  <Text className="text-white text-base">{draft.description}</Text>
+                </View>
+              );
+            case 'compensation':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Compensation</Text>
+                  <View className="flex-row items-center">
+                    <View className="bg-emerald-500 px-4 py-2 rounded-lg">
+                      <Text className="text-white text-lg font-bold">{draft.isForHonor ? 'For Honor' : `$${draft.amount}`}</Text>
+                    </View>
+                    {!draft.isForHonor && <View className="ml-3 flex-1"><Text className="text-emerald-200 text-sm">Funds held in escrow until completion</Text></View>}
+                  </View>
+                </View>
+              );
+            case 'location':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Work Type & Location</Text>
+                  <View className="flex-row items-center">
+                    <MaterialIcons name={draft.workType === 'online' ? 'language' : 'place'} size={20} color="#fff" />
+                    <Text className="text-white text-base ml-2">{draft.workType === 'online' ? 'Online / Remote' : draft.location}</Text>
+                  </View>
+                </View>
+              );
+            case 'optional':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Additional Details</Text>
+                  {draft.timeline && <View className="mb-2"><Text className="text-emerald-300 text-sm">Timeline:</Text><Text className="text-white text-base">{draft.timeline}</Text></View>}
+                  {draft.skills && <View><Text className="text-emerald-300 text-sm">Skills:</Text><Text className="text-white text-base">{draft.skills}</Text></View>}
+                </View>
+              );
+            case 'escrow':
+              return (
+                <TouchableOpacity onPress={() => setShowEscrowModal(true)} className="mb-6 bg-emerald-500/20 rounded-lg p-4 border border-emerald-400/30" accessibilityLabel="View escrow information" accessibilityRole="button">
+                  <View className="flex-row items-start">
+                    <MaterialIcons name="security" size={24} color="rgba(52, 211, 153, 0.9)" style={{ marginRight: 12 }} />
+                    <View className="flex-1">
+                      <Text className="text-emerald-100 font-semibold mb-1">Escrow Protection Active</Text>
+                      <Text className="text-emerald-200/70 text-sm mb-2">${draft.amount} will be held securely until you approve completion</Text>
+                      <View className="flex-row items-center"><Text className="text-emerald-300 text-sm font-medium">Learn how it works</Text><MaterialIcons name="arrow-forward" size={16} color="rgba(52, 211, 153, 0.9)" style={{ marginLeft: 4 }} /></View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            default:
+              return null;
+          }
+        }}
+      />
 
       {/* Navigation Buttons */}
-      <View className="px-4 pb-6 pt-4 bg-emerald-600 border-t border-emerald-700/50">
+      <View
+        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+      >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}

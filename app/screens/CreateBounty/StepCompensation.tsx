@@ -3,6 +3,7 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useState } from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StepCompensationProps {
   draft: BountyDraft;
@@ -17,6 +18,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [customAmount, setCustomAmount] = useState('');
+  const insets = useSafeAreaInsets();
+  const BOTTOM_NAV_OFFSET = 60;
 
   const validateAmount = (amount: number, isForHonor: boolean): string | null => {
     if (isForHonor) {
@@ -74,7 +77,11 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
 
   return (
     <View className="flex-1 bg-emerald-600">
-      <ScrollView className="flex-1 px-4 pt-6" keyboardShouldPersistTaps="handled">
+      <ScrollView
+        className="flex-1 px-4 pt-2"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+      >
         {/* Honor Toggle */}
         <View className="mb-6 bg-emerald-700/30 rounded-lg p-4">
           <View className="flex-row items-center justify-between mb-2">
@@ -223,7 +230,10 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
       </ScrollView>
 
       {/* Navigation Buttons */}
-      <View className="px-4 pb-6 pt-4 bg-emerald-600 border-t border-emerald-700/50">
+      <View
+        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+      >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}

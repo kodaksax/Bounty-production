@@ -348,7 +348,8 @@ function BountyAppInner() {
           onBack={() => setActiveScreen("bounty")} 
           activeScreen={activeScreen} 
           setActiveScreen={setActiveScreen}
-          onBountyPosted={loadBounties} // Refresh bounties when a new one is posted
+          onBountyPosted={() => loadBounties({ reset: true })} // Refresh bounties when a new one is posted
+          setShowBottomNav={setShowBottomNav}
         />
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
