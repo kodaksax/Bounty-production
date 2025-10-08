@@ -61,7 +61,8 @@ export interface Message {
   createdAt: string;
   replyTo?: string; // ID of message being replied to
   mediaUrl?: string;
-  status?: 'sending' | 'sent' | 'failed';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  isPinned?: boolean;
 }
 
 // Conversation

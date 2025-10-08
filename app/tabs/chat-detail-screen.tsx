@@ -2,12 +2,16 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { StickyMessageInterface } from "components/sticky-message-interface"
-import React from "react"
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
+import React, { useState, useRef, useCallback } from "react"
+import { ActivityIndicator, FlatList, Text, TouchableOpacity, View, StyleSheet, Alert } from "react-native"
 import { useMessages } from "../../hooks/useMessages"
 import type { Conversation, Message } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
+import { MessageBubble } from "../../components/MessageBubble"
+import { MessageActions } from "../../components/MessageActions"
+import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
+import { TypingIndicator } from "../../components/TypingIndicator"
+import { useTypingIndicator, socketStub } from "../../hooks/useSocketStub"
 
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -26,58 +30,111 @@ export function ChatDetailScreen({
   onBack,
   onNavigate,
 }: ChatDetailScreenProps) {
-  const { messages, loading, error, sendMessage, retryMessage } = useMessages(conversation.id)
+  const { 
+    messages, 
+    loading, 
+    error, 
+    pinnedMessage,
+    sendMessage, 
+    retryMessage,
+    pinMessage,
+    unpinMessage,
+    copyMessage,
+    reportMessage,
+  } = useMessages(conversation.id)
   const { balance } = useWallet()
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
+  const [showActions, setShowActions] = useState(false)
+  const listRef = useRef<FlatList<Message>>(null)
+  const typingUsersRef = useTypingIndicator(conversation.id)
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text)
+    // Scroll to bottom after sending
+    setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true })
+    }, 100)
   }
 
   const handleRetry = async (messageId: string) => {
     await retryMessage(messageId)
   }
 
-  const renderMessage = ({ item: message }: { item: Message }) => {
-    const time = formatMessageTime(message.createdAt);
-    const isFailed = message.status === 'failed';
-    const isSending = message.status === 'sending';
+  const handleLongPress = useCallback((messageId: string) => {
+    setSelectedMessageId(messageId)
+    setShowActions(true)
+  }, [])
 
+  const handlePin = async () => {
+    if (!selectedMessageId) return
+    const message = messages.find(m => m.id === selectedMessageId)
+    if (message?.isPinned) {
+      await unpinMessage(selectedMessageId)
+    } else {
+      await pinMessage(selectedMessageId)
+    }
+  }
+
+  const handleCopy = async () => {
+    if (!selectedMessageId) return
+    await copyMessage(selectedMessageId)
+    Alert.alert('Copied', 'Message copied to clipboard')
+  }
+
+  const handleReport = async () => {
+    if (!selectedMessageId) return
+    Alert.alert(
+      'Report Message',
+      'Are you sure you want to report this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            await reportMessage(selectedMessageId)
+            Alert.alert('Reported', 'Message has been reported')
+          },
+        },
+      ]
+    )
+  }
+
+  const handlePinnedMessagePress = () => {
+    if (!pinnedMessage) return
+    const index = messages.findIndex(m => m.id === pinnedMessage.id)
+    if (index !== -1) {
+      listRef.current?.scrollToIndex({ index, animated: true })
+    }
+  }
+
+  const renderMessage = useCallback(({ item: message }: { item: Message }) => {
     return (
-      <View
-        className={`flex-row mb-3 ${
-          message.senderId === 'current-user' ? "justify-end" : "justify-start"
-        }`}
-      >
-        <View
-          className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-            message.senderId === 'current-user'
-              ? "bg-emerald-500"
-              : "bg-emerald-700"
-          } ${isFailed ? 'opacity-50' : ''}`}
-        >
-          <Text className="text-white">{message.text}</Text>
-          <View className="flex-row items-center justify-end mt-1 gap-1">
-            <Text className="text-xs text-emerald-200">{time}</Text>
-            {message.senderId === 'current-user' && (
-              <>
-                {isSending && (
-                  <ActivityIndicator size="small" color="#d1fae5" />
-                )}
-                {isFailed && (
-                  <TouchableOpacity onPress={() => handleRetry(message.id)}>
-                    <MaterialIcons name="error" size={14} color="#ef4444" />
-                  </TouchableOpacity>
-                )}
-                {message.status === 'sent' && (
-                  <MaterialIcons name="check" size={14} color="#d1fae5" />
-                )}
-              </>
-            )}
-          </View>
-        </View>
-      </View>
-    );
-  };
+      <MessageBubble
+        id={message.id}
+        text={message.text}
+        isUser={message.senderId === 'current-user'}
+        status={message.status}
+        isPinned={message.isPinned}
+        onLongPress={handleLongPress}
+      />
+    )
+  }, [handleLongPress])
+
+  const renderFooter = () => {
+    const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0
+    if (!isTyping) return null
+
+    return <TypingIndicator userName={conversation.name} />
+  }
+
+  const getItemLayout = (_: any, index: number) => ({
+    length: 80, // Approximate message height
+    offset: 80 * index,
+    index,
+  })
+
+  const selectedMessage = messages.find(m => m.id === selectedMessageId)
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -112,6 +169,15 @@ export function ChatDetailScreen({
         </View>
       </View>
 
+      {/* Pinned Message Header */}
+      {pinnedMessage && (
+        <PinnedMessageHeader
+          text={pinnedMessage.text}
+          onPress={handlePinnedMessagePress}
+          onDismiss={() => unpinMessage(pinnedMessage.id)}
+        />
+      )}
+
       {/* Error banner */}
       {error && (
         <View className="mx-4 mt-2 p-3 bg-red-500/20 border border-red-500 rounded">
@@ -119,27 +185,107 @@ export function ChatDetailScreen({
         </View>
       )}
 
-      {/* Messages */}
+      {/* Messages and Input */}
       <View className="flex-1">
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#ffffff" />
           </View>
         ) : (
-          <StickyMessageInterface
-            messages={messages.map(m => ({ 
-              id: m.id, 
-              text: m.text, 
-              isUser: m.senderId === 'current-user', 
-              createdAt: new Date(m.createdAt).getTime() 
-            }))}
-            onSend={handleSendMessage}
-            topInset={120}
-            bottomInset={0}
-            placeholder="Message"
-          />
+          <View style={{ flex: 1 }}>
+            <FlatList
+              ref={listRef}
+              data={messages}
+              renderItem={renderMessage}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.messageList}
+              inverted={false}
+              ListFooterComponent={renderFooter}
+              maxToRenderPerBatch={20}
+              initialNumToRender={15}
+              windowSize={10}
+              removeClippedSubviews={true}
+              getItemLayout={getItemLayout}
+              onScrollToIndexFailed={(info) => {
+                const wait = new Promise(resolve => setTimeout(resolve, 500))
+                wait.then(() => {
+                  listRef.current?.scrollToIndex({ index: info.index, animated: true })
+                })
+              }}
+            />
+            {/* Message Input */}
+            <View style={styles.inputContainer}>
+              <TouchableOpacity 
+                style={styles.inputButton}
+                onPress={() => {
+                  Alert.prompt(
+                    'Send Message',
+                    'Type your message:',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Send', 
+                        onPress: (text) => {
+                          if (text?.trim()) {
+                            handleSendMessage(text.trim())
+                          }
+                        }
+                      },
+                    ],
+                    'plain-text'
+                  )
+                }}
+              >
+                <Text style={styles.inputPlaceholder}>Type a message...</Text>
+                <MaterialIcons name="send" size={20} color="#d1fae5" />
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
       </View>
+
+      {/* Message Actions Modal */}
+      <MessageActions
+        visible={showActions}
+        onClose={() => setShowActions(false)}
+        onPin={handlePin}
+        onCopy={handleCopy}
+        onReport={handleReport}
+        isPinned={selectedMessage?.isPinned}
+      />
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  messageList: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 80, // Space for input
+  },
+  inputContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+    backgroundColor: '#047857', // emerald-700
+    borderTopWidth: 1,
+    borderTopColor: '#059669',
+  },
+  inputButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(6, 95, 70, 0.6)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  inputPlaceholder: {
+    color: '#d1fae5',
+    fontSize: 15,
+  },
+})
