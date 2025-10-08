@@ -41,10 +41,11 @@ This document provides a checklist for auditing and maintaining mobile performan
 - [x] Extracted inline render functions to useCallback
 
 ### 🔄 To Review
-- [ ] Convert postings-screen tab content lists to FlatList (currently uses .map())
-- [ ] Verify all FlatList implementations have proper keyExtractor
-- [ ] Check that renderItem, keyExtractor are not inline functions
-- [ ] Ensure ItemSeparatorComponent is extracted (not inline)
+- [ ] Convert postings-screen tab content lists to FlatList (currently uses .map() - **requires larger refactor**)
+  - **Note**: postings-screen has complex nested tabs with forms. Converting to FlatList would require restructuring the component hierarchy. Recommend as separate follow-up PR to avoid breaking existing functionality.
+- [x] Verify all FlatList implementations have proper keyExtractor
+- [x] Check that renderItem, keyExtractor are not inline functions
+- [x] Ensure ItemSeparatorComponent is extracted (not inline)
 
 ### 📝 FlatList Performance Props
 
