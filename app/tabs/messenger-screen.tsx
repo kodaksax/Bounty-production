@@ -3,8 +3,8 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
-import React, { useState } from "react"
-import { ScrollView, Text, TouchableOpacity, View } from "react-native"
+import React, { useState, useCallback } from "react"
+import { FlatList, Text, TouchableOpacity, View } from "react-native"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
 
@@ -77,6 +77,14 @@ export function MessengerScreen({
     onConversationModeChange?.(false)
   }
 
+  // Optimized render function for FlatList
+  const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
+    <ConversationItem 
+      conversation={item} 
+      onPress={() => handleConversationClick(item.id)} 
+    />
+  ), [])
+
 // Removed unused StyleSheet (styles)
 
   if (activeConversation) {
@@ -108,11 +116,17 @@ export function MessengerScreen({
         </View>
       </View>
     
-      <ScrollView className="flex-1 px-2 pb-24">
-         {conversations.map((conversation) => (
-           <ConversationItem key={conversation.id} conversation={conversation} onPress={() => handleConversationClick(conversation.id)} />
-         ))}
-       </ScrollView>
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item.id}
+        renderItem={renderConversationItem}
+        contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 96 }}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        initialNumToRender={10}
+      />
 
       {/* Bottom navigation is provided by the app container (BountyApp) */}
     </View>
