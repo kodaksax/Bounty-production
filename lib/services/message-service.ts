@@ -203,4 +203,72 @@ export const messageService = {
     conversations.push(conversation);
     return conversation;
   },
+
+  /**
+   * Pin a message (only one pinned message per conversation)
+   */
+  pinMessage: async (messageId: string): Promise<{ success: boolean; error?: string }> => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) {
+      return { success: false, error: 'Message not found' };
+    }
+
+    // Unpin all other messages in the same conversation
+    messages.forEach(m => {
+      if (m.conversationId === message.conversationId) {
+        m.isPinned = false;
+      }
+    });
+
+    // Pin this message
+    message.isPinned = true;
+
+    return { success: true };
+  },
+
+  /**
+   * Unpin a message
+   */
+  unpinMessage: async (messageId: string): Promise<{ success: boolean; error?: string }> => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) {
+      return { success: false, error: 'Message not found' };
+    }
+
+    message.isPinned = false;
+    return { success: true };
+  },
+
+  /**
+   * Get pinned message for a conversation
+   */
+  getPinnedMessage: async (conversationId: string): Promise<Message | null> => {
+    initializeData();
+    return messages.find(m => m.conversationId === conversationId && m.isPinned) || null;
+  },
+
+  /**
+   * Report a message
+   */
+  reportMessage: async (messageId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) {
+      return { success: false, error: 'Message not found' };
+    }
+
+    // In a real app, this would send to a moderation queue
+    console.log(`Message ${messageId} reported${reason ? `: ${reason}` : ''}`);
+    
+    return { success: true };
+  },
+
+  /**
+   * Update message status
+   */
+  updateMessageStatus: async (messageId: string, status: 'delivered' | 'read'): Promise<void> => {
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      message.status = status;
+    }
+  },
 };
