@@ -76,8 +76,8 @@ const badgeStyles = StyleSheet.create({
     elevation: 1,
   },
   default: {
-    backgroundColor: '#10b981',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: '#00912C', // emerald-600 (primary brand color)
+    borderColor: 'rgba(0, 145, 44, 0.4)',
   },
   secondary: {
     backgroundColor: 'rgba(16, 20, 24, 0.8)',
