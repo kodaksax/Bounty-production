@@ -4,13 +4,13 @@ import { MaterialIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { 
   ActivityIndicator, 
-  Image, 
   Modal, 
   ScrollView, 
   Text, 
   TouchableOpacity, 
   View 
 } from "react-native";
+import { OptimizedImage } from "lib/components/OptimizedImage";
 import { useFollow } from "hooks/useFollow";
 import { usePortfolio } from "hooks/usePortfolio";
 import { useProfile } from "hooks/useProfile";
@@ -203,10 +203,15 @@ export function EnhancedProfileSection({
                   onPress={() => setSelectedPortfolioItem(item)}
                 >
                   <View className="w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden">
-                    <Image 
+                    <OptimizedImage 
                       source={{ uri: item.thumbnail || item.url }} 
-                      className="w-full h-full"
+                      width={128}
+                      height={128}
+                      style={{ width: '100%', height: '100%' }}
                       resizeMode="cover"
+                      useThumbnail={true}
+                      priority="low"
+                      alt={item.title || 'Portfolio item'}
                     />
                     {item.type === 'video' && (
                       <View className="absolute inset-0 items-center justify-center">
@@ -253,10 +258,13 @@ export function EnhancedProfileSection({
             
             {selectedPortfolioItem && (
               <>
-                <Image
+                <OptimizedImage
                   source={{ uri: selectedPortfolioItem.url }}
-                  className="w-full h-64 rounded-lg mb-3"
+                  style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
                   resizeMode="contain"
+                  useThumbnail={false}
+                  priority="high"
+                  alt={selectedPortfolioItem.title || 'Portfolio item detail'}
                 />
                 {selectedPortfolioItem.title && (
                   <Text className="text-base font-medium text-white mb-2">
