@@ -37,8 +37,8 @@ const inputStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#ffffff',
-    backgroundColor: 'rgba(12, 58, 36, 0.8)', // dark emerald surface
+    color: '#fffef5', // company specified header text color
+    backgroundColor: 'rgba(0, 87, 26, 0.3)', // emerald-700 with opacity for glass effect
     fontWeight: '400',
     // Enhanced glass-morphism styling
     shadowColor: '#000000',
@@ -49,13 +49,13 @@ const inputStyles = StyleSheet.create({
   } as any,
   default: {
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)', // emerald border
+    borderColor: 'rgba(0, 145, 44, 0.4)', // emerald-600 border
   },
   outline: {
     borderWidth: 1.5,
-    borderColor: '#10b981', // spy-glow
+    borderColor: '#00912C', // emerald-600 (primary brand)
     // Enhanced glow effect for focused state
-    shadowColor: '#10b981',
+    shadowColor: '#00912C', // emerald-600 glow
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
