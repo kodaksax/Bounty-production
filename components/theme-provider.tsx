@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { createContext, useContext, useEffect, useState } from 'react'
+import { theme as designTheme } from '../lib/theme'
 
 type Theme = 'dark' | 'light' | 'system'
 
@@ -13,11 +14,23 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
+  colors: typeof designTheme.colors
+  spacing: typeof designTheme.spacing
+  borderRadius: typeof designTheme.borderRadius
+  typography: typeof designTheme.typography
+  shadows: typeof designTheme.shadows
+  animations: typeof designTheme.animations
 }
 
 const initialState: ThemeProviderState = {
   theme: 'dark',
   setTheme: () => null,
+  colors: designTheme.colors,
+  spacing: designTheme.spacing,
+  borderRadius: designTheme.borderRadius,
+  typography: designTheme.typography,
+  shadows: designTheme.shadows,
+  animations: designTheme.animations,
 }
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
@@ -39,6 +52,12 @@ export function ThemeProvider({
   const value = {
     theme,
     setTheme,
+    colors: designTheme.colors,
+    spacing: designTheme.spacing,
+    borderRadius: designTheme.borderRadius,
+    typography: designTheme.typography,
+    shadows: designTheme.shadows,
+    animations: designTheme.animations,
   }
 
   return (
