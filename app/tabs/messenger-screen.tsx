@@ -5,8 +5,8 @@ import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID } from "lib/utils/data-utils"
-import React, { useState } from "react"
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native"
+import React, { useState, useCallback } from "react"
+import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
 import { useConversations } from "../../hooks/useConversations"
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
@@ -58,6 +58,28 @@ export function MessengerScreen({
     refresh() // Refresh conversation list when returning
   }
 
+  // Optimized keyExtractor for FlatList
+  const keyExtractor = useCallback((item: Conversation) => item.id, []);
+
+  // Optimized render function for FlatList
+  const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
+    <ConversationItem 
+      conversation={item} 
+      onPress={() => handleConversationClick(item.id)} 
+    />
+  ), []);
+
+  // Empty list component
+  const ListEmptyComponent = useCallback(() => (
+    <View className="flex-1 items-center justify-center px-4 py-20">
+      <MaterialIcons name="chat-bubble-outline" size={64} color="rgba(255,255,255,0.3)" />
+      <Text className="text-lg mt-4 text-center text-emerald-200">No conversations yet</Text>
+      <Text className="text-sm mt-2 text-center text-emerald-300">
+        Start a conversation from a bounty posting
+      </Text>
+    </View>
+  ), []);
+
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
     if (conversation) {
@@ -99,24 +121,20 @@ export function MessengerScreen({
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#ffffff" />
         </View>
-      ) : conversations.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-4">
-          <MaterialIcons name="chat-bubble-outline" size={64} color="rgba(255,255,255,0.3)" />
-          <Text className="text-lg mt-4 text-center text-emerald-200">No conversations yet</Text>
-          <Text className="text-sm mt-2 text-center text-emerald-300">
-            Start a conversation from a bounty posting
-          </Text>
-        </View>
       ) : (
-        <ScrollView className="flex-1 px-2 pb-24">
-          {conversations.map((conversation) => (
-            <ConversationItem 
-              key={conversation.id} 
-              conversation={conversation} 
-              onPress={() => handleConversationClick(conversation.id)} 
-            />
-          ))}
-        </ScrollView>
+        <FlatList
+          data={conversations}
+          keyExtractor={keyExtractor}
+          renderItem={renderConversationItem}
+          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 96 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={ListEmptyComponent}
+          // Performance optimizations
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={10}
+        />
       )}
 
       {/* Bottom navigation is provided by the app container (BountyApp) */}
@@ -132,7 +150,7 @@ interface ConversationItemProps {
   onPress: () => void
 }
 
-function ConversationItem({ conversation, onPress }: ConversationItemProps) {
+const ConversationItem = React.memo<ConversationItemProps>(function ConversationItem({ conversation, onPress }) {
   const router = useRouter()
   const time = formatConversationTime(conversation.updatedAt);
   
@@ -181,7 +199,7 @@ function ConversationItem({ conversation, onPress }: ConversationItemProps) {
       </View>
     </TouchableOpacity>
   )
-}
+});
 
 function GroupAvatar() {
   return (

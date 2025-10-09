@@ -209,6 +209,54 @@ function BountyAppInner() {
 
   // Removed early return of SearchScreen; will render as overlay so nav & state persist.
 
+  // FlatList optimization: memoized functions
+  const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
+
+  const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
+    const distance = calculateDistance(item.location || '')
+    return (
+      <BountyListItem
+        id={item.id}
+        title={item.title}
+        username="@Jon_Doe"
+        price={Number(item.amount)}
+        distance={distance}
+        description={item.description}
+        isForHonor={Boolean(item.is_for_honor)}
+      />
+    )
+  }, []);
+
+  const handleEndReached = useCallback(() => {
+    if (!isLoadingBounties && !loadingMore && hasMore) {
+      loadBounties()
+    }
+  }, [isLoadingBounties, loadingMore, hasMore, loadBounties]);
+
+  const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, []);
+
+  const EmptyListComponent = useCallback(() => (
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
+      {isLoadingBounties ? (
+        <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
+      ) : (
+        <>
+          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  ), [isLoadingBounties]);
+
+  const ListFooterComponent = useCallback(() => (
+    loadingMore ? (
+      <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+        <Text style={{ color: '#e5e7eb' }}>Loading more...</Text>
+      </View>
+    ) : null
+  ), [loadingMore]);
 
   // Render dashboard content when activeScreen is "bounty"
   const renderDashboardContent = () => (
@@ -275,7 +323,7 @@ function BountyAppInner() {
       {/* Bounty List with scroll listener (content extends under BottomNav) */}
       <Animated.FlatList
         data={filteredBounties}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={keyExtractor}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: HEADER_EXPANDED + headerTopPad + 8,
@@ -284,48 +332,21 @@ function BountyAppInner() {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
         onEndReachedThreshold={0.5}
-        onEndReached={() => {
-          if (!isLoadingBounties && !loadingMore && hasMore) {
-            loadBounties()
-          }
-        }}
-        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
+        onEndReached={handleEndReached}
+        ItemSeparatorComponent={ItemSeparator}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListEmptyComponent={() => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-            {isLoadingBounties ? (
-              <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
-            ) : (
-              <>
-                <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-                <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-                  <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+        ListEmptyComponent={EmptyListComponent}
+        ListFooterComponent={ListFooterComponent}
+        renderItem={renderBountyItem}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={8}
+        windowSize={10}
+        getItemLayout={(data, index) => (
+          {length: 88, offset: 90 * index, index} // Approximate item height + margin
         )}
-        ListFooterComponent={() => (
-          loadingMore ? (
-            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-              <Text style={{ color: '#e5e7eb' }}>Loading more...</Text>
-            </View>
-          ) : null
-        )}
-        renderItem={({ item }) => {
-          const distance = calculateDistance(item.location || '')
-          return (
-            <BountyListItem
-              id={item.id}
-              title={item.title}
-              username="@Jon_Doe"
-              price={Number(item.amount)}
-              distance={distance}
-              description={item.description}
-              isForHonor={Boolean(item.is_for_honor)}
-            />
-          )
-        }}
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
