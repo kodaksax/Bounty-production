@@ -36,7 +36,7 @@ const Switch = React.forwardRef<any, SwitchProps>(
 
     const backgroundColor = animatedValue.interpolate({
       inputRange: [0, 1],
-      outputRange: ['rgba(55, 65, 81, 0.6)', '#10b981'], // spy-border to spy-glow
+      outputRange: ['rgba(55, 65, 81, 0.6)', '#00912C'], // gray to emerald-600
     });
 
     const thumbShadow = animatedValue.interpolate({
@@ -92,7 +92,7 @@ const Switch = React.forwardRef<any, SwitchProps>(
             transform: [{ translateX }],
             // Add dynamic glow based on state
             borderWidth: checked ? 2 : 1,
-            borderColor: checked ? 'rgba(16, 185, 129, 0.3)' : 'rgba(0, 0, 0, 0.1)',
+            borderColor: checked ? 'rgba(0, 145, 44, 0.3)' : 'rgba(0, 0, 0, 0.1)', // emerald-600 glow when checked
           }}
         />
       </TouchableOpacity>

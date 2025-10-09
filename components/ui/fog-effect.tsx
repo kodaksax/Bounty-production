@@ -15,7 +15,7 @@ interface FogEffectProps {
 export function FogEffect({ 
   intensity = 3, 
   speed = 1, 
-  color = '#10b981', 
+  color = '#00912C', // emerald-600 (primary brand color)
   opacity = 0.15 
 }: FogEffectProps) {
   // Create multiple animated values for different fog layers

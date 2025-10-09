@@ -20,6 +20,27 @@ export function EmptyState({
   onAction,
   style 
 }: EmptyStateProps) {
+  const iconScale = React.useRef(new (require('react-native').Animated.Value)(0)).current;
+  const contentOpacity = React.useRef(new (require('react-native').Animated.Value)(0)).current;
+  const Animated = require('react-native').Animated;
+
+  React.useEffect(() => {
+    Animated.sequence([
+      Animated.timing(iconScale, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [iconScale, contentOpacity]);
+
+  const AnimatedView = Animated.createAnimatedComponent(View);
+
   return (
     <View 
       style={[styles.container, style]}
@@ -27,33 +48,42 @@ export function EmptyState({
       accessibilityRole="text"
       accessibilityLabel={`${title}. ${description}`}
     >
-      <View style={styles.iconContainer}>
+      <AnimatedView 
+        style={[
+          styles.iconContainer,
+          {
+            transform: [{ scale: iconScale }],
+          },
+        ]}
+      >
         <MaterialIcons 
           name={icon} 
           size={48} 
-          color="rgba(16, 185, 129, 0.4)" 
+          color="#007423" 
           accessibilityElementsHidden={true}
         />
-      </View>
+      </AnimatedView>
       
-      <Text style={styles.title} accessibilityRole="header">
-        {title}
-      </Text>
-      
-      <Text style={styles.description}>
-        {description}
-      </Text>
-      
-      {actionLabel && onAction && (
-        <Button
-          onPress={onAction}
-          style={styles.actionButton}
-          accessibilityLabel={actionLabel}
-          accessibilityHint="Primary action for this empty state"
-        >
-          {actionLabel}
-        </Button>
-      )}
+      <AnimatedView style={{ opacity: contentOpacity }}>
+        <Text style={styles.title} accessibilityRole="header">
+          {title}
+        </Text>
+        
+        <Text style={styles.description}>
+          {description}
+        </Text>
+        
+        {actionLabel && onAction && (
+          <Button
+            onPress={onAction}
+            style={styles.actionButton}
+            accessibilityLabel={actionLabel}
+            accessibilityHint="Primary action for this empty state"
+          >
+            {actionLabel}
+          </Button>
+        )}
+      </AnimatedView>
     </View>
   );
 }
@@ -68,8 +98,8 @@ export function BountyEmptyState({ filter, onClearFilter }: BountyEmptyStateProp
     return (
       <EmptyState
         icon="filter-list-off"
-        title="No bounties match this filter"
-        description={`Try browsing other categories or clearing your ${filter} filter to see more opportunities.`}
+        title="No matching bounties"
+        description={`We couldn't find any bounties for "${filter}". Try exploring other categories or clear your filter to discover more opportunities.`}
         actionLabel="Clear Filter"
         onAction={onClearFilter}
       />
@@ -79,8 +109,8 @@ export function BountyEmptyState({ filter, onClearFilter }: BountyEmptyStateProp
   return (
     <EmptyState
       icon="work-outline"
-      title="No bounties available"
-      description="Be the first to post a bounty! Create opportunities for others to earn while helping you complete tasks."
+      title="No bounties yet"
+      description="Be the first to create a bounty! Post tasks, set rewards, and connect with talented people ready to help you succeed."
       actionLabel="Create First Bounty"
       onAction={() => {
         // This would navigate to create bounty screen
@@ -101,34 +131,37 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(16, 97, 62, 0.3)',
+    backgroundColor: 'rgba(0, 116, 35, 0.2)', // emerald-700 with opacity
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-    // Add subtle glow
-    shadowColor: '#10b981',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 145, 44, 0.3)', // emerald-600 border
+    // Enhanced emerald glow
+    shadowColor: '#00912C', // emerald-600
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 6,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     textAlign: 'center',
     marginBottom: 12,
-    // Add subtle text shadow
-    textShadowColor: 'rgba(16, 185, 129, 0.3)',
+    // Emerald text shadow
+    textShadowColor: 'rgba(0, 145, 44, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
   description: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 254, 245, 0.8)',
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
+    maxWidth: 320,
   },
   actionButton: {
     minWidth: 160,
