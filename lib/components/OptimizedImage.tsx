@@ -52,7 +52,7 @@ function getThumbnailUrl(source: string | ImageSource | { uri: string }, width?:
   let uri: string;
   if (typeof source === 'string') {
     uri = source;
-  } else if (typeof source === 'object' && 'uri' in source) {
+  } else if (typeof source === 'object' && 'uri' in source && source.uri) {
     uri = source.uri;
   } else {
     // For ImageSource objects without uri, return empty string
