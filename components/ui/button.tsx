@@ -46,6 +46,7 @@ export interface ButtonProps
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
   ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
     const { triggerHaptic } = useHapticFeedback();
+    const scaleAnim = React.useRef(new (require('react-native').Animated.Value)(1)).current;
     
     const handlePress = React.useCallback((event: any) => {
       if (disabled) return;
@@ -60,8 +61,30 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       onPress?.(event);
     }, [disabled, onPress, triggerHaptic, variant]);
 
+    const handlePressIn = React.useCallback(() => {
+      if (disabled) return;
+      require('react-native').Animated.spring(scaleAnim, {
+        toValue: 0.95,
+        useNativeDriver: true,
+        tension: 300,
+        friction: 10,
+      }).start();
+    }, [disabled, scaleAnim]);
+
+    const handlePressOut = React.useCallback(() => {
+      if (disabled) return;
+      require('react-native').Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 300,
+        friction: 10,
+      }).start();
+    }, [disabled, scaleAnim]);
+
+    const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
+
     return (
-      <TouchableOpacity
+      <AnimatedTouchable
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         style={[
@@ -69,9 +92,14 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           buttonStyles[variant ?? "default"],
           buttonStyles[size ?? "default"],
           disabled && buttonStyles.disabled,
+          {
+            transform: [{ scale: scaleAnim }],
+          },
         ]}
         disabled={disabled}
         onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         accessible={true}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
@@ -92,7 +120,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         ) : (
           children
         )}
-      </TouchableOpacity>
+      </AnimatedTouchable>
     );
   }
 );
