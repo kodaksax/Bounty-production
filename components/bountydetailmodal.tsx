@@ -1,16 +1,16 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
-import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
-  Dimensions,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Dimensions,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native"
 
 interface BountyDetailModalProps {

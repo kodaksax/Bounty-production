@@ -10,7 +10,7 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, on
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#000" />
-          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <TouchableOpacity onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#000" />

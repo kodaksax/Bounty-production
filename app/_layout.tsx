@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import "../global.css";
 import { AdminProvider } from '../lib/admin-context';
@@ -40,6 +40,36 @@ const styles = StyleSheet.create({
     // Add any additional styling needed for "iphone-container"
   },
 });
+
+class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: any) {
+    // eslint-disable-next-line no-console
+    console.error('[RootErrorBoundary] Caught error', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View style={{ maxWidth: 320, width: '100%' }}>
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ color: 'white', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>Something went wrong</Text>
+              <Text style={{ color: 'white', fontSize: 14, opacity: 0.85 }} numberOfLines={4}>{this.state.error.message}</Text>
+            </View>
+            <Text style={{ color: 'white', fontSize: 12, opacity: 0.6 }}>Restart the app or check recent changes. See console for stack trace.</Text>
+          </View>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [appIsReady, setAppIsReady] = useState(false);
@@ -120,11 +150,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SplashScreenController />
           <AdminProvider>
             <StripeProvider>
-              <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                <View style={styles.inner}>
-                  <Slot />
-                </View>
-              </ThemeProvider>
+              <RootErrorBoundary>
+                <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                  <View style={styles.inner}>
+                    <Slot />
+                  </View>
+                </ThemeProvider>
+              </RootErrorBoundary>
             </StripeProvider>
           </AdminProvider>
           </AuthProvider>

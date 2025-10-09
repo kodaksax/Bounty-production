@@ -70,6 +70,52 @@ export const bountyService = {
   },
 
   /**
+   * Search open bounties by text (title / description). Returns an empty list on failure instead of throwing.
+   * Server-side filtered to reduce bandwidth; falls back progressively.
+   */
+  async search(query: string, options?: { limit?: number; offset?: number }): Promise<Bounty[]> {
+    const q = query.trim()
+    if (!q) return []
+    try {
+      if (isSupabaseConfigured) {
+        // Prefer full text search if a tsvector column exists; otherwise fallback to ilike OR combination.
+        // We'll attempt using ilike on both title & description for broad match.
+        const limit = options?.limit ?? 20
+        const offset = options?.offset ?? 0
+        let sbQuery = supabase
+          .from('bounties')
+          .select('*')
+          .eq('status', 'open')
+          .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1)
+
+        const { data, error } = await sbQuery
+        if (error) throw error
+        return (data as unknown as Bounty[]) ?? []
+      }
+
+      // API fallback: if backend supports /api/bounties?search=...
+      try {
+        const params = new URLSearchParams()
+        params.append('status', 'open')
+        params.append('search', q)
+        if (options?.limit != null) params.append('limit', String(options.limit))
+        if (options?.offset != null) params.append('offset', String(options.offset))
+        const response = await fetch(`${getApiBaseUrl()}/api/bounties?${params.toString()}`)
+        if (!response.ok) throw new Error(`Search API failed: ${response.status}`)
+        const json = await response.json()
+        return Array.isArray(json) ? (json as Bounty[]) : []
+      } catch (apiErr) {
+        logOnce('bounties:searchApi', 'warn', 'Search API fallback failed', { message: (apiErr as any)?.message })
+      }
+    } catch (err) {
+      logOnce('bounties:search', 'warn', 'Search failed (returning empty)', { query, error: (err as any)?.message })
+    }
+    return []
+  },
+
+  /**
    * Get all bounties
    */
   async getAll(options?: {

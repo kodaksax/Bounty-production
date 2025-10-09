@@ -14,7 +14,7 @@ export function RecentSales() {
           <Text className="text-sm font-medium leading-none">Olivia Martin</Text>
           <Text className="text-sm text-muted-foreground">olivia.martin@email.com</Text>
         </View>
-        <View className="ml-auto font-medium">+$1,999.00</View>
+  <Text className="ml-auto font-medium">+$1,999.00</Text>
       </View>
       <View className="flex items-center">
         <Avatar className="flex h-9 w-9 items-center justify-center space-y-0 border">
@@ -25,7 +25,7 @@ export function RecentSales() {
           <Text className="text-sm font-medium leading-none">Jackson Lee</Text>
           <Text className="text-sm text-muted-foreground">jackson.lee@email.com</Text>
         </View>
-        <View className="ml-auto font-medium">+$39.00</View>
+  <Text className="ml-auto font-medium">+$39.00</Text>
       </View>
       <View className="flex items-center">
         <Avatar className="h-9 w-9">
@@ -36,7 +36,7 @@ export function RecentSales() {
           <Text className="text-sm font-medium leading-none">Isabella Nguyen</Text>
           <Text className="text-sm text-muted-foreground">isabella.nguyen@email.com</Text>
         </View>
-        <View className="ml-auto font-medium">+$299.00</View>
+  <Text className="ml-auto font-medium">+$299.00</Text>
       </View>
       <View className="flex items-center">
         <Avatar className="h-9 w-9">
@@ -47,7 +47,7 @@ export function RecentSales() {
           <Text className="text-sm font-medium leading-none">William Kim</Text>
           <Text className="text-sm text-muted-foreground">will@email.com</Text>
         </View>
-        <View className="ml-auto font-medium">+$99.00</View>
+  <Text className="ml-auto font-medium">+$99.00</Text>
       </View>
       <View className="flex items-center">
         <Avatar className="h-9 w-9">
@@ -58,7 +58,7 @@ export function RecentSales() {
           <Text className="text-sm font-medium leading-none">Sofia Davis</Text>
           <Text className="text-sm text-muted-foreground">sofia.davis@email.com</Text>
         </View>
-        <View className="ml-auto font-medium">+$39.00</View>
+  <Text className="ml-auto font-medium">+$39.00</Text>
       </View>
     </View>
   )

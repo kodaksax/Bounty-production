@@ -1,3 +1,7 @@
+// LEGACY SEARCH SCREEN (kept temporarily for reference). Not used by current app route.
+// The active implementation now resides directly in app/tabs/search.tsx for simplicity
+// and to eliminate prior context issues. You can safely delete this file after confirming
+// the new search screen works end-to-end.
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
@@ -5,8 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { useEffect, useRef, useState } from "react"
-import { Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface SearchScreenProps {
   onBack: () => void
@@ -26,30 +30,36 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   const [searchResults, setSearchResults] = useState<BountyItem[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(["@Jon_Doe", "lawn", "package"])
   const [isInputFocused, setIsInputFocused] = useState(false)
-  const [allBounties, setAllBounties] = useState<Bounty[]>([])
+  const [allBounties, setAllBounties] = useState<Bounty[]>([]) // retained for future caching (not strictly required now)
   const [isLoading, setIsLoading] = useState(false)
   const [initialLoadTried, setInitialLoadTried] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<TextInput | null>(null)
 
-  // Fetch all bounties when the component mounts
+  // Initial preload of open bounties (for instant client-side results while user types)
   useEffect(() => {
+    let cancelled = false
     const fetchBounties = async () => {
       setIsLoading(true)
       setLoadError(null)
       try {
-        const bounties = await bountyService.getAll({ status: "open" })
-        setAllBounties(bounties)
+        const bounties = await bountyService.getAll({ status: 'open', limit: 50 })
+        if (!cancelled) setAllBounties(bounties)
       } catch (error) {
-        console.error("Error fetching bounties for search:", error)
-        setLoadError('network')
+        console.error('Error preloading bounties for search:', error)
+        if (!cancelled) setLoadError('network')
       } finally {
-        setIsLoading(false)
-        setInitialLoadTried(true)
+        if (!cancelled) {
+          setIsLoading(false)
+          setInitialLoadTried(true)
+        }
       }
     }
-
     fetchBounties()
+    return () => { cancelled = true }
   }, [])
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
@@ -89,22 +99,43 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
     }
   }
 
-  // Search function
-  useEffect(() => {
-    if (searchQuery.trim() === "") {
+  // Debounced remote search (server-side filtering) with client-side fallback while typing
+  const runSearch = useCallback(async (text: string) => {
+    const q = text.trim()
+    if (!q) {
       setSearchResults([])
+      setSearchError(null)
       return
     }
+    setIsSearching(true)
+    setSearchError(null)
+    try {
+      const remote = await bountyService.search(q, { limit: 40 })
+      if (remote.length > 0) {
+        setSearchResults(remote.map(convertToBountyItem))
+      } else {
+        // fallback to preloaded client list if remote empty
+        const queryLower = q.toLowerCase()
+        const local = allBounties.filter(b => (
+          b.title.toLowerCase().includes(queryLower) || b.description?.toLowerCase().includes(queryLower)
+        ))
+        setSearchResults(local.map(convertToBountyItem))
+      }
+    } catch (e: any) {
+      console.error('Search failed:', e)
+      setSearchError(e?.message || 'Search failed')
+    } finally {
+      setIsSearching(false)
+    }
+  }, [allBounties])
 
-    const query = searchQuery.toLowerCase()
-    const results = allBounties
-      .filter(
-        (bounty) => bounty.title.toLowerCase().includes(query) || bounty.description?.toLowerCase().includes(query),
-      )
-      .map(convertToBountyItem)
-
-    setSearchResults(results)
-  }, [searchQuery, allBounties])
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => runSearch(searchQuery), 250)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchQuery, runSearch])
 
   // Focus input on mount
   useEffect(() => {
@@ -146,22 +177,13 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   const refreshBounties = async () => {
     setIsLoading(true)
     try {
-      const bounties = await bountyService.getAll({ status: "open" })
+      const bounties = await bountyService.getAll({ status: 'open', limit: 50 })
       setAllBounties(bounties)
-
-      // Re-apply search if there's an active query
-      if (searchQuery.trim() !== "") {
-        const query = searchQuery.toLowerCase()
-        const results = bounties
-          .filter(
-            (bounty) => bounty.title.toLowerCase().includes(query) || bounty.description?.toLowerCase().includes(query),
-          )
-          .map(convertToBountyItem)
-
-        setSearchResults(results)
+      if (searchQuery.trim()) {
+        runSearch(searchQuery)
       }
     } catch (error) {
-      console.error("Error refreshing bounties for search:", error)
+      console.error('Error refreshing bounties for search:', error)
     } finally {
       setIsLoading(false)
     }
@@ -209,7 +231,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       </View>
 
       {/* Search Results or Recent Searches */}
-      <View className="flex-1 px-4 overflow-y-auto">
+      <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
         {searchQuery.trim() === "" ? (
           <>
             {initialLoadTried && allBounties.length === 0 && !isLoading && (
@@ -223,6 +245,11 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                 <TouchableOpacity onPress={refreshBounties} className="bg-emerald-600 rounded-full px-3 py-1 self-start">
                   <Text className="text-white text-xs">Retry</Text>
                 </TouchableOpacity>
+              </View>
+            )}
+            {isLoading && (
+              <View className="flex items-center justify-center mb-4">
+                <ActivityIndicator color="#6ee7b7" />
               </View>
             )}
             {recentSearches.length > 0 && (
@@ -278,8 +305,21 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
               </View>
             </View>
           </>
+        ) : isSearching ? (
+          <View className="flex flex-col items-center justify-center mt-12">
+            <ActivityIndicator color="#6ee7b7" />
+            <Text className="mt-3 text-emerald-100">Searching...</Text>
+          </View>
+        ) : searchError ? (
+          <View className="flex flex-col items-center justify-center mt-12">
+            <Text className="mb-2 text-emerald-100 font-medium">Search failed</Text>
+            <Text className="text-xs text-emerald-300/80 mb-4 text-center px-4">{searchError}</Text>
+            <TouchableOpacity onPress={() => runSearch(searchQuery)} className="bg-emerald-600 rounded-full px-4 py-2">
+              <Text className="text-white text-sm">Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : searchResults.length > 0 ? (
-          <View className="space-y-3">
+          <View className="space-y-3 pb-4">
             {searchResults.map((bounty) => (
               <View key={bounty.id} className="bg-emerald-700/40 rounded-lg p-3">
                 <View className="flex items-center gap-3 mb-2">
@@ -305,12 +345,12 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             ))}
           </View>
         ) : (
-          <View className="flex flex-col items-center justify-center h-full text-emerald-200 text-center">
-            <Text className="mb-2">No Results Found</Text>
+          <View className="flex flex-col items-center justify-center mt-16 text-center">
+            <Text className="mb-2 text-emerald-100 font-medium">No Results Found</Text>
             <Text className="text-sm text-emerald-300/70">Try a different search term</Text>
           </View>
         )}
-      </View>
+      </ScrollView>
 
       {/* Search Bar at Bottom */}
       <View className="p-4 mt-auto">

@@ -144,7 +144,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       <View className="flex flex-row items-center justify-between p-4 pt-safe">
         <View className="flex flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <TouchableOpacity onPress={onBack} className="p-2 touch-target-min ml-4">
           <MaterialIcons name="arrow-back" size={24} color="#000000" />

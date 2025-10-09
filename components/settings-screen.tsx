@@ -69,11 +69,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
       {/* Header */}
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-black">BOUNTY</Text>
+          <MaterialIcons name="gps-fixed" size={24} color="#fff" />
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color="#000" />
+          <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>

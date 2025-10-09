@@ -4,13 +4,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EnhancedProfileSection } from "components/enhanced-profile-section";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
-import { CURRENT_USER_ID } from "lib/utils/data-utils";
+// Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
+// import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useUserProfile } from "../../hooks/useUserProfile";
+import { supabase } from '../../lib/supabase';
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -23,8 +26,11 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   })
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
   
-  // Use new profile service
-  const { profile: userProfile } = useUserProfile()
+  // Auth session (Supabase) provides canonical user id
+  const { session } = useAuthContext();
+  const authUserId = session?.user?.id;
+  // Use new profile service (abstracted user profile fields)
+  const { profile: userProfile, refresh: refreshUserProfile } = useUserProfile()
 
   // Add state for statistics
   const [stats, setStats] = useState({
@@ -43,53 +49,33 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     }[]
   >([])
 
-  // Fetch initial statistics from Supabase
+  // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
     const fetchStats = async () => {
+      if (!authUserId) return;
       try {
-        // Fetch bounties posted by the user
-        const postedBounties = await bountyService.getByUserId(CURRENT_USER_ID)
-
-        // Fetch bounty requests accepted by the user
-        const acceptedRequests = await bountyRequestService.getByUserId(CURRENT_USER_ID)
-        const acceptedJobs = acceptedRequests.filter((req) => req.status === "accepted")
-
-        // For badges, we'll just use a mock value for now
-        const badgesCount = Math.min(postedBounties.length, 3) // Mock calculation
-
+        const postedBounties = await bountyService.getByUserId(authUserId);
+        const acceptedRequests = await bountyRequestService.getByUserId(authUserId);
+        const acceptedJobs = acceptedRequests.filter((req) => req.status === 'accepted');
+        const badgesCount = Math.min(postedBounties.length, 3);
         setStats({
           jobsAccepted: acceptedJobs.length,
           bountiesPosted: postedBounties.length,
           badgesEarned: badgesCount,
           isLoading: false,
-        })
-
-        // Generate activity feed based on bounties and requests
+        });
         const newActivities = [
-          ...postedBounties.map((bounty) => ({
-            type: "bounty_posted",
-            title: `Posted bounty: ${bounty.title}`,
-            timestamp: new Date(bounty.created_at),
-          })),
-          ...acceptedJobs.map((job) => ({
-            type: "job_accepted",
-            title: "Accepted a bounty request",
-            timestamp: new Date(job.created_at),
-          })),
-        ]
-
-        // Sort by timestamp, newest first
-        newActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-
-        setActivities(newActivities.slice(0, 5)) // Show only the 5 most recent activities
+          ...postedBounties.map(b => ({ type: 'bounty_posted', title: `Posted bounty: ${b.title}`, timestamp: new Date(b.created_at) })),
+          ...acceptedJobs.map(j => ({ type: 'job_accepted', title: 'Accepted a bounty request', timestamp: new Date(j.created_at) })),
+        ].sort((a,b)=> b.timestamp.getTime() - a.timestamp.getTime());
+        setActivities(newActivities.slice(0,5));
       } catch (error) {
-        console.error("Error fetching profile statistics:", error)
-        setStats((prev) => ({ ...prev, isLoading: false }))
+        console.error('[ProfileScreen] Error fetching profile statistics:', error);
+        setStats(prev => ({ ...prev, isLoading: false }));
       }
-    }
-
-    fetchStats()
-  }, [])
+    };
+    fetchStats();
+  }, [authUserId]);
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
   // To re-implement real-time updates for stats and the activity feed,
@@ -97,7 +83,40 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // with your Hostinger backend. The component now only fetches data once on load.
   // The "Test" buttons will still update the UI state locally for demonstration.
 
-  // Listen for changes from settings screen and sync with new profile service
+  // Ensure a profile row exists for the authenticated user; if missing, create a minimal placeholder.
+  useEffect(() => {
+    const ensureProfile = async () => {
+      if (!authUserId) return;
+      try {
+        const { data, error } = await supabase.from('profiles').select('id, username').eq('id', authUserId).single();
+        if (error && !data) {
+          // If the error indicates a type mismatch (bigint vs uuid), surface clearer guidance
+          const msg = error.message || '';
+          if (msg.includes('bigint') || msg.includes('invalid input syntax for type bigint') || (error as any)?.code === '22P02') {
+            console.warn('[ProfileScreen] profiles.id column appears to be BIGINT but auth user id is UUID. Change profiles.id to uuid referencing auth.users(id) OR add a separate user_id uuid column. Skipping auto-create. Raw error:', msg);
+            return; // bail; insertion will also fail below
+          }
+          // Attempt creation (username fallback to truncated id)
+          const username = authUserId.slice(0, 8);
+          const { error: insertErr } = await supabase.from('profiles').insert({ id: authUserId, username });
+          if (insertErr) {
+            if ((insertErr as any)?.code === '22P02' || insertErr.message.includes('bigint')) {
+              console.warn('[ProfileScreen] profile auto-create failed due to BIGINT/UUID mismatch. Fix schema: ALTER TABLE profiles ALTER COLUMN id TYPE uuid USING gen_random_uuid(); and add FK to auth.users. Error:', insertErr.message);
+            } else {
+              console.warn('[ProfileScreen] profile auto-create failed', insertErr.message);
+            }
+          } else {
+            await refreshUserProfile();
+          }
+        }
+      } catch (e) {
+        console.warn('[ProfileScreen] ensureProfile error', (e as any)?.message);
+      }
+    };
+    ensureProfile();
+  }, [authUserId, refreshUserProfile]);
+
+  // Listen for changes from settings screen and sync with new profile service / local cache (scoped per user)
   useEffect(() => {
     const load = async () => {
       try {
@@ -110,11 +129,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           })
         } else {
           // Fallback to old storage
-          const storedProfile = await AsyncStorage.getItem("profileData")
+          const storedProfile = await AsyncStorage.getItem(`profileData:${authUserId || 'anon'}`)
           if (storedProfile) setProfileData(JSON.parse(storedProfile))
         }
-        
-        const storedSkills = await AsyncStorage.getItem('profileSkills')
+        const storedSkills = await AsyncStorage.getItem(`profileSkills:${authUserId || 'anon'}`)
         if (storedSkills) {
           const parsed = JSON.parse(storedSkills)
           if (Array.isArray(parsed)) setSkills(parsed)
@@ -139,7 +157,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       }
     }
     load()
-  }, [showSettings, userProfile])
+  }, [showSettings, userProfile, authUserId])
 
   const getIconComponent = (iconName: string) => {
     const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
@@ -160,8 +178,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
   const shareProfile = async () => {
     try {
-      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
-      const profileUrl = `https://example.com/u/${CURRENT_USER_ID}` // <-- Replace with your real profile URL
+  const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
+  const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
       const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
 
       await Share.share({
@@ -256,15 +274,15 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       {/* Header — left: BOUNTY brand, right: back + settings */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider ml-2">BOUNTY</Text>
+          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <View className="flex-row items-center">
           <TouchableOpacity className="p-2" onPress={shareProfile} accessibilityLabel="Share profile">
-            <MaterialIcons name="share" size={22} color="#000000" />
+            <MaterialIcons name="share" size={22} color="#ffffff" />
           </TouchableOpacity>
           <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)} accessibilityLabel="Open settings">
-            <MaterialIcons name="settings" size={24} color="#000000" />
+            <MaterialIcons name="settings" size={24} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -277,7 +295,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <View className="flex-row items-center mb-4">
               <View className="relative">
                 <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
-                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                  <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
                 </View>
                 <View className="absolute -top-1 -right-1 bg-red-500 rounded">
                   <Text className="text-white text-xs font-bold px-1.5 py-0.5">
@@ -319,7 +337,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   </View>
 
   {/* Enhanced Profile Section with Portfolio, Follow, etc. */}
-  <EnhancedProfileSection userId={CURRENT_USER_ID} isOwnProfile={true} />
+  <EnhancedProfileSection userId={authUserId || ''} isOwnProfile={true} />
 
   {/* Skills */}
   <View className="px-4 py-2">
@@ -365,7 +383,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                 <View key={i} className="bg-emerald-700/30 rounded-lg p-3">
                   <View className="flex justify-between items-center mb-1">
                     <Text className="text-sm font-medium flex items-center gap-1">
-                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#000000" />}
+                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />}
                       {activity.type === "job_accepted" && <MaterialIcons name="check-circle" size={14} color="#ffffff" />}
                       {activity.type === "badge_earned" && <MaterialIcons name="emoji-events" size={14} color="#f59e0b" />}
                       {activity.type === "bounty_posted"
@@ -403,9 +421,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                     className={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
                   >
                     {i % 3 === 0 ? (
-                      <MaterialIcons name="gps-fixed" size={20} color="#000000" />
+                      <MaterialIcons name="gps-fixed" size={20} color={isEarned ? '#ffffff' : '#ffffff'} />
                     ) : i % 3 === 1 ? (
-                      <MaterialIcons name="favorite" size={20} color="#000000" />
+                      <MaterialIcons name="favorite" size={20} color={isEarned ? '#ffffff' : '#ffffff'} />
                     ) : (
                       <MaterialIcons name="public" size={20} color={isEarned ? "#f59e0b" : "#34d399"} />
                     )}

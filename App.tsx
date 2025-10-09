@@ -1,53 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
-import { supabase } from 'lib/supabase';
+// IMPORTANT: We delegate to expo-router's entrypoint so that navigation context is established.
+// Previously this file rendered a standalone component (Todo list) which broke useRouter() calls
+// with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
+// ensures compatibility with the "main": "expo-router/entry" in package.json.
+import 'expo-router/entry';
 
-interface Todo {
-  id: string
-  title: string
-  completed?: boolean
+// If you need to run global side-effects before the router mounts, you can add them here, e.g.:
+// import './polyfills';
+// But do not export a React component – expo-router handles root mounting.
+
+if (__DEV__) {
+	// eslint-disable-next-line no-console
+	console.log('[AppEntry] expo-router entry imported (navigation context should be established)');
 }
-
-export default function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  useEffect(() => {
-    const getTodos = async () => {
-      try {
-  // use a typed query: pass table name as string then cast the returned rows to Todo[]
-  const res = await supabase.from('todos').select();
-  const data = res.data as Todo[] | null
-  const sbError = res.error
-        if (sbError) {
-          console.error('Error fetching todos:', sbError.message);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setTodos(data);
-        }
-      } catch (err: unknown) {
-        // Narrow the unknown error before reading .message
-        if (err instanceof Error) {
-          console.error('Error fetching todos:', err.message);
-        } else {
-          console.error('Error fetching todos:', String(err));
-        }
-      }
-    };
-
-    getTodos();
-  }, []);
-
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Todo List</Text>
-      <FlatList
-        data={todos}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => <Text key={item.id}>{item.title}</Text>}
-      />
-    </View>
-  );
-};
 
