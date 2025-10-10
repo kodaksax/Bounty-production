@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFollow } from "hooks/useFollow";
 import { useProfile } from "hooks/useProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
-import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -14,11 +14,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuthContext } from "../../hooks/use-auth-context";
 
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuthContext();
+  const currentUserId = getCurrentUserId();
   
   const { profile, loading, error } = useProfile(userId);
   const {
@@ -28,11 +31,11 @@ export default function UserProfileScreen() {
     toggleFollow,
     loading: followLoading,
     error: followError,
-  } = useFollow(userId || "", CURRENT_USER_ID);
+  } = useFollow(userId || "", currentUserId);
 
   const [dismissedError, setDismissedError] = useState(false);
 
-  const isOwnProfile = userId === CURRENT_USER_ID;
+  const isOwnProfile = userId === currentUserId;
 
   const handleMessage = () => {
     // Navigate to messenger/chat with this user

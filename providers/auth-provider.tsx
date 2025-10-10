@@ -2,6 +2,7 @@ import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import { PropsWithChildren, use, useContext, useEffect, useState } from 'react'
+import { authProfileService } from '../lib/services/auth-profile-service'
 
 type AuthData = {
   session: Session | null | undefined
@@ -30,6 +31,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       }
 
       setSession(session)
+      
+      // Sync session with auth profile service
+      await authProfileService.setSession(session)
+      
       setIsLoading(false)
     }
 
@@ -37,9 +42,12 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log('Auth state changed:', { event: _event, session })
       setSession(session)
+      
+      // Sync session with auth profile service
+      await authProfileService.setSession(session)
     })
     console.log('AuthProvider mounted')
     // Cleanup subscription on unmount
@@ -49,28 +57,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     
   }, [])
 
-  // Fetch the profile when the session changes
+  // Subscribe to profile updates from auth profile service
   useEffect(() => {
-    const fetchProfile = async () => {
-      setIsLoading(true)
-
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-
-        setProfile(data)
-      } else {
-        setProfile(null)
-      }
-
+    const unsubscribe = authProfileService.subscribe((authProfile) => {
+      setProfile(authProfile)
       setIsLoading(false)
-    }
+    })
 
-    fetchProfile()
-  }, [session])
+    return unsubscribe
+  }, [])
 
   return (
     <AuthContext.Provider

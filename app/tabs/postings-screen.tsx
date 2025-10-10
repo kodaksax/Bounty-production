@@ -8,7 +8,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { getCurrentUserId } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
@@ -20,6 +20,7 @@ import { BountyConfirmationCard } from "../../components/bounty-confirmation-car
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { useWallet } from '../../lib/wallet-context'
+import { useAuthContext } from '../../hooks/use-auth-context'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 
@@ -34,6 +35,9 @@ interface PostingsScreenProps {
 }
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
+  const { session } = useAuthContext()
+  const currentUserId = getCurrentUserId()
+  
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
@@ -137,7 +141,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const loadMyBounties = React.useCallback(async () => {
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
-      const mine = await bountyService.getByUserId(CURRENT_USER_ID)
+      const mine = await bountyService.getByUserId(currentUserId)
       setMyBounties(mine)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
@@ -147,7 +151,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setError('Failed to load your bounties')
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
     }
-  }, [loadRequestsForMyBounties])
+  }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
     try {
@@ -224,7 +228,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   location: formData.workType === 'in_person' ? formData.location : '',
   timeline: formData.timeline,
   skills_required: formData.skills,
-  user_id: CURRENT_USER_ID, // Make sure this is set correctly from your auth state
+  user_id: currentUserId, // Use authenticated user ID
   status: "open", // Ensure this matches the expected type
   work_type: formData.workType,
   is_time_sensitive: formData.isTimeSensitive,
@@ -515,7 +519,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   )}
                   renderItem={({ item: bounty }) => (
                     <InProgressBountyItem
-                      username={bounty.user_id === CURRENT_USER_ID ? "@Jon_Doe" : "@User"}
+                      username={bounty.user_id === currentUserId ? "@Jon_Doe" : "@User"}
                       title={bounty.title}
                       amount={Number(bounty.amount)}
                       distance={calculateDistance(bounty.location || "")}

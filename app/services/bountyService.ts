@@ -2,7 +2,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
-import { CURRENT_USER_ID } from 'lib/utils/data-utils';
+import { getCurrentUserId } from 'lib/utils/data-utils';
 
 export interface CreateBountyPayload {
   title: string;
@@ -46,7 +46,7 @@ export const bountyService = {
         work_type: draft.workType,
         timeline: draft.timeline || '',
         skills_required: draft.skills || '',
-        user_id: CURRENT_USER_ID,
+        user_id: getCurrentUserId(),
         status: 'open',
       };
 
