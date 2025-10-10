@@ -3,8 +3,8 @@
  * React hook for accessing authenticated user profile with real-time updates
  */
 
-import { useEffect, useState } from 'react';
-import { authProfileService, AuthProfile } from '../lib/services/auth-profile-service';
+import { useCallback, useEffect, useState } from 'react';
+import { AuthProfile, authProfileService } from '../lib/services/auth-profile-service';
 
 interface UseAuthProfileResult {
   profile: AuthProfile | null;
@@ -35,15 +35,20 @@ export function useAuthProfile(): UseAuthProfileResult {
     return unsubscribe;
   }, []);
 
-  const updateProfile = async (updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>) => {
+  // Stable wrapper for updating the profile
+  const updateProfile = useCallback(async (updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>) => {
     return await authProfileService.updateProfile(updates);
-  };
+  }, []);
 
-  const refreshProfile = async () => {
+  // Stable wrapper for refreshing the profile
+  const refreshProfile = useCallback(async () => {
     setLoading(true);
-    await authProfileService.refreshProfile();
-    setLoading(false);
-  };
+    try {
+      await authProfileService.refreshProfile();
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return {
     profile,

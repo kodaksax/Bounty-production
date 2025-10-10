@@ -184,7 +184,7 @@ DECLARE
 BEGIN
     IF EXISTS (SELECT 1 FROM auth.users WHERE id = test_user) THEN
         INSERT INTO profiles (id, username, email, about, phone, balance)
-        VALUES (test_user, '@jon_Doe', 'test@example.com', 'Russian opportunist', '+998 90 943 32 00', 100.00)
+    VALUES (test_user, '@jon_Doe', 'test@example.com', '', '+998 90 943 32 00', 100.00)
         ON CONFLICT (id) DO NOTHING;
     END IF;
 END $$;

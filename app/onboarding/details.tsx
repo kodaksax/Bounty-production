@@ -7,28 +7,30 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUserProfile } from '../../hooks/useUserProfile';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
+import { useUserProfile } from '../../hooks/useUserProfile';
 
 export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, updateProfile } = useUserProfile();
+  const { profile: localProfile, updateProfile } = useUserProfile();
   const { updateProfile: updateAuthProfile } = useAuthProfile();
-  
-  const [displayName, setDisplayName] = useState(profile?.displayName || '');
-  const [location, setLocation] = useState(profile?.location || '');
+  const { profile: normalized } = useNormalizedProfile();
+
+  const [displayName, setDisplayName] = useState(normalized?.name || localProfile?.displayName || '');
+  const [location, setLocation] = useState((normalized?._raw && (normalized as any)._raw.location) || localProfile?.location || '');
   const [saving, setSaving] = useState(false);
 
   const handleNext = async () => {

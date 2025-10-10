@@ -1,20 +1,22 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { 
-  ActivityIndicator, 
-  Modal, 
-  ScrollView, 
-  Text, 
-  TouchableOpacity, 
-  View 
-} from "react-native";
-import { OptimizedImage } from "lib/components/OptimizedImage";
+import { useAuthProfile } from "hooks/useAuthProfile";
 import { useFollow } from "hooks/useFollow";
+import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { usePortfolio } from "hooks/usePortfolio";
-import { useProfile } from "hooks/useProfile";
+import { OptimizedImage } from "lib/components/OptimizedImage";
 import type { PortfolioItem } from "lib/types";
+import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 
 interface EnhancedProfileSectionProps {
   userId?: string;
@@ -25,7 +27,7 @@ export function EnhancedProfileSection({
   userId, 
   isOwnProfile = true 
 }: EnhancedProfileSectionProps) {
-  const { profile, loading: profileLoading } = useProfile(userId);
+  const { profile: normalizedFromHookOrLocal, loading: profileLoading } = useNormalizedProfile(userId);
   const { items, loading: portfolioLoading, deleteItem } = usePortfolio(userId || 'current-user');
   const { 
     isFollowing, 
@@ -36,7 +38,9 @@ export function EnhancedProfileSection({
   } = useFollow(userId || 'current-user');
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
+  const { profile: authProfileFromHook } = useAuthProfile();
 
+  // profileLoading already accounts for local + supabase fetch inside useNormalizedProfile
   if (profileLoading) {
     return (
       <View className="p-4 items-center">
@@ -44,8 +48,9 @@ export function EnhancedProfileSection({
       </View>
     );
   }
+  const effectiveProfile: NormalizedProfile | null = normalizedFromHookOrLocal || normalizeAuthProfile(authProfileFromHook || null) || null;
 
-  if (!profile) {
+  if (!effectiveProfile) {
     return (
       <View className="p-4">
         <Text className="text-center text-emerald-200">Profile not found</Text>
@@ -54,16 +59,17 @@ export function EnhancedProfileSection({
   }
 
   const renderVerificationBadge = () => {
-    const { verificationStatus } = profile;
+    const { verificationStatus } = effectiveProfile || {};
     
     if (!verificationStatus || verificationStatus === 'unverified') {
       return null;
     }
 
-    const config = {
+    const configMap: Record<string, { icon: string; color: string; label: string }> = {
       pending: { icon: 'schedule', color: '#fbbf24', label: 'Pending' },
       verified: { icon: 'verified', color: '#10b981', label: 'Verified' },
-    }[verificationStatus];
+    };
+    const config = configMap[String(verificationStatus)];
 
     if (!config) return null;
 
@@ -96,10 +102,10 @@ export function EnhancedProfileSection({
               {renderVerificationBadge()}
             </View>
             <View className="ml-4 flex-1">
-              <Text className="text-lg font-bold">{profile.name || profile.username}</Text>
-              <Text className="text-xs text-emerald-300">{profile.username}</Text>
-              {profile.title && (
-                <Text className="text-sm text-emerald-200 mt-1">{profile.title}</Text>
+              <Text className="text-lg font-bold">{effectiveProfile.name || effectiveProfile.username}</Text>
+              <Text className="text-xs text-emerald-300">{effectiveProfile.username}</Text>
+              {effectiveProfile.title && (
+                <Text className="text-sm text-emerald-200 mt-1">{effectiveProfile.title}</Text>
               )}
             </View>
           </View>
@@ -124,8 +130,8 @@ export function EnhancedProfileSection({
         </View>
 
         {/* Bio */}
-        {profile.bio && (
-          <Text className="text-sm text-emerald-200 mt-3">{profile.bio}</Text>
+        {effectiveProfile.bio && (
+          <Text className="text-sm text-emerald-200 mt-3">{effectiveProfile.bio}</Text>
         )}
 
         {/* Stats Row */}
@@ -146,11 +152,11 @@ export function EnhancedProfileSection({
       </View>
 
       {/* Languages & Skills */}
-      {(profile.languages && profile.languages.length > 0) && (
+      {(effectiveProfile.languages && effectiveProfile.languages.length > 0) && (
         <View className="mb-4">
           <Text className="text-sm font-medium mb-2">Languages</Text>
           <View className="flex-row flex-wrap gap-2">
-            {profile.languages.map((lang, idx) => (
+            {effectiveProfile.languages.map((lang: string, idx: number) => (
               <View key={idx} className="bg-emerald-700/50 px-3 py-1 rounded-full">
                 <Text className="text-xs text-emerald-100">{lang}</Text>
               </View>
@@ -159,11 +165,11 @@ export function EnhancedProfileSection({
         </View>
       )}
 
-      {(profile.skills && profile.skills.length > 0) && (
+      {(effectiveProfile.skills && effectiveProfile.skills.length > 0) && (
         <View className="mb-4">
           <Text className="text-sm font-medium mb-2">Skills</Text>
           <View className="flex-row flex-wrap gap-2">
-            {profile.skills.map((skill, idx) => (
+            {effectiveProfile.skills.map((skill: string, idx: number) => (
               <View key={idx} className="bg-emerald-500/30 px-3 py-1 rounded-full border border-emerald-500">
                 <Text className="text-xs text-emerald-100">{skill}</Text>
               </View>
@@ -285,8 +291,8 @@ export function EnhancedProfileSection({
       {/* Join Date */}
       <View className="mt-2 flex-row items-center">
         <MaterialIcons name="calendar-today" size={14} color="#a7f3d0" />
-        <Text className="text-xs text-emerald-300 ml-1">
-          Joined {new Date(profile.joinDate).toLocaleDateString('en-US', { 
+          <Text className="text-xs text-emerald-300 ml-1">
+          Joined {new Date(effectiveProfile.joinDate || effectiveProfile.created_at || Date.now()).toLocaleDateString('en-US', { 
             month: 'long', 
             year: 'numeric' 
           })}

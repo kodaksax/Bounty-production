@@ -132,7 +132,7 @@ export const createBountyWithValidationUtil = async (
         id: bountyData.user_id,
         username: "@Jon_Doe",
         avatar_url: "/placeholder.svg?height=40&width=40",
-        about: "Russian opportunist",
+  about: "",
         phone: "+998 90 943 32 00",
         balance: 40.0,
         email: "test@example.com"

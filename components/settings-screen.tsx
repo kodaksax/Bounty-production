@@ -24,7 +24,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   const { isAdmin, setIsAdmin } = useAdmin()
   const [profileData, setProfileData] = useState({
     name: '@jon_Doe',
-    about: 'Russian opportunist',
+  about: '',
     phone: '+998 90 943 32 00',
     avatar: '/placeholder.svg?height=48&width=48',
   })

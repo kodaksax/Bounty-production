@@ -6,8 +6,9 @@ import * as DocumentPicker from 'expo-document-picker'
 import type React from "react"
 import { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
-import { useUserProfile } from '../hooks/useUserProfile'
 import { useAuthProfile } from '../hooks/useAuthProfile'
+import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { useUserProfile } from '../hooks/useUserProfile'
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
 
@@ -23,21 +24,22 @@ interface EditProfileScreenProps {
 export function EditProfileScreen({
   onBack,
   initialName = "@jon_Doe",
-  initialAbout = "Russian opportunist",
+  initialAbout = "",
   initialPhone = "+998 90 943 32 00",
   initialAvatar = "/placeholder.svg?height=80&width=80",
   onSave,
 }: EditProfileScreenProps) {
-  const { profile, updateProfile } = useUserProfile()
+  const { profile: localProfile, updateProfile } = useUserProfile()
   const { profile: authProfile, updateProfile: updateAuthProfile } = useAuthProfile()
-  const [name, setName] = useState(authProfile?.username || profile?.displayName || initialName)
-  const [about, setAbout] = useState(authProfile?.about || profile?.location || initialAbout)
+  const { profile: normalized } = useNormalizedProfile()
+  const [name, setName] = useState(authProfile?.username || normalized?.name || localProfile?.displayName || initialName)
+  const [about, setAbout] = useState(authProfile?.about || normalized?.bio || localProfile?.location || initialAbout)
   const [phone, setPhone] = useState(initialPhone)
-  const [avatar, setAvatar] = useState(authProfile?.avatar || profile?.avatar || initialAvatar)
+  const [avatar, setAvatar] = useState(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
-  const [bio, setBio] = useState(authProfile?.about || profile?.location || "")
+  const [bio, setBio] = useState(authProfile?.about || normalized?.bio || localProfile?.location || "")
   const { balance } = useWallet()
 
   const validateName = (value: string) => {

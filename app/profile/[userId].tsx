@@ -1,17 +1,17 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFollow } from "hooks/useFollow";
-import { useProfile } from "hooks/useProfile";
+import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthContext } from "../../hooks/use-auth-context";
@@ -23,7 +23,7 @@ export default function UserProfileScreen() {
   const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   
-  const { profile, loading, error } = useProfile(userId);
+  const { profile, loading, error } = useNormalizedProfile(userId);
   const {
     isFollowing,
     followerCount,
@@ -124,12 +124,12 @@ export default function UserProfileScreen() {
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {profile.name?.[0]?.toUpperCase() || profile.username[1]?.toUpperCase() || "U"}
+                {profile?.name?.[0]?.toUpperCase() || profile?.username?.[1]?.toUpperCase() || "U"}
               </Text>
             </View>
           </View>
-          <Text style={styles.displayName}>{profile.name || profile.username}</Text>
-          <Text style={styles.username}>{profile.username}</Text>
+          <Text style={styles.displayName}>{profile?.name || profile?.username}</Text>
+          <Text style={styles.username}>{profile?.username}</Text>
           {profile.title && <Text style={styles.title}>{profile.title}</Text>}
         </View>
 
@@ -203,7 +203,7 @@ export default function UserProfileScreen() {
             <View style={styles.infoRow}>
               <MaterialIcons name="language" size={20} color="#10b981" />
               <Text style={styles.infoText}>
-                {profile.languages.join(", ")}
+                {profile?.languages.join(", ")}
               </Text>
             </View>
           )}
@@ -226,7 +226,7 @@ export default function UserProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Skills</Text>
             <View style={styles.skillsContainer}>
-              {profile.skills.map((skill, index) => (
+              {profile.skills.map((skill: string, index: number) => (
                 <View key={index} style={styles.skillChip}>
                   <Text style={styles.skillText}>{skill}</Text>
                 </View>

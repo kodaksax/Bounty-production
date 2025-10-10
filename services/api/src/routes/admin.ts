@@ -1,9 +1,9 @@
 // services/api/src/routes/admin.ts - Admin-only routes with proper security
+import { desc, eq, sql } from 'drizzle-orm';
 import { FastifyInstance } from 'fastify';
-import { adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db/connection';
-import { users, bounties } from '../db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { bounties, users } from '../db/schema';
+import { adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
 
 /**
  * Register admin-only routes
@@ -109,11 +109,11 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Get user's bounties
+      // Get user's bounties (bounties are linked by creator_id)
       const userBounties = await db
         .select()
         .from(bounties)
-        .where(eq(bounties.user_id, userId))
+        .where(eq(bounties.creator_id, userId))
         .orderBy(desc(bounties.created_at));
 
       return reply.send({
@@ -230,18 +230,18 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const bountyIdNum = parseInt(bountyId, 10);
-      if (isNaN(bountyIdNum)) {
+      // Bounty IDs are UUID strings in the schema; validate basic length
+      if (!bountyId || typeof bountyId !== 'string') {
         return reply.code(400).send({
           error: 'Invalid bounty ID',
-          message: 'Bounty ID must be a number',
+          message: 'Bounty ID must be a UUID string',
         });
       }
 
       await db
         .update(bounties)
         .set({ status })
-        .where(eq(bounties.id, bountyIdNum));
+        .where(eq(bounties.id, bountyId));
 
       // Log the admin action for audit trail
       console.log(`[ADMIN_ACTION] User ${request.userId} updated bounty ${bountyId} status to ${status}. Reason: ${reason || 'N/A'}`);
@@ -269,11 +269,11 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
       const { bountyId } = request.params as { bountyId: string };
       const { reason } = request.body as { reason?: string };
 
-      const bountyIdNum = parseInt(bountyId, 10);
-      if (isNaN(bountyIdNum)) {
+      // Bounty IDs are UUIDs (strings)
+      if (!bountyId || typeof bountyId !== 'string') {
         return reply.code(400).send({
           error: 'Invalid bounty ID',
-          message: 'Bounty ID must be a number',
+          message: 'Bounty ID must be a UUID string',
         });
       }
 
@@ -281,7 +281,7 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
       const existing = await db
         .select()
         .from(bounties)
-        .where(eq(bounties.id, bountyIdNum))
+        .where(eq(bounties.id, bountyId))
         .limit(1);
 
       if (!existing || existing.length === 0) {
@@ -292,7 +292,7 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
       }
 
       // Delete the bounty
-      await db.delete(bounties).where(eq(bounties.id, bountyIdNum));
+  await db.delete(bounties).where(eq(bounties.id, bountyId));
 
       // Log the admin action for audit trail
       console.log(`[ADMIN_ACTION] User ${request.userId} deleted bounty ${bountyId}. Reason: ${reason || 'N/A'}`);

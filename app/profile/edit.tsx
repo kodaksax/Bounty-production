@@ -1,17 +1,18 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthContext } from "../../hooks/use-auth-context";
@@ -22,7 +23,9 @@ export default function EditProfileScreen() {
   const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   
-  const { profile, loading, error, updateProfile } = useProfile(currentUserId);
+  // Use normalized profile for display and useUserProfile for update operations
+  const { profile, loading, error } = useNormalizedProfile(currentUserId);
+  const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
 
   const [formData, setFormData] = useState({
     name: profile?.name || "",
@@ -67,7 +70,7 @@ export default function EditProfileScreen() {
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      await updateProfile({
+      await updateLocalProfile({
         name: formData.name,
         username: formData.username,
         title: formData.title,

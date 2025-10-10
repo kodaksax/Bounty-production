@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
 import { bountyService } from '../../lib/services/bounty-service'
@@ -48,8 +49,10 @@ function BountyAppInner() {
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
   
-  // Check if onboarding is needed
+  // Check if onboarding is needed (useUserProfile provides completeness)
   const { isComplete, loading: profileLoading } = useUserProfile()
+  // Use normalized profile for display in the UI where needed
+  const { profile: normalizedProfile } = useNormalizedProfile()
   const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false)
 
   // Collapsing header config

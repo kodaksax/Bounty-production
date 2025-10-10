@@ -7,19 +7,22 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Animated,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 
 export default function DoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile } = useUserProfile();
+  const { profile: localProfile } = useUserProfile();
+  const { profile: normalized } = useNormalizedProfile();
+  const displayProfile = normalized || (localProfile ? { username: localProfile.username, name: (localProfile as any).displayName || undefined, _raw: localProfile } : null as any);
   
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -64,7 +67,7 @@ export default function DoneScreen() {
         <Animated.View style={{ opacity: fadeAnim, alignItems: 'center' }}>
           <Text style={styles.title}>All Set!</Text>
           <Text style={styles.subtitle}>
-            Welcome to Bounty, @{profile?.username || 'user'}!
+            Welcome to Bounty, @{displayProfile?.username || 'user'}!
           </Text>
           
           <View style={styles.summaryCard}>
@@ -73,26 +76,26 @@ export default function DoneScreen() {
             <View style={styles.summaryItem}>
               <MaterialIcons name="person" size={20} color="#a7f3d0" />
               <Text style={styles.summaryLabel}>Username:</Text>
-              <Text style={styles.summaryValue}>@{profile?.username}</Text>
+              <Text style={styles.summaryValue}>@{displayProfile?.username}</Text>
             </View>
             
-            {profile?.displayName && (
+            {displayProfile?.name && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="badge" size={20} color="#a7f3d0" />
                 <Text style={styles.summaryLabel}>Display Name:</Text>
-                <Text style={styles.summaryValue}>{profile.displayName}</Text>
+                <Text style={styles.summaryValue}>{displayProfile?.name}</Text>
               </View>
             )}
             
-            {profile?.location && (
+            {displayProfile?._raw?.location && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="location-on" size={20} color="#a7f3d0" />
                 <Text style={styles.summaryLabel}>Location:</Text>
-                <Text style={styles.summaryValue}>{profile.location}</Text>
+                <Text style={styles.summaryValue}>{displayProfile?._raw?.location}</Text>
               </View>
             )}
             
-            {profile?.phone && (
+            {displayProfile?._raw?.phone && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="phone" size={20} color="#a7f3d0" />
                 <Text style={styles.summaryLabel}>Phone:</Text>

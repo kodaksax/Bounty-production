@@ -12,17 +12,16 @@ import { ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
-import { useUserProfile } from "../../hooks/useUserProfile";
 import { useAuthProfile } from "../../hooks/useAuthProfile";
-import { supabase } from '../../lib/supabase';
+import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [profileData, setProfileData] = useState({
-    name: "@jon_Doe",
-    about: "Russian opportunist",
+    name: "",
+    about: "",
     avatar: "/placeholder.svg?height=80&width=80",
   })
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
@@ -31,7 +30,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const { session } = useAuthContext();
   const authUserId = session?.user?.id;
   // Use new profile service (abstracted user profile fields)
-  const { profile: userProfile, refresh: refreshUserProfile } = useUserProfile()
+  const { profile: userProfile, refresh: refreshUserProfile } = useNormalizedProfile()
   // Also use auth profile service for Supabase-synced profile
   const { profile: authProfile, refreshProfile: refreshAuthProfile } = useAuthProfile()
 
@@ -51,6 +50,12 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       timestamp: Date
     }[]
   >([])
+
+  // readiness flag to avoid rendering EnhancedProfileSection with an empty id
+  const profileUuid = authProfile?.id || authUserId
+  const isProfileReady = !!profileUuid
+  // Determine if viewing own profile (then let EnhancedProfileSection load current-user)
+  const isOwnProfile = !!(authUserId && profileUuid && profileUuid === authUserId)
 
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
@@ -95,8 +100,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();
       
-      // Also refresh local profile service
-      await refreshUserProfile();
+  // Also refresh normalized profile (local + supabase)
+  await refreshUserProfile();
     };
     ensureProfile();
   }, [authUserId, refreshUserProfile, refreshAuthProfile]);
@@ -113,10 +118,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             avatar: authProfile.avatar || "/placeholder.svg?height=80&width=80",
           })
         } else if (userProfile) {
-          // Fallback to local user profile service
+          // Fallback to local/normalized profile
           setProfileData({
-            name: userProfile.displayName ? `${userProfile.displayName} (@${userProfile.username})` : `@${userProfile.username}`,
-            about: userProfile.location || "Bounty user",
+            name: userProfile.name ? `${userProfile.name} (@${userProfile.username})` : `@${userProfile.username}`,
+            about: userProfile.bio || "Bounty user",
             avatar: userProfile.avatar || "/placeholder.svg?height=80&width=80",
           })
         } else {
@@ -135,12 +140,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           // Prefer auth profile data
           const profileToUse = authProfile || userProfile
           
-          if (profileToUse && 'phone' in profileToUse && profileToUse.phone) {
+          // If we have phone or location in the raw profile, prefer those
+          const raw = (profileToUse as any)?._raw || null;
+          if (raw && raw.phone) {
             defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' })
           }
-          
-          if (profileToUse && 'location' in profileToUse && (profileToUse as any).location) {
-            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${(profileToUse as any).location}` })
+
+          if (raw && raw.location) {
+            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` })
           }
           
           if (authProfile?.created_at) {
@@ -157,7 +164,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       }
     }
     load()
-  }, [showSettings, userProfile, authProfile, authUserId])
+  // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
+  }, [showSettings, userProfile?.username, authProfile?.id, authUserId])
 
   const getIconComponent = (iconName: string) => {
     const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
@@ -288,27 +296,21 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       </View>
 
       <ScrollView className="flex-1 pb-40" contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Stats + Profile Info (profile moved inside the stats card) */}
+        {/* Profile card (kodaksax, avatar, follow, portfolio) */}
+        {isProfileReady ? (
+          // If this is the signed-in user's profile, pass undefined so the hook resolves the "current-user" profile
+          <EnhancedProfileSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} key={profileUuid} />
+        ) : (
+          <View className="px-4 py-4">
+            <View className="bg-black/20 rounded-md p-3">
+              <Text className="text-sm text-emerald-200">Loading profile…</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Stats */}
         <View className="px-4 py-4">
           <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
-            {/* Profile header inside the stats card */}
-            <View className="flex-row items-center mb-4">
-              <View className="relative">
-                <View className="h-16 w-16 rounded-full bg-gray-700 flex items-center justify-center">
-                  <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-                </View>
-                <View className="absolute -top-1 -right-1 bg-red-500 rounded">
-                  <Text className="text-white text-xs font-bold px-1.5 py-0.5">
-                    lvl {Math.max(1, Math.floor(stats.badgesEarned / 2) + 1)}
-                  </Text>
-                </View>
-              </View>
-              <View className="ml-4">
-                <Text className="text-lg font-bold">{profileData.name}</Text>
-                <Text className="text-sm text-emerald-200">{profileData.about}</Text>
-              </View>
-            </View>
-
             <View className="grid grid-cols-3 gap-4 text-center">
               <View className="transition-all duration-300 transform hover:scale-105">
                 <Text className="text-2xl font-bold animate-pulse">{stats.jobsAccepted}</Text>
@@ -323,21 +325,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                 <Text className="text-xs text-emerald-200 mt-1">Badges Earned</Text>
               </View>
             </View>
-
-            {/* Test buttons (hidden in production) */}
-            <View className="mt-4 flex justify-center gap-2">
-              <TouchableOpacity onPress={simulateJobAccepted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
-                Test: Complete Job
-              </TouchableOpacity>
-              <TouchableOpacity onPress={simulateBountyPosted} className="px-2 py-1 bg-emerald-700 rounded-md text-xs">
-                Test: Post Bounty
-              </TouchableOpacity>
-            </View>
           </View>
-  </View>
-
-  {/* Enhanced Profile Section with Portfolio, Follow, etc. */}
-  <EnhancedProfileSection userId={authUserId || ''} isOwnProfile={true} />
+        </View>
 
   {/* Skills */}
   <View className="px-4 py-2">

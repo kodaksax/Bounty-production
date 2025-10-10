@@ -5,29 +5,31 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { validateUsername, isUsernameUnique } from '../../lib/services/userProfile';
-import { useUserProfile } from '../../hooks/useUserProfile';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
+import { useUserProfile } from '../../hooks/useUserProfile';
+import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
 
 export default function UsernameScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, updateProfile } = useUserProfile();
+  const { profile: localProfile, updateProfile } = useUserProfile();
   const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
+  const { profile: normalized } = useNormalizedProfile();
   
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,8 @@ export default function UsernameScreen() {
       // Format validation
       const validation = validateUsername(username);
       if (!validation.valid) {
-        setError(validation.error);
+        // validation.error may be undefined; setError expects string | null
+        setError(validation.error ?? null);
         setIsValid(false);
         return;
       }
@@ -81,10 +84,10 @@ export default function UsernameScreen() {
       // Save username to local profile service
       const result = await updateProfile({ 
         username,
-        displayName: profile?.displayName,
-        avatar: profile?.avatar,
-        location: profile?.location,
-        phone: profile?.phone,
+        displayName: normalized?.name || localProfile?.displayName,
+        avatar: normalized?.avatar || localProfile?.avatar,
+        location: (normalized?._raw && (normalized as any)._raw.location) || localProfile?.location,
+        phone: (normalized?._raw && (normalized as any)._raw.phone) || localProfile?.phone,
       });
 
       if (!result.success) {

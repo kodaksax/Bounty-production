@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 -- IMPORTANT: Always insert the default user first to avoid foreign key constraints
 INSERT INTO profiles (id, username, avatar_url, about, phone, balance)
 VALUES 
- ('00000000-0000-0000-0000-000000000001', '@Jon_Doe', '/placeholder.svg?height=40&width=40', 'Russian opportunist', '+998 90 943 32 00', 40.00),
+ ('00000000-0000-0000-0000-000000000001', '@Jon_Doe', '/placeholder.svg?height=40&width=40', '', '+998 90 943 32 00', 40.00),
  ('00000000-0000-0000-0000-000000000002', '@MtnOlympus', '/placeholder.svg?height=40&width=40', 'Delivery specialist', '+1 555 123 4567', 75.50),
  ('00000000-0000-0000-0000-000000000003', '@CryptoKing', '/placeholder.svg?height=40&width=40', 'Crypto enthusiast', '+1 555 987 6543', 120.25)
 ON CONFLICT (id) DO NOTHING;

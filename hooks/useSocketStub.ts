@@ -21,7 +21,8 @@ type MessageStatusCallback = (event: MessageStatusEvent) => void;
 class SocketStub {
   private typingCallbacks: TypingCallback[] = [];
   private messageStatusCallbacks: MessageStatusCallback[] = [];
-  private typingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Use ReturnType<typeof setTimeout> for cross-environment compatibility (NodeJS or browser)
+  private typingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   /**
    * Emit a typing event (for testing/dev)
