@@ -7,6 +7,7 @@ import type React from "react"
 import { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useUserProfile } from '../hooks/useUserProfile'
+import { useAuthProfile } from '../hooks/useAuthProfile'
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
 
@@ -28,14 +29,15 @@ export function EditProfileScreen({
   onSave,
 }: EditProfileScreenProps) {
   const { profile, updateProfile } = useUserProfile()
-  const [name, setName] = useState(profile?.displayName || initialName)
-  const [about, setAbout] = useState(profile?.location || initialAbout)
+  const { profile: authProfile, updateProfile: updateAuthProfile } = useAuthProfile()
+  const [name, setName] = useState(authProfile?.username || profile?.displayName || initialName)
+  const [about, setAbout] = useState(authProfile?.about || profile?.location || initialAbout)
   const [phone, setPhone] = useState(initialPhone)
-  const [avatar, setAvatar] = useState(profile?.avatar || initialAvatar)
+  const [avatar, setAvatar] = useState(authProfile?.avatar || profile?.avatar || initialAvatar)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
-  const [bio, setBio] = useState(profile?.location || "")
+  const [bio, setBio] = useState(authProfile?.about || profile?.location || "")
   const { balance } = useWallet()
 
   const validateName = (value: string) => {
@@ -75,13 +77,27 @@ export function EditProfileScreen({
 
     // Persist via profile service, mapping fields to canonical keys.
     // Use bio (wired) as the persisted about/location field.
-    updateProfile({ displayName: name.trim(), location: (bio || about || '').trim(), avatar: avatar?.trim() })
-      .then((res) => {
+    const updates = { 
+      displayName: name.trim(), 
+      location: (bio || about || '').trim(), 
+      avatar: avatar?.trim() 
+    }
+    
+    // Update local profile service
+    updateProfile(updates)
+      .then(async (res) => {
         if (!res.success) {
           setUploadMessage(res.error || 'Failed to save')
           setTimeout(() => setUploadMessage(null), 2500)
           return
         }
+        
+        // Also update Supabase profile via auth profile service
+        await updateAuthProfile({
+          about: (bio || about || '').trim(),
+          avatar: avatar?.trim()
+        })
+        
         // Also notify parent legacy state if provided
         onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
         setUploadMessage('Profile updated')
