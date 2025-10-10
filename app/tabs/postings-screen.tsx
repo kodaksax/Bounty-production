@@ -11,13 +11,15 @@ import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
+import { BountyCard } from "../../components/bounty-card"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
+import { EditPostingModal } from "../../components/edit-posting-modal"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { useWallet } from '../../lib/wallet-context'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -90,6 +92,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   // Animation refs
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
   const prevLowBalance = useRef(false)
+  // Edit/Delete state
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
 
   // Ensure BottomNav is visible while on Postings screen and during create steps
   useEffect(() => {
@@ -323,6 +328,82 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       console.error("Error rejecting request:", err)
       setError(err.message || "Failed to reject request")
     }
+  }
+
+  const handleEditBounty = (bounty: Bounty) => {
+    setEditingBounty(bounty)
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async (updates: Partial<Bounty>) => {
+    if (!editingBounty) return
+
+    try {
+      // Optimistic update
+      const optimisticBounty = { ...editingBounty, ...updates }
+      setMyBounties((prev) =>
+        prev.map((b) => (b.id === editingBounty.id ? optimisticBounty : b))
+      )
+
+      // API call
+      const updated = await bountyService.update(editingBounty.id, updates)
+
+      if (!updated) {
+        throw new Error("Failed to update bounty")
+      }
+
+      // Update with actual response
+      setMyBounties((prev) =>
+        prev.map((b) => (b.id === editingBounty.id ? updated : b))
+      )
+
+      setShowEditModal(false)
+      setEditingBounty(null)
+    } catch (err: any) {
+      // Rollback optimistic update
+      setMyBounties((prev) =>
+        prev.map((b) => (b.id === editingBounty.id ? editingBounty : b))
+      )
+      throw err
+    }
+  }
+
+  const handleDeleteBounty = (bounty: Bounty) => {
+    Alert.alert(
+      "Delete Posting",
+      "Delete this posting? This can't be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Optimistic update
+              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+
+              // API call
+              const success = await bountyService.delete(bounty.id)
+
+              if (!success) {
+                throw new Error("Failed to delete bounty")
+              }
+
+              // Refresh to ensure consistency
+              await loadMyBounties()
+            } catch (err: any) {
+              // Rollback on error
+              setMyBounties((prev) => [...prev, bounty])
+              setError(err.message || "Failed to delete posting")
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    )
   }
 
   if (showArchivedBounties) {
@@ -597,33 +678,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     </View>
                   )}
                   renderItem={({ item: bounty }) => (
-                    <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3 shadow-md">
-                      <View className="p-4">
-                        <View className="flex justify-between items-center mb-2">
-                          <Text className="text-base font-medium text-emerald-100">
-                            Bounty #{bounty.id}
-                            {bounty.status !== "open" && (
-                              <Text className="ml-2 px-2 py-0.5 bg-emerald-700 rounded-full text-xs">
-                                {bounty.status}
-                              </Text>
-                            )}
-                            {bounty.work_type && (
-                              <Text className="ml-2 px-2 py-0.5 bg-emerald-900/70 rounded-full text-xs text-emerald-300">
-                                {bounty.work_type === 'online' ? 'Online' : 'In Person'}
-                              </Text>
-                            )}
-                          </Text>
-                          <Text className="text-sm text-emerald-300">{formatTimeAgo(bounty.created_at)}</Text>
-                        </View>
-                        <Text className="text-white font-medium mt-0.5 text-base">{bounty.title}</Text>
-                        <View className="flex justify-between items-center mt-3">
-                          <View className="bg-emerald-900/50 px-3 py-1.5 rounded text-emerald-400 font-bold text-base">
-                            {bounty.is_for_honor ? "For Honor" : `$${Number(bounty.amount).toLocaleString()}`}
-                          </View>
-                          <View className="text-base text-emerald-200">{calculateDistance(bounty.location || "")} mi</View>
-                        </View>
-                      </View>
-                    </View>
+                    <BountyCard
+                      bounty={bounty}
+                      currentUserId={currentUserId}
+                      onEdit={() => handleEditBounty(bounty)}
+                      onDelete={() => handleDeleteBounty(bounty)}
+                    />
                   )}
                   ListEmptyComponent={
                     isLoading.myBounties ? (
@@ -824,6 +884,19 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       {/* Deadline screen removed; using inline text input */}
 
       {/* Multi-Step flow is rendered inline above for the New tab */}
+
+      {/* Edit Posting Modal */}
+      {editingBounty && (
+        <EditPostingModal
+          visible={showEditModal}
+          bounty={editingBounty}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditingBounty(null)
+          }}
+          onSave={handleSaveEdit}
+        />
+      )}
     </View>
     </TouchableWithoutFeedback>
   )
