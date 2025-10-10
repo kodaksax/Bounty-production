@@ -15,6 +15,7 @@ export interface WalletTransactionRecord {
     counterparty?: string;
     bounty_id?: number;
   };
+  disputeStatus?: "none" | "pending" | "resolved";
 }
 
 interface WalletContextValue {
@@ -27,6 +28,7 @@ interface WalletContextValue {
   transactions: WalletTransactionRecord[];
   logTransaction: (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => Promise<WalletTransactionRecord>;
   clearAllTransactions: () => Promise<void>;
+  updateDisputeStatus: (transactionId: string, status: "none" | "pending" | "resolved") => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -126,6 +128,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try { await AsyncStorage.removeItem(TX_STORAGE_KEY); } catch {}
   }, []);
 
+  const updateDisputeStatus = useCallback(async (transactionId: string, status: "none" | "pending" | "resolved") => {
+    setTransactions(prev => {
+      const next = prev.map(tx => 
+        tx.id === transactionId ? { ...tx, disputeStatus: status } : tx
+      );
+      persistTransactions(next);
+      return next;
+    });
+  }, [persistTransactions]);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
@@ -136,6 +148,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     transactions,
     logTransaction,
     clearAllTransactions,
+    updateDisputeStatus,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

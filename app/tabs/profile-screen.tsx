@@ -2,6 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EnhancedProfileSection } from "components/enhanced-profile-section";
+import { HistoryScreen } from "components/history-screen";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -19,6 +20,7 @@ import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [profileData, setProfileData] = useState({
     name: "",
     about: "",
@@ -277,6 +279,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     return <SettingsScreen onBack={handleSettingsClose} />
   }
 
+  if (showHistory) {
+    return <HistoryScreen onBack={() => setShowHistory(false)} />
+  }
+
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">
       {/* Header — left: BOUNTY brand, right: back + settings */}
@@ -326,6 +332,23 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               </View>
             </View>
           </View>
+        </View>
+
+        {/* History Link */}
+        <View className="px-4 py-2">
+          <TouchableOpacity
+            className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
+            onPress={() => {
+              // Navigate to history screen
+              setShowHistory(true)
+            }}
+          >
+            <View className="flex-row items-center">
+              <MaterialIcons name="history" size={20} color="#a7f3d0" />
+              <Text className="text-sm font-medium text-white ml-2">View History</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
+          </TouchableOpacity>
         </View>
 
   {/* Skills */}
