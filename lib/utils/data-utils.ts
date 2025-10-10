@@ -1,6 +1,7 @@
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import { profileService } from "lib/services/profile-service"
+import { authProfileService } from "lib/services/auth-profile-service"
 
 // API Configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
@@ -38,8 +39,18 @@ export type Bounty = {
   attachments_json?: string;
 }
 
-// Current user ID (in a real app, this would come from authentication)
+// Current user ID - now dynamically retrieved from auth context
+// Kept for backward compatibility but should use getCurrentUserId() instead
 export const CURRENT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+/**
+ * Get the current authenticated user ID
+ * @returns The authenticated user ID, or fallback ID if not authenticated
+ */
+export const getCurrentUserId = (): string => {
+  const userId = authProfileService.getAuthUserId()
+  return userId || CURRENT_USER_ID
+}
 
 /**
  * Calculate distance (mock function - in a real app, this would use geolocation)

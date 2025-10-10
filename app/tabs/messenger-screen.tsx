@@ -4,13 +4,14 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { cn } from "lib/utils"
-import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useState, useCallback } from "react"
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
 import { useConversations } from "../../hooks/useConversations"
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
+import { useAuthContext } from '../../hooks/use-auth-context'
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -42,6 +43,8 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
+  const { session } = useAuthContext()
+  const currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const { balance } = useWallet()
@@ -152,10 +155,11 @@ interface ConversationItemProps {
 
 const ConversationItem = React.memo<ConversationItemProps>(function ConversationItem({ conversation, onPress }) {
   const router = useRouter()
+  const currentUserId = getCurrentUserId()
   const time = formatConversationTime(conversation.updatedAt);
   
   // Get the other participant's ID (not the current user)
-  const otherUserId = conversation.participantIds?.find(id => id !== CURRENT_USER_ID)
+  const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
   
   const handleAvatarPress = (e: any) => {
     e.stopPropagation()

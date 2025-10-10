@@ -7,9 +7,10 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import type { Conversation } from "lib/types"
-import { CURRENT_USER_ID } from "lib/utils/data-utils"
+import { getCurrentUserId } from "lib/utils/data-utils"
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
+import { useAuthContext } from '../hooks/use-auth-context'
 
 interface Message extends ChatMessage {
   time: string
@@ -74,13 +75,15 @@ export function ChatDetailScreen({
   onBack,
   onNavigate,
 }: ChatDetailScreenProps) {
+  const { session } = useAuthContext()
+  const currentUserId = getCurrentUserId()
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>(() => getConversationMessages(conversation.id))
   const { balance } = useWallet()
   // no manual scroll ref needed; handled by StickyMessageInterface
   
   // Get the other participant's ID (not the current user)
-  const otherUserId = conversation.participantIds?.find(id => id !== CURRENT_USER_ID)
+  const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
 
   const handleSendMessage = (text: string) => {
     const newMsg: Message = {

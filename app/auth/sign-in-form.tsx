@@ -156,7 +156,20 @@ export function SignInForm() {
       }
       
       if (data.session) {
-        router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+        // Check if user has completed onboarding (has profile in Supabase)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', data.session.user.id)
+          .single()
+        
+        if (!profile || !profile.username) {
+          // User needs to complete onboarding
+          router.replace('/onboarding/username')
+        } else {
+          // User has completed onboarding, go to app
+          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+        }
       } else {
         setAuthError('Authentication failed. Please try again.')
       }
@@ -190,7 +203,20 @@ export function SignInForm() {
         })
         if (error) throw error
         if (data.session) {
-          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          // Check if user has completed onboarding (has profile in Supabase)
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', data.session.user.id)
+            .single()
+          
+          if (!profile || !profile.username) {
+            // User needs to complete onboarding
+            router.replace('/onboarding/username')
+          } else {
+            // User has completed onboarding, go to app
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          }
         } else {
           setAuthError('No session returned after Google sign-in.')
         }
@@ -330,7 +356,20 @@ export function SignInForm() {
                         token: credential.identityToken,
                       })
                       if (error) throw error
-                      if (data.session) router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                      if (data.session) {
+                        // Check if user has completed onboarding
+                        const { data: profile } = await supabase
+                          .from('profiles')
+                          .select('username')
+                          .eq('id', data.session.user.id)
+                          .single()
+                        
+                        if (!profile || !profile.username) {
+                          router.replace('/onboarding/username')
+                        } else {
+                          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                        }
+                      }
                     } catch (e: any) {
                       if (e?.code !== 'ERR_REQUEST_CANCELED') {
                         setAuthError('Apple sign-in failed')

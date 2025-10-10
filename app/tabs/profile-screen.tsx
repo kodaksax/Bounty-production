@@ -13,6 +13,7 @@ import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useUserProfile } from "../../hooks/useUserProfile";
+import { useAuthProfile } from "../../hooks/useAuthProfile";
 import { supabase } from '../../lib/supabase';
 
 // Update the ProfileScreen component to include real-time statistics
@@ -31,6 +32,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const authUserId = session?.user?.id;
   // Use new profile service (abstracted user profile fields)
   const { profile: userProfile, refresh: refreshUserProfile } = useUserProfile()
+  // Also use auth profile service for Supabase-synced profile
+  const { profile: authProfile, refreshProfile: refreshAuthProfile } = useAuthProfile()
 
   // Add state for statistics
   const [stats, setStats] = useState({
@@ -84,44 +87,33 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // The "Test" buttons will still update the UI state locally for demonstration.
 
   // Ensure a profile row exists for the authenticated user; if missing, create a minimal placeholder.
+  // This effect is now redundant as authProfileService handles this, but kept for backward compatibility
   useEffect(() => {
     const ensureProfile = async () => {
       if (!authUserId) return;
-      try {
-        const { data, error } = await supabase.from('profiles').select('id, username').eq('id', authUserId).single();
-        if (error && !data) {
-          // If the error indicates a type mismatch (bigint vs uuid), surface clearer guidance
-          const msg = error.message || '';
-          if (msg.includes('bigint') || msg.includes('invalid input syntax for type bigint') || (error as any)?.code === '22P02') {
-            console.warn('[ProfileScreen] profiles.id column appears to be BIGINT but auth user id is UUID. Change profiles.id to uuid referencing auth.users(id) OR add a separate user_id uuid column. Skipping auto-create. Raw error:', msg);
-            return; // bail; insertion will also fail below
-          }
-          // Attempt creation (username fallback to truncated id)
-          const username = authUserId.slice(0, 8);
-          const { error: insertErr } = await supabase.from('profiles').insert({ id: authUserId, username });
-          if (insertErr) {
-            if ((insertErr as any)?.code === '22P02' || insertErr.message.includes('bigint')) {
-              console.warn('[ProfileScreen] profile auto-create failed due to BIGINT/UUID mismatch. Fix schema: ALTER TABLE profiles ALTER COLUMN id TYPE uuid USING gen_random_uuid(); and add FK to auth.users. Error:', insertErr.message);
-            } else {
-              console.warn('[ProfileScreen] profile auto-create failed', insertErr.message);
-            }
-          } else {
-            await refreshUserProfile();
-          }
-        }
-      } catch (e) {
-        console.warn('[ProfileScreen] ensureProfile error', (e as any)?.message);
-      }
+      
+      // Refresh the auth profile to ensure it's synced
+      await refreshAuthProfile();
+      
+      // Also refresh local profile service
+      await refreshUserProfile();
     };
     ensureProfile();
-  }, [authUserId, refreshUserProfile]);
+  }, [authUserId, refreshUserProfile, refreshAuthProfile]);
 
   // Listen for changes from settings screen and sync with new profile service / local cache (scoped per user)
   useEffect(() => {
     const load = async () => {
       try {
-        // Try to load from new profile service first
-        if (userProfile) {
+        // Prefer auth profile (Supabase-synced) first
+        if (authProfile) {
+          setProfileData({
+            name: `@${authProfile.username}`,
+            about: authProfile.about || "Bounty user",
+            avatar: authProfile.avatar || "/placeholder.svg?height=80&width=80",
+          })
+        } else if (userProfile) {
+          // Fallback to local user profile service
           setProfileData({
             name: userProfile.displayName ? `${userProfile.displayName} (@${userProfile.username})` : `@${userProfile.username}`,
             about: userProfile.location || "Bounty user",
@@ -137,18 +129,26 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           const parsed = JSON.parse(storedSkills)
           if (Array.isArray(parsed)) setSkills(parsed)
         } else {
-          // Generate skills from new profile if available
+          // Generate skills from profiles
           const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = []
           
-          if (userProfile?.location) {
-            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${userProfile.location}` })
-          }
+          // Prefer auth profile data
+          const profileToUse = authProfile || userProfile
           
-          if (userProfile?.phone) {
+          if (profileToUse && 'phone' in profileToUse && profileToUse.phone) {
             defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' })
           }
           
-          defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
+          if (profileToUse && 'location' in profileToUse && (profileToUse as any).location) {
+            defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${(profileToUse as any).location}` })
+          }
+          
+          if (authProfile?.created_at) {
+            const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
+          } else {
+            defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
+          }
           
           setSkills(defaultSkills)
         }
@@ -157,7 +157,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       }
     }
     load()
-  }, [showSettings, userProfile, authUserId])
+  }, [showSettings, userProfile, authProfile, authUserId])
 
   const getIconComponent = (iconName: string) => {
     const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }

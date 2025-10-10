@@ -19,11 +19,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
 
 export default function PhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { updateProfile } = useUserProfile();
+  const { updateProfile: updateAuthProfile } = useAuthProfile();
   
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
@@ -31,17 +33,24 @@ export default function PhoneScreen() {
   const handleNext = async () => {
     setSaving(true);
     
+    // Save to local storage
     const result = await updateProfile({
       phone: phone.trim() || undefined,
     });
 
-    setSaving(false);
-
-    if (result.success) {
-      router.push('/onboarding/done');
-    } else {
+    if (!result.success) {
+      setSaving(false);
       Alert.alert('Error', result.error || 'Failed to save phone number');
+      return;
     }
+
+    // Also sync to Supabase via AuthProfileService
+    await updateAuthProfile({
+      phone: phone.trim() || undefined,
+    });
+
+    setSaving(false);
+    router.push('/onboarding/done');
   };
 
   const handleSkip = () => {

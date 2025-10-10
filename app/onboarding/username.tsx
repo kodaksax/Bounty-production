@@ -20,11 +20,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { validateUsername, isUsernameUnique } from '../../lib/services/userProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { supabase } from '../../lib/supabase';
 
 export default function UsernameScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, updateProfile } = useUserProfile();
+  const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
   
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -72,21 +75,58 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    if (!isValid || checking) return;
+    if (!isValid || checking || !userId) return;
 
-    // Save username to profile
-    const result = await updateProfile({ 
-      username,
-      displayName: profile?.displayName,
-      avatar: profile?.avatar,
-      location: profile?.location,
-      phone: profile?.phone,
-    });
+    try {
+      // Save username to local profile service
+      const result = await updateProfile({ 
+        username,
+        displayName: profile?.displayName,
+        avatar: profile?.avatar,
+        location: profile?.location,
+        phone: profile?.phone,
+      });
 
-    if (result.success) {
+      if (!result.success) {
+        setError(result.error || 'Failed to save username');
+        return;
+      }
+
+      // Also save to Supabase profiles table via AuthProfileService
+      // First check if profile exists
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      if (existingProfile) {
+        // Update existing profile
+        await updateAuthProfile({ username });
+      } else {
+        // Create new profile in Supabase
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            username,
+            balance: 0,
+          });
+
+        if (insertError) {
+          console.error('[onboarding] Error creating profile:', insertError);
+          setError('Failed to save profile. Please try again.');
+          return;
+        }
+
+        // Fetch the newly created profile via AuthProfileService
+        await updateAuthProfile({ username });
+      }
+
       router.push('/onboarding/details');
-    } else {
-      setError(result.error || 'Failed to save username');
+    } catch (err) {
+      console.error('[onboarding] Error:', err);
+      setError('Failed to save username. Please try again.');
     }
   };
 

@@ -74,7 +74,8 @@ export function SignUpForm() {
 
       // If email confirmations are enabled, session may be null until user verifies email
       if (data.session) {
-        router.replace('/tabs/bounty-app')
+        // New users always need to complete onboarding
+        router.replace('/onboarding/username')
       } else {
         // Show a friendly note and route to sign-in
         setAuthError('Check your email to confirm your account, then sign in.')

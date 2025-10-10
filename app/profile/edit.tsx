@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useProfile } from "hooks/useProfile";
-import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -14,12 +14,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuthContext } from "../../hooks/use-auth-context";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuthContext();
+  const currentUserId = getCurrentUserId();
   
-  const { profile, loading, error, updateProfile } = useProfile(CURRENT_USER_ID);
+  const { profile, loading, error, updateProfile } = useProfile(currentUserId);
 
   const [formData, setFormData] = useState({
     name: profile?.name || "",
