@@ -138,6 +138,8 @@ export class AuthProfileService {
 
   /**
    * Create a minimal profile for a new user
+   * This is called when a Supabase auth user exists but has no profile record
+   * Note: Minimal profiles are temporary - users should complete onboarding
    */
   private async createMinimalProfile(userId: string): Promise<AuthProfile | null> {
     if (!isSupabaseConfigured) {
@@ -145,9 +147,39 @@ export class AuthProfileService {
     }
 
     try {
+      // Generate a temporary username from email or user ID
+      // This will be replaced during onboarding
       const username = this.currentSession?.user?.email?.split('@')[0] || `user_${userId.slice(0, 8)}`;
       const email = this.currentSession?.user?.email;
 
+      // Check if profile already exists (race condition protection)
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (existing) {
+        // Profile was created by another process, use it
+        const profile: AuthProfile = {
+          id: existing.id,
+          username: existing.username,
+          email: existing.email,
+          avatar: existing.avatar,
+          about: existing.about,
+          phone: existing.phone,
+          balance: existing.balance || 0,
+          created_at: existing.created_at,
+          updated_at: existing.updated_at,
+        };
+
+        this.currentProfile = profile;
+        await this.cacheProfile(profile);
+        this.notifyListeners(profile);
+        return profile;
+      }
+
+      // Create new minimal profile
       const { data, error } = await supabase
         .from('profiles')
         .insert({
@@ -160,6 +192,36 @@ export class AuthProfileService {
         .single();
 
       if (error) {
+        // If error is due to duplicate key, profile was created concurrently
+        if (error.code === '23505') {
+          logger.warning('Profile already exists (concurrent creation)', { userId });
+          // Fetch the existing profile
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+          if (existingProfile) {
+            const profile: AuthProfile = {
+              id: existingProfile.id,
+              username: existingProfile.username,
+              email: existingProfile.email,
+              avatar: existingProfile.avatar,
+              about: existingProfile.about,
+              phone: existingProfile.phone,
+              balance: existingProfile.balance || 0,
+              created_at: existingProfile.created_at,
+              updated_at: existingProfile.updated_at,
+            };
+
+            this.currentProfile = profile;
+            await this.cacheProfile(profile);
+            this.notifyListeners(profile);
+            return profile;
+          }
+        }
+
         logger.error('Error creating minimal profile', { userId, error });
         return null;
       }
@@ -180,6 +242,7 @@ export class AuthProfileService {
         this.currentProfile = profile;
         await this.cacheProfile(profile);
         this.notifyListeners(profile);
+        logger.info('Created minimal profile for new user', { userId, username });
         return profile;
       }
 

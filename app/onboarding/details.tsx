@@ -19,11 +19,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
 
 export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, updateProfile } = useUserProfile();
+  const { updateProfile: updateAuthProfile } = useAuthProfile();
   
   const [displayName, setDisplayName] = useState(profile?.displayName || '');
   const [location, setLocation] = useState(profile?.location || '');
@@ -32,18 +34,25 @@ export default function DetailsScreen() {
   const handleNext = async () => {
     setSaving(true);
     
+    // Save to local storage
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
       location: location.trim() || undefined,
     });
 
-    setSaving(false);
-
-    if (result.success) {
-      router.push('/onboarding/phone');
-    } else {
+    if (!result.success) {
+      setSaving(false);
       Alert.alert('Error', result.error || 'Failed to save details');
+      return;
     }
+
+    // Also sync to Supabase via AuthProfileService
+    await updateAuthProfile({
+      about: location.trim() || undefined,
+    });
+
+    setSaving(false);
+    router.push('/onboarding/phone');
   };
 
   const handleSkip = () => {
