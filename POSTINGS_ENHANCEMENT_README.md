@@ -82,7 +82,7 @@ Lightweight dispute mechanism for handling conflicts:
 **Dispute Modal**:
 - Guidance-first approach
 - Clear explanation of dispute process
-- Support contact information (support@bounty.app)
+- Support contact information (Support@bountyfinder.app)
 - Step-by-step process outline
 - Confirmation step to prevent accidental disputes
 
@@ -440,7 +440,7 @@ For issues or questions:
 - Check integration guides: `RATING_INTEGRATION_GUIDE.md`, `DISPUTE_INTEGRATION_GUIDE.md`
 - Review component implementations in `components/`
 - Check service implementations in `lib/services/`
-- Email: support@bounty.app
+- Email: Support@bountyfinder.app
 
 ## License
 

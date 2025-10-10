@@ -19,7 +19,7 @@ interface DisputeModalProps {
   transactionId?: string;
 }
 
-const SUPPORT_EMAIL = "support@bounty.app";
+const SUPPORT_EMAIL = "Support@bountyfinder.app";
 
 export function DisputeModal({
   visible,

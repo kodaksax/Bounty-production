@@ -369,10 +369,10 @@ Update the support email in the DisputeModal:
 
 ```tsx
 // In dispute-modal.tsx
-const SUPPORT_EMAIL = "support@bounty.app";
+const SUPPORT_EMAIL = "Support@bountyfinder.app";
 
 // Can be configured via environment variable:
-const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || "support@bounty.app";
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || "Support@bountyfinder.app";
 ```
 
 ## Backend Requirements
