@@ -1,7 +1,7 @@
-import { bountyRequestService } from "lib/services/bounty-request-service"
-import { bountyService } from "lib/services/bounty-service"
-import { profileService } from "lib/services/profile-service"
-import { authProfileService } from "lib/services/auth-profile-service"
+import { authProfileService } from "lib/services/auth-profile-service";
+import { bountyRequestService } from "lib/services/bounty-request-service";
+import { bountyService } from "lib/services/bounty-service";
+import { profileService } from "lib/services/profile-service";
 
 // API Configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
