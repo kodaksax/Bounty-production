@@ -78,6 +78,17 @@ export interface Conversation {
   unread?: number;
 }
 
+// User Rating
+export interface UserRating {
+  id: string;
+  user_id: string; // ratee (person being rated)
+  rater_id: string; // person giving the rating
+  bountyId?: string;
+  score: 1 | 2 | 3 | 4 | 5;
+  comment?: string;
+  createdAt: string;
+}
+
 // Wallet Transaction
 export interface WalletTransaction {
   id: string;
@@ -85,4 +96,5 @@ export interface WalletTransaction {
   amount: Money;
   bountyId?: string;
   createdAt: string;
+  disputeStatus?: "none" | "pending" | "resolved";
 }

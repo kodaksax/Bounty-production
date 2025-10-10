@@ -16,6 +16,9 @@ export type Bounty = {
   is_time_sensitive?: boolean
   deadline?: string // ISO date string when is_time_sensitive === true
   attachments_json?: string // JSON serialized AttachmentMeta[] (storage format)
+  // Rating aggregates for the bounty poster
+  averageRating?: number
+  ratingCount?: number
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

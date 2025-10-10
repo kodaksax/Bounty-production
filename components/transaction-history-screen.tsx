@@ -269,7 +269,15 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                             </Text>
                           </View>
                           <View className="flex justify-between items-center mt-1">
-                            <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
+                            <View className="flex-row items-center gap-2">
+                              <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
+                              {(transaction as any).disputeStatus === "pending" && (
+                                <View className="flex-row items-center bg-red-500/80 px-2 py-0.5 rounded-full">
+                                  <MaterialIcons name="warning" size={10} color="#fff" />
+                                  <Text className="text-[10px] text-white font-bold ml-1">DISPUTE</Text>
+                                </View>
+                              )}
+                            </View>
                             {transaction.details.status && (
                               <Text
                                 className={cn(
