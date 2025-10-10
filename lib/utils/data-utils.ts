@@ -89,8 +89,8 @@ export const getCurrentUserProfile = async (): Promise<Profile | null> => {
   }
 }
 
-// Get the current user ID
-export const getCurrentUserId = async (): Promise<string | null> => {
+// Fetch the current user ID from the API (async helper)
+export const fetchCurrentUserId = async (): Promise<string | null> => {
   try {
     const res = await fetch(`${API_BASE_URL}/api/user-id`);
     if (!res.ok) return null;
