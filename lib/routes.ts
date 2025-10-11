@@ -17,6 +17,12 @@ export const ROUTES = {
     PROFILE: '/tabs/profile-screen',
     SEARCH: '/tabs/search',
   },
+  // Bounty detail flows
+  BOUNTY: {
+    DASHBOARD: (id: string | number) => `/postings/${id}` as const,
+    REVIEW_AND_VERIFY: (id: string | number) => `/postings/${id}/review-and-verify` as const,
+    PAYOUT: (id: string | number) => `/postings/${id}/payout` as const,
+  },
   // Admin section
   ADMIN: {
     INDEX: '/(admin)',
