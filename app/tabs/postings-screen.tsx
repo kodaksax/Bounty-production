@@ -23,6 +23,7 @@ import { EditPostingModal } from "../../components/edit-posting-modal"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { useWallet } from '../../lib/wallet-context'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { OfflineStatusBadge } from '../../components/offline-status-badge'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 
@@ -483,6 +484,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <MaterialIcons name="bookmark" size={20} color="#ffffff" />
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Offline status badge */}
+          <View className="px-4 mb-2">
+            <OfflineStatusBadge />
           </View>
 
           {/* Title (centered below header) */}

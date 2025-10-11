@@ -12,6 +12,7 @@ import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { OfflineStatusBadge } from '../../components/offline-status-badge'
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -93,7 +94,7 @@ export function MessengerScreen({
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       <View className="p-4 pt-8 pb-2">
-        <View className="flex-row justify-between items-center">
+        <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
             <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
@@ -102,16 +103,21 @@ export function MessengerScreen({
         </View>
       </View>
 
-      <View className="px-4 py-2 flex-row justify-between items-center">
-        <Text className="text-xl font-bold">INBOX</Text>
-        <View className="flex-row gap-4">
-          <TouchableOpacity onPress={refresh}>
-            <MaterialIcons name="refresh" size={20} color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Text className="text-sm">New Group</Text>
-          </TouchableOpacity>
+      <View className="px-4 py-2">
+        <View className="flex-row justify-between items-center mb-2">
+          <Text className="text-xl font-bold">INBOX</Text>
+          <View className="flex-row gap-4">
+            <TouchableOpacity onPress={refresh}>
+              <MaterialIcons name="refresh" size={20} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity>
+              <Text className="text-sm">New Group</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        
+        {/* Offline status badge */}
+        <OfflineStatusBadge />
       </View>
 
       {error && (

@@ -2,6 +2,8 @@ import type { Bounty } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
+import { offlineQueueService } from './offline-queue-service';
+import NetInfo from '@react-native-community/netinfo';
 
 // API Configuration
 function getApiBaseUrl() {
@@ -191,10 +193,28 @@ export const bountyService = {
   },
 
   /**
-   * Create a new bounty
+   * Create a new bounty with offline support
    */
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
+      // Check network connectivity
+      const netState = await NetInfo.fetch();
+      const isOnline = !!netState.isConnected;
+
+      // If offline, queue the bounty for later
+      if (!isOnline) {
+        console.log('📴 Offline: queueing bounty for later submission');
+        await offlineQueueService.enqueue('bounty', { bounty });
+        
+        // Return a temporary bounty object with a temp ID
+        return {
+          ...bounty,
+          id: Date.now(), // temporary ID
+          created_at: new Date().toISOString(),
+          status: 'open',
+        } as Bounty;
+      }
+
       if (isSupabaseConfigured) {
         // Try direct Supabase insert first (works if RLS permits anon/session)
         const { data, error } = await supabase
@@ -393,5 +413,71 @@ export const bountyService = {
    */
   async getArchivedBounties(): Promise<Bounty[]> {
     return this.getAll({ status: "archived" })
+  },
+
+  /**
+   * Process a queued bounty (called by offline queue service)
+   */
+  async processQueuedBounty(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
+    // Use direct create logic without offline queueing
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('bounties')
+          .insert(bounty as any)
+          .select('*')
+          .single()
+
+        if (!error) {
+          return (data as unknown as Bounty) ?? null
+        }
+
+        // Fallback to relay for RLS/permission errors
+        const msg = typeof error.message === 'string' ? error.message : String(error)
+        const isPolicy = /row level security|RLS|permission denied|not authorized/i.test(msg)
+        if (!isPolicy) {
+          throw new Error(msg)
+        }
+
+        // Use server relay
+        const relayResp = await fetch(`${getApiBaseUrl()}/api/supabase/bounties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...bounty,
+            status: (bounty as any).status || 'open',
+            timeline: (bounty as any).timeline ?? '',
+            skills_required: (bounty as any).skills_required ?? '',
+            work_type: (bounty as any).work_type || 'online',
+          }),
+        })
+        if (!relayResp.ok) {
+          const text = await relayResp.text()
+          throw new Error(`Relay insert failed: ${text}`)
+        }
+        return await relayResp.json() as Bounty
+      }
+
+      // Direct API call
+      const API_URL = `${getApiBaseUrl()}/api/bounties`
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(bounty),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to create bounty: ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Unknown error")
+      logger.error('Error processing queued bounty', { bounty, error: { message: error.message } })
+      throw error
+    }
   },
 }

@@ -75,19 +75,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
     setSubmitError(null);
 
     try {
-      // Check network connectivity
-      const isOnline = await bountyService.checkConnectivity();
-      if (!isOnline) {
-        Alert.alert(
-          'No Internet Connection',
-          'Please check your connection and try again.',
-          [{ text: 'OK' }]
-        );
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Create the bounty
+      // Create the bounty (offline support built-in)
       const result = await bountyService.createBounty(draft);
 
       if (!result) {
@@ -97,13 +85,19 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       // Clear draft on success
       await clearDraft();
 
+      // Check if we're online to show appropriate message
+      const { offlineQueueService } = await import('lib/services/offline-queue-service');
+      const isOnline = offlineQueueService.getOnlineStatus();
+
       // Show success message
       Alert.alert(
-        'Bounty Posted! 🎉',
-        'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
+        isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📤',
+        isOnline 
+          ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
+          : 'You\'re offline. Your bounty will be posted automatically when you reconnect.',
         [
           {
-            text: 'View Bounty',
+            text: isOnline ? 'View Bounty' : 'OK',
             onPress: () => {
               if (onComplete) {
                 onComplete(result.id.toString());
