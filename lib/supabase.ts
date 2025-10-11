@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 // SecureStore adapter for RN environment (persists auth session)
@@ -8,9 +9,15 @@ type StorageAdapter = {
   setItem: (key: string, value: string) => Promise<void> | void;
   removeItem: (key: string) => Promise<void> | void;
 };
+// On iOS, default SecureStore accessibility (WHEN_UNLOCKED) can fail when the app is in background
+// and Supabase tries to auto-refresh ("User interaction is not allowed"). Persist items with
+// AFTER_FIRST_UNLOCK so background reads work after the device has been unlocked once post-boot.
+const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
+  Platform.OS === 'ios' ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined;
+
 const ExpoSecureStoreAdapter: StorageAdapter = {
   getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value, SECURE_OPTS),
   removeItem: (key: string) => SecureStore.deleteItemAsync(key),
 };
 
@@ -59,11 +66,7 @@ let supabase: SupabaseClient
 if (isSupabaseConfigured) {
   supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {
-      storage: {
-        getItem: (key: string) => SecureStore.getItemAsync(key),
-        setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-        removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-      },
+      storage: ExpoSecureStoreAdapter,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
@@ -85,3 +88,4 @@ if (isSupabaseConfigured) {
 }
 
 export { supabase };
+

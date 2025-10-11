@@ -1,16 +1,16 @@
 // app/postings/[bountyId]/index.tsx - Bounty Dashboard
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -36,7 +36,7 @@ const STAGES: StageInfo[] = [
 ];
 
 export default function BountyDashboard() {
-  const { bountyId } = useLocalSearchParams<{ bountyId: string }>();
+  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
@@ -51,16 +51,27 @@ export default function BountyDashboard() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
-  useEffect(() => {
-    loadBounty();
-    loadConversation();
-  }, [bountyId]);
+  // Normalize route param to a string (supports UUIDs)
+  const routeBountyId = React.useMemo(() => {
+    const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId
+    return raw && String(raw).trim().length > 0 ? String(raw) : null
+  }, [bountyId])
 
-  const loadBounty = async () => {
+  useEffect(() => {
+    if (!routeBountyId) {
+      setError('Invalid bounty id')
+      setIsLoading(false)
+      return
+    }
+    loadBounty(routeBountyId)
+    loadConversation(routeBountyId)
+  }, [routeBountyId]);
+
+  const loadBounty = async (id: string) => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await bountyService.getById(Number(bountyId));
+      const data = await bountyService.getById(id);
       
       if (!data) {
         throw new Error('Bounty not found');
@@ -92,10 +103,10 @@ export default function BountyDashboard() {
     }
   };
 
-  const loadConversation = async () => {
+  const loadConversation = async (idStr: string) => {
     try {
       const conversations = await messageService.getConversations();
-      const bountyConv = conversations.find((c) => c.bountyId === bountyId);
+      const bountyConv = conversations.find((c) => String(c.bountyId) === idStr);
       setConversation(bountyConv || null);
     } catch (err) {
       console.error('Error loading conversation:', err);
@@ -141,7 +152,9 @@ export default function BountyDashboard() {
     
     if (currentIndex === STAGES.length - 2) {
       // Moving from review_verify to payout
-      router.push(`/postings/${bountyId}/review-and-verify`);
+      if (routeBountyId) {
+        router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: routeBountyId } })
+      }
     } else if (currentIndex < STAGES.length - 1) {
       const nextStage = STAGES[currentIndex + 1];
       setCurrentStage(nextStage.id);
@@ -205,7 +218,7 @@ export default function BountyDashboard() {
       <View style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -264,6 +277,21 @@ export default function BountyDashboard() {
         </View>
 
         {/* Timeline */}
+        {bounty.status === 'open' && (
+          <View style={styles.preAcceptancePanel}>
+            <MaterialIcons name="hourglass-empty" size={24} color="#6ee7b7" />
+            <Text style={styles.preAcceptanceTitle}>Awaiting a hunter</Text>
+            <Text style={styles.preAcceptanceText}>
+              This posting is visible in the feed. You’ll receive requests from hunters and can review them from the Postings screen.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.back()}>
+                <Text style={styles.secondaryBtnText}>Back to My Postings</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <View style={styles.timelineContainer}>
           <Text style={styles.sectionTitle}>Progress Timeline</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timeline}>
@@ -413,7 +441,7 @@ export default function BountyDashboard() {
         {currentStage === 'payout' && (
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() => router.push(`/postings/${bountyId}/payout`)}
+            onPress={() => routeBountyId && router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: routeBountyId } })}
           >
             <Text style={styles.nextButtonText}>Go to Payout</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
@@ -734,6 +762,38 @@ const styles = StyleSheet.create({
   nextButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  preAcceptancePanel: {
+    backgroundColor: 'rgba(5, 150, 105, 0.25)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    marginBottom: 16,
+  },
+  preAcceptanceTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  preAcceptanceText: {
+    color: '#d1fae5',
+    fontSize: 13,
+  },
+  secondaryBtn: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(110,231,183,0.5)',
+  },
+  secondaryBtnText: {
+    color: '#6ee7b7',
+    fontSize: 13,
     fontWeight: '600',
   },
 });

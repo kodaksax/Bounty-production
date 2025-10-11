@@ -33,21 +33,21 @@ export const bountyService = {
   /**
    * Get a bounty by ID
    */
-  async getById(id: number): Promise<Bounty | null> {
+  async getById(id: number | string): Promise<Bounty | null> {
     try {
-      // Prefer Supabase when configured
+      // Prefer Supabase when configured; Supabase can match UUID or numeric ids depending on schema
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('bounties')
           .select('*')
-          .eq('id', id)
+          .eq('id', id as any)
           .single()
 
         if (error) throw error
         return (data as unknown as Bounty) ?? null
       }
 
-  const API_URL = `${getApiBaseUrl()}/api/bounties/${id}`
+  const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(id))}`
       const response = await fetch(API_URL, {
         headers: {
           'Content-Type': 'application/json',

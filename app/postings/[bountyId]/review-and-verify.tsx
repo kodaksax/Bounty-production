@@ -3,15 +3,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -28,7 +28,7 @@ interface ProofItem {
 }
 
 export default function ReviewAndVerifyScreen() {
-  const { bountyId } = useLocalSearchParams<{ bountyId: string }>();
+  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
@@ -50,7 +50,11 @@ export default function ReviewAndVerifyScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await bountyService.getById(Number(bountyId));
+      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
+      if (!id) {
+        throw new Error('Invalid bounty id')
+      }
+      const data = await bountyService.getById(id);
 
       if (!data) {
         throw new Error('Bounty not found');
@@ -102,7 +106,8 @@ export default function ReviewAndVerifyScreen() {
     console.log('Saving rating:', { rating, comment: ratingComment });
 
     // Navigate to payout
-    router.push(`/postings/${bountyId}/payout`);
+    const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
+    if (id) router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: String(id) } })
   };
 
   const formatFileSize = (bytes?: number) => {

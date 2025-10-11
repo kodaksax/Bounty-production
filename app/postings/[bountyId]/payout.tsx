@@ -3,24 +3,24 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
-import { useWallet } from '../../../lib/wallet-context';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { useWallet } from '../../../lib/wallet-context';
 
 export default function PayoutScreen() {
-  const { bountyId } = useLocalSearchParams<{ bountyId: string }>();
+  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
@@ -41,7 +41,11 @@ export default function PayoutScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await bountyService.getById(Number(bountyId));
+      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
+      if (!id) {
+        throw new Error('Invalid bounty id')
+      }
+      const data = await bountyService.getById(id);
 
       if (!data) {
         throw new Error('Bounty not found');
@@ -79,7 +83,7 @@ export default function PayoutScreen() {
       setIsProcessing(true);
 
       // Update bounty status to completed
-      const updated = await bountyService.update(Number(bountyId), {
+      const updated = await bountyService.update(Number(bounty?.id), {
         status: 'completed',
       });
 
