@@ -620,12 +620,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   )}
                   renderItem={({ item: bounty }) => (
                     <InProgressBountyItem
+                      bountyId={bounty.id}
                       username={bounty.user_id === currentUserId ? "@Jon_Doe" : "@User"}
                       title={bounty.title}
                       amount={Number(bounty.amount)}
                       distance={calculateDistance(bounty.location || "")}
                       timeAgo={formatTimeAgo(bounty.created_at)}
                       workType={bounty.work_type}
+                      isForHonor={bounty.is_for_honor}
                     />
                   )}
                   ListEmptyComponent={

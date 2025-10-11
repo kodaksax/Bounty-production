@@ -1,0 +1,709 @@
+// app/in-progress/[bountyId]/hunter/review-and-verify.tsx - Review & verify with proof submission
+import { MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthContext } from '../../../../hooks/use-auth-context';
+import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
+import { bountyService } from '../../../../lib/services/bounty-service';
+import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
+import { messageService } from '../../../../lib/services/message-service';
+import type { Conversation } from '../../../../lib/types';
+import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+
+type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
+
+interface StageInfo {
+  id: HunterStage;
+  label: string;
+  icon: string;
+}
+
+const HUNTER_STAGES: StageInfo[] = [
+  { id: 'apply', label: 'Apply for work', icon: 'work' },
+  { id: 'work_in_progress', label: 'Work in progress', icon: 'trending-up' },
+  { id: 'review_verify', label: 'Review & verify', icon: 'rate-review' },
+  { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
+];
+
+interface ProofItem {
+  id: string;
+  type: 'image' | 'file';
+  name: string;
+  url?: string;
+  size?: number;
+}
+
+export default function HunterReviewAndVerifyScreen() {
+  const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { session } = useAuthContext();
+  const currentUserId = getCurrentUserId();
+
+  const [bounty, setBounty] = useState<Bounty | null>(null);
+  const [request, setRequest] = useState<BountyRequest | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentStage] = useState<HunterStage>('review_verify');
+  const [messageText, setMessageText] = useState('');
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [proofItems, setProofItems] = useState<ProofItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const routeBountyId = React.useMemo(() => {
+    const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
+    return raw && String(raw).trim().length > 0 ? String(raw) : null;
+  }, [bountyId]);
+
+  useEffect(() => {
+    if (!routeBountyId) {
+      setError('Invalid bounty id');
+      setIsLoading(false);
+      return;
+    }
+    loadData(routeBountyId);
+    loadConversation(routeBountyId);
+    loadProofItems();
+  }, [routeBountyId]);
+
+  const loadData = async (id: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Load bounty
+      const bountyData = await bountyService.getById(id);
+      if (!bountyData) {
+        throw new Error('Bounty not found');
+      }
+
+      setBounty(bountyData);
+
+      // Check if hunter has an accepted request for this bounty
+      const requests = await bountyRequestService.getAll({
+        bountyId: id,
+        userId: currentUserId,
+      });
+
+      if (requests.length === 0) {
+        Alert.alert('No Application', 'You have not applied to this bounty.', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        return;
+      }
+
+      const hunterRequest = requests[0];
+      setRequest(hunterRequest);
+
+      // If not accepted yet, go back to apply screen
+      if (hunterRequest.status !== 'accepted') {
+        router.replace({
+          pathname: '/in-progress/[bountyId]/hunter/apply',
+          params: { bountyId: id },
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadConversation = async (idStr: string) => {
+    try {
+      const conversations = await messageService.getConversations();
+      const bountyConv = conversations.find((c) => String(c.bountyId) === idStr);
+      setConversation(bountyConv || null);
+    } catch (err) {
+      console.error('Error loading conversation:', err);
+    }
+  };
+
+  const loadProofItems = async () => {
+    try {
+      // Mock proof items for now - in real implementation, fetch from backend
+      const mockProof: ProofItem[] = [
+        { id: '1', type: 'image', name: 'work_photo_1.jpg', size: 2048 },
+        { id: '2', type: 'image', name: 'work_photo_2.jpg', size: 1856 },
+      ];
+      setProofItems(mockProof);
+    } catch (err) {
+      console.error('Error loading proof items:', err);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !conversation) {
+      if (!conversation) {
+        Alert.alert('No Conversation', 'No active conversation found for this bounty.');
+      }
+      return;
+    }
+
+    try {
+      setIsSendingMessage(true);
+      await messageService.sendMessage(conversation.id, messageText.trim());
+      setMessageText('');
+      Alert.alert('Success', 'Message sent successfully!');
+    } catch (err) {
+      console.error('Error sending message:', err);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  const handleAddProof = () => {
+    // In real implementation, use expo-document-picker or expo-image-picker
+    Alert.alert(
+      'Add Proof',
+      'This feature will allow you to upload images or files as proof of completion.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleRemoveProof = (id: string) => {
+    setProofItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleRequestReview = async () => {
+    if (proofItems.length === 0) {
+      Alert.alert(
+        'No Proof Attached',
+        'Please attach at least one proof of completion before requesting review.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      // In real implementation, update bounty status and notify poster
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+
+      Alert.alert(
+        'Review Requested',
+        'Your work has been submitted for review. The poster will verify and release payment.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate to payout screen (disabled state)
+              if (routeBountyId) {
+                router.push({
+                  pathname: '/in-progress/[bountyId]/hunter/payout',
+                  params: { bountyId: routeBountyId },
+                });
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      console.error('Error requesting review:', err);
+      Alert.alert('Error', 'Failed to request review. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '0 KB';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const renderProofItem = ({ item }: { item: ProofItem }) => (
+    <View style={styles.proofItem}>
+      <View style={styles.proofIcon}>
+        <MaterialIcons
+          name={item.type === 'image' ? 'image' : 'insert-drive-file'}
+          size={32}
+          color="#6ee7b7"
+        />
+      </View>
+      <View style={styles.proofInfo}>
+        <Text style={styles.proofName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => handleRemoveProof(item.id)}
+      >
+        <MaterialIcons name="close" size={20} color="#ef4444" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (error || !bounty || !request) {
+    return (
+      <View style={styles.errorContainer}>
+        <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+        <Text style={styles.errorText}>{error || 'Data not found'}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => routeBountyId && loadData(routeBountyId)}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Review & Verify</Text>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Bounty Info Card */}
+        <View style={styles.bountyInfoCard}>
+          <Text style={styles.bountyTitle} numberOfLines={2}>
+            {bounty.title}
+          </Text>
+          <Text style={styles.bountyAmount}>
+            {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
+          </Text>
+        </View>
+
+        {/* Timeline */}
+        <View style={styles.timelineContainer}>
+          <Text style={styles.sectionTitle}>Progress Timeline</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.timeline}
+          >
+            {HUNTER_STAGES.map((stage, index) => {
+              const isActive = stage.id === currentStage;
+              const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
+              const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
+              const isCompleted = stageIndex < currentIndex;
+              const isAccessible = stageIndex <= currentIndex;
+
+              return (
+                <View
+                  key={stage.id}
+                  style={[
+                    styles.stageItem,
+                    isActive && styles.stageItemActive,
+                    isCompleted && styles.stageItemCompleted,
+                    !isAccessible && styles.stageItemLocked,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.stageIcon,
+                      isActive && styles.stageIconActive,
+                      isCompleted && styles.stageIconCompleted,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name={stage.icon as any}
+                      size={24}
+                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                    />
+                  </View>
+                  <Text style={styles.stageLabel}>{stage.label}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Quick Messaging */}
+        {conversation && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Quick Message to Poster</Text>
+            <View style={styles.messageInputContainer}>
+              <TextInput
+                style={styles.messageInput}
+                placeholder="Type a message to the poster..."
+                placeholderTextColor="rgba(255,254,245,0.4)"
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
+                onPress={handleSendMessage}
+                disabled={!messageText.trim() || isSendingMessage}
+              >
+                {isSendingMessage ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialIcons name="send" size={20} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Proof of Completion */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Proof of Completion</Text>
+          <Text style={styles.sectionSubtitle}>
+            Attach images or files showing your completed work
+          </Text>
+          {proofItems.length > 0 ? (
+            <FlatList
+              data={proofItems}
+              renderItem={renderProofItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.proofList}
+            />
+          ) : (
+            <View style={styles.emptyProof}>
+              <MaterialIcons name="attachment" size={48} color="#6ee7b7" />
+              <Text style={styles.emptyProofText}>No proof attached yet</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
+            <MaterialIcons name="add" size={20} color="#fff" />
+            <Text style={styles.addProofText}>Add Proof</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Request Review Button */}
+        <TouchableOpacity
+          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          onPress={handleRequestReview}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.submitButtonText}>Request Review</Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1a3d2e',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#1a3d2e',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: 'rgba(255,254,245,0.8)',
+    fontSize: 14,
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#1a3d2e',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  backButtonText: {
+    color: '#6ee7b7',
+    fontSize: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+  },
+  backIcon: {
+    padding: 4,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
+    gap: 20,
+  },
+  bountyInfoCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.3)',
+    gap: 8,
+  },
+  bountyTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  bountyAmount: {
+    color: '#10b981',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  timelineContainer: {
+    gap: 12,
+  },
+  sectionTitle: {
+    color: '#6ee7b7',
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timeline: {
+    gap: 16,
+    paddingVertical: 8,
+  },
+  stageItem: {
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minWidth: 120,
+  },
+  stageItemActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#10b981',
+    borderWidth: 2,
+  },
+  stageItemCompleted: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#10b981',
+  },
+  stageItemLocked: {
+    opacity: 0.5,
+  },
+  stageIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  stageIconActive: {
+    backgroundColor: '#10b981',
+  },
+  stageIconCompleted: {
+    backgroundColor: '#059669',
+  },
+  stageLabel: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  section: {
+    gap: 12,
+  },
+  sectionSubtitle: {
+    color: 'rgba(255,254,245,0.7)',
+    fontSize: 13,
+  },
+  messageInputContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-end',
+  },
+  messageInput: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 48,
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  sendButton: {
+    backgroundColor: '#10b981',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  proofList: {
+    gap: 12,
+  },
+  proofItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  proofIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  proofInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  proofName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  proofSize: {
+    color: '#6ee7b7',
+    fontSize: 12,
+  },
+  removeButton: {
+    padding: 8,
+  },
+  emptyProof: {
+    alignItems: 'center',
+    padding: 32,
+    gap: 12,
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderStyle: 'dashed',
+  },
+  emptyProofText: {
+    color: 'rgba(255,254,245,0.6)',
+    fontSize: 14,
+  },
+  addProofButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  addProofText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  submitButtonDisabled: {
+    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
