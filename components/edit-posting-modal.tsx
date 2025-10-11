@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import type { Bounty } from "lib/services/database.types";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -12,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import type { Bounty } from "lib/services/database.types";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface EditPostingModalProps {
   visible: boolean;
@@ -27,6 +28,7 @@ export function EditPostingModal({
   onClose,
   onSave,
 }: EditPostingModalProps) {
+  const insets = useSafeAreaInsets();
   const [formData, setFormData] = useState({
     title: bounty.title,
     description: bounty.description,
@@ -114,7 +116,11 @@ export function EditPostingModal({
 
             <ScrollView
               style={styles.content}
-              contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={[
+                styles.contentContainer,
+                // ensure actions aren't clipped behind bottom nav / home indicator
+                { paddingBottom: Math.max(insets.bottom, 16) + 60 },
+              ]}
               keyboardShouldPersistTaps="handled"
             >
               {/* Title */}
@@ -262,7 +268,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#047857", // emerald-700
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "90%",
+    // Use a fixed relative height so content gets layout below the header
+    height: "90%",
+    width: "100%",
     overflow: "hidden",
   },
   header: {
