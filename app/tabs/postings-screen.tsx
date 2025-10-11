@@ -13,6 +13,7 @@ import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useRouter } from "expo-router"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
@@ -39,6 +40,7 @@ interface PostingsScreenProps {
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
   const { session } = useAuthContext()
   const currentUserId = getCurrentUserId()
+  const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
@@ -681,6 +683,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     <BountyCard
                       bounty={bounty}
                       currentUserId={currentUserId}
+                      onPress={() => router.push(`/postings/${bounty.id}` as any)}
                       onEdit={() => handleEditBounty(bounty)}
                       onDelete={() => handleDeleteBounty(bounty)}
                     />
