@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
+import { useRouter } from "expo-router"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -13,18 +14,16 @@ import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useRouter } from "expo-router"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
-import { BountyCard } from "../../components/bounty-card"
-import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
-import { useWallet } from '../../lib/wallet-context'
+import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useWallet } from '../../lib/wallet-context'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 

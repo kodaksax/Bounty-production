@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native'
 import { MaterialIcons } from '@expo/vector-icons'
 import type { Bounty } from 'lib/services/database.types'
-import { BountyCard } from './bounty-card'
 import { messageService } from 'lib/services/message-service'
 import type { Conversation } from 'lib/types'
+import React, { useEffect, useMemo, useState } from 'react'
+import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native'
+import { BountyCard } from './bounty-card'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
