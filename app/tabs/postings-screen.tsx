@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
+import { useRouter } from "expo-router"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
@@ -16,14 +17,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
-import { BountyCard } from "../../components/bounty-card"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { BountyRequestItem } from "../../components/bounty-request-item"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
-import { useWallet } from '../../lib/wallet-context'
+import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { useWallet } from '../../lib/wallet-context'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 
@@ -40,6 +41,7 @@ interface PostingsScreenProps {
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
   const { session } = useAuthContext()
   const currentUserId = getCurrentUserId()
+  const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
@@ -96,6 +98,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
+  // Expanded rows map for My Postings list
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
 
   // Ensure BottomNav is visible while on Postings screen and during create steps
   useEffect(() => {
@@ -423,6 +427,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   if (showAddMoney) {
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
   }
+  // Local row component to encapsulate expansion state per item
+  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout }) => {
+    return (
+      <MyPostingExpandable
+        bounty={bounty}
+        currentUserId={currentUserId}
+        expanded={expanded}
+        onToggle={onToggle}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onGoToReview={onGoToReview}
+        onGoToPayout={onGoToPayout}
+      />
+    )
+  }
+
 
   // Calculate distance (mock function - in a real app, this would use geolocation)
   const calculateDistance = (location: string) => {
@@ -473,7 +493,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           <View className="flex-row justify-between items-center px-4">
             {/* Left: icon + title aligned like messenger (no back icon) */}
             <View className="flex-row items-center gap-3">
-              <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+              <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
               <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
             </View>
 
@@ -670,6 +690,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <FlatList
                   data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={(item) => item.id.toString()}
+                  extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
                       {(['all','online','in_person'] as const).map(f => {
@@ -684,11 +705,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     </View>
                   )}
                   renderItem={({ item: bounty }) => (
-                    <BountyCard
+                    <MyPostingRow
                       bounty={bounty}
                       currentUserId={currentUserId}
+                      expanded={!!expandedMap[String(bounty.id)]}
+                      onToggle={() => setExpandedMap((prev) => ({ ...prev, [String(bounty.id)]: !prev[String(bounty.id)] }))}
                       onEdit={() => handleEditBounty(bounty)}
                       onDelete={() => handleDeleteBounty(bounty)}
+                      onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
+                      onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
                     />
                   )}
                   ListEmptyComponent={

@@ -1,12 +1,13 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
-import React, { useState, useCallback } from "react"
+import React, { useCallback, useState } from "react"
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
@@ -97,23 +98,21 @@ export function MessengerScreen({
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
-            <Text className="text-lg font-bold tracking-wider">BOUNTY</Text>
+            <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
-          <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
+          <Text className="text-lg font-bold text-white">$ {balance.toFixed(2)}</Text>
         </View>
       </View>
 
-      <View className="px-4 py-2">
-        <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-xl font-bold">INBOX</Text>
-          <View className="flex-row gap-4">
-            <TouchableOpacity onPress={refresh}>
-              <MaterialIcons name="refresh" size={20} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity>
-              <Text className="text-sm">New Group</Text>
-            </TouchableOpacity>
-          </View>
+      <View className="px-4 py-2 flex-row justify-between items-center">
+        <Text className="text-xl font-bold text-white">INBOX</Text>
+        <View className="flex-row gap-4">
+          <TouchableOpacity onPress={refresh}>
+            <MaterialIcons name="refresh" size={20} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Text className="text-sm text-white">New Group</Text>
+          </TouchableOpacity>
         </View>
         
         {/* Offline status badge */}
@@ -193,7 +192,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 
       <View className="ml-3 flex-1 min-w-0">
         <View className="flex-row justify-between items-center">
-          <Text className="font-medium">{conversation.name}</Text>
+          <Text className="font-medium text-white">{conversation.name}</Text>
           <Text className="text-xs text-emerald-300">{time}</Text>
         </View>
         <View className="flex-row justify-between items-center mt-1">

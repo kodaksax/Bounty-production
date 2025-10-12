@@ -100,10 +100,15 @@ function BountyAppInner() {
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
     if (activeCategory !== "all") {
-      // simple contains filter on title/description to simulate
-      list = list.filter((b) =>
-        (b.title + " " + (b.description || "")).toLowerCase().includes(activeCategory.replace(/_/g, " ")),
-      )
+      if (activeCategory === 'forkids') {
+        // For Honor chip should show bounties marked as for-honor
+        list = list.filter((b) => Boolean(b.is_for_honor))
+      } else {
+        // simple contains filter on title/description to simulate other categories
+        list = list.filter((b) =>
+          (b.title + " " + (b.description || "")).toLowerCase().includes(activeCategory.replace(/_/g, " ")),
+        )
+      }
     }
     // High paying sorts by amount when selected
     if (activeCategory === "highpaying") {
@@ -268,7 +273,7 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
             <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
           </View>
           <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
