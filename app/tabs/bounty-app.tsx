@@ -106,6 +106,9 @@ function BountyAppInner() {
       } else if (activeCategory === 'remote') {
         // Remote chip filters for online work type
         list = list.filter((b) => b.work_type === 'online')
+      } else if (activeCategory === 'highpaying') {
+        // High Paying: exclude for-honor, only paid bounties
+        list = list.filter((b) => !b.is_for_honor && Number(b.amount) > 0)
       } else {
         // simple contains filter on title/description to simulate other categories
         list = list.filter((b) =>
@@ -113,9 +116,10 @@ function BountyAppInner() {
         )
       }
     }
-    // High paying sorts by amount when selected
+    // Sorting
     if (activeCategory === "highpaying") {
-      list.sort((a, b) => Number(b.amount) - Number(a.amount))
+      // Highest amount first
+      list.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
     } else {
       // default by proximity
       list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
