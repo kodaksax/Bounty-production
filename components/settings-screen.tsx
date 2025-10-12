@@ -4,6 +4,8 @@ import { MaterialIcons } from "@expo/vector-icons"
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { useAdmin } from "../lib/admin-context"
+import { useAuthProfile } from "../hooks/useAuthProfile"
+import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -22,12 +24,18 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'help' | 'co
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const { isAdmin, setIsAdmin } = useAdmin()
-  const [profileData, setProfileData] = useState({
-    name: '@jon_Doe',
-  about: '',
-    phone: '+998 90 943 32 00',
-    avatar: '/placeholder.svg?height=48&width=48',
-  })
+  
+  // Import profile hooks to get real profile data
+  const { profile: authProfile } = useAuthProfile()
+  const { profile: normalizedProfile } = useNormalizedProfile()
+  
+  // Use actual profile data from auth or normalized profile
+  const profileData = {
+    name: authProfile?.username || normalizedProfile?.username || '@user',
+    about: authProfile?.about || normalizedProfile?.bio || '',
+    phone: '+998 90 943 32 00', // Phone is private, not exposed
+    avatar: authProfile?.avatar || normalizedProfile?.avatar || '/placeholder.svg?height=48&width=48',
+  }
 
   const handleAdminToggle = async (value: boolean) => {
     await setIsAdmin(value)
@@ -39,7 +47,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   }
 
   const handleProfileSave = (data: { name: string; about: string; phone: string; avatar?: string }) => {
-    setProfileData(prev => ({ ...prev, ...data }))
+    // Profile updates are handled by authProfileService subscribers
+    // Just return to root panel - the profile will update automatically
     setPanel('root')
   }
 

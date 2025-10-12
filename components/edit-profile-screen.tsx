@@ -29,9 +29,9 @@ export function EditProfileScreen({
   initialAvatar = "/placeholder.svg?height=80&width=80",
   onSave,
 }: EditProfileScreenProps) {
-  const { profile: localProfile, updateProfile } = useUserProfile()
-  const { profile: authProfile, updateProfile: updateAuthProfile } = useAuthProfile()
-  const { profile: normalized } = useNormalizedProfile()
+  const { profile: localProfile, updateProfile, error: localProfileError } = useUserProfile()
+  const { profile: authProfile, updateProfile: updateAuthProfile, loading: authLoading } = useAuthProfile()
+  const { profile: normalized, loading: normalizedLoading, error: normalizedError } = useNormalizedProfile()
   const [name, setName] = useState(authProfile?.username || normalized?.name || localProfile?.displayName || initialName)
   const [about, setAbout] = useState(authProfile?.about || normalized?.bio || localProfile?.location || initialAbout)
   const [phone, setPhone] = useState(initialPhone)
@@ -39,8 +39,12 @@ export function EditProfileScreen({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const [bio, setBio] = useState(authProfile?.about || normalized?.bio || localProfile?.location || "")
   const { balance } = useWallet()
+  
+  // Show loading state if profiles are still loading
+  const isLoading = authLoading || normalizedLoading
 
   const validateName = (value: string) => {
     const trimmed = (value || '').trim()
@@ -63,7 +67,10 @@ export function EditProfileScreen({
     return false
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Prevent multiple simultaneous saves
+    if (isSaving) return
+    
     // Validation
     const nameError = validateName(name)
     if (nameError) {
@@ -77,41 +84,51 @@ export function EditProfileScreen({
       return
     }
 
-    // Persist via profile service, mapping fields to canonical keys.
-    // Use bio (wired) as the persisted about/location field.
-    const updates = { 
-      displayName: name.trim(), 
-      location: (bio || about || '').trim(), 
-      avatar: avatar?.trim() 
-    }
+    setIsSaving(true)
     
-    // Update local profile service
-    updateProfile(updates)
-      .then(async (res) => {
-        if (!res.success) {
-          setUploadMessage(res.error || 'Failed to save')
-          setTimeout(() => setUploadMessage(null), 2500)
-          return
-        }
-        
-        // Also update Supabase profile via auth profile service
-        await updateAuthProfile({
-          about: (bio || about || '').trim(),
-          avatar: avatar?.trim()
-        })
-        
-        // Also notify parent legacy state if provided
-        onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
-        setUploadMessage('Profile updated')
-        setTimeout(() => setUploadMessage(null), 1200)
-        // Return to previous screen after a short delay
-        setTimeout(() => onBack && onBack(), 300)
+    try {
+      // Update Supabase profile via auth profile service (primary source of truth)
+      const updatedProfile = await updateAuthProfile({
+        username: name.trim(),
+        about: (bio || about || '').trim(),
+        avatar: avatar?.trim()
       })
-      .catch((e) => {
-        console.error('[EditProfile] save error', e)
-        setUploadMessage('Error saving profile')
+      
+      if (!updatedProfile) {
+        setUploadMessage('Failed to save profile. Please try again.')
         setTimeout(() => setUploadMessage(null), 2500)
+        setIsSaving(false)
+        return
+      }
+      
+      // Also update local profile service for backward compatibility
+      const updates = { 
+        displayName: name.trim(), 
+        location: (bio || about || '').trim(), 
+        avatar: avatar?.trim() 
+      }
+      
+      await updateProfile(updates).catch(e => {
+        console.warn('[EditProfile] local profile update failed (non-critical):', e)
       })
+      
+      // Notify parent legacy state if provided
+      onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
+      
+      setUploadMessage('✓ Profile updated successfully!')
+      setTimeout(() => setUploadMessage(null), 1200)
+      
+      // Return to previous screen after a short delay
+      setTimeout(() => {
+        setIsSaving(false)
+        if (onBack) onBack()
+      }, 300)
+    } catch (e) {
+      console.error('[EditProfile] save error', e)
+      setUploadMessage('Error saving profile. Please try again.')
+      setTimeout(() => setUploadMessage(null), 2500)
+      setIsSaving(false)
+    }
   }
 
   const handleAvatarClick = async () => {
@@ -184,6 +201,46 @@ export function EditProfileScreen({
     handleSave()
   }
 
+  // Show loading spinner if profiles are loading
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-emerald-600 items-center justify-center">
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text className="text-white text-sm mt-4">Loading profile...</Text>
+      </View>
+    )
+  }
+  
+  // Show error state if there's an error loading profiles
+  if (localProfileError || normalizedError) {
+    return (
+      <View className="flex-1 bg-emerald-600">
+        <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
+          <View className="flex-row items-center">
+            <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
+            <Text className="text-white font-extrabold text-lg tracking-widest ml-2">BOUNTY</Text>
+          </View>
+          <TouchableOpacity onPress={onBack} accessibilityLabel="Back" className="p-2">
+            <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
+        <View className="flex-1 items-center justify-center px-6">
+          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <Text className="text-white text-lg font-semibold mt-4 text-center">Failed to Load Profile</Text>
+          <Text className="text-emerald-200 text-sm mt-2 text-center">
+            {localProfileError || normalizedError}
+          </Text>
+          <TouchableOpacity 
+            onPress={onBack}
+            className="mt-6 px-6 py-3 bg-emerald-700 rounded-lg"
+          >
+            <Text className="text-white font-semibold">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
   return (
     <View className="flex-1 bg-emerald-600">
       {/* Upload Status Banner */}
@@ -203,9 +260,23 @@ export function EditProfileScreen({
           <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
           <Text className="text-white font-extrabold text-lg tracking-widest ml-2">BOUNTY</Text>
         </View>
-        <TouchableOpacity onPress={handleBack} accessibilityLabel="Back" className="p-2">
-          <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity 
+            onPress={handleSave} 
+            disabled={isSaving}
+            className={`px-4 py-2 bg-emerald-800 rounded-lg ${isSaving ? 'opacity-50' : ''}`}
+            accessibilityLabel="Save"
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text className="text-white font-semibold">Save</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onBack} accessibilityLabel="Back" className="p-2" disabled={isSaving}>
+            <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Scrollable Content */}
