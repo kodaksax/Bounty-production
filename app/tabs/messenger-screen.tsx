@@ -12,7 +12,6 @@ import { useConversations } from "../../hooks/useConversations"
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
-import { useAuthContext } from '../../hooks/use-auth-context'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 
 // Helper to format conversation time
