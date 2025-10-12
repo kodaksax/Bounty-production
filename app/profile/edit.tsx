@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
+import { useAuthProfile } from "hooks/useAuthProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
@@ -23,9 +24,10 @@ export default function EditProfileScreen() {
   const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   
-  // Use normalized profile for display and useUserProfile for update operations
+  // Use normalized profile for display and both services for update operations
   const { profile, loading, error } = useNormalizedProfile(currentUserId);
   const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
+  const { updateProfile: updateAuthProfile } = useAuthProfile();
 
   const [formData, setFormData] = useState({
     name: profile?.name || "",
@@ -70,6 +72,17 @@ export default function EditProfileScreen() {
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
+      // Update auth profile (primary source of truth)
+      const authUpdated = await updateAuthProfile({
+        username: formData.username,
+        about: formData.bio,
+      });
+      
+      if (!authUpdated) {
+        throw new Error("Failed to update profile");
+      }
+
+      // Also update local profile for backward compatibility
       await updateLocalProfile({
         name: formData.name,
         username: formData.username,
@@ -77,6 +90,8 @@ export default function EditProfileScreen() {
         bio: formData.bio,
         languages,
         skills,
+      }).catch(e => {
+        console.warn('[EditProfile] local profile update failed (non-critical):', e);
       });
 
       Alert.alert("Success", "Profile updated successfully!", [

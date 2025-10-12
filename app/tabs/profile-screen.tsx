@@ -21,6 +21,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const [profileData, setProfileData] = useState({
     name: "",
     about: "",
@@ -180,8 +181,19 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     setIsEditing(false)
   }
 
-  const handleSettingsClose = () => {
+  const handleSettingsClose = async () => {
     setShowSettings(false)
+    // Refresh profile data when returning from settings
+    try {
+      await Promise.all([refreshAuthProfile(), refreshUserProfile()])
+      // Show brief success message
+      setUpdateMessage('Profile refreshed')
+      setTimeout(() => setUpdateMessage(null), 2000)
+    } catch (error) {
+      console.error('Error refreshing profile:', error)
+      setUpdateMessage('Failed to refresh profile')
+      setTimeout(() => setUpdateMessage(null), 3000)
+    }
   }
 
   // Share the user's profile (name, about, skills and a shareable link)
@@ -285,6 +297,17 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">
+      {/* Update Message Banner */}
+      {updateMessage && (
+        <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
+          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+            <Text className="text-white text-sm flex-1">{updateMessage}</Text>
+            <TouchableOpacity onPress={() => setUpdateMessage(null)}>
+              <MaterialIcons name="close" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* Header — left: BOUNTY brand, right: back + settings */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
