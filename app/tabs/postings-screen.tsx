@@ -16,14 +16,14 @@ import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollV
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
+import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
-import { ApplicantCard } from "../../components/applicant-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
-import { useAuthContext } from '../../hooks/use-auth-context'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
 
 // Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
