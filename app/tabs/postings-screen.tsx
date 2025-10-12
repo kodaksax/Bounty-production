@@ -18,7 +18,7 @@ import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen
 import { AddMoneyScreen } from "../../components/add-money-screen"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
-import { BountyRequestItem } from "../../components/bounty-request-item"
+import { ApplicantCard } from "../../components/applicant-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
@@ -304,6 +304,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   const handleAcceptRequest = async (requestId: number) => {
     try {
+      // Find the request to get bounty and profile info
+      const request = bountyRequests.find(req => req.id === requestId)
+      if (!request) {
+        throw new Error("Request not found")
+      }
+
       // ANNOTATION: This API call should be transactional on your backend.
       const result = await bountyRequestService.acceptRequest(requestId)
 
@@ -311,8 +317,51 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Failed to accept request")
       }
 
+      // Auto-create a conversation for coordination
+      try {
+        const { messageService } = await import('lib/services/message-service')
+        const conversation = await messageService.createConversation(
+          [request.user_id],
+          request.profile?.username || 'Hunter',
+          false
+        )
+        
+        // Send initial message with bounty context
+        await messageService.sendMessage(
+          conversation.id,
+          `Welcome! You've been selected for: "${request.bounty?.title}". Let's coordinate the details.`,
+          currentUserId
+        )
+
+        console.log('✅ Conversation created for accepted request:', conversation.id)
+      } catch (convError) {
+        console.error('Error creating conversation:', convError)
+        // Don't fail the whole operation if conversation creation fails
+      }
+
       // Update local state
       setBountyRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "accepted" } : req)))
+
+      // Show escrow instructions if it's a paid bounty
+      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
+        Alert.alert(
+          'Request Accepted',
+          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount} will be held securely until completion.\n💬 A conversation has been created to coordinate.`,
+          [
+            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
+            { text: 'OK' }
+          ]
+        )
+      } else {
+        Alert.alert(
+          'Request Accepted',
+          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.`,
+          [
+            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
+            { text: 'OK' }
+          ]
+        )
+      }
     } catch (err: any) {
       console.error("Error accepting request:", err)
       setError(err.message || "Failed to accept request")
@@ -657,19 +706,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   data={bountyRequests}
                   keyExtractor={(item) => item.id.toString()}
                   renderItem={({ item: request }) => (
-                    <BountyRequestItem
-                      username={request.profile.username}
-                      title={request.bounty.title}
-                      amount={Number(request.bounty.amount)}
-                      distance={calculateDistance(request.bounty.location || "")}
-                      timeAgo={formatTimeAgo(request.created_at)}
-                      avatarSrc={request.profile.avatar_url || undefined}
-                      onMenuClick={() => console.log(`Menu clicked for request ${request.id}`)}
-                      onAccept={() => handleAcceptRequest(request.id)}
-                      onReject={() => handleRejectRequest(request.id)}
-                      status={request.status}
-                      workType={request.bounty.work_type}
-                      deadline={request.bounty.deadline}
+                    <ApplicantCard
+                      request={request}
+                      onAccept={handleAcceptRequest}
+                      onReject={handleRejectRequest}
+                      onRequestMoreInfo={(requestId) => {
+                        // Open conversation to request more info
+                        console.log('Request more info for:', requestId)
+                        setActiveScreen('create')
+                      }}
                     />
                   )}
                   ListEmptyComponent={

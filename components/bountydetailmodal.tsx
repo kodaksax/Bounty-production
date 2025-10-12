@@ -3,6 +3,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
+    ActivityIndicator,
+    Alert,
     Dimensions,
     Modal,
     ScrollView,
@@ -12,6 +14,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
+import { bountyRequestService } from "../lib/services/bounty-request-service"
+import { getCurrentUserId } from "../lib/utils/data-utils"
 
 interface BountyDetailModalProps {
   bounty: {
@@ -44,8 +48,11 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
+  const [isApplying, setIsApplying] = useState(false)
+  const [hasApplied, setHasApplied] = useState(false)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
+  const currentUserId = getCurrentUserId()
 
   // Sample description if not provided
   const description =
@@ -74,6 +81,25 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
   // Handle click outside to close
   // In React Native, use TouchableWithoutFeedback for click outside modal.
 
+  // Check if user has already applied
+  useEffect(() => {
+    const checkApplicationStatus = async () => {
+      if (!currentUserId || !bounty.id) return
+      
+      try {
+        const requests = await bountyRequestService.getAll({
+          bountyId: bounty.id,
+          userId: currentUserId,
+        })
+        setHasApplied(requests.length > 0)
+      } catch (error) {
+        console.error('Error checking application status:', error)
+      }
+    }
+    
+    checkApplicationStatus()
+  }, [bounty.id, currentUserId])
+
   // Send message
   const handleSendMessage = () => {
     if (newMessage.trim() === "") return
@@ -98,6 +124,54 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
       }
       setMessages((prev) => [...prev, response])
     }, 1000)
+  }
+
+  // Handle apply for bounty
+  const handleApplyForBounty = async () => {
+    if (!currentUserId || !bounty.id) {
+      Alert.alert('Error', 'Unable to apply. Please try again.')
+      return
+    }
+
+    // Check if user is trying to apply to their own bounty
+    if (bounty.user_id === currentUserId) {
+      Alert.alert('Cannot Apply', 'You cannot apply to your own bounty.')
+      return
+    }
+
+    setIsApplying(true)
+    try {
+      const request = await bountyRequestService.create({
+        bounty_id: bounty.id,
+        user_id: currentUserId,
+        status: 'pending',
+      })
+
+      if (request) {
+        setHasApplied(true)
+        Alert.alert(
+          'Application Submitted',
+          'Your application has been submitted. The bounty poster will review it soon.',
+          [
+            {
+              text: 'View In Progress',
+              onPress: () => {
+                handleClose()
+                router.push(`/in-progress/${bounty.id}/hunter`)
+              },
+            },
+            { text: 'OK' },
+          ]
+        )
+      } else {
+        Alert.alert('Error', 'Failed to submit application. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error applying for bounty:', error)
+      Alert.alert('Error', 'An error occurred while submitting your application.')
+    } finally {
+      setIsApplying(false)
+    }
   }
 
   const { width, height } = Dimensions.get('window')
@@ -282,8 +356,21 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
 
         {/* Accept Bounty Button - With safe area inset */}
         <View style={styles.actionContainer}>
-          <TouchableOpacity style={styles.acceptButton}>
-            <Text style={styles.acceptButtonText}>Apply for Bounty</Text>
+          <TouchableOpacity 
+            style={[
+              styles.acceptButton,
+              (hasApplied || isApplying) && styles.acceptButtonDisabled
+            ]}
+            onPress={handleApplyForBounty}
+            disabled={hasApplied || isApplying}
+          >
+            {isApplying ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.acceptButtonText}>
+                {hasApplied ? 'Application Submitted' : 'Apply for Bounty'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
           </View>
@@ -559,6 +646,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  acceptButtonDisabled: {
+    backgroundColor: '#059669', // emerald-600 (darker)
+    opacity: 0.6,
   },
   acceptButtonText: {
     color: 'white',
