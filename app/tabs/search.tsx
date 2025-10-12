@@ -141,7 +141,7 @@ export default function SimpleBountySearchScreen() {
         data={data}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 12, paddingBottom: 64 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
         keyboardDismissMode="on-drag"
         ListEmptyComponent={
           query && !isSearching && !error ? (
