@@ -353,25 +353,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
         </View>
 
-        {/* History Link */}
-        <View className="px-4 py-2">
-          <TouchableOpacity
-            className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
-            onPress={() => {
-              // Navigate to history screen
-              setShowHistory(true)
-            }}
-          >
-            <View className="flex-row items-center">
-              <MaterialIcons name="history" size={20} color="#a7f3d0" />
-              <Text className="text-sm font-medium text-white ml-2">View History</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
-          </TouchableOpacity>
-        </View>
-
-  {/* Skillsets - simplified chip display */}
-  <View style={styles.section}>
+        {/* Skillsets - simplified chip display */}
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Skillsets</Text>
             <TouchableOpacity
@@ -382,9 +365,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             </TouchableOpacity>
           </View>
           <SkillsetChips skills={skills} />
-  </View>
+        </View>
 
-  <View className="px-4 py-4">
+        {/* Achievements - grid display */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Achievements</Text>
+          <AchievementsGrid badgesEarned={stats.badgesEarned} />
+        </View>
+
+        {/* Activity */}
+        <View className="px-4 py-4">
           <Text className="text-sm font-medium mb-2">Activity</Text>
           <View className="space-y-4">
             {activities.length > 0 ? (
@@ -412,13 +402,24 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               </View>
             )}
           </View>
-  </View>
+        </View>
 
-  {/* Achievements - grid display */}
-  <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <AchievementsGrid badgesEarned={stats.badgesEarned} />
-  </View>
+        {/* History Link */}
+        <View className="px-4 py-2">
+          <TouchableOpacity
+            className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
+            onPress={() => {
+              // Navigate to history screen
+              setShowHistory(true)
+            }}
+          >
+            <View className="flex-row items-center">
+              <MaterialIcons name="history" size={20} color="#a7f3d0" />
+              <Text className="text-sm font-medium text-white ml-2">View History</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Bottom navigation is now provided at app level; this spacer ensures content isn't obscured */}
