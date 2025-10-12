@@ -143,7 +143,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={{ flex: 1 }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
             {bountyTransactions.length === 0 ? (
               <View style={styles.emptyState}> 
                 <Text style={styles.emptyStateText}>No bounty transactions yet</Text>
