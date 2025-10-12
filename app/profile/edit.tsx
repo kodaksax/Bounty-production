@@ -8,6 +8,8 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -32,28 +34,36 @@ export default function EditProfileScreen() {
   const [formData, setFormData] = useState({
     name: profile?.name || "",
     username: profile?.username || "",
-    title: profile?.title || "",
     bio: profile?.bio || "",
-    languages: profile?.languages?.join(", ") || "",
-    skills: profile?.skills?.join(", ") || "",
+    location: profile?.location || "",
+    portfolio: profile?.portfolio || "",
+    skillsets: profile?.skills?.join(", ") || "",
   });
 
+  const [initialData, setInitialData] = useState(formData);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
 
   React.useEffect(() => {
     if (profile) {
-      setFormData({
+      const data = {
         name: profile.name || "",
         username: profile.username || "",
-        title: profile.title || "",
         bio: profile.bio || "",
-        languages: profile.languages?.join(", ") || "",
-        skills: profile.skills?.join(", ") || "",
-      });
+        location: profile.location || "",
+        portfolio: profile.portfolio || "",
+        skillsets: profile.skills?.join(", ") || "",
+      };
+      setFormData(data);
+      setInitialData(data);
     }
   }, [profile]);
+
+  // Check if form is dirty (has changes)
+  const isDirty = React.useMemo(() => {
+    return JSON.stringify(formData) !== JSON.stringify(initialData);
+  }, [formData, initialData]);
 
   const handleSave = async () => {
     try {
@@ -61,13 +71,8 @@ export default function EditProfileScreen() {
       setSaveError(null);
       setDismissedError(false);
 
-      // Parse comma-separated values
-      const languages = formData.languages
-        .split(",")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
-
-      const skills = formData.skills
+      // Parse comma-separated skillsets
+      const skillsets = formData.skillsets
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
@@ -86,13 +91,16 @@ export default function EditProfileScreen() {
       await updateLocalProfile({
         name: formData.name,
         username: formData.username,
-        title: formData.title,
         bio: formData.bio,
-        languages,
-        skills,
+        location: formData.location,
+        portfolio: formData.portfolio,
+        skills: skillsets,
       }).catch(e => {
         console.warn('[EditProfile] local profile update failed (non-critical):', e);
       });
+
+      // Update initial data after successful save
+      setInitialData(formData);
 
       Alert.alert("Success", "Profile updated successfully!", [
         { text: "OK", onPress: () => router.back() },
@@ -116,24 +124,29 @@ export default function EditProfileScreen() {
   }
 
   const displayError = !dismissedError && (error || saveError);
+  const bioLength = formData.bio.length;
+  const maxBioLength = 160;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.container, { paddingTop: insets.top }]}
+    >
+      {/* Pinned Header: Twitter-style Cancel/Save */}
+      <View style={styles.pinnedHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+          <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <TouchableOpacity
           onPress={handleSave}
-          disabled={saving}
-          style={styles.saveButton}
+          disabled={saving || !isDirty}
+          style={[styles.headerButton, styles.saveButton, (!isDirty || saving) && styles.saveButtonDisabled]}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#10b981" />
+            <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={[styles.saveText, !isDirty && styles.saveTextDisabled]}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -151,129 +164,177 @@ export default function EditProfileScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Avatar Placeholder */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
+        {/* Banner + Avatar Overlap (Twitter-style) */}
+        <View style={styles.bannerSection}>
+          <View style={styles.bannerPlaceholder}>
+            <MaterialIcons name="image" size={32} color="#6b7280" />
+            <Text style={styles.bannerHelpText}>Banner upload coming soon</Text>
+          </View>
+          <View style={styles.avatarOverlap}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.avatarChangeButton}>
+              <MaterialIcons name="camera-alt" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Form Fields with clear sections */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.sectionTitle}>Basic Information</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.name}
+              onChangeText={(text) => setFormData({ ...formData, name: text })}
+              placeholder="Your display name"
+              placeholderTextColor="#6b7280"
+            />
+          </View>
+
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.username}
+              onChangeText={(text) => setFormData({ ...formData, username: text })}
+              placeholder="@username"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Bio</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.bio}
+              onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
+              placeholder="Tell others about yourself..."
+              placeholderTextColor="#6b7280"
+              multiline
+              numberOfLines={4}
+              maxLength={maxBioLength}
+              textAlignVertical="top"
+            />
+            <Text style={styles.characterCounter}>
+              {bioLength}/{maxBioLength}
             </Text>
           </View>
-          <TouchableOpacity style={styles.changeAvatarButton}>
-            <MaterialIcons name="camera-alt" size={20} color="#10b981" />
-            <Text style={styles.changeAvatarText}>Change Photo</Text>
-          </TouchableOpacity>
-          <Text style={styles.avatarHelp}>Avatar upload coming soon</Text>
         </View>
 
-        {/* Form Fields */}
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Display Name</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.name}
-            onChangeText={(text) => setFormData({ ...formData, name: text })}
-            placeholder="Your name"
-            placeholderTextColor="#6b7280"
-          />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.sectionTitle}>Location & Links</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Location</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.location}
+              onChangeText={(text) => setFormData({ ...formData, location: text })}
+              placeholder="City, Country"
+              placeholderTextColor="#6b7280"
+            />
+          </View>
+
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Website / Portfolio</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.portfolio}
+              onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
+              placeholder="https://yourwebsite.com"
+              placeholderTextColor="#6b7280"
+              keyboardType="url"
+              autoCapitalize="none"
+            />
+          </View>
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.username}
-            onChangeText={(text) => setFormData({ ...formData, username: text })}
-            placeholder="@username"
-            placeholderTextColor="#6b7280"
-            autoCapitalize="none"
-          />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.sectionTitle}>Skills & Expertise</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Skillsets</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.skillsets}
+              onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
+              placeholder="e.g., React, Node.js, Design"
+              placeholderTextColor="#6b7280"
+            />
+            <Text style={styles.helpText}>Separate with commas. Max 4 skills recommended.</Text>
+          </View>
         </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Title</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.title}
-            onChangeText={(text) => setFormData({ ...formData, title: text })}
-            placeholder="e.g., Full Stack Developer"
-            placeholderTextColor="#6b7280"
-          />
-        </View>
-
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Bio</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.bio}
-            onChangeText={(text) => setFormData({ ...formData, bio: text })}
-            placeholder="Tell others about yourself..."
-            placeholderTextColor="#6b7280"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </View>
-
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Languages</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.languages}
-            onChangeText={(text) => setFormData({ ...formData, languages: text })}
-            placeholder="e.g., English, Spanish"
-            placeholderTextColor="#6b7280"
-          />
-          <Text style={styles.helpText}>Separate with commas</Text>
-        </View>
-
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Skills</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.skills}
-            onChangeText={(text) => setFormData({ ...formData, skills: text })}
-            placeholder="e.g., React, Node.js, Design"
-            placeholderTextColor="#6b7280"
-          />
-          <Text style={styles.helpText}>Separate with commas</Text>
+        <View style={styles.infoBox}>
+          <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
+          <Text style={styles.infoText}>
+            Badges and Achievements are earned automatically and cannot be edited here.
+          </Text>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a3d2e",
+    backgroundColor: "#064e3b", // emerald-900
   },
-  header: {
+  pinnedHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#1a3d2e",
+    paddingVertical: 14,
+    backgroundColor: "#047857", // emerald-700
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
-  backButton: {
-    marginRight: 12,
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fffef5",
-    letterSpacing: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#ffffff",
+    fontWeight: "500",
   },
   saveButton: {
-    paddingHorizontal: 12,
+    backgroundColor: "#10b981", // emerald-500
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingVertical: 6,
+    minWidth: 60,
+    alignItems: "center",
   },
-  saveButtonText: {
+  saveButtonDisabled: {
+    backgroundColor: "#6b7280",
+    opacity: 0.5,
+  },
+  saveText: {
     fontSize: 16,
+    color: "#ffffff",
     fontWeight: "600",
-    color: "#10b981",
+  },
+  saveTextDisabled: {
+    opacity: 0.6,
   },
   loadingContainer: {
     flex: 1,
@@ -292,7 +353,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#dc2626",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginHorizontal: 16,
     marginBottom: 8,
     borderRadius: 8,
   },
@@ -305,71 +365,118 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingTop: 0,
   },
-  avatarSection: {
+  bannerSection: {
+    position: "relative",
+    marginBottom: 60,
+  },
+  bannerPlaceholder: {
+    height: 120,
+    backgroundColor: "#047857",
+    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#374151",
-    marginBottom: 24,
+  },
+  bannerHelpText: {
+    fontSize: 12,
+    color: "#d1fae5",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  avatarOverlap: {
+    position: "absolute",
+    bottom: -50,
+    left: 16,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    borderWidth: 4,
+    borderColor: "#064e3b",
   },
   avatarText: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: "bold",
-    color: "#fffef5",
+    color: "#ffffff",
   },
-  changeAvatarButton: {
-    flexDirection: "row",
+  avatarChangeButton: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#047857",
+    justifyContent: "center",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: "#064e3b",
   },
-  changeAvatarText: {
-    fontSize: 14,
-    color: "#10b981",
-    fontWeight: "600",
+  fieldGroup: {
+    marginBottom: 24,
   },
-  avatarHelp: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontStyle: "italic",
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#a7f3d0",
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
-  formSection: {
-    marginBottom: 20,
+  fieldContainer: {
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 1,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#d1d5db",
-    marginBottom: 8,
+    color: "#6ee7b7",
+    marginBottom: 6,
   },
   input: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderWidth: 1,
-    borderColor: "#374151",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
     fontSize: 16,
-    color: "#fffef5",
+    color: "#ffffff",
   },
   textArea: {
-    minHeight: 100,
-    paddingTop: 12,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  characterCounter: {
+    fontSize: 11,
+    color: "#6b7280",
+    textAlign: "right",
+    marginTop: 4,
   },
   helpText: {
-    fontSize: 12,
-    color: "#6b7280",
+    fontSize: 11,
+    color: "#6ee7b7",
     marginTop: 4,
+    fontStyle: "italic",
+  },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 24,
+    borderRadius: 8,
+    gap: 8,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#d1fae5",
+    lineHeight: 16,
   },
 });

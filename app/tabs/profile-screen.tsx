@@ -1,15 +1,17 @@
 "use client"
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AchievementsGrid } from "components/achievements-grid";
 import { EnhancedProfileSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
+import { SkillsetChips } from "components/skillset-chips";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { ScrollView, Share, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -169,12 +171,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     load()
   // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
   }, [showSettings, userProfile?.username, authProfile?.id, authUserId])
-
-  const getIconComponent = (iconName: string) => {
-    const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
-    const resolved = alias[iconName] || iconName
-    return <MaterialIcons name={resolved as any} size={16} color="#34d399" />
-  }
 
   const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
     setSkills(updatedSkills)
@@ -374,40 +370,18 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </TouchableOpacity>
         </View>
 
-  {/* Skills */}
-  <View className="px-4 py-2">
-          {/* Header: title left, edit button right */}
-          <View className="flex-row justify-between items-center mb-2">
-            <Text className="text-sm font-medium">Skillsets</Text>
+  {/* Skillsets - simplified chip display */}
+  <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Skillsets</Text>
             <TouchableOpacity
-              className="px-2 py-1 border border-emerald-500 rounded"
+              style={styles.editButton}
               onPress={() => setIsEditing(true)}
             >
-              <Text className="text-xs text-emerald-200">Edit</Text>
+              <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Skill items: text left, icon right */}
-          <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{ paddingBottom: 10 }}>
-          <View className="space-y-3">
-            {skills.map((skill) => (
-              <View key={skill.id} className="flex-row justify-between items-center bg-emerald-700/20 rounded-lg p-3">
-                <View className="flex-1 pr-2">
-                  <Text className="text-sm text-emerald-100" numberOfLines={2}>{skill.text}</Text>
-                  {skill.credentialUrl && (
-                    <View className="flex-row items-center mt-1">
-                      <MaterialIcons name="attach-file" size={14} color="#a7f3d0" />
-                      <Text className="text-xs text-emerald-200 ml-1" numberOfLines={1}>{skill.credentialUrl.split('/').pop()}</Text>
-                    </View>
-                  )}
-                </View>
-                <View className="ml-2 h-8 w-8 rounded-full bg-black/30 items-center justify-center">
-                  {getIconComponent(skill.icon)}
-                </View>
-              </View>
-            ))}
-          </View>
-          </ScrollView>
+          <SkillsetChips skills={skills} />
   </View>
 
   <View className="px-4 py-4">
@@ -440,37 +414,11 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
   </View>
 
-  <View className="px-4 py-4">
-          <Text className="text-sm font-medium mb-2">Achievements</Text>
-          <View className="grid grid-cols-3 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const isEarned = i < stats.badgesEarned
-              return (
-                <View
-                  key={i}
-                  className={`bg-emerald-700/30 rounded-lg p-3 flex flex-col items-center justify-center aspect-square ${
-                    isEarned ? "border border-yellow-400" : "opacity-50"
-                  }`}
-                >
-                  <View
-                    className={`h-10 w-10 rounded-full ${isEarned ? "bg-emerald-600" : "bg-emerald-800"} flex items-center justify-center mb-2`}
-                  >
-                    {i % 3 === 0 ? (
-                      <MaterialIcons name="gps-fixed" size={20} color={isEarned ? '#ffffff' : '#ffffff'} />
-                    ) : i % 3 === 1 ? (
-                      <MaterialIcons name="favorite" size={20} color={isEarned ? '#ffffff' : '#ffffff'} />
-                    ) : (
-                      <MaterialIcons name="public" size={20} color={isEarned ? "#f59e0b" : "#34d399"} />
-                    )}
-                  </View>
-                  <Text className="text-xs text-center">
-                    {i % 3 === 0 ? "Sharpshooter" : i % 3 === 1 ? "Helper" : "Explorer"}
-                  </Text>
-                </View>
-              )
-            })}
-          </View>
-        </View>
+  {/* Achievements - grid display */}
+  <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Achievements</Text>
+          <AchievementsGrid badgesEarned={stats.badgesEarned} />
+  </View>
       </ScrollView>
 
       {/* Bottom navigation is now provided at app level; this spacer ensures content isn't obscured */}
@@ -497,3 +445,32 @@ function formatTimeAgo(date: Date): string {
     return `${diffDays}d ago`
   }
 }
+
+const styles = StyleSheet.create({
+  section: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  editButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#10b981",
+    borderRadius: 4,
+  },
+  editButtonText: {
+    fontSize: 12,
+    color: "#6ee7b7",
+  },
+});
