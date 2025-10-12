@@ -1,4 +1,6 @@
 import type { Message, Conversation } from '../types';
+import { offlineQueueService } from './offline-queue-service';
+import NetInfo from '@react-native-community/netinfo';
 
 // In-memory storage (replace with AsyncStorage or API calls later)
 let messages: Message[] = [];
@@ -113,7 +115,7 @@ export const messageService = {
   },
 
   /**
-   * Send a message (optimistic update)
+   * Send a message (optimistic update with offline support)
    */
   sendMessage: async (conversationId: string, text: string, senderId: string = 'current-user'): Promise<{ message: Message; error?: string }> => {
     initializeData();
@@ -127,7 +129,7 @@ export const messageService = {
       status: 'sending',
     };
 
-    // Add message
+    // Add message optimistically
     messages.push(message);
 
     // Update conversation
@@ -135,6 +137,25 @@ export const messageService = {
     if (conversation) {
       conversation.lastMessage = text;
       conversation.updatedAt = message.createdAt;
+    }
+
+    // Check network connectivity
+    const netState = await NetInfo.fetch();
+    const isOnline = !!netState.isConnected;
+
+    if (!isOnline) {
+      // Queue for later if offline
+      console.log('📴 Offline: queueing message for later delivery');
+      await offlineQueueService.enqueue('message', {
+        conversationId,
+        text,
+        senderId,
+        tempId: message.id,
+      });
+      
+      // Mark as pending (will retry when online)
+      message.status = 'sending';
+      return { message };
     }
 
     // Simulate network delay and success
@@ -270,5 +291,33 @@ export const messageService = {
     if (message) {
       message.status = status;
     }
+  },
+
+  /**
+   * Process a queued message (called by offline queue service)
+   */
+  processQueuedMessage: async (conversationId: string, text: string, senderId: string): Promise<Message> => {
+    initializeData();
+    
+    const message: Message = {
+      id: `m${Date.now()}`,
+      conversationId,
+      senderId,
+      text,
+      createdAt: new Date().toISOString(),
+      status: 'sent',
+    };
+
+    // Add message
+    messages.push(message);
+
+    // Update conversation
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (conversation) {
+      conversation.lastMessage = text;
+      conversation.updatedAt = message.createdAt;
+    }
+
+    return message;
   },
 };

@@ -12,6 +12,8 @@ import { useConversations } from "../../hooks/useConversations"
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
+import { useAuthContext } from '../../hooks/use-auth-context'
+import { OfflineStatusBadge } from '../../components/offline-status-badge'
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -93,7 +95,7 @@ export function MessengerScreen({
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       <View className="p-4 pt-8 pb-2">
-        <View className="flex-row justify-between items-center">
+        <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
             <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
@@ -112,6 +114,9 @@ export function MessengerScreen({
             <Text className="text-sm text-white">New Group</Text>
           </TouchableOpacity>
         </View>
+        
+        {/* Offline status badge */}
+        <OfflineStatusBadge />
       </View>
 
       {error && (

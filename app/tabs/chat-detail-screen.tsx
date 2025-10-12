@@ -122,9 +122,10 @@ export function ChatDetailScreen({
         status={message.status}
         isPinned={message.isPinned}
         onLongPress={handleLongPress}
+        onRetry={handleRetry}
       />
     )
-  }, [handleLongPress])
+  }, [handleLongPress, handleRetry])
 
   const renderFooter = () => {
     const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0

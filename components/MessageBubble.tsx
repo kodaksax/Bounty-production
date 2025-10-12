@@ -10,6 +10,7 @@ export interface MessageBubbleProps {
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   isPinned?: boolean;
   onLongPress?: (messageId: string) => void;
+  onRetry?: (messageId: string) => void;
 }
 
 /**
@@ -21,11 +22,18 @@ export const MessageBubble = memo(({
   isUser, 
   status,
   isPinned,
-  onLongPress 
+  onLongPress,
+  onRetry
 }: MessageBubbleProps) => {
   const handleLongPress = () => {
     if (onLongPress) {
       onLongPress(id);
+    }
+  };
+
+  const handleRetry = () => {
+    if (onRetry) {
+      onRetry(id);
     }
   };
 
@@ -85,6 +93,17 @@ export const MessageBubble = memo(({
           <Text className={cn('text-sm', isUser ? 'text-gray-900' : 'text-white')}>{text}</Text>
           {renderStatusIcon()}
         </View>
+        {/* Retry button for failed messages */}
+        {status === 'failed' && isUser && onRetry && (
+          <TouchableOpacity 
+            onPress={handleRetry}
+            style={styles.retryButton}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="refresh" size={16} color="#ef4444" />
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -111,6 +130,24 @@ const styles = StyleSheet.create({
   pinnedText: {
     fontSize: 10,
     color: '#fbbf24',
+    fontWeight: '600',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginTop: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    alignSelf: 'flex-end',
+  },
+  retryText: {
+    fontSize: 12,
+    color: '#ef4444',
     fontWeight: '600',
   },
 });
