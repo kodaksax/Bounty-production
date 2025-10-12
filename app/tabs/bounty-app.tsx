@@ -5,6 +5,7 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { BountyMapView } from 'components/BountyMapView'
 import { FilterBar, type FilterOptions } from 'components/FilterBar'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
@@ -58,6 +59,9 @@ function BountyAppInner() {
     sortBy: 'default',
     workType: 'all',
   })
+  
+  // Map view toggle state
+  const [isMapView, setIsMapView] = useState(false)
   
   // Check if onboarding is needed (useUserProfile provides completeness)
   const { isComplete, loading: profileLoading } = useUserProfile()
@@ -215,12 +219,17 @@ function BountyAppInner() {
     }
   }, [profileLoading, isComplete, hasCheckedOnboarding, router])
 
-  // Restore last-selected chip on mount
+  // Restore last-selected chip and filters on mount
   useEffect(() => {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem('BE:lastFilter')
         if (saved) setActiveCategory(saved as any)
+        
+        const savedFilters = await AsyncStorage.getItem('BE:filters')
+        if (savedFilters) {
+          setFilters(JSON.parse(savedFilters))
+        }
       } catch {}
     })()
   }, [])
@@ -233,6 +242,15 @@ function BountyAppInner() {
       } catch {}
     })()
   }, [activeCategory])
+  
+  // Persist filter preferences
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem('BE:filters', JSON.stringify(filters))
+      } catch {}
+    })()
+  }, [filters])
 
   // Pull-to-refresh handler - reload data from backend
   const onRefresh = useCallback(async () => {
@@ -366,6 +384,8 @@ function BountyAppInner() {
           <FilterBar 
             filters={filters}
             onFiltersChange={setFilters}
+            onToggleMapView={() => setIsMapView(!isMapView)}
+            isMapView={isMapView}
           />
         </Animated.View>
         <LinearGradient
@@ -375,34 +395,48 @@ function BountyAppInner() {
         />
       </Animated.View>
 
-      {/* Bounty List with scroll listener (content extends under BottomNav) */}
-      <Animated.FlatList
-        data={filteredBounties}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: HEADER_EXPANDED + headerTopPad + 8,
-          paddingBottom: 160, // large enough so last item scrolls beneath nav
-        }}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
-        onEndReachedThreshold={0.5}
-        onEndReached={handleEndReached}
-        ItemSeparatorComponent={ItemSeparator}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListEmptyComponent={EmptyListComponent}
-        ListFooterComponent={ListFooterComponent}
-        renderItem={renderBountyItem}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={8}
-        windowSize={10}
-        getItemLayout={(data, index) => (
-          {length: 88, offset: 90 * index, index} // Approximate item height + margin
-        )}
-      />
+      {/* Map or List View */}
+      {isMapView ? (
+        <View style={{ flex: 1, paddingTop: HEADER_EXPANDED + headerTopPad }}>
+          <BountyMapView 
+            bounties={filteredBounties} 
+            onBountyPress={(bounty) => {
+              // Navigate to bounty detail when clicking on map location
+              router.push(`/postings/${bounty.id}`)
+            }}
+            onClose={() => setIsMapView(false)}
+          />
+        </View>
+      ) : (
+        /* Bounty List with scroll listener (content extends under BottomNav) */
+        <Animated.FlatList
+          data={filteredBounties}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: HEADER_EXPANDED + headerTopPad + 8,
+            paddingBottom: 160, // large enough so last item scrolls beneath nav
+          }}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          scrollEventThrottle={16}
+          onEndReachedThreshold={0.5}
+          onEndReached={handleEndReached}
+          ItemSeparatorComponent={ItemSeparator}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+          ListEmptyComponent={EmptyListComponent}
+          ListFooterComponent={ListFooterComponent}
+          renderItem={renderBountyItem}
+          // Performance optimizations
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={100}
+          initialNumToRender={8}
+          windowSize={10}
+          getItemLayout={(data, index) => (
+            {length: 88, offset: 90 * index, index} // Approximate item height + margin
+          )}
+        />
+      )}
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
         colors={["rgba(5,150,105,0)", "rgba(5,150,105,0.5)", "#059669"]}
