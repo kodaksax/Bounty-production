@@ -134,7 +134,12 @@ export default function EditProfileScreen() {
     >
       {/* Pinned Header: Twitter-style Cancel/Save */}
       <View style={styles.pinnedHeader}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={styles.headerButton}
+          accessibilityLabel="Cancel editing"
+          accessibilityRole="button"
+        >
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -142,6 +147,9 @@ export default function EditProfileScreen() {
           onPress={handleSave}
           disabled={saving || !isDirty}
           style={[styles.headerButton, styles.saveButton, (!isDirty || saving) && styles.saveButtonDisabled]}
+          accessibilityLabel={isDirty ? "Save profile changes" : "No changes to save"}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: saving || !isDirty }}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -178,7 +186,12 @@ export default function EditProfileScreen() {
                 {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
               </Text>
             </View>
-            <TouchableOpacity style={styles.avatarChangeButton}>
+            <TouchableOpacity 
+              style={styles.avatarChangeButton}
+              accessibilityLabel="Change profile picture"
+              accessibilityRole="button"
+              accessibilityHint="Upload a new profile picture"
+            >
               <MaterialIcons name="camera-alt" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -196,6 +209,8 @@ export default function EditProfileScreen() {
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               placeholder="Your display name"
               placeholderTextColor="#6b7280"
+              accessibilityLabel="Display name"
+              accessibilityHint="Enter your display name"
             />
           </View>
 
@@ -208,6 +223,8 @@ export default function EditProfileScreen() {
               placeholder="@username"
               placeholderTextColor="#6b7280"
               autoCapitalize="none"
+              accessibilityLabel="Username"
+              accessibilityHint="Enter your unique username"
             />
           </View>
 
@@ -223,6 +240,8 @@ export default function EditProfileScreen() {
               numberOfLines={4}
               maxLength={maxBioLength}
               textAlignVertical="top"
+              accessibilityLabel="Bio"
+              accessibilityHint={`Enter your bio, ${bioLength} of ${maxBioLength} characters used`}
             />
             <Text style={styles.characterCounter}>
               {bioLength}/{maxBioLength}
@@ -241,6 +260,8 @@ export default function EditProfileScreen() {
               onChangeText={(text) => setFormData({ ...formData, location: text })}
               placeholder="City, Country"
               placeholderTextColor="#6b7280"
+              accessibilityLabel="Location"
+              accessibilityHint="Enter your city and country"
             />
           </View>
 
@@ -254,6 +275,8 @@ export default function EditProfileScreen() {
               placeholderTextColor="#6b7280"
               keyboardType="url"
               autoCapitalize="none"
+              accessibilityLabel="Website or Portfolio URL"
+              accessibilityHint="Enter your website or portfolio link"
             />
           </View>
         </View>
@@ -269,6 +292,8 @@ export default function EditProfileScreen() {
               onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
               placeholder="e.g., React, Node.js, Design"
               placeholderTextColor="#6b7280"
+              accessibilityLabel="Skillsets"
+              accessibilityHint="Enter your skills separated by commas"
             />
             <Text style={styles.helpText}>Separate with commas. Max 4 skills recommended.</Text>
           </View>
@@ -302,7 +327,8 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 8,
+    minHeight: 44, // Ensure minimum touch target height
   },
   headerTitle: {
     flex: 1,
@@ -405,15 +431,15 @@ const styles = StyleSheet.create({
   },
   avatarChangeButton: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    bottom: -4,
+    right: -4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: "#064e3b",
   },
   fieldGroup: {
