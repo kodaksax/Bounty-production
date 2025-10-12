@@ -20,7 +20,7 @@ import { ArchivedBountiesScreen } from "../../components/archived-bounties-scree
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { ApplicantCard } from "../../components/applicant-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
-import { InProgressBountyItem } from "../../components/in-progress-bounty-item"
+// Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -166,15 +166,24 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const loadInProgress = React.useCallback(async () => {
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
-      const data = await bountyService.getAll({ status: 'in_progress' })
-      setInProgressBounties(data)
+      // Show bounties that the current user has applied for (pending/accepted/etc.)
+      const requests = await bountyRequestService.getAllWithDetails({ userId: currentUserId })
+      // Only include bounties where the user's request isn't rejected
+      const relevant = requests.filter(r => r.status !== 'rejected')
+      // Map to unique bounties
+      const map = new Map<string, Bounty>()
+      for (const r of relevant) {
+        const b = r?.bounty as Bounty | undefined
+        if (b && !map.has(String(b.id))) map.set(String(b.id), b)
+      }
+      setInProgressBounties(Array.from(map.values()))
     } catch (e: any) {
-      console.error('Error loading in-progress bounties:', e)
-      setError('Failed to load in-progress bounties')
+      console.error('Error loading applied bounties for In Progress:', e)
+      setError('Failed to load your applied bounties')
     } finally {
       setIsLoading((prev) => ({ ...prev, inProgress: false }))
     }
-  }, [])
+  }, [currentUserId])
 
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
@@ -477,7 +486,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
   }
   // Local row component to encapsulate expansion state per item
-  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout }) => {
+  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; variant?: 'owner' | 'hunter' }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant }) => {
     return (
       <MyPostingExpandable
         bounty={bounty}
@@ -488,28 +497,13 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         onDelete={onDelete}
         onGoToReview={onGoToReview}
         onGoToPayout={onGoToPayout}
+        variant={variant}
       />
     )
   }
 
 
-  // Calculate distance (mock function - in a real app, this would use geolocation)
-  const calculateDistance = (location: string) => {
-    // Simple mock distance calculation
-    return Math.floor(Math.random() * 20) + 1
-  }
-
-  // Format timestamp to relative time
-  const formatTimeAgo = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-
-    if (diffHrs < 1) return "Just now"
-    if (diffHrs < 24) return `${diffHrs}h AGO`
-    return `${Math.floor(diffHrs / 24)}d AGO`
-  }
+  // Using shared MyPostingExpandable for consistent look-and-feel; no extra helpers needed here
 
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
@@ -660,6 +654,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <FlatList
                   data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={(item) => item.id.toString()}
+                  extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
                       {(['all','online','in_person'] as const).map(f => {
@@ -674,22 +669,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     </View>
                   )}
                   renderItem={({ item: bounty }) => (
-                    <InProgressBountyItem
-                      bountyId={bounty.id}
-                      username={bounty.user_id === currentUserId ? "@Jon_Doe" : "@User"}
-                      title={bounty.title}
-                      amount={Number(bounty.amount)}
-                      distance={calculateDistance(bounty.location || "")}
-                      timeAgo={formatTimeAgo(bounty.created_at)}
-                      workType={bounty.work_type}
-                      isForHonor={bounty.is_for_honor}
+                    <MyPostingRow
+                      bounty={bounty}
+                      currentUserId={currentUserId}
+                      expanded={!!expandedMap[String(bounty.id)]}
+                      onToggle={() => setExpandedMap((prev) => ({ ...prev, [String(bounty.id)]: !prev[String(bounty.id)] }))}
+                      // For hunter view, route to hunter-specific flows when applicable
+                      onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
+                      onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
+                      variant={'hunter'}
                     />
                   )}
                   ListEmptyComponent={
                     isLoading.inProgress ? (
                       <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
                     ) : (
-                      <View className="text-center py-10 text-emerald-200"><Text>No bounties in progress</Text></View>
+                      <View className="text-center py-10 text-emerald-200"><Text>No applied bounties yet</Text></View>
                     )
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -761,6 +756,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       onDelete={() => handleDeleteBounty(bounty)}
                       onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
                       onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
+                      variant={'owner'}
                     />
                   )}
                   ListEmptyComponent={

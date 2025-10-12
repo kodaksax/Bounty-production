@@ -19,6 +19,7 @@ type Props = {
   onDelete?: () => void
   onGoToReview?: (bountyId: string) => void
   onGoToPayout?: (bountyId: string) => void
+  variant?: 'owner' | 'hunter'
 }
 
 const STAGES = [
@@ -28,7 +29,7 @@ const STAGES = [
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ] as const
 
-export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout }: Props) {
+export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
 
   useEffect(() => {
@@ -50,6 +51,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     // We don't track 'review_verify' in status—user reaches it via flow; keep default as 'apply_work'
     return 'apply_work'
   }, [bounty.status])
+
+  const isOwner = useMemo(() => {
+    if (variant === 'owner') return true
+    if (variant === 'hunter') return false
+    return currentUserId === bounty.user_id
+  }, [variant, currentUserId, bounty.user_id])
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
 
@@ -92,7 +99,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
               <MaterialIcons name="hourglass-empty" size={18} color="#6ee7b7" />
-              <Text style={styles.infoText}>Awaiting a hunter. Review requests in the Requests tab.</Text>
+              {isOwner ? (
+                <Text style={styles.infoText}>Awaiting a hunter. Review requests in the Requests tab.</Text>
+              ) : (
+                <Text style={styles.infoText}>Your application is pending. We’ll notify you when the poster accepts.</Text>
+              )}
             </View>
           )}
 
@@ -100,16 +111,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           <View style={styles.actionsRow}>
             {bounty.status === 'in_progress' ? (
               <TouchableOpacity style={styles.primaryBtn} onPress={() => onGoToReview?.(String(bounty.id))}>
-                <Text style={styles.primaryText}>Go to Review & Verify</Text>
+                <Text style={styles.primaryText}>{isOwner ? 'Go to Review & Verify' : 'Open Work In Progress'}</Text>
                 <MaterialIcons name="arrow-forward" size={18} color="#fff" />
               </TouchableOpacity>
             ) : bounty.status === 'completed' ? (
               <TouchableOpacity style={styles.primaryBtn} onPress={() => onGoToPayout?.(String(bounty.id))}>
-                <Text style={styles.primaryText}>Go to Payout</Text>
+                <Text style={styles.primaryText}>{isOwner ? 'Go to Payout' : 'View Payout Status'}</Text>
                 <MaterialIcons name="arrow-forward" size={18} color="#fff" />
               </TouchableOpacity>
             ) : (
-              <Text style={styles.muted}>No actions until a request is accepted.</Text>
+              <Text style={styles.muted}>{isOwner ? 'No actions until a request is accepted.' : 'No actions yet. You can start once the poster accepts.'}</Text>
             )}
           </View>
 
@@ -117,7 +128,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           {!conversation && (
             <View style={styles.infoBox}>
               <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
-              <Text style={styles.infoText}>Conversation will appear after acceptance.</Text>
+              <Text style={styles.infoText}>{isOwner ? 'Conversation will appear after acceptance.' : 'A chat with the poster will appear once you’re accepted.'}</Text>
             </View>
           )}
         </View>
