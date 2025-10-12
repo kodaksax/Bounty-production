@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     zIndex: 0,
     opacity: 0.4,
   },
-  dashboardArea: { flex: 1 },
+  dashboardArea: { flex: 1, zIndex: 1 },
   collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
