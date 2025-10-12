@@ -24,6 +24,8 @@ export interface UserProfile {
   skills?: string[]; // e.g., ["React", "Node.js"]
   joinDate: string; // ISO date
   bio?: string;
+  location?: string; // e.g., "San Francisco, CA"
+  portfolio?: string; // Website or portfolio URL
   verificationStatus?: 'unverified' | 'pending' | 'verified';
   followerCount?: number;
   followingCount?: number;

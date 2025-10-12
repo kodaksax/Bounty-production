@@ -134,6 +134,26 @@ export function EnhancedProfileSection({
           <Text className="text-sm text-emerald-200 mt-3">{effectiveProfile.bio}</Text>
         )}
 
+        {/* Location & Portfolio/Website */}
+        {(effectiveProfile.location || effectiveProfile.portfolio) && (
+          <View className="mt-3 space-y-2">
+            {effectiveProfile.location && (
+              <View className="flex-row items-center">
+                <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
+                <Text className="text-sm text-emerald-200 ml-2">{effectiveProfile.location}</Text>
+              </View>
+            )}
+            {effectiveProfile.portfolio && (
+              <View className="flex-row items-center">
+                <MaterialIcons name="link" size={16} color="#6ee7b7" />
+                <Text className="text-sm text-emerald-200 ml-2" numberOfLines={1}>
+                  {effectiveProfile.portfolio}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Stats Row */}
         <View className="flex-row justify-around mt-4 pt-3 border-t border-emerald-500/30">
           <View className="items-center">
@@ -165,18 +185,7 @@ export function EnhancedProfileSection({
         </View>
       )}
 
-      {(effectiveProfile.skills && effectiveProfile.skills.length > 0) && (
-        <View className="mb-4">
-          <Text className="text-sm font-medium mb-2">Skills</Text>
-          <View className="flex-row flex-wrap gap-2">
-            {effectiveProfile.skills.map((skill: string, idx: number) => (
-              <View key={idx} className="bg-emerald-500/30 px-3 py-1 rounded-full border border-emerald-500">
-                <Text className="text-xs text-emerald-100">{skill}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
+      {/* Skills section removed - now using Skillsets display in main Profile screen */}
 
       {/* Portfolio Section */}
       <View className="mb-4">

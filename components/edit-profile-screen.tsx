@@ -21,6 +21,11 @@ interface EditProfileScreenProps {
   onSave: (data: { name: string; about: string; phone: string; avatar?: string }) => void
 }
 
+/**
+ * @deprecated Legacy EditProfileScreen component - kept for backward compatibility
+ * For the main edit profile flow, use app/profile/edit.tsx instead
+ * This component is used by Settings screen but should route to the dedicated Edit Profile screen
+ */
 export function EditProfileScreen({
   onBack,
   initialName = "@jon_Doe",
