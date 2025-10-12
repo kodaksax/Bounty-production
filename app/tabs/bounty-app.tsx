@@ -103,6 +103,9 @@ function BountyAppInner() {
       if (activeCategory === 'forkids') {
         // For Honor chip should show bounties marked as for-honor
         list = list.filter((b) => Boolean(b.is_for_honor))
+      } else if (activeCategory === 'remote') {
+        // Remote chip filters for online work type
+        list = list.filter((b) => b.work_type === 'online')
       } else {
         // simple contains filter on title/description to simulate other categories
         list = list.filter((b) =>
