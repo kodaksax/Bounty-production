@@ -5,6 +5,8 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { BountyMapView } from 'components/BountyMapView'
+import { FilterBar, type FilterOptions } from 'components/FilterBar'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -48,6 +50,18 @@ function BountyAppInner() {
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
+  
+  // Enhanced filters state
+  const [filters, setFilters] = useState<FilterOptions>({
+    distanceMax: 999,
+    amountMin: 0,
+    amountMax: 999999,
+    sortBy: 'default',
+    workType: 'all',
+  })
+  
+  // Map view toggle state
+  const [isMapView, setIsMapView] = useState(false)
   
   // Check if onboarding is needed (useUserProfile provides completeness)
   const { isComplete, loading: profileLoading } = useUserProfile()
@@ -96,9 +110,11 @@ function BountyAppInner() {
     return 1 + ((hash % seed) % 15)
   }
 
-  // Filter and sort bounties by category
+  // Filter and sort bounties by category and enhanced filters
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
+    
+    // Apply category filters (existing logic)
     if (activeCategory !== "all") {
       if (activeCategory === 'forkids') {
         // For Honor chip should show bounties marked as for-honor
@@ -113,15 +129,42 @@ function BountyAppInner() {
         )
       }
     }
-    // High paying sorts by amount when selected
-    if (activeCategory === "highpaying") {
+    
+    // Apply enhanced filters
+    // Distance filter
+    if (filters.distanceMax !== 999) {
+      list = list.filter((b) => calculateDistance(b.location || "") <= filters.distanceMax)
+    }
+    
+    // Amount range filter (skip for honor bounties)
+    list = list.filter((b) => {
+      if (b.is_for_honor) return true; // Always show honor bounties
+      const amount = Number(b.amount) || 0;
+      return amount >= filters.amountMin && amount <= filters.amountMax;
+    })
+    
+    // Work type filter
+    if (filters.workType !== 'all') {
+      list = list.filter((b) => b.work_type === filters.workType)
+    }
+    
+    // Sorting
+    if (filters.sortBy === 'newest') {
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    } else if (filters.sortBy === 'highest_pay') {
+      list.sort((a, b) => Number(b.amount) - Number(a.amount))
+    } else if (filters.sortBy === 'nearest') {
+      list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
+    } else if (activeCategory === "highpaying") {
+      // Legacy high paying category sort
       list.sort((a, b) => Number(b.amount) - Number(a.amount))
     } else {
       // default by proximity
       list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
     }
+    
     return list
-  }, [bounties, activeCategory])
+  }, [bounties, activeCategory, filters])
 
   // Load bounties from backend
   const PAGE_SIZE = 20
@@ -176,12 +219,17 @@ function BountyAppInner() {
     }
   }, [profileLoading, isComplete, hasCheckedOnboarding, router])
 
-  // Restore last-selected chip on mount
+  // Restore last-selected chip and filters on mount
   useEffect(() => {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem('BE:lastFilter')
         if (saved) setActiveCategory(saved as any)
+        
+        const savedFilters = await AsyncStorage.getItem('BE:filters')
+        if (savedFilters) {
+          setFilters(JSON.parse(savedFilters))
+        }
       } catch {}
     })()
   }, [])
@@ -194,6 +242,15 @@ function BountyAppInner() {
       } catch {}
     })()
   }, [activeCategory])
+  
+  // Persist filter preferences
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem('BE:filters', JSON.stringify(filters))
+      } catch {}
+    })()
+  }, [filters])
 
   // Pull-to-refresh handler - reload data from backend
   const onRefresh = useCallback(async () => {
@@ -323,6 +380,13 @@ function BountyAppInner() {
               }}
             />
           </View>
+          {/* Enhanced Filter Bar */}
+          <FilterBar 
+            filters={filters}
+            onFiltersChange={setFilters}
+            onToggleMapView={() => setIsMapView(!isMapView)}
+            isMapView={isMapView}
+          />
         </Animated.View>
         <LinearGradient
           colors={["rgba(5,150,105,0.0)", "rgba(5,150,105,0.25)", "rgba(5,150,105,0.55)"]}
@@ -331,34 +395,48 @@ function BountyAppInner() {
         />
       </Animated.View>
 
-      {/* Bounty List with scroll listener (content extends under BottomNav) */}
-      <Animated.FlatList
-        data={filteredBounties}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: HEADER_EXPANDED + headerTopPad + 8,
-          paddingBottom: 160, // large enough so last item scrolls beneath nav
-        }}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
-        onEndReachedThreshold={0.5}
-        onEndReached={handleEndReached}
-        ItemSeparatorComponent={ItemSeparator}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListEmptyComponent={EmptyListComponent}
-        ListFooterComponent={ListFooterComponent}
-        renderItem={renderBountyItem}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={8}
-        windowSize={10}
-        getItemLayout={(data, index) => (
-          {length: 88, offset: 90 * index, index} // Approximate item height + margin
-        )}
-      />
+      {/* Map or List View */}
+      {isMapView ? (
+        <View style={{ flex: 1, paddingTop: HEADER_EXPANDED + headerTopPad }}>
+          <BountyMapView 
+            bounties={filteredBounties} 
+            onBountyPress={(bounty) => {
+              // Navigate to bounty detail when clicking on map location
+              router.push(`/postings/${bounty.id}`)
+            }}
+            onClose={() => setIsMapView(false)}
+          />
+        </View>
+      ) : (
+        /* Bounty List with scroll listener (content extends under BottomNav) */
+        <Animated.FlatList
+          data={filteredBounties}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: HEADER_EXPANDED + headerTopPad + 8,
+            paddingBottom: 160, // large enough so last item scrolls beneath nav
+          }}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          scrollEventThrottle={16}
+          onEndReachedThreshold={0.5}
+          onEndReached={handleEndReached}
+          ItemSeparatorComponent={ItemSeparator}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+          ListEmptyComponent={EmptyListComponent}
+          ListFooterComponent={ListFooterComponent}
+          renderItem={renderBountyItem}
+          // Performance optimizations
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={100}
+          initialNumToRender={8}
+          windowSize={10}
+          getItemLayout={(data, index) => (
+            {length: 88, offset: 90 * index, index} // Approximate item height + margin
+          )}
+        />
+      )}
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
         colors={["rgba(5,150,105,0)", "rgba(5,150,105,0.5)", "#059669"]}
