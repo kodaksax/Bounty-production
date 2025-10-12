@@ -63,7 +63,7 @@ export function EditProfileScreen({
     return false
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validation
     const nameError = validateName(name)
     if (nameError) {
@@ -77,41 +77,44 @@ export function EditProfileScreen({
       return
     }
 
-    // Persist via profile service, mapping fields to canonical keys.
-    // Use bio (wired) as the persisted about/location field.
-    const updates = { 
-      displayName: name.trim(), 
-      location: (bio || about || '').trim(), 
-      avatar: avatar?.trim() 
-    }
-    
-    // Update local profile service
-    updateProfile(updates)
-      .then(async (res) => {
-        if (!res.success) {
-          setUploadMessage(res.error || 'Failed to save')
-          setTimeout(() => setUploadMessage(null), 2500)
-          return
-        }
-        
-        // Also update Supabase profile via auth profile service
-        await updateAuthProfile({
-          about: (bio || about || '').trim(),
-          avatar: avatar?.trim()
-        })
-        
-        // Also notify parent legacy state if provided
-        onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
-        setUploadMessage('Profile updated')
-        setTimeout(() => setUploadMessage(null), 1200)
-        // Return to previous screen after a short delay
-        setTimeout(() => onBack && onBack(), 300)
+    try {
+      // Update Supabase profile via auth profile service (primary source of truth)
+      const updatedProfile = await updateAuthProfile({
+        username: name.trim(),
+        about: (bio || about || '').trim(),
+        avatar: avatar?.trim()
       })
-      .catch((e) => {
-        console.error('[EditProfile] save error', e)
-        setUploadMessage('Error saving profile')
+      
+      if (!updatedProfile) {
+        setUploadMessage('Failed to save profile')
         setTimeout(() => setUploadMessage(null), 2500)
+        return
+      }
+      
+      // Also update local profile service for backward compatibility
+      const updates = { 
+        displayName: name.trim(), 
+        location: (bio || about || '').trim(), 
+        avatar: avatar?.trim() 
+      }
+      
+      await updateProfile(updates).catch(e => {
+        console.warn('[EditProfile] local profile update failed (non-critical):', e)
       })
+      
+      // Notify parent legacy state if provided
+      onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
+      
+      setUploadMessage('Profile updated successfully!')
+      setTimeout(() => setUploadMessage(null), 1200)
+      
+      // Return to previous screen after a short delay
+      setTimeout(() => onBack && onBack(), 300)
+    } catch (e) {
+      console.error('[EditProfile] save error', e)
+      setUploadMessage('Error saving profile')
+      setTimeout(() => setUploadMessage(null), 2500)
+    }
   }
 
   const handleAvatarClick = async () => {

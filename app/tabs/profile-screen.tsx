@@ -180,8 +180,11 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     setIsEditing(false)
   }
 
-  const handleSettingsClose = () => {
+  const handleSettingsClose = async () => {
     setShowSettings(false)
+    // Refresh profile data when returning from settings
+    await refreshAuthProfile()
+    await refreshUserProfile()
   }
 
   // Share the user's profile (name, about, skills and a shareable link)
