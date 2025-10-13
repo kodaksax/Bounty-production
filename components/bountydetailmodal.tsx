@@ -15,6 +15,7 @@ import {
     View
 } from "react-native"
 import { bountyRequestService } from "../lib/services/bounty-request-service"
+import { messageService } from "../lib/services/message-service"
 import { getCurrentUserId } from "../lib/utils/data-utils"
 
 interface BountyDetailModalProps {
@@ -34,22 +35,15 @@ interface BountyDetailModalProps {
     }[]
   }
   onClose: () => void
+  onNavigateToChat?: (conversationId: string) => void
 }
 
-interface Message {
-  id: string
-  sender: "user" | "other"
-  text: string
-  timestamp: Date
-}
-
-export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
+export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
   const router = useRouter()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
+  const [isCreatingChat, setIsCreatingChat] = useState(false)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
@@ -73,13 +67,47 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
     }, 300)
   }
 
-  // Scroll to bottom of messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollToEnd({ animated: true })
-  }, [messages])
+  // Handle message poster button
+  const handleMessagePoster = async () => {
+    if (!bounty.user_id || !currentUserId) {
+      Alert.alert('Error', 'Unable to start conversation.')
+      return
+    }
 
-  // Handle click outside to close
-  // In React Native, use TouchableWithoutFeedback for click outside modal.
+    // Check if trying to message yourself
+    if (bounty.user_id === currentUserId) {
+      Alert.alert('Cannot Message', 'You cannot message yourself.')
+      return
+    }
+
+    setIsCreatingChat(true)
+    try {
+      // Create or get existing conversation
+      const conversation = await messageService.getOrCreateConversation(
+        [bounty.user_id],
+        bounty.username,
+        bounty.id.toString()
+      )
+
+      console.log('✅ Conversation created/retrieved:', conversation.id)
+      
+      // Close the modal and navigate to chat
+      handleClose()
+      
+      // Use the callback if provided, otherwise navigate directly
+      if (onNavigateToChat) {
+        onNavigateToChat(conversation.id)
+      } else {
+        // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
+        router.push('/messenger')
+      }
+    } catch (error) {
+      console.error('Error creating conversation:', error)
+      Alert.alert('Error', 'Failed to start conversation. Please try again.')
+    } finally {
+      setIsCreatingChat(false)
+    }
+  }
 
   // Check if user has already applied
   useEffect(() => {
@@ -99,32 +127,6 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
     
     checkApplicationStatus()
   }, [bounty.id, currentUserId])
-
-  // Send message
-  const handleSendMessage = () => {
-    if (newMessage.trim() === "") return
-
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: newMessage,
-      timestamp: new Date(),
-    }
-
-    setMessages([...messages, newMsg])
-    setNewMessage("")
-
-    // Simulate response after 1 second
-    setTimeout(() => {
-      const response: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: "other",
-        text: "Thanks for your interest! Do you have any specific questions about the bounty?",
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, response])
-    }, 1000)
-  }
 
   // Handle apply for bounty
   const handleApplyForBounty = async () => {
@@ -294,65 +296,27 @@ export function BountyDetailModal({ bounty, onClose }: BountyDetailModalProps) {
             </View>
           </View>
 
-          {/* Messages */}
-          <View style={styles.messagesContainer}>
-            <Text style={styles.sectionHeader}>Messages</Text>
-
-            {messages.length === 0 ? (
-              <View style={styles.noMessagesContainer}>
-                <Text style={styles.noMessagesText}>No messages yet. Start the conversation!</Text>
-              </View>
-            ) : (
-              <View style={styles.messagesWrapper}>
-                {messages.map((message) => (
-                  <View
-                    key={message.id}
-                    style={[
-                      styles.messageContainer,
-                      message.sender === "user" ? styles.userMessage : styles.otherMessage,
-                    ]}
-                  >
-                    <Text style={styles.messageText}>{message.text}</Text>
-                    <View style={styles.timestampContainer}>
-                      <Text style={styles.timestamp}>
-                        {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          {/* Contact Section */}
+          {bounty.user_id && bounty.user_id !== currentUserId && (
+            <View style={styles.contactContainer}>
+              <Text style={styles.sectionHeader}>Contact</Text>
+              <TouchableOpacity 
+                style={styles.messageButton}
+                onPress={handleMessagePoster}
+                disabled={isCreatingChat}
+              >
+                {isCreatingChat ? (
+                  <ActivityIndicator size="small" color="#065f46" />
+                ) : (
+                  <>
+                    <MaterialIcons name="chat" size={20} color="#065f46" />
+                    <Text style={styles.messageButtonText}>Message {bounty.username}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
-
-        {/* Message Input - Fixed at bottom with safe area inset */}
-        <View style={styles.inputContainer}>
-          <View style={styles.inputWrapper}>
-            <TouchableOpacity style={styles.attachButton}>
-              <MaterialIcons name="attach-file" size={20} color="#a7f3d0" />
-            </TouchableOpacity>
-            <TextInput
-              value={newMessage}
-              onChangeText={setNewMessage}
-              onSubmitEditing={handleSendMessage}
-              placeholder="Message about this bounty..."
-              placeholderTextColor="#a7f3d0bb"
-              style={styles.textInput}
-              multiline={false}
-              returnKeyType="send"
-            />
-            <TouchableOpacity
-              onPress={handleSendMessage}
-              disabled={newMessage.trim() === ""}
-              style={[
-                styles.sendButton,
-                newMessage.trim() === "" ? styles.sendButtonDisabled : styles.sendButtonActive,
-              ]}
-            >
-              <MaterialIcons name="send" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Accept Bounty Button - With safe area inset */}
         <View style={styles.actionContainer}>
@@ -557,82 +521,23 @@ const styles = StyleSheet.create({
   downloadButton: {
     padding: 8,
   },
-  messagesContainer: {
+  contactContainer: {
     marginBottom: 16,
   },
-  noMessagesContainer: {
-    alignItems: 'center',
-    paddingVertical: 24,
-  },
-  noMessagesText: {
-    color: '#a7f3d0', // emerald-300
-    fontSize: 14,
-  },
-  messagesWrapper: {
-    gap: 12,
-  },
-  messageContainer: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 8,
-  },
-  userMessage: {
-    backgroundColor: '#10b981', // emerald-500
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 0,
-  },
-  otherMessage: {
-    backgroundColor: '#047857', // emerald-700
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 0,
-  },
-  messageText: {
-    color: 'white',
-    fontSize: 14,
-  },
-  timestampContainer: {
-    alignItems: 'flex-end',
-    marginTop: 4,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: '#ffffffb3', // white with opacity
-  },
-  inputContainer: {
-    padding: 12,
-    backgroundColor: '#047857', // emerald-700
-    borderTopWidth: 1,
-    borderTopColor: '#059669', // emerald-600
-  },
-  inputWrapper: {
+  messageButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#a7f3d0', // emerald-200
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     gap: 8,
   },
-  attachButton: {
-    padding: 8,
-  },
-  textInput: {
-    flex: 1,
-    backgroundColor: '#05543280', // emerald-800/50
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    color: 'white',
+  messageButtonText: {
+    color: '#065f46', // emerald-800
     fontSize: 16,
-  },
-  sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#05543280', // emerald-800/50
-  },
-  sendButtonActive: {
-    backgroundColor: '#10b981', // emerald-500
+    fontWeight: '600',
   },
   actionContainer: {
     padding: 12,
