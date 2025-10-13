@@ -8,6 +8,8 @@ export type NormalizedProfile = {
   avatar?: string;
   title?: string;
   bio?: string;
+  location?: string;
+  portfolio?: string;
   languages?: string[];
   skills?: string[];
   joinDate?: string;
@@ -46,6 +48,8 @@ export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile |
     avatar: p.avatar,
     title: p.title,
     bio: p.bio,
+    location: p.location,
+    portfolio: p.portfolio,
     languages: p.languages,
     skills: p.skills,
     joinDate: p.joinDate,
@@ -67,6 +71,8 @@ export function mergeNormalized(primary: NormalizedProfile | null, fallback: Nor
     avatar: primary.avatar || fallback.avatar,
     title: primary.title || fallback.title,
     bio: primary.bio || fallback.bio,
+    location: primary.location || fallback.location,
+    portfolio: primary.portfolio || fallback.portfolio,
     languages: primary.languages || fallback.languages,
     skills: primary.skills || fallback.skills,
     joinDate: primary.joinDate || fallback.joinDate,

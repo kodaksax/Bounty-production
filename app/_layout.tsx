@@ -2,18 +2,15 @@ import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
-import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import "../global.css";
+import { useAuthContext } from '../hooks/use-auth-context';
 import { AdminProvider } from '../lib/admin-context';
 import { StripeProvider } from '../lib/stripe-context';
-import BrandedSplash from './auth/splash';
-
-import { SplashScreenController } from '../components/splash-screen-controller';
-import { useAuthContext } from '../hooks/use-auth-context';
 import AuthProvider from '../providers/auth-provider';
+import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
 // Load test utilities in development
 if (__DEV__) {
@@ -90,7 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     const start = Date.now();
     (async () => {
       try {
-        await SplashScreen.preventAutoHideAsync();
+        await showNativeSplash();
         await Asset.loadAsync([ require('../assets/images/icon.png') ]);
       } catch (e) {
         console.warn('[Splash] preparation error', e);
@@ -99,7 +96,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           setAppIsReady(true);
           setPhase('brand'); // immediately move to branded React splash
           // Ensure native splash is hidden now that branded phase is active
-          SplashScreen.hideAsync().catch(()=>{});
+          hideNativeSplashSafely();
           // Enforce minimum branded duration
           const elapsed = Date.now() - start;
           const remaining = BRANDED_MIN_MS - elapsed;
@@ -147,7 +144,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <BrandedSplash />
         ) : (
           <AuthProvider>
-            <SplashScreenController />
           <AdminProvider>
             <StripeProvider>
               <RootErrorBoundary>

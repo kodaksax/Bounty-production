@@ -1,6 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons";
+import { usePortfolioUpload } from "hooks/use-portfolio-upload";
 import { useAuthProfile } from "hooks/useAuthProfile";
 import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
@@ -28,7 +29,20 @@ export function EnhancedProfileSection({
   isOwnProfile = true 
 }: EnhancedProfileSectionProps) {
   const { profile: normalizedFromHookOrLocal, loading: profileLoading } = useNormalizedProfile(userId);
-  const { items, loading: portfolioLoading, deleteItem } = usePortfolio(userId || 'current-user');
+  const resolvedUserId = userId || 'current-user'
+  const { items, loading: portfolioLoading, deleteItem, addItem } = usePortfolio(resolvedUserId);
+  const {
+    pickAndUpload,
+    isPicking,
+    isUploading,
+    progress,
+  } = usePortfolioUpload({
+    userId: resolvedUserId,
+    onUploaded: async (item) => {
+      // Persist via portfolio service and refresh UI
+      await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any)
+    },
+  })
   const { 
     isFollowing, 
     followerCount, 
@@ -192,8 +206,14 @@ export function EnhancedProfileSection({
         <View className="flex-row justify-between items-center mb-2">
           <Text className="text-sm font-medium">Portfolio</Text>
           {isOwnProfile && (
-            <TouchableOpacity className="px-2 py-1 bg-emerald-500 rounded">
-              <Text className="text-xs text-white">Add Item</Text>
+            <TouchableOpacity
+              className="px-2 py-1 bg-emerald-500 rounded"
+              onPress={pickAndUpload}
+              disabled={isPicking || isUploading}
+            >
+              <Text className="text-xs text-white">
+                {isUploading ? `Uploading ${Math.round((progress || 0) * 100)}%` : 'Add Item'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -217,22 +237,33 @@ export function EnhancedProfileSection({
                   className="relative"
                   onPress={() => setSelectedPortfolioItem(item)}
                 >
-                  <View className="w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden">
-                    <OptimizedImage 
-                      source={{ uri: item.thumbnail || item.url }} 
-                      width={128}
-                      height={128}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                      useThumbnail={true}
-                      priority="low"
-                      alt={item.title || 'Portfolio item'}
-                    />
-                    {item.type === 'video' && (
-                      <View className="absolute inset-0 items-center justify-center">
-                        <View className="bg-black/50 rounded-full p-2">
-                          <MaterialIcons name="play-arrow" size={24} color="white" />
-                        </View>
+                  <View className="w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center">
+                    {item.type === 'image' || item.type === 'video' ? (
+                      <>
+                        <OptimizedImage 
+                          source={{ uri: item.thumbnail || item.url }} 
+                          width={128}
+                          height={128}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                          useThumbnail={true}
+                          priority="low"
+                          alt={item.title || 'Portfolio item'}
+                        />
+                        {item.type === 'video' && (
+                          <View className="absolute inset-0 items-center justify-center">
+                            <View className="bg-black/50 rounded-full p-2">
+                              <MaterialIcons name="play-arrow" size={24} color="white" />
+                            </View>
+                          </View>
+                        )}
+                      </>
+                    ) : (
+                      <View className="items-center justify-center p-3">
+                        <MaterialIcons name="insert-drive-file" size={28} color="#e5e7eb" />
+                        <Text className="text-[10px] text-emerald-100 mt-1" numberOfLines={2}>
+                          {item.name || 'File'}
+                        </Text>
                       </View>
                     )}
                   </View>

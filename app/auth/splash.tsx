@@ -1,7 +1,25 @@
+import * as ExpoSplash from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
-// Note: Native splash visibility is controlled centrally in RootLayout.
-// Do NOT call SplashScreen.preventAutoHideAsync()/hideAsync() here to avoid race conditions.
+// Centralized helpers: RootLayout (and any other callers) should use these
+// to show/hide the native splash. Keeping them here ensures "use splash.tsx
+// for any splash things" without scattering imports of expo-splash-screen.
+
+export async function showNativeSplash() {
+	try {
+		await ExpoSplash.preventAutoHideAsync();
+	} catch {
+		// ignore if already prevented or not applicable
+	}
+}
+
+export async function hideNativeSplashSafely() {
+	try {
+		await ExpoSplash.hideAsync();
+	} catch {
+		// ignore when no native splash is registered for current view controller
+	}
+}
 
 export interface BrandedSplashProps {
 	onReady?: () => void; // Optional callback when any internal animation completes

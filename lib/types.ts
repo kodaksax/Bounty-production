@@ -46,11 +46,14 @@ export type FollowEdge = Follow;
 export interface PortfolioItem {
   id: string;
   userId: string;
-  type: 'image' | 'video';
-  url: string;
-  thumbnail?: string;
+  type: 'image' | 'video' | 'file';
+  url: string; // remote URL for the item
+  thumbnail?: string; // preview for images/videos if available
   title?: string;
   description?: string;
+  name?: string; // original file name
+  mimeType?: string; // content type (e.g., image/png, video/mp4, application/pdf)
+  sizeBytes?: number; // file size, if known
   createdAt: string;
 }
 

@@ -6,8 +6,11 @@ import * as DocumentPicker from 'expo-document-picker'
 import type React from "react"
 import { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { usePortfolio } from '../hooks/usePortfolio'
+import { useProfile } from '../hooks/useProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
@@ -38,15 +41,25 @@ export function EditProfileScreen({
   const { profile: authProfile, updateProfile: updateAuthProfile, loading: authLoading } = useAuthProfile()
   const { profile: normalized, loading: normalizedLoading, error: normalizedError } = useNormalizedProfile()
   const [name, setName] = useState(authProfile?.username || normalized?.name || localProfile?.displayName || initialName)
-  const [about, setAbout] = useState(authProfile?.about || normalized?.bio || localProfile?.location || initialAbout)
-  const [phone, setPhone] = useState(initialPhone)
+  const [title, setTitle] = useState(normalized?.title || "")
+  const [location, setLocation] = useState((normalized as any)?.location || "")
+  const [portfolio, setPortfolio] = useState((normalized as any)?.portfolio || "")
+  const [bio, setBio] = useState(authProfile?.about || normalized?.bio || localProfile?.location || "")
   const [avatar, setAvatar] = useState(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [bio, setBio] = useState(authProfile?.about || normalized?.bio || localProfile?.location || "")
   const { balance } = useWallet()
+  const { profile: currentProfile, updateProfile: updateUserProfile } = useProfile()
+  const userIdForPortfolio = authProfile?.id || 'current-user'
+  const { addItem: addPortfolioItem } = usePortfolio(userIdForPortfolio)
+  const { pickAndUpload: pickPortfolioItem, isUploading: isUploadingPortfolio, progress: portfolioProgress } = usePortfolioUpload({
+    userId: userIdForPortfolio,
+    onUploaded: async (item) => {
+      await addPortfolioItem({ ...item, id: undefined as any, createdAt: undefined as any } as any)
+    },
+  })
   
   // Show loading state if profiles are still loading
   const isLoading = authLoading || normalizedLoading
@@ -95,7 +108,7 @@ export function EditProfileScreen({
       // Update Supabase profile via auth profile service (primary source of truth)
       const updatedProfile = await updateAuthProfile({
         username: name.trim(),
-        about: (bio || about || '').trim(),
+        about: (bio || '').trim(),
         avatar: avatar?.trim()
       })
       
@@ -109,16 +122,31 @@ export function EditProfileScreen({
       // Also update local profile service for backward compatibility
       const updates = { 
         displayName: name.trim(), 
-        location: (bio || about || '').trim(), 
-        avatar: avatar?.trim() 
-      }
+        avatar: avatar?.trim(),
+        // Store additional fields in local profile service if supported
+        location: location.trim() || undefined,
+      } as any
       
       await updateProfile(updates).catch(e => {
         console.warn('[EditProfile] local profile update failed (non-critical):', e)
       })
+
+      // Update the profile used by Profile screen (name/title/location/portfolio/bio/avatar)
+      try {
+        await updateUserProfile({
+          name: name.trim(),
+          title: title.trim() || undefined,
+          location: location.trim() || undefined,
+          portfolio: portfolio.trim() || undefined,
+          bio: (bio || '').trim(),
+          avatar: avatar?.trim() || undefined,
+        })
+      } catch (e) {
+        console.warn('[EditProfile] useProfile update failed (non-critical):', e)
+      }
       
       // Notify parent legacy state if provided
-      onSave({ name: name.trim(), about: (bio || about || '').trim(), phone, avatar })
+      onSave({ name: name.trim(), about: (bio || '').trim(), phone: '', avatar })
       
       setUploadMessage('✓ Profile updated successfully!')
       setTimeout(() => setUploadMessage(null), 1200)
@@ -259,39 +287,33 @@ export function EditProfileScreen({
           </View>
         </View>
       )}
-      {/* Header */}
+      {/* Header - Twitter-like modal style */}
       <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
-        <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-          <Text className="text-white font-extrabold text-lg tracking-widest ml-2">BOUNTY</Text>
-        </View>
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity 
-            onPress={handleSave} 
-            disabled={isSaving}
-            className={`px-4 py-2 bg-emerald-800 rounded-lg ${isSaving ? 'opacity-50' : ''}`}
-            accessibilityLabel="Save"
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text className="text-white font-semibold">Save</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onBack} accessibilityLabel="Back" className="p-2" disabled={isSaving}>
-            <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={onBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
+          <MaterialIcons name="close" size={22} color="#ffffff" />
+        </TouchableOpacity>
+        <Text className="text-white font-extrabold text-base tracking-widest">Edit Profile</Text>
+        <TouchableOpacity 
+          onPress={handleSave} 
+          disabled={isSaving}
+          className={`px-4 py-2 bg-white rounded-full ${isSaving ? 'opacity-60' : ''}`}
+          accessibilityLabel="Save"
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#059669" />
+          ) : (
+            <Text className="text-emerald-700 font-extrabold">Save</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Scrollable Content */}
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Screen Title */}
-        <View className="px-4 py-3 bg-emerald-700/30 border-b border-emerald-500/20">
-          <Text className="text-white text-xl font-semibold">Edit Profile</Text>
-        </View>
-        {/* Profile Picture */}
-        <View className="px-4 py-6 bg-emerald-900/40 flex flex-col items-center">
+        {/* Banner area (Twitter-like aesthetic placeholder) */}
+        <View className="h-24 bg-emerald-800/40" />
+
+        {/* Avatar */}
+        <View className="px-4 -mt-8 flex flex-col items-start">
           <View className="relative mb-2">
             <Avatar className="h-20 w-20 border-2 border-emerald-500">
               <AvatarImage src={avatar} alt="Profile" />
@@ -311,126 +333,79 @@ export function EditProfileScreen({
               )}
             </TouchableOpacity>
           </View>
-          <Text className="text-xs text-center text-emerald-100/80 max-w-[220px]">
-            {isUploadingAvatar 
-              ? `Uploading... ${Math.round(uploadProgress * 100)}%`
-              : "Enter your name and add an optional profile picture"}
-          </Text>
-          <TouchableOpacity 
-            className="mt-2 text-emerald-300 text-sm"
-            onPress={handleAvatarClick}
-            disabled={isUploadingAvatar}
-          >
-            <Text className="text-emerald-300 text-sm">
-              {isUploadingAvatar ? 'Uploading...' : 'Edit'}
-            </Text>
-          </TouchableOpacity>
-  </View>
+          {isUploadingAvatar ? (
+            <Text className="text-xs text-emerald-100/80">Uploading... {Math.round(uploadProgress * 100)}%</Text>
+          ) : null}
+        </View>
 
-        {/* Name Field */}
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
+        {/* Fields - Twitter style inputs */}
+        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+          <Text className="text-xs text-emerald-300 mb-1">Name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Enter your name"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            placeholder="Your name"
+            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
           />
         </View>
 
-        {/* Phone Field - DEPRECATED: Phone number should be private and not displayed in UI
-            TODO: Remove this field in next PR. Phone is managed in onboarding only. */}
-        <View className="px-4 py-4 bg-emerald-900/30 mt-1" style={{ opacity: 0.5 }}>
-          <Text className="text-xs text-emerald-300 mb-1">Phone (Private)</Text>
-          <Text className="text-white text-sm">***-***-****</Text>
-          <Text className="text-xs text-gray-400 mt-1">Phone is private and managed separately</Text>
-        </View>
-
-        {/* About Field */}
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
+        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+          <Text className="text-xs text-emerald-300 mb-1">Title</Text>
           <TextInput
-            value={about}
-            onChangeText={setAbout}
-            placeholder="About"
-            multiline
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="e.g., Full Stack Developer"
+            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
           />
         </View>
 
-        {/* Additional Fields for Scrolling */}
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 block mb-1">Email</Text>
+        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+          <Text className="text-xs text-emerald-300 mb-1">Location</Text>
           <TextInput
-            placeholder="your.email@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
-          />
-        </View>
-
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 block mb-1">Location</Text>
-          <TextInput
+            value={location}
+            onChangeText={setLocation}
             placeholder="City, Country"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
           />
         </View>
 
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 block mb-1">Website</Text>
+        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+          <Text className="text-xs text-emerald-300 mb-1">Portfolio</Text>
           <TextInput
-            placeholder="https://yourwebsite.com"
+            value={portfolio}
+            onChangeText={setPortfolio}
+            placeholder="https://yourportfolio.com"
             keyboardType="url"
             autoCapitalize="none"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
           />
+          <View className="flex-row items-center mt-3">
+            <TouchableOpacity
+              onPress={pickPortfolioItem}
+              className="bg-emerald-600 rounded-lg px-3 py-2"
+              disabled={isUploadingPortfolio}
+            >
+              <Text className="text-white text-sm">
+                {isUploadingPortfolio ? `Uploading ${Math.round((portfolioProgress || 0) * 100)}%` : 'Add Portfolio Item'}
+              </Text>
+            </TouchableOpacity>
+            <Text className="text-xs text-emerald-200 ml-3">Upload images, videos, or files</Text>
+          </View>
         </View>
 
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 block mb-1">Birthday</Text>
+        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+          <Text className="text-xs text-emerald-300 mb-1">Bio</Text>
           <TextInput
-            placeholder="MM/DD/YYYY"
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
-          />
-        </View>
-
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 block mb-1">Languages</Text>
-          <TextInput
-            placeholder="English, Spanish, etc."
-            className="w-full bg-transparent border-none p-0 text-white focus:outline-none focus:ring-0"
-          />
-        </View>
-
-        <View className="px-4 py-6 bg-emerald-900/40 mt-1">
-          <Text className="text-xs text-emerald-300 mb-2">Bio</Text>
-          <TextInput
-            placeholder="Tell us more about yourself..."
+            placeholder="Tell us about yourself"
             multiline
             numberOfLines={4}
             value={bio}
             onChangeText={setBio}
-            className="w-full bg-emerald-700/50 rounded-md p-3 text-white"
+            className="w-full bg-emerald-800/40 rounded-md p-3 text-white"
           />
         </View>
-
-        {/* Privacy Section */}
-        <View className="px-4 py-3 bg-emerald-700/30 mt-1">
-          <Text className="text-lg font-medium">Privacy</Text>
-        </View>
-
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1 flex items-center justify-between">
-          <Text>Show phone number</Text>
-          <View className="h-6 w-10 bg-emerald-700 rounded-full p-1 flex items-center">
-            <View className="h-4 w-4 bg-white rounded-full"></View>
-          </View>
-        </View>
-
-        <View className="px-4 py-4 bg-emerald-900/40 mt-1 flex items-center justify-between">
-          <Text>Show profile photo</Text>
-          <View className="h-6 w-10 bg-emerald-500 rounded-full p-1 flex justify-end items-center">
-            <View className="h-4 w-4 bg-white rounded-full"></View>
-          </View>
-        </View>
+        {/* Footer space */}
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   )
