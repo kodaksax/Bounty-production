@@ -2,7 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AchievementsGrid } from "components/achievements-grid";
-import { EnhancedProfileSection } from "components/enhanced-profile-section";
+import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
 import { bountyRequestService } from "lib/services/bounty-request-service";
@@ -47,14 +47,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     isLoading: true,
   })
 
-  // Add state for activity feed
-  const [activities, setActivities] = useState<
-    {
-      type: string
-      title: string
-      timestamp: Date
-    }[]
-  >([])
+  // Activity feed removed per requirements
 
   // readiness flag to avoid rendering EnhancedProfileSection with an empty id
   const profileUuid = authProfile?.id || authUserId
@@ -77,11 +70,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           badgesEarned: badgesCount,
           isLoading: false,
         });
-        const newActivities = [
-          ...postedBounties.map(b => ({ type: 'bounty_posted', title: `Posted bounty: ${b.title}`, timestamp: new Date(b.created_at) })),
-          ...acceptedJobs.map(j => ({ type: 'job_accepted', title: 'Accepted a bounty request', timestamp: new Date(j.created_at) })),
-        ].sort((a,b)=> b.timestamp.getTime() - a.timestamp.getTime());
-        setActivities(newActivities.slice(0,5));
+        // Activity feed removed
       } catch (error) {
         console.error('[ProfileScreen] Error fetching profile statistics:', error);
         setStats(prev => ({ ...prev, isLoading: false }));
@@ -209,75 +198,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     }
   }
 
-  // Function to simulate completing a job (for testing)
-  const simulateJobAccepted = () => {
-    setStats((prev) => ({
-      ...prev,
-      jobsAccepted: prev.jobsAccepted + 1,
-    }))
-
-    // Add to activity feed
-    const newActivity = {
-      type: "job_accepted",
-      title: "Accepted a bounty request",
-      timestamp: new Date(),
-    }
-
-    setActivities((prev) => [newActivity, ...prev.slice(0, 4)])
-
-    // Check if we should award a new badge
-    if ((stats.jobsAccepted + 1) % 5 === 0) {
-      // Award a new badge every 5 jobs accepted
-      setStats((prev) => ({
-        ...prev,
-        badgesEarned: prev.badgesEarned + 1,
-      }))
-
-      // Add badge earned activity
-      const badgeActivity = {
-        type: "badge_earned",
-        title: "Earned a new badge: Bounty Hunter",
-        timestamp: new Date(),
-      }
-
-      setActivities((prev) => [badgeActivity, ...prev.slice(0, 4)])
-    }
-  }
-
-  // Function to simulate posting a bounty (for testing)
-  const simulateBountyPosted = () => {
-    setStats((prev) => ({
-      ...prev,
-      bountiesPosted: prev.bountiesPosted + 1,
-    }))
-
-    // Add to activity feed
-    const newActivity = {
-      type: "bounty_posted",
-      title: "Posted a new bounty",
-      timestamp: new Date(),
-    }
-
-    setActivities((prev) => [newActivity, ...prev.slice(0, 4)])
-
-    // Check if we should award a new badge
-    if ((stats.bountiesPosted + 1) % 3 === 0) {
-      // Award a new badge every 3 bounties posted
-      setStats((prev) => ({
-        ...prev,
-        badgesEarned: prev.badgesEarned + 1,
-      }))
-
-      // Add badge earned activity
-      const badgeActivity = {
-        type: "badge_earned",
-        title: "Earned a new badge: Bounty Creator",
-        timestamp: new Date(),
-      }
-
-      setActivities((prev) => [badgeActivity, ...prev.slice(0, 4)])
-    }
-  }
+  // Removed test simulation functions for activity
 
   if (isEditing) {
     return <SkillsetEditScreen initialSkills={skills} onBack={() => setIsEditing(false)} onSave={handleSaveSkills} />
@@ -321,10 +242,20 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       </View>
 
       <ScrollView className="flex-1 pb-40" contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Profile card (kodaksax, avatar, follow, portfolio) */}
+        {/* Profile + Stats merged card */}
         {isProfileReady ? (
           // If this is the signed-in user's profile, pass undefined so the hook resolves the "current-user" profile
-          <EnhancedProfileSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} key={profileUuid} />
+          <EnhancedProfileSection 
+            userId={isOwnProfile ? undefined : profileUuid} 
+            isOwnProfile={isOwnProfile} 
+            key={profileUuid}
+            showPortfolio={false}
+            activityStats={{
+              jobsAccepted: stats.jobsAccepted,
+              bountiesPosted: stats.bountiesPosted,
+              badgesEarned: stats.badgesEarned,
+            }}
+          />
         ) : (
           <View className="px-4 py-4">
             <View className="bg-black/20 rounded-md p-3">
@@ -333,25 +264,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
         )}
 
-        {/* Stats */}
-        <View className="px-4 py-4">
-          <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4">
-            <View className="grid grid-cols-3 gap-4 text-center">
-              <View className="transition-all duration-300 transform hover:scale-105">
-                <Text className="text-2xl font-bold animate-pulse">{stats.jobsAccepted}</Text>
-                <Text className="text-xs text-emerald-200 mt-1">Jobs Accepted</Text>
-              </View>
-              <View className="transition-all duration-300 transform hover:scale-105">
-                <Text className="text-2xl font-bold animate-pulse">{stats.bountiesPosted}</Text>
-                <Text className="text-xs text-emerald-200 mt-1">Bounties Posted</Text>
-              </View>
-              <View className="transition-all duration-300 transform hover:scale-105">
-                <Text className="text-2xl font-bold animate-pulse">{stats.badgesEarned}</Text>
-                <Text className="text-xs text-emerald-200 mt-1">Badges Earned</Text>
-              </View>
-            </View>
-          </View>
-        </View>
 
         {/* Skillsets - simplified chip display */}
         <View style={styles.section}>
@@ -367,42 +279,18 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <SkillsetChips skills={skills} />
         </View>
 
-        {/* Achievements - grid display */}
+        {/* Portfolio (standalone, after skillsets) */}
+        <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
+
+        
+
+        {/* Achievements - grid display (last) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Achievements</Text>
           <AchievementsGrid badgesEarned={stats.badgesEarned} />
         </View>
 
-        {/* Activity */}
-        <View className="px-4 py-4">
-          <Text className="text-sm font-medium mb-2">Activity</Text>
-          <View className="space-y-4">
-            {activities.length > 0 ? (
-              activities.map((activity, i) => (
-                <View key={i} className="bg-emerald-700/30 rounded-lg p-3">
-                  <View className="flex justify-between items-center mb-1">
-                    <Text className="text-sm font-medium flex items-center gap-1">
-                      {activity.type === "bounty_posted" && <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />}
-                      {activity.type === "job_accepted" && <MaterialIcons name="check-circle" size={14} color="#ffffff" />}
-                      {activity.type === "badge_earned" && <MaterialIcons name="emoji-events" size={14} color="#f59e0b" />}
-                      {activity.type === "bounty_posted"
-                        ? "Bounty Posted"
-                        : activity.type === "job_accepted"
-                          ? "Job Accepted"
-                          : "Badge Earned"}
-                    </Text>
-                    <Text className="text-xs text-emerald-300">{formatTimeAgo(activity.timestamp)}</Text>
-                  </View>
-                  <Text className="text-sm text-emerald-200">{activity.title}</Text>
-                </View>
-              ))
-            ) : (
-              <View className="text-center py-4 text-emerald-300">
-                <Text>No activity yet</Text>
-              </View>
-            )}
-          </View>
-        </View>
+        {/* Activity section removed per requirements */}
 
         {/* History Link */}
         <View className="px-4 py-2">
@@ -427,25 +315,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   )
 }
 
-// Helper function to format time ago
-function formatTimeAgo(date: Date): string {
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSecs = Math.floor(diffMs / 1000)
-  const diffMins = Math.floor(diffMs / 60)
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffSecs < 60) {
-    return "just now"
-  } else if (diffMins < 60) {
-    return `${diffMins}m ago`
-  } else if (diffHours < 24) {
-    return `${diffHours}h ago`
-  } else {
-    return `${diffDays}d ago`
-  }
-}
+// formatTimeAgo removed with Activity section
 
 const styles = StyleSheet.create({
   section: {
