@@ -15,6 +15,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | undefined | null>()
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
 
   // Fetch the session once, and subscribe to auth state changes
   useEffect(() => {
@@ -35,6 +36,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Sync session with auth profile service
       await authProfileService.setSession(session)
       
+      // Email verification gate: Check if email is verified
+      // Priority: session.user?.email_confirmed_at > profile.email_verified > false
+      const verified = Boolean(
+        session?.user?.email_confirmed_at ||
+        session?.user?.confirmed_at
+      )
+      setIsEmailVerified(verified)
+      
       setIsLoading(false)
     }
 
@@ -48,6 +57,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       
       // Sync session with auth profile service
       await authProfileService.setSession(session)
+      
+      // Email verification gate: Check if email is verified
+      const verified = Boolean(
+        session?.user?.email_confirmed_at ||
+        session?.user?.confirmed_at
+      )
+      setIsEmailVerified(verified)
     })
     console.log('AuthProvider mounted')
     // Cleanup subscription on unmount
@@ -62,6 +78,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const unsubscribe = authProfileService.subscribe((authProfile) => {
       setProfile(authProfile)
       setIsLoading(false)
+      
+      // Email verification gate: Also check profile for email_verified flag
+      if (authProfile?.email_verified !== undefined) {
+        setIsEmailVerified(authProfile.email_verified)
+      }
     })
 
     return unsubscribe
@@ -74,6 +95,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         isLoading,
         profile,
         isLoggedIn: session != undefined,
+        isEmailVerified,
       }}
     >
       {children}
