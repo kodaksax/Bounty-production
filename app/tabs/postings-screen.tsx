@@ -329,10 +329,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       // Auto-create a conversation for coordination
       try {
         const { messageService } = await import('lib/services/message-service')
-        const conversation = await messageService.createConversation(
+        const conversation = await messageService.getOrCreateConversation(
           [request.user_id],
           request.profile?.username || 'Hunter',
-          false
+          request.bounty?.id?.toString()
         )
         
         // Send initial message with bounty context

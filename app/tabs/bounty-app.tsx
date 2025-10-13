@@ -238,6 +238,7 @@ function BountyAppInner() {
         distance={distance}
         description={item.description}
         isForHonor={Boolean(item.is_for_honor)}
+        user_id={item.user_id}
       />
     )
   }, []);
