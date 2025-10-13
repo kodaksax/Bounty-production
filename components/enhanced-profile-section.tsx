@@ -120,8 +120,21 @@ export function EnhancedProfileSection({
         <View className="flex-row items-start justify-between">
           <View className="flex-row items-center flex-1">
             <View className="relative">
-              <View className="h-16 w-16 rounded-full bg-emerald-700 flex items-center justify-center">
-                <MaterialIcons name="person" size={32} color="#d1fae5" />
+              <View className="h-16 w-16 rounded-full bg-emerald-700 overflow-hidden items-center justify-center">
+                {effectiveProfile.avatar ? (
+                  <OptimizedImage
+                    source={{ uri: effectiveProfile.avatar }}
+                    width={64}
+                    height={64}
+                    style={{ width: 64, height: 64, borderRadius: 32 }}
+                    resizeMode="cover"
+                    useThumbnail
+                    priority="low"
+                    alt="Profile avatar"
+                  />
+                ) : (
+                  <MaterialIcons name="person" size={32} color="#d1fae5" />
+                )}
               </View>
               {renderVerificationBadge()}
             </View>

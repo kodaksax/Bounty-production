@@ -66,6 +66,11 @@ function getThumbnailUrl(source: string | ImageSource | { uri: string }, width?:
 
   try {
     const url = new URL(uri);
+    const isHttp = url.protocol === 'http:' || url.protocol === 'https:';
+    // Do not modify non-http(s) URIs (file://, content://, asset://, data:, ph://) to keep them loadable
+    if (!isHttp) {
+      return uri;
+    }
     
     // Cloudinary CDN detection and transformation
     if (uri.includes('cloudinary.com')) {
@@ -84,7 +89,7 @@ function getThumbnailUrl(source: string | ImageSource | { uri: string }, width?:
       return url.toString();
     }
     
-    // Generic query parameter approach for other CDNs
+    // Generic query parameter approach for other CDNs (http/https only)
     if (width) url.searchParams.set('w', width.toString());
     if (height) url.searchParams.set('h', height.toString());
     
