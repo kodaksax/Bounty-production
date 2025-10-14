@@ -103,3 +103,30 @@ export interface WalletTransaction {
   createdAt: string;
   disputeStatus?: "none" | "pending" | "resolved";
 }
+
+// Location & Address Types
+export interface SavedAddress {
+  id: string;
+  label: string; // e.g., "Home", "Office", "Studio"
+  address: string; // Full address string
+  latitude?: number;
+  longitude?: number;
+  createdAt: string;
+}
+
+export interface LocationCoordinates {
+  latitude: number;
+  longitude: number;
+}
+
+export interface LocationPermissionState {
+  granted: boolean;
+  canAskAgain: boolean;
+  status: 'granted' | 'denied' | 'undetermined';
+}
+
+export interface DistanceFilter {
+  enabled: boolean;
+  maxDistance: number; // in miles
+  unit: 'miles' | 'km';
+}

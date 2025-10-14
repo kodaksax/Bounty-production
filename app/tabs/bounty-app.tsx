@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { LocationScreen } from "app/tabs/location-screen"
 import { MessengerScreen } from "app/tabs/messenger-screen"
 import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
@@ -30,7 +31,7 @@ function BountyAppInner() {
   const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin } = useAdmin()
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
-  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'create', 'admin'])
+  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'location', 'profile', 'create', 'admin'])
   const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
   const [activeScreen, setActiveScreen] = useState(paramScreen)
   const [showBottomNav, setShowBottomNav] = useState(true)
@@ -387,6 +388,8 @@ function BountyAppInner() {
           onBountyPosted={() => loadBounties({ reset: true })} // Refresh bounties when a new one is posted
           setShowBottomNav={setShowBottomNav}
         />
+      ) : activeScreen === "location" ? (
+        <LocationScreen />
       ) : activeScreen === "profile" ? (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "create" ? (

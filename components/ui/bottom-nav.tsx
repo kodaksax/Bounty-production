@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useHapticFeedback } from "lib/haptic-feedback";
 
-export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
+export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "location" | "profile" | "admin";
 
 interface BottomNavProps {
   activeScreen: string;
@@ -120,6 +120,16 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
           accessibilityState={{ selected: activeScreen === "postings" }}
         >
           <MaterialIcons name="search" color={activeScreen === "postings" ? "#fffef5" : "#c3c3c4"} size={24} />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => handleNavigate("location")} 
+          style={styles.navButton}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Location and addresses"
+          accessibilityState={{ selected: activeScreen === "location" }}
+        >
+          <MaterialIcons name="place" color={activeScreen === "location" ? "#fffef5" : "#c3c3c4"} size={24} />
         </TouchableOpacity>
         {showAdmin ? (
           <TouchableOpacity 
