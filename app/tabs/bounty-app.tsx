@@ -437,9 +437,9 @@ const styles = StyleSheet.create({
     top: 0, 
     bottom: 0, 
     zIndex: 0, 
-    opacity: 0.4 
+    opacity: 0.6 
   },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: 'rgba(5,150,105,0.85)' },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: 'rgba(5,150,105,0.75)' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
