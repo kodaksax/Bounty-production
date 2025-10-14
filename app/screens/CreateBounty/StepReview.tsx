@@ -1,8 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthContext } from '../../../hooks/use-auth-context';
 
 interface StepReviewProps {
   draft: BountyDraft;
@@ -12,11 +13,25 @@ interface StepReviewProps {
 }
 
 export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReviewProps) {
+  const { isEmailVerified } = useAuthContext();
   const [showEscrowModal, setShowEscrowModal] = useState(false);
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
 
   const handleSubmit = async () => {
+    // Email verification gate: Block submitting if email is not verified
+    if (!isEmailVerified) {
+      setShowEscrowModal(false);
+      Alert.alert(
+        'Email verification required',
+        "Please verify your email to post bounties. We've sent a verification link to your inbox.",
+        [
+          { text: 'OK', style: 'default' }
+        ]
+      );
+      return;
+    }
+    
     setShowEscrowModal(false);
     await onSubmit();
   };

@@ -9,7 +9,6 @@ import { BountyListItem } from 'components/bounty-list-item'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import LottieView from 'lottie-react-native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -239,6 +238,7 @@ function BountyAppInner() {
         distance={distance}
         description={item.description}
         isForHonor={Boolean(item.is_for_honor)}
+        user_id={item.user_id}
       />
     )
   }, []);
@@ -376,16 +376,6 @@ function BountyAppInner() {
 
   return (
     <View style={styles.container}>
-      {/* Animated Vanta-like fog background */}
-      <LottieView
-        source={require('../../assets/fog.json')}
-        autoPlay
-        loop
-        style={styles.fogBackground}
-        speed={0.5}
-        resizeMode="cover"
-      />
-
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
@@ -430,16 +420,7 @@ export function BountyApp() {
 // Styles (consolidated)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
-  fogBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-    opacity: 0.4,
-  },
-  dashboardArea: { flex: 1, zIndex: 1 },
+  dashboardArea: { flex: 1 },
   collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },

@@ -2,6 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { useRouter } from "expo-router"
 import React, { useCallback, useRef, useState } from "react"
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +14,7 @@ import { useMessages } from "../../hooks/useMessages"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
 import type { Conversation, Message } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
+import { getCurrentUserId } from "../../lib/utils/data-utils"
 
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -31,6 +33,8 @@ export function ChatDetailScreen({
   onBack,
   onNavigate,
 }: ChatDetailScreenProps) {
+  const router = useRouter()
+  const currentUserId = getCurrentUserId()
   const { 
     messages, 
     loading, 
@@ -52,6 +56,11 @@ export function ChatDetailScreen({
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
   const BOTTOM_NAV_OFFSET = 60 // height of BottomNav
+  
+  // Get the other participant's ID (not the current user) for 1:1 chats
+  const otherUserId = !conversation.isGroup && conversation.participantIds
+    ? conversation.participantIds.find(id => id !== currentUserId)
+    : null
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text)
@@ -150,20 +159,30 @@ export function ChatDetailScreen({
           <TouchableOpacity onPress={onBack} className="mr-3">
             <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
-          <Avatar className="h-10 w-10 mr-3">
-            <AvatarImage src={conversation.avatar} alt={conversation.name} />
-            <AvatarFallback className="bg-emerald-700 text-emerald-200">
-              {conversation.name.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <View>
-            <Text className="font-medium">{conversation.name}</Text>
-            {conversation.isGroup && (
-              <Text className="text-xs text-emerald-300">
-                {conversation.participantIds?.length || 0} members
-              </Text>
-            )}
-          </View>
+          <TouchableOpacity 
+            onPress={() => {
+              if (otherUserId) {
+                router.push(`/profile/${otherUserId}`)
+              }
+            }}
+            disabled={!otherUserId || conversation.isGroup}
+            className="flex-row items-center flex-1"
+          >
+            <Avatar className="h-10 w-10 mr-3">
+              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarFallback className="bg-emerald-700 text-emerald-200">
+                {conversation.name.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <View>
+              <Text className="font-medium">{conversation.name}</Text>
+              {conversation.isGroup && (
+                <Text className="text-xs text-emerald-300">
+                  {conversation.participantIds?.length || 0} members
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
         <View className="flex-row gap-3">
           <TouchableOpacity className="text-white">

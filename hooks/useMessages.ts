@@ -3,6 +3,7 @@ import { Clipboard } from 'react-native';
 import type { Message } from '../lib/types';
 import { messageService } from '../lib/services/message-service';
 import { socketStub, useMessageStatus } from './useSocketStub';
+import * as messagingService from '../lib/services/messaging';
 
 interface UseMessagesResult {
   messages: Message[];
@@ -189,10 +190,18 @@ export function useMessages(conversationId: string): UseMessagesResult {
   useEffect(() => {
     fetchMessages();
 
-    // Set up polling for new messages (replace with WebSocket later)
-    const interval = setInterval(fetchMessages, 5000); // Poll every 5s
+    // Listen for real-time updates from the messaging service
+    const handleMessagesUpdated = () => {
+      fetchMessages();
+    };
     
-    return () => clearInterval(interval);
+    messagingService.on('messagesUpdated', handleMessagesUpdated);
+    messagingService.on('messageSent', handleMessagesUpdated);
+    
+    return () => {
+      messagingService.off('messagesUpdated', handleMessagesUpdated);
+      messagingService.off('messageSent', handleMessagesUpdated);
+    };
   }, [conversationId]);
 
   return {

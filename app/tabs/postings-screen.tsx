@@ -39,7 +39,7 @@ interface PostingsScreenProps {
 }
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
-  const { session } = useAuthContext()
+  const { session, isEmailVerified } = useAuthContext()
   const currentUserId = getCurrentUserId()
   const router = useRouter()
   
@@ -229,11 +229,34 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Show confirmation card instead of directly posting
   const handleShowConfirmation = () => {
+    // Email verification gate: Block posting if email is not verified
+    if (!isEmailVerified) {
+      Alert.alert(
+        'Email verification required',
+        "Please verify your email to post bounties. We've sent a verification link to your inbox.",
+        [
+          { text: 'OK', style: 'default' }
+        ]
+      )
+      return
+    }
     setShowConfirmationCard(true)
   }
 
   // Handle the actual bounty posting after confirmation
   const handlePostBounty = async () => {
+    // Email verification gate: Double-check before submitting
+    if (!isEmailVerified) {
+      Alert.alert(
+        'Email verification required',
+        "Please verify your email to post bounties. We've sent a verification link to your inbox.",
+        [
+          { text: 'OK', style: 'default' }
+        ]
+      )
+      return
+    }
+    
     try {
       setIsSubmitting(true)
       setError(null)
@@ -329,10 +352,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       // Auto-create a conversation for coordination
       try {
         const { messageService } = await import('lib/services/message-service')
-        const conversation = await messageService.createConversation(
+        const conversation = await messageService.getOrCreateConversation(
           [request.user_id],
           request.profile?.username || 'Hunter',
-          false
+          request.bounty?.id?.toString()
         )
         
         // Send initial message with bounty context
