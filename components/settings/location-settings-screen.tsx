@@ -11,13 +11,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocation } from '../hooks/useLocation';
-import { useAddressLibrary } from '../hooks/useAddressLibrary';
+import { useLocation } from '../../app/hooks/useLocation';
+import { useAddressLibrary } from '../../app/hooks/useAddressLibrary';
 import type { SavedAddress } from '../../lib/types';
 
 const BOTTOM_NAV_OFFSET = 70;
 
-export function LocationScreen() {
+interface LocationSettingsScreenProps {
+  onBack?: () => void;
+}
+
+export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const {
     location,
@@ -155,16 +159,28 @@ export function LocationScreen() {
 
   return (
     <View className="flex-1 bg-emerald-600">
+      {/* Header with Back Button */}
+      <View className="flex-row justify-between items-center p-4 pt-8">
+        <View className="flex-row items-center">
+          <MaterialIcons name="place" size={24} color="#fff" />
+          <Text className="text-lg font-bold tracking-wider ml-2 text-white">Location & Visibility</Text>
+        </View>
+        {onBack && (
+          <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+      
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
-          paddingTop: Math.max(insets.top, 12),
+          paddingTop: 12,
           paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16),
         }}
       >
-        {/* Header */}
+        {/* Description */}
         <View className="px-4 mb-6">
-          <Text className="text-white text-3xl font-bold mb-2">Location & Visibility</Text>
           <Text className="text-emerald-200/80 text-sm">
             Manage your location settings and saved addresses
           </Text>
