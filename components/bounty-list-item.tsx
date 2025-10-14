@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { SPACING, SIZING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { BountyDetailModal } from "./bountydetailmodal"
 
@@ -110,10 +111,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderRadius: SPACING.ELEMENT_GAP,
+    paddingHorizontal: SPACING.ELEMENT_GAP,
+    paddingVertical: SPACING.ELEMENT_GAP,
     marginBottom: 10,
+    minHeight: SIZING.MIN_TOUCH_TARGET + SPACING.ELEMENT_GAP,
   },
   leadingIconWrap: {
     width: 36,
@@ -122,7 +124,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#064e3b', // dark emerald
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: SPACING.ELEMENT_GAP,
     borderWidth: 1,
     borderColor: '#6ee7b780', // emerald-400/50
   },
@@ -132,7 +134,8 @@ const styles = StyleSheet.create({
   title: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: TYPOGRAPHY.SIZE_DEFAULT,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_DEFAULT * TYPOGRAPHY.LINE_HEIGHT_TIGHT),
     marginBottom: 4,
   },
   metaRow: {
@@ -141,7 +144,7 @@ const styles = StyleSheet.create({
   },
   username: {
     color: '#a7f3d0', // emerald-200
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
   },
   dot: {
     width: 4,
@@ -153,7 +156,7 @@ const styles = StyleSheet.create({
   },
   distance: {
     color: '#d1fae5', // emerald-100
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
   },
   onlineBadge: {
     flexDirection: 'row',
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1fae5', // emerald-100
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: SPACING.COMPACT_GAP,
     gap: 2,
   },
   onlineText: {
@@ -172,7 +175,7 @@ const styles = StyleSheet.create({
   trailing: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginLeft: SPACING.ELEMENT_GAP,
   },
   price: {
     color: '#fcd34d', // amber-300

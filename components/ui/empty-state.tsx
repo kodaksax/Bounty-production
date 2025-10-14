@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { SPACING, SIZING, TYPOGRAPHY, A11Y } from '../../lib/constants/accessibility';
 import { Button } from './button';
 
 interface EmptyStateProps {
@@ -32,12 +33,12 @@ export function EmptyState({
     Animated.sequence([
       Animated.timing(iconScale, {
         toValue: 1,
-        duration: 400,
+        duration: A11Y.ANIMATION_SLOW,
         useNativeDriver: true,
       }),
       Animated.timing(contentOpacity, {
         toValue: 1,
-        duration: 300,
+        duration: A11Y.ANIMATION_NORMAL,
         useNativeDriver: true,
       }),
     ]).start();
@@ -98,16 +99,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingVertical: 48,
+    paddingVertical: SIZING.AVATAR_MEDIUM,
   },
   iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: SIZING.AVATAR_XLARGE,
+    height: SIZING.AVATAR_XLARGE,
+    borderRadius: SIZING.AVATAR_XLARGE / 2,
     backgroundColor: 'rgba(0, 145, 44, 0.1)', // emerald-500 background
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: SPACING.SECTION_GAP,
     borderWidth: 2,
     borderColor: 'rgba(0, 145, 44, 0.3)', // emerald-600 border
     // Enhanced emerald glow
@@ -118,25 +119,26 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   title: {
-    fontSize: 20,
+    fontSize: TYPOGRAPHY.SIZE_LARGE,
     fontWeight: '700',
     color: '#fffef5',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.ELEMENT_GAP,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_LARGE * TYPOGRAPHY.LINE_HEIGHT_NORMAL),
     // Emerald text shadow
     textShadowColor: 'rgba(0, 145, 44, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   description: {
-    fontSize: 15,
+    fontSize: TYPOGRAPHY.SIZE_DEFAULT,
     color: 'rgba(255, 254, 245, 0.8)',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_DEFAULT * TYPOGRAPHY.LINE_HEIGHT_RELAXED),
+    marginBottom: SPACING.SECTION_GAP,
   },
   actionButton: {
-    marginTop: 8,
+    marginTop: SPACING.COMPACT_GAP,
     minWidth: 200,
   },
 });

@@ -244,16 +244,48 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       )}
       {/* Header — left: BOUNTY brand, right: back + settings */}
       <View className="flex-row items-center justify-between p-4 pt-8">
-        <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+        <View className="flex-row items-center gap-2">
+          <MaterialIcons 
+            name="gps-fixed" 
+            size={24} 
+            color="#ffffff" 
+            accessibilityElementsHidden={true}
+          />
+          <Text 
+            className="text-lg font-bold tracking-wider text-white"
+            accessibilityRole="header"
+          >
+            BOUNTY
+          </Text>
         </View>
         <View className="flex-row items-center">
-          <TouchableOpacity className="p-2" onPress={shareProfile} accessibilityLabel="Share profile">
-            <MaterialIcons name="share" size={22} color="#ffffff" />
+          <TouchableOpacity 
+            className="p-2" 
+            onPress={shareProfile} 
+            accessibilityRole="button"
+            accessibilityLabel="Share profile"
+            accessibilityHint="Share your profile via social media or messaging apps"
+          >
+            <MaterialIcons 
+              name="share" 
+              size={22} 
+              color="#ffffff" 
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
-          <TouchableOpacity className="p-2" onPress={() => setShowSettings(true)} accessibilityLabel="Open settings">
-            <MaterialIcons name="settings" size={24} color="#ffffff" />
+          <TouchableOpacity 
+            className="p-2" 
+            onPress={() => setShowSettings(true)} 
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            accessibilityHint="Access profile settings and preferences"
+          >
+            <MaterialIcons 
+              name="settings" 
+              size={24} 
+              color="#ffffff" 
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         </View>
       </View>
