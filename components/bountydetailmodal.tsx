@@ -118,8 +118,13 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       if (Platform.OS === 'web') {
         // On web, copy to clipboard
         const link = `https://bountyexpo.app/bounties/${bounty.id}`;
-        await navigator.clipboard.writeText(link);
-        Alert.alert('Link Copied', 'Bounty link copied to clipboard!');
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(link);
+          Alert.alert('Link Copied', 'Bounty link copied to clipboard!');
+        } else {
+          // Fallback: show link in alert
+          Alert.alert('Share Link', link);
+        }
       } else {
         // On mobile, use native share
         await Share.share({
