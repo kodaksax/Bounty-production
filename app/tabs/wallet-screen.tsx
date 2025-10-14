@@ -8,6 +8,7 @@ import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { WithdrawScreen } from "../../components/withdraw-screen";
+import { SPACING, SIZING, TYPOGRAPHY, HEADER_LAYOUT } from '../../lib/constants/accessibility';
 import { useWallet } from '../../lib/wallet-context';
 import { useStripe } from '../../lib/stripe-context';
 import { stripeService } from '../../lib/services/stripe-service';
@@ -53,8 +54,18 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <MaterialIcons 
+            name="gps-fixed" 
+            size={HEADER_LAYOUT.iconSize} 
+            color="#fff" 
+            accessibilityElementsHidden={true}
+          />
+          <Text 
+            style={styles.headerTitle}
+            accessibilityRole="header"
+          >
+            BOUNTY
+          </Text>
         </View>
       </View>
   
@@ -66,12 +77,24 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
             </View>
             <View style={styles.balanceActionsRow}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => setShowAddMoney(true)}>
-                <MaterialIcons name="add" size={20} color="#fff" />
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => setShowAddMoney(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Add money to wallet"
+                accessibilityHint="Add funds to your wallet using a payment method"
+              >
+                <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.actionButtonText}>Add Money</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => setShowWithdraw(true)}>
-                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" />
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => setShowWithdraw(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Withdraw money from wallet"
+                accessibilityHint="Transfer funds from your wallet to your bank account"
+              >
+                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.actionButtonText}>Withdraw</Text>
               </TouchableOpacity>
             </View>
@@ -83,7 +106,12 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         <View style={styles.sectionPad}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Linked Accounts</Text>
-            <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
+            <TouchableOpacity 
+              onPress={() => setShowPaymentMethods(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Manage payment methods"
+              accessibilityHint="Add, remove, or update payment methods"
+            >
               <Text style={styles.sectionManage}>Manage</Text>
             </TouchableOpacity>
           </View>
@@ -176,42 +204,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 32,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     backgroundColor: '#059669',
+    gap: HEADER_LAYOUT.iconToTitleGap,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: HEADER_LAYOUT.iconToTitleGap,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: HEADER_LAYOUT.titleFontSize,
     fontWeight: 'bold',
-    letterSpacing: 1,
+    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
   },
   backButton: {
-    padding: 8,
+    padding: SPACING.COMPACT_GAP,
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sectionPad: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    marginBottom: SPACING.SECTION_GAP,
   },
   balanceCard: {
     backgroundColor: '#047857',
-    borderRadius: 16,
+    borderRadius: SPACING.SCREEN_HORIZONTAL,
     padding: 20,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    marginBottom: 8,
+    marginBottom: SPACING.COMPACT_GAP,
   },
   balanceCardHeader: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.SCREEN_HORIZONTAL,
   },
   balanceLabel: {
     color: '#6ee7b7',
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
     textTransform: 'uppercase',
     fontWeight: 'bold',
   },
@@ -224,76 +258,83 @@ const styles = StyleSheet.create({
   balanceActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 12,
+    marginTop: SPACING.ELEMENT_GAP,
+    gap: SPACING.COMPACT_GAP,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#065f46',
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
     flex: 1,
-    marginHorizontal: 4,
     justifyContent: 'center',
+    minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
+    gap: SPACING.COMPACT_GAP,
   },
   actionButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.COMPACT_GAP,
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   sectionManage: {
     color: '#6ee7b7',
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: 'bold',
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#047857cc',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: SPACING.ELEMENT_GAP,
+    padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
+    minHeight: SIZING.MIN_TOUCH_TARGET + SPACING.ELEMENT_GAP,
   },
   accountIcon: {
-    height: 48,
-    width: 48,
+    height: SIZING.AVATAR_MEDIUM,
+    width: SIZING.AVATAR_MEDIUM,
     backgroundColor: '#065f46',
-    borderRadius: 8,
+    borderRadius: SPACING.COMPACT_GAP,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: SPACING.ELEMENT_GAP,
   },
   accountName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   accountSub: {
     color: '#6ee7b7',
-    fontSize: 13,
+    fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#047857cc',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: SPACING.ELEMENT_GAP,
+    padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -301,21 +342,21 @@ const styles = StyleSheet.create({
   },
   bountyName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   bountyAmount: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   emptyState: {
-    paddingVertical: 24,
+    paddingVertical: SPACING.SECTION_GAP,
     alignItems: 'center',
   },
   emptyStateText: {
     color: '#6ee7b7',
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
     opacity: 0.9,
   },
   // bottom nav indicator removed; using shared BottomNav at app level

@@ -48,10 +48,18 @@ export function BountyListItem({ id, title, username, price, distance, descripti
         activeOpacity={0.8}
         style={styles.row}
         onPress={() => setShowDetail(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`}
+        accessibilityHint="Tap to view bounty details and apply"
       >
         {/* Leading icon/avatar */}
         <View style={styles.leadingIconWrap}>
-          <MaterialIcons name="paid" size={18} color="#a7f3d0" />
+          <MaterialIcons 
+            name="paid" 
+            size={18} 
+            color="#a7f3d0" 
+            accessibilityElementsHidden={true}
+          />
         </View>
 
         {/* Main content */}
