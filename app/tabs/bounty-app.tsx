@@ -11,14 +11,14 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
 import { bountyService } from '../../lib/services/bounty-service'
-import { locationService } from '../../lib/services/location-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
+import { locationService } from '../../lib/services/location-service'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 
 // Calendar removed in favor of Profile as the last tab
@@ -86,8 +86,16 @@ function BountyAppInner() {
     { id: "crypto", label: "Crypto", icon: "attach-money" as const },
     { id: "remote", label: "Remote", icon: "inventory" as const },
     { id: "highpaying", label: "High Paying", icon: "payments" as const },
+    // Insert distance as a synthetic chip so it renders inline between High Paying and For Honor
+    { id: "distance", label: "Distance", icon: "near-me" as const, special: true },
     { id: "forkids", label: "For Honor", icon: "favorite" as const },
   ], [])
+
+  const DISTANCE_OPTIONS = [5, 10, 25, 50]
+  const [distanceDropdownOpen, setDistanceDropdownOpen] = useState(false)
+  // Layout info for positioning the dropdown under the distance chip
+  const [distanceChipLayout, setDistanceChipLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const distanceChipRef = useRef<any>(null)
 
   // Calculate distance - uses real geolocation when available, falls back to mock
   const calculateDistance = useCallback((bountyLocation: string) => {
@@ -333,7 +341,7 @@ function BountyAppInner() {
               <Text style={styles.searchText}>Search bounties or users...</Text>
             </TouchableOpacity>
           </View>
-          {/* Filter Chips */}
+          {/* Filter Chips + Distance chip */}
           <View style={styles.filtersRow}>
             <FlatList
               horizontal
@@ -342,7 +350,53 @@ function BountyAppInner() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingHorizontal: 16 }}
               renderItem={({ item }) => {
-                const isActive = activeCategory === item.id
+                const isDistance = item.id === 'distance'
+                const isActive = isDistance ? Boolean(distanceFilter) : activeCategory === item.id
+                if (isDistance) {
+                  return (
+                    <TouchableOpacity
+                      ref={(r) => { distanceChipRef.current = r }}
+                      onLayout={(e) => {
+                        const { x, y, width, height } = e.nativeEvent.layout
+                        setDistanceChipLayout({ x, y, width, height })
+                      }}
+                      onPress={() => {
+                        if (!permission?.granted || !userLocation) {
+                          Alert.alert('Location required', 'Enable location permission to filter by distance.')
+                          return
+                        }
+                        // If a distance is already selected, pressing the chip clears it (toggle-off)
+                        if (distanceFilter) {
+                          setDistanceFilter(null)
+                          setDistanceDropdownOpen(false)
+                          return
+                        }
+                        // If dropdown is already open and no distance is selected, close it (tapped again without selection)
+                        if (distanceDropdownOpen && !distanceFilter) {
+                          setDistanceDropdownOpen(false)
+                          return
+                        }
+                        // Measure chip position in window coordinates so we can anchor the dropdown below it
+                        try {
+                          if (distanceChipRef.current && typeof distanceChipRef.current.measureInWindow === 'function') {
+                            distanceChipRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+                              setDistanceChipLayout({ x, y, width, height })
+                              setDistanceDropdownOpen(true)
+                            })
+                            return
+                          }
+                        } catch (err) {
+                          // fallthrough to open without positioning
+                        }
+                        setDistanceDropdownOpen((s) => !s)
+                      }}
+                      style={[styles.chip, isActive && styles.chipActive, !permission?.granted ? styles.disabledChip : undefined]}
+                    >
+                      <MaterialIcons name={item.icon} size={16} color={isActive ? '#052e1b' : '#d1fae5'} style={{ marginRight: 8 }} />
+                      <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{distanceFilter ? `${distanceFilter}mi` : item.label}</Text>
+                    </TouchableOpacity>
+                  )
+                }
                 return (
                   <TouchableOpacity
                     onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
@@ -359,42 +413,50 @@ function BountyAppInner() {
                 )
               }}
             />
+
+            
           </View>
-          {/* Distance Filter - only show if location permission granted */}
-          {permission?.granted && userLocation && (
-            <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <MaterialIcons name="near-me" size={16} color="#d1fae5" />
-                <Text style={{ color: '#d1fae5', fontSize: 12, fontWeight: '600' }}>Distance:</Text>
-                {[5, 10, 25, 50].map((miles) => (
-                  <TouchableOpacity
-                    key={miles}
-                    onPress={() => setDistanceFilter(distanceFilter === miles ? null : miles)}
-                    style={[
-                      styles.distanceChip,
-                      distanceFilter === miles && styles.distanceChipActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.distanceChipLabel,
-                        distanceFilter === miles && styles.distanceChipLabelActive,
-                      ]}
-                    >
-                      {miles}mi
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {distanceFilter !== null && (
-                  <TouchableOpacity
-                    onPress={() => setDistanceFilter(null)}
-                    style={styles.distanceClearButton}
-                  >
-                    <MaterialIcons name="close" size={16} color="#d1fae5" />
-                  </TouchableOpacity>
+
+          {/* Distance dropdown */}
+          {distanceDropdownOpen && (
+            // If we have a measured chip layout use absolute positioning anchored under the chip
+            distanceChipLayout ? (
+              (() => {
+                const windowWidth = require('react-native').Dimensions.get('window').width
+                const dropdownWidth = Math.max(160, distanceChipLayout.width)
+                let left = distanceChipLayout.x
+                // Clamp so dropdown doesn't overflow screen
+                if (left + dropdownWidth > windowWidth - 8) {
+                  left = Math.max(8, windowWidth - dropdownWidth - 8)
+                }
+                const top = distanceChipLayout.y + distanceChipLayout.height + 2
+                return (
+                  <View style={[styles.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }] }>
+                    {permission?.granted && userLocation ? (
+                      DISTANCE_OPTIONS.map((m) => (
+                        <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
+                          <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <Text style={styles.dropdownNotice}>Location permission required to use distance filter.</Text>
+                    )}
+                  </View>
+                )
+              })()
+            ) : (
+              <View style={styles.distanceDropdown}>
+                {permission?.granted && userLocation ? (
+                  DISTANCE_OPTIONS.map((m) => (
+                    <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
+                      <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={styles.dropdownNotice}>Location permission required to use distance filter.</Text>
                 )}
               </View>
-            </View>
+            )
           )}
         </Animated.View>
         <LinearGradient
@@ -510,6 +572,10 @@ const styles = StyleSheet.create({
   distanceChipLabelActive: { color: '#052e1b' },
   distanceClearButton: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.3)', justifyContent: 'center', alignItems: 'center' },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
+  disabledChip: { opacity: 0.5 },
+  distanceDropdown: { position: 'absolute', top: 48, right: 16, backgroundColor: 'rgba(2,44,34,0.9)', padding: 8, borderRadius: 8, zIndex: 60 },
+  distanceOption: { paddingVertical: 8, paddingHorizontal: 12 },
+  dropdownNotice: { color: '#f3fff9', padding: 8, fontSize: 12 },
   // searchOverlay removed (search is its own route now)
 })
 export default function BountyAppRoute() {
