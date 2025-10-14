@@ -11,9 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty0.BOUNTYExpo",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "infoPlist": {
+          "ITSAppUsesNonExemptEncryption": false,
+          "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture and add portfolio media.",
+          "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed."
+        }
     },
     "android": {
       "adaptiveIcon": {

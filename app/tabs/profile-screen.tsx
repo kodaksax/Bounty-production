@@ -9,6 +9,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import { useFocusEffect } from "expo-router";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -99,6 +100,22 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     };
     ensureProfile();
   }, [authUserId, refreshUserProfile, refreshAuthProfile]);
+
+  // On-focus refresh to ensure latest avatar and fields are shown when returning
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      const run = async () => {
+        try {
+          await Promise.all([refreshAuthProfile(), refreshUserProfile()]);
+        } catch (e) {
+          console.warn('[ProfileScreen] focus refresh failed:', e);
+        }
+      };
+      run();
+      return () => { isActive = false };
+    }, [refreshAuthProfile, refreshUserProfile])
+  );
 
   // Listen for changes from settings screen and sync with new profile service / local cache (scoped per user)
   useEffect(() => {

@@ -4,23 +4,26 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { attachmentService } from '../../lib/services/attachment-service';
 
 export default function DetailsScreen() {
   const router = useRouter();
@@ -32,6 +35,49 @@ export default function DetailsScreen() {
   const [displayName, setDisplayName] = useState(normalized?.name || localProfile?.displayName || '');
   const [location, setLocation] = useState((normalized?._raw && (normalized as any)._raw.location) || localProfile?.location || '');
   const [saving, setSaving] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9,
+    });
+    if (result.canceled) return;
+    const asset = result.assets?.[0];
+    if (!asset) return;
+    // Optional size guard
+    const MAX_FILE_SIZE = 5 * 1024 * 1024;
+    if ((asset as any).fileSize && (asset as any).fileSize > MAX_FILE_SIZE) {
+      Alert.alert('Image too large', 'Please select an image under 5MB.');
+      return;
+    }
+    // Upload via attachment service to get a stable URL
+    try {
+      setUploading(true);
+      const uploaded = await attachmentService.upload({
+        id: `onboarding-avatar-${Date.now()}`,
+        name: (asset as any).fileName || 'avatar.jpg',
+        uri: asset.uri,
+        mimeType: asset.mimeType || 'image/jpeg',
+        size: (asset as any).fileSize,
+        status: 'uploading',
+        progress: 0,
+      } as any);
+      setAvatarUri(uploaded.remoteUri || asset.uri);
+    } catch (e) {
+      setAvatarUri(asset.uri);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleNext = async () => {
     setSaving(true);
@@ -40,6 +86,7 @@ export default function DetailsScreen() {
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
       location: location.trim() || undefined,
+      avatar: avatarUri || undefined,
     });
 
     if (!result.success) {
@@ -51,6 +98,7 @@ export default function DetailsScreen() {
     // Also sync to Supabase via AuthProfileService
     await updateAuthProfile({
       about: location.trim() || undefined,
+      avatar: avatarUri || undefined,
     });
 
     setSaving(false);
@@ -117,14 +165,22 @@ export default function DetailsScreen() {
             <Text style={styles.hint}>City and state/country</Text>
           </View>
 
-          {/* Avatar placeholder */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Profile Picture (Coming Soon)</Text>
-            <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.3)" />
-              <Text style={styles.avatarText}>Photo upload coming soon</Text>
+            {/* Avatar picker */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Profile Picture</Text>
+              <TouchableOpacity style={styles.avatarPlaceholder} onPress={pickAvatar} disabled={uploading}>
+                {avatarUri ? (
+                  <View style={{ width: 96, height: 96, borderRadius: 48, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(167,243,208,0.6)' }}>
+                    <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  </View>
+                ) : (
+                  <>
+                    <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.3)" />
+                    <Text style={styles.avatarText}>{uploading ? 'Uploading…' : 'Tap to select a photo'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
-          </View>
         </View>
 
         {/* Action Buttons */}

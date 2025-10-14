@@ -1,10 +1,10 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import * as DocumentPicker from 'expo-document-picker'
-import type React from "react"
-import { useState } from "react"
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { AvatarFallback } from "components/ui/avatar"
+import * as ImagePicker from 'expo-image-picker'
+import React, { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
@@ -12,6 +12,7 @@ import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useProfile } from '../hooks/useProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
+import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
 
@@ -39,13 +40,14 @@ export function EditProfileScreen({
 }: EditProfileScreenProps) {
   const { profile: localProfile, updateProfile, error: localProfileError } = useUserProfile()
   const { profile: authProfile, updateProfile: updateAuthProfile, loading: authLoading } = useAuthProfile()
-  const { profile: normalized, loading: normalizedLoading, error: normalizedError } = useNormalizedProfile()
+  const { profile: normalized, loading: normalizedLoading, error: normalizedError, refresh: refreshNormalized } = useNormalizedProfile()
   const [name, setName] = useState(authProfile?.username || normalized?.name || localProfile?.displayName || initialName)
   const [title, setTitle] = useState(normalized?.title || "")
   const [location, setLocation] = useState((normalized as any)?.location || "")
   const [portfolio, setPortfolio] = useState((normalized as any)?.portfolio || "")
   const [bio, setBio] = useState(authProfile?.about || normalized?.bio || localProfile?.location || "")
   const [avatar, setAvatar] = useState(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar)
+  const [pendingAvatarRemoteUri, setPendingAvatarRemoteUri] = useState<string | undefined>(undefined)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
@@ -60,6 +62,36 @@ export function EditProfileScreen({
       await addPortfolioItem({ ...item, id: undefined as any, createdAt: undefined as any } as any)
     },
   })
+
+  // Draft persistence keys
+  const DRAFT_KEY = 'editProfile:draft';
+
+  // Hydrate draft on mount
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft.name) setName(draft.name);
+          if (draft.title) setTitle(draft.title);
+          if (draft.location) setLocation(draft.location);
+          if (draft.portfolio) setPortfolio(draft.portfolio);
+          if (draft.bio) setBio(draft.bio);
+          if (draft.avatar) setAvatar(draft.avatar);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Persist draft on changes (debounced)
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      const payload = { name, title, location, portfolio, bio, avatar };
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(payload)).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [name, title, location, portfolio, bio, avatar]);
   
   // Show loading state if profiles are still loading
   const isLoading = authLoading || normalizedLoading
@@ -109,7 +141,7 @@ export function EditProfileScreen({
       const updatedProfile = await updateAuthProfile({
         username: name.trim(),
         about: (bio || '').trim(),
-        avatar: avatar?.trim()
+        avatar: (pendingAvatarRemoteUri || avatar)?.trim()
       })
       
       if (!updatedProfile) {
@@ -122,7 +154,7 @@ export function EditProfileScreen({
       // Also update local profile service for backward compatibility
       const updates = { 
         displayName: name.trim(), 
-        avatar: avatar?.trim(),
+        avatar: (pendingAvatarRemoteUri || avatar)?.trim(),
         // Store additional fields in local profile service if supported
         location: location.trim() || undefined,
       } as any
@@ -139,7 +171,7 @@ export function EditProfileScreen({
           location: location.trim() || undefined,
           portfolio: portfolio.trim() || undefined,
           bio: (bio || '').trim(),
-          avatar: avatar?.trim() || undefined,
+          avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
         })
       } catch (e) {
         console.warn('[EditProfile] useProfile update failed (non-critical):', e)
@@ -150,6 +182,12 @@ export function EditProfileScreen({
       
       setUploadMessage('✓ Profile updated successfully!')
       setTimeout(() => setUploadMessage(null), 1200)
+      
+  // Refresh normalized profile cache
+  try { await refreshNormalized?.() } catch {}
+
+  // Clear draft after successful save
+  try { await AsyncStorage.removeItem(DRAFT_KEY) } catch {}
       
       // Return to previous screen after a short delay
       setTimeout(() => {
@@ -166,72 +204,78 @@ export function EditProfileScreen({
 
   const handleAvatarClick = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'image/*',
-        copyToCacheDirectory: true,
-      })
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        setUploadMessage('Permission to access photos is required');
+        setTimeout(() => setUploadMessage(null), 3000);
+        return;
+      }
 
-      if (result.canceled) return
+      // Launch image library
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+        exif: false,
+      });
 
-      if (result.assets && result.assets.length > 0) {
-        const selectedImage = result.assets[0]
-        
-        // Validate file size (5MB limit)
-        const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB in bytes
-        if (selectedImage.size && selectedImage.size > MAX_FILE_SIZE) {
-          setUploadMessage('Image too large. Maximum size is 5MB')
-          setTimeout(() => setUploadMessage(null), 3000)
-          return
-        }
-        
-        // Set uploading state
-        setIsUploadingAvatar(true)
-        setUploadProgress(0)
+      if (result.canceled) return;
 
-        // Create attachment metadata
-        const attachment = {
-          id: `avatar-${Date.now()}`,
-          name: selectedImage.name || 'avatar.jpg',
-          uri: selectedImage.uri,
-          mimeType: selectedImage.mimeType,
-          size: selectedImage.size,
-          status: 'uploading' as const,
-          progress: 0,
-        }
+      const selected = result.assets?.[0];
+      if (!selected) return;
 
-        try {
-          // Upload using attachment service
-          const uploaded = await attachmentService.upload(attachment, {
-            onProgress: (progress) => {
-              setUploadProgress(progress)
-            },
-          })
+      // Validate file size (5MB limit) - many pickers don't provide size, so guard if available
+      const MAX_FILE_SIZE = 5 * 1024 * 1024;
+      if ((selected as any).fileSize && (selected as any).fileSize > MAX_FILE_SIZE) {
+        setUploadMessage('Image too large. Maximum size is 5MB');
+        setTimeout(() => setUploadMessage(null), 3000);
+        return;
+      }
 
-          // Update avatar with the uploaded URL
-          setAvatar(uploaded.remoteUri || selectedImage.uri)
-          setIsUploadingAvatar(false)
-          setUploadMessage('Profile picture uploaded successfully!')
-          setTimeout(() => setUploadMessage(null), 3000)
-        } catch (uploadError) {
-          console.error('Failed to upload avatar:', uploadError)
-          setIsUploadingAvatar(false)
-          // Still set the local URI so user can see their selection
-          setAvatar(selectedImage.uri)
-          setUploadMessage('Upload failed - using local image')
-          setTimeout(() => setUploadMessage(null), 3000)
-        }
+      setIsUploadingAvatar(true);
+      setUploadProgress(0);
+
+      const attachment = {
+        id: `avatar-${Date.now()}`,
+        name: selected.fileName || 'avatar.jpg',
+        uri: selected.uri,
+        mimeType: selected.mimeType || 'image/jpeg',
+        size: (selected as any).fileSize,
+        status: 'uploading' as const,
+        progress: 0,
+      };
+
+      try {
+        const uploaded = await attachmentService.upload(attachment, {
+          onProgress: (p) => setUploadProgress(p),
+        });
+        // Use local URI for immediate preview; store remote for persistence
+        setAvatar(selected.uri);
+        setPendingAvatarRemoteUri(uploaded.remoteUri);
+        setIsUploadingAvatar(false);
+        setUploadMessage('Profile picture uploaded successfully!');
+        setTimeout(() => setUploadMessage(null), 3000);
+      } catch (uploadError) {
+        console.error('Failed to upload avatar:', uploadError);
+        setIsUploadingAvatar(false);
+        setAvatar(selected.uri);
+        setPendingAvatarRemoteUri(undefined);
+        setUploadMessage('Upload failed - using local image');
+        setTimeout(() => setUploadMessage(null), 3000);
       }
     } catch (error) {
-      console.error('Error picking image:', error)
-      setIsUploadingAvatar(false)
-      setUploadMessage('Failed to select image')
-      setTimeout(() => setUploadMessage(null), 3000)
+      console.error('Error picking image:', error);
+      setIsUploadingAvatar(false);
+      setUploadMessage('Failed to select image');
+      setTimeout(() => setUploadMessage(null), 3000);
     }
   }
 
   const handleBack = () => {
-    // Save then navigate back
-    handleSave()
+    // Just navigate back; draft is persisted automatically
+    if (onBack) onBack()
   }
 
   // Show loading spinner if profiles are loading
@@ -315,12 +359,24 @@ export function EditProfileScreen({
         {/* Avatar */}
         <View className="px-4 -mt-8 flex flex-col items-start">
           <View className="relative mb-2">
-            <Avatar className="h-20 w-20 border-2 border-emerald-500">
-              <AvatarImage src={avatar} alt="Profile" />
-              <AvatarFallback className="bg-emerald-800 text-emerald-200">
-                {initialName.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <View className="h-20 w-20 rounded-full overflow-hidden border-2 border-emerald-500 bg-emerald-800 items-center justify-center">
+              {avatar ? (
+                <OptimizedImage
+                  source={{ uri: avatar }}
+                  width={80}
+                  height={80}
+                  style={{ width: 80, height: 80, borderRadius: 40 }}
+                  resizeMode="cover"
+                  useThumbnail
+                  priority="low"
+                  alt="Profile"
+                />
+              ) : (
+                <AvatarFallback className="bg-emerald-800 text-emerald-200">
+                  {initialName.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              )}
+            </View>
             <TouchableOpacity
               style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
               onPress={handleAvatarClick}

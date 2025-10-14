@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
+import { useAuthContext } from "../hooks/use-auth-context"
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { messageService } from "../lib/services/message-service"
 import { getCurrentUserId } from "../lib/utils/data-utils"
@@ -40,6 +41,9 @@ interface BountyDetailModalProps {
 
 export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
   const router = useRouter()
+  const { isEmailVerified } = useAuthContext()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
@@ -130,6 +134,18 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
 
   // Handle apply for bounty
   const handleApplyForBounty = async () => {
+    // Email verification gate: Block applying if email is not verified
+    if (!isEmailVerified) {
+      Alert.alert(
+        'Email verification required',
+        "Please verify your email to apply for bounties. We've sent a verification link to your inbox.",
+        [
+          { text: 'OK', style: 'default' }
+        ]
+      )
+      return
+    }
+    
     if (!currentUserId || !bounty.id) {
       Alert.alert('Error', 'Unable to apply. Please try again.')
       return
