@@ -3,7 +3,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { BountyDetailModal } from "./bountydetailmodal"
 
@@ -12,21 +11,22 @@ export interface BountyListItemProps {
   title: string
   username?: string
   price: number
-  distance: number
+  distance: number | null
   description?: string
   isForHonor?: boolean
   user_id?: string
+  work_type?: 'online' | 'in_person'
 }
 
-export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id }: BountyListItemProps) {
+export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const { profile: posterProfile } = useNormalizedProfile(user_id)
-  const { profile: authProfile } = useAuthProfile()
 
-  const [resolvedUsername, setResolvedUsername] = useState<string>(username || authProfile?.username || '@User')
+  const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Unknown Poster')
 
   useEffect(() => {
-    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> authProfile (current user) -> '@User'
+    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Unknown Poster'
+    // Never fall back to the current user's profile
     if (username) {
       setResolvedUsername(username)
       return
@@ -37,8 +37,8 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       return
     }
 
-    setResolvedUsername(authProfile?.username || '@User')
-  }, [username, posterProfile?.username, authProfile?.username])
+    setResolvedUsername('Unknown Poster')
+  }, [username, posterProfile?.username])
 
 
 
@@ -60,7 +60,16 @@ export function BountyListItem({ id, title, username, price, distance, descripti
           <View style={styles.metaRow}>
             <Text style={styles.username}>{resolvedUsername}</Text>
             <View style={styles.dot} />
-            <Text style={styles.distance}>{distance} mi</Text>
+            {work_type === 'online' ? (
+              <View style={styles.onlineBadge}>
+                <MaterialIcons name="wifi" size={10} color="#10b981" />
+                <Text style={styles.onlineText}>Online</Text>
+              </View>
+            ) : distance === null ? (
+              <Text style={styles.distance}>Location TBD</Text>
+            ) : (
+              <Text style={styles.distance}>{distance} mi</Text>
+            )}
           </View>
         </View>
 
@@ -80,7 +89,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id }}
+          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type }}
           onClose={() => setShowDetail(false)}
         />
       )}
@@ -137,6 +146,20 @@ const styles = StyleSheet.create({
   distance: {
     color: '#d1fae5', // emerald-100
     fontSize: 12,
+  },
+  onlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#d1fae5', // emerald-100
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 2,
+  },
+  onlineText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#065f46', // emerald-800
   },
   trailing: {
     alignItems: 'flex-end',

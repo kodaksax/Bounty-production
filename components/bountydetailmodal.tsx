@@ -1,5 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
@@ -7,18 +8,20 @@ import {
   Alert,
   Dimensions,
   Modal,
+  Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
-import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import type { AttachmentMeta } from '../lib/services/database.types'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { messageService } from "../lib/services/message-service"
-import { userProfileService } from '../lib/services/user-profile-service'
+import { reportService } from '../lib/services/report-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 
@@ -28,15 +31,12 @@ interface BountyDetailModalProps {
     username?: string
     title: string
     price: number
-    distance: number
+    distance: number | null
     description?: string
-    user_id?: string // Add optional user_id
-    attachments?: {
-      id: string
-      type: "image" | "document"
-      name: string
-      size: string
-    }[]
+    user_id?: string
+    work_type?: 'online' | 'in_person'
+    attachments?: AttachmentMeta[]
+    attachments_json?: string
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -55,51 +55,132 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
 
-  // Ensure we have a safe username string for UI and APIs. Prefer the current user username over generic '@User'.
-  const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || '@User')
-
-  const { profile: authProfile } = useAuthProfile()
+  // Resolve poster identity - ONLY from bounty.user_id, never from current user
+  const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Unknown Poster')
   const { profile: normalizedPoster } = useNormalizedProfile(bounty.user_id)
+  const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
 
   useEffect(() => {
-    // Resolution priority: bounty.username -> normalizedPoster.username -> authProfile.username -> userProfileService.current -> '@User'
+    // Resolution priority: bounty.username -> normalizedPoster.username -> 'Unknown Poster'
+    // Never fall back to the current user's profile
+    if (bounty.username) {
+      setDisplayUsername(bounty.username)
+      return
+    }
+
+    if (normalizedPoster?.username) {
+      setDisplayUsername(normalizedPoster.username)
+      return
+    }
+
+    setDisplayUsername('Unknown Poster')
+  }, [bounty.username, normalizedPoster?.username])
+
+  // Parse and load attachments
+  useEffect(() => {
     let mounted = true
-    ;(async () => {
+    const loadAttachments = () => {
       try {
-        if (bounty.username) {
-          if (mounted) setDisplayUsername(bounty.username)
+        // Priority: explicit attachments prop, then parse from attachments_json
+        if (bounty.attachments && bounty.attachments.length > 0) {
+          if (mounted) setActualAttachments(bounty.attachments)
           return
         }
 
-        if (normalizedPoster?.username) {
-          if (mounted) setDisplayUsername(normalizedPoster.username)
+        if (bounty.attachments_json) {
+          const parsed = JSON.parse(bounty.attachments_json) as AttachmentMeta[]
+          if (mounted) setActualAttachments(parsed || [])
           return
         }
 
-        if (authProfile?.username) {
-          if (mounted) setDisplayUsername(authProfile.username)
-          return
-        }
-
-        const current = await userProfileService.getCurrentProfile()
-        if (mounted) setDisplayUsername(current?.username || '@User')
-      } catch (e) {
-        // ignore
+        // No attachments
+        if (mounted) setActualAttachments([])
+      } catch (error) {
+        console.error('Error parsing attachments:', error)
+        if (mounted) setActualAttachments([])
       }
-    })()
+    }
+
+    loadAttachments()
     return () => { mounted = false }
-  }, [bounty.username, normalizedPoster?.username, authProfile?.username, bounty.user_id])
+  }, [bounty.attachments, bounty.attachments_json])
 
   // Sample description if not provided
   const description =
     bounty.description ||
     "I need someone to mow my lawn. The yard is approximately 1/4 acre with some slopes. I have a lawn mower you can use, or you can bring your own equipment. The grass is about 3 inches tall now. Please trim around the edges and clean up afterward. This should take about 2 hours to complete. I need this done by this weekend."
 
-  // Sample attachments if not provided
-  const attachments = bounty.attachments || [
-    { id: "1", type: "image", name: "yard-front.jpg", size: "2.4 MB" },
-    { id: "2", type: "document", name: "lawn-instructions.pdf", size: "1.1 MB" },
-  ]
+  // Handle Share button
+  const handleShare = async () => {
+    try {
+      const shareMessage = `Check out this bounty: ${bounty.title}\nAmount: $${bounty.price}\n\nView on BountyExpo: bountyexpo://bounties/${bounty.id}`;
+      
+      if (Platform.OS === 'web') {
+        // On web, copy to clipboard
+        const link = `https://bountyexpo.app/bounties/${bounty.id}`;
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(link);
+          Alert.alert('Link Copied', 'Bounty link copied to clipboard!');
+        } else {
+          // Fallback: show link in alert
+          Alert.alert('Share Link', link);
+        }
+      } else {
+        // On mobile, use native share
+        await Share.share({
+          message: shareMessage,
+          title: bounty.title,
+        });
+      }
+    } catch (error) {
+      console.error('Error sharing bounty:', error);
+      Alert.alert('Error', 'Failed to share bounty. Please try again.');
+    }
+  };
+
+  // Handle Report button
+  const handleReport = () => {
+    Alert.alert(
+      'Report Bounty',
+      'Are you sure you want to report this bounty? Our moderation team will review it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await reportService.reportBounty(bounty.id);
+            if (result.success) {
+              Alert.alert('Report Submitted', 'Thank you for helping keep our community safe. We will review this bounty.');
+            } else {
+              Alert.alert('Error', result.error || 'Failed to submit report. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Handle attachment open
+  const handleAttachmentOpen = async (attachment: AttachmentMeta) => {
+    try {
+      const uri = attachment.remoteUri || attachment.uri;
+      if (!uri) {
+        Alert.alert('Error', 'Attachment not available');
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(uri);
+      if (canOpen) {
+        await Linking.openURL(uri);
+      } else {
+        Alert.alert('Error', 'Cannot open this attachment');
+      }
+    } catch (error) {
+      console.error('Error opening attachment:', error);
+      Alert.alert('Error', 'Failed to open attachment');
+    }
+  };
 
   // Handle close animation
   const handleClose = () => {
@@ -257,10 +338,10 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
             <Text style={styles.headerTitle}>BOUNTY</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
+            <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
               <MaterialIcons name="share" size={20} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
+            <TouchableOpacity onPress={handleReport} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
               <MaterialIcons name="report" size={20} color="white" />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
@@ -307,12 +388,21 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
               {/* Title */}
               <Text style={styles.title}>{bounty.title}</Text>
 
-              {/* Price and distance */}
+              {/* Price and distance / Online badge */}
               <View style={styles.priceDistanceContainer}>
                 <View style={styles.priceContainer}>
                   <Text style={styles.priceText}>${bounty.price}</Text>
                 </View>
-                <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
+                {bounty.work_type === 'online' ? (
+                  <View style={styles.onlineBadge}>
+                    <MaterialIcons name="wifi" size={14} color="#10b981" />
+                    <Text style={styles.onlineText}>Online</Text>
+                  </View>
+                ) : bounty.distance === null ? (
+                  <Text style={styles.distanceText}>Location TBD</Text>
+                ) : (
+                  <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
+                )}
               </View>
 
               {/* Description */}
@@ -322,28 +412,39 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
               </View>
 
               {/* Attachments */}
-              {attachments.length > 0 && (
+              {actualAttachments.length > 0 && (
                 <View>
                   <Text style={styles.sectionHeader}>Attachments</Text>
                   <View style={styles.attachmentsContainer}>
-                    {attachments.map((attachment) => (
-                      <View key={attachment.id} style={styles.attachmentItem}>
-                        <View style={styles.attachmentIcon}>
-                          {attachment.type === "image" ? (
-                            <MaterialIcons name="image" size={20} color="#a7f3d0" />
-                          ) : (
-                            <MaterialIcons name="description" size={20} color="#a7f3d0" />
-                          )}
-                        </View>
-                        <View style={styles.attachmentInfo}>
-                          <Text style={styles.attachmentName}>{attachment.name}</Text>
-                          <Text style={styles.attachmentSize}>{attachment.size}</Text>
-                        </View>
-                        <TouchableOpacity style={styles.downloadButton}>
-                          <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                    {actualAttachments.map((attachment) => {
+                      const isImage = attachment.mimeType?.startsWith('image/') || attachment.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                      const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown';
+                      
+                      return (
+                        <TouchableOpacity
+                          key={attachment.id}
+                          style={styles.attachmentItem}
+                          onPress={() => handleAttachmentOpen(attachment)}
+                        >
+                          <View style={styles.attachmentIcon}>
+                            {isImage ? (
+                              <MaterialIcons name="image" size={20} color="#a7f3d0" />
+                            ) : (
+                              <MaterialIcons name="description" size={20} color="#a7f3d0" />
+                            )}
+                          </View>
+                          <View style={styles.attachmentInfo}>
+                            <Text style={styles.attachmentName}>{attachment.name}</Text>
+                            <Text style={styles.attachmentSize}>
+                              {attachment.size ? `${sizeInMB} MB` : 'Unknown size'}
+                            </Text>
+                          </View>
+                          <View style={styles.downloadButton}>
+                            <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                          </View>
                         </TouchableOpacity>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -528,6 +629,20 @@ const styles = StyleSheet.create({
   distanceText: {
     fontSize: 14,
     color: '#a7f3d0', // emerald-200
+  },
+  onlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#d1fae5', // emerald-100
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  onlineText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#065f46', // emerald-800
   },
   descriptionContainer: {
     marginBottom: 16,
