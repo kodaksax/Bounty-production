@@ -3,26 +3,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
+import { useAuthProfile } from '../hooks/useAuthProfile'
+import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { messageService } from "../lib/services/message-service"
+import { userProfileService } from '../lib/services/user-profile-service'
+import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 
 interface BountyDetailModalProps {
   bounty: {
     id: number
-    username: string
+    username?: string
     title: string
     price: number
     distance: number
@@ -51,6 +54,41 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
+
+  // Ensure we have a safe username string for UI and APIs. Prefer the current user username over generic '@User'.
+  const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || '@User')
+
+  const { profile: authProfile } = useAuthProfile()
+  const { profile: normalizedPoster } = useNormalizedProfile(bounty.user_id)
+
+  useEffect(() => {
+    // Resolution priority: bounty.username -> normalizedPoster.username -> authProfile.username -> userProfileService.current -> '@User'
+    let mounted = true
+    ;(async () => {
+      try {
+        if (bounty.username) {
+          if (mounted) setDisplayUsername(bounty.username)
+          return
+        }
+
+        if (normalizedPoster?.username) {
+          if (mounted) setDisplayUsername(normalizedPoster.username)
+          return
+        }
+
+        if (authProfile?.username) {
+          if (mounted) setDisplayUsername(authProfile.username)
+          return
+        }
+
+        const current = await userProfileService.getCurrentProfile()
+        if (mounted) setDisplayUsername(current?.username || '@User')
+      } catch (e) {
+        // ignore
+      }
+    })()
+    return () => { mounted = false }
+  }, [bounty.username, normalizedPoster?.username, authProfile?.username, bounty.user_id])
 
   // Sample description if not provided
   const description =
@@ -89,7 +127,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       // Create or get existing conversation
       const conversation = await messageService.getOrCreateConversation(
         [bounty.user_id],
-        bounty.username,
+        displayUsername,
         bounty.id.toString()
       )
 
@@ -103,7 +141,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
         onNavigateToChat(conversation.id)
       } else {
         // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
-        router.push('/messenger')
+  router.push('/tabs/messenger' as any)
       }
     } catch (error) {
       console.error('Error creating conversation:', error)
@@ -250,15 +288,15 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 disabled={!bounty.user_id}
               >
                 <Avatar style={styles.avatar}>
-                  <AvatarImage src="/placeholder.svg?height=40&width=40" alt={bounty.username} />
+                  <AvatarImage src="/placeholder.svg?height=40&width=40" alt={displayUsername} />
                   <AvatarFallback style={styles.avatarFallback}>
                     <Text style={styles.avatarText}>
-                      {bounty.username.substring(1, 3).toUpperCase()}
+                      {displayUsername.substring(1, 3).toUpperCase()}
                     </Text>
                   </AvatarFallback>
                 </Avatar>
                 <View style={styles.userTextInfo}>
-                  <Text style={styles.username}>{bounty.username}</Text>
+                  <Text style={styles.username}>{displayUsername}</Text>
                   <Text style={styles.postTime}>Posted 2h ago</Text>
                 </View>
                 {bounty.user_id && (
@@ -326,7 +364,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 ) : (
                   <>
                     <MaterialIcons name="chat" size={20} color="#065f46" />
-                    <Text style={styles.messageButtonText}>Message {bounty.username}</Text>
+                    <Text style={styles.messageButtonText}>Message {displayUsername}</Text>
                   </>
                 )}
               </TouchableOpacity>

@@ -233,7 +233,7 @@ function BountyAppInner() {
       <BountyListItem
         id={item.id}
         title={item.title}
-        username="@Jon_Doe"
+        username={item.user_id ? undefined : '@Jon_Doe'}
         price={Number(item.amount)}
         distance={distance}
         description={item.description}

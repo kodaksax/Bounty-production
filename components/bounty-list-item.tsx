@@ -1,14 +1,16 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useAuthProfile } from '../hooks/useAuthProfile'
+import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { BountyDetailModal } from "./bountydetailmodal"
 
 export interface BountyListItemProps {
   id: number
   title: string
-  username: string
+  username?: string
   price: number
   distance: number
   description?: string
@@ -18,6 +20,27 @@ export interface BountyListItemProps {
 
 export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
+  const { profile: posterProfile } = useNormalizedProfile(user_id)
+  const { profile: authProfile } = useAuthProfile()
+
+  const [resolvedUsername, setResolvedUsername] = useState<string>(username || authProfile?.username || '@User')
+
+  useEffect(() => {
+    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> authProfile (current user) -> '@User'
+    if (username) {
+      setResolvedUsername(username)
+      return
+    }
+
+    if (posterProfile?.username) {
+      setResolvedUsername(posterProfile.username)
+      return
+    }
+
+    setResolvedUsername(authProfile?.username || '@User')
+  }, [username, posterProfile?.username, authProfile?.username])
+
+
 
   return (
     <>
@@ -35,7 +58,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
         <View style={styles.mainContent}>
           <Text style={styles.title} numberOfLines={2}>{title}</Text>
           <View style={styles.metaRow}>
-            <Text style={styles.username}>{username}</Text>
+            <Text style={styles.username}>{resolvedUsername}</Text>
             <View style={styles.dot} />
             <Text style={styles.distance}>{distance} mi</Text>
           </View>
@@ -57,7 +80,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username, title, price, distance, description, user_id }}
+          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id }}
           onClose={() => setShowDetail(false)}
         />
       )}
