@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
+import { SIZING, A11Y } from "../../lib/constants/accessibility";
 import { useHapticFeedback } from "lib/haptic-feedback";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
@@ -29,18 +30,18 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
     onNavigate(screen);
   }, [activeScreen, onNavigate, triggerHaptic]);
 
-  // Animate center button when active screen changes
+  // Animate center button when active screen changes (using standardized durations)
   useEffect(() => {
     if (activeScreen === "bounty") {
       Animated.parallel([
         Animated.timing(centerButtonScale, {
           toValue: 1.1,
-          duration: 200,
+          duration: A11Y.ANIMATION_NORMAL,
           useNativeDriver: true,
         }),
         Animated.timing(centerButtonRotation, {
           toValue: 1,
-          duration: 300,
+          duration: A11Y.ANIMATION_NORMAL,
           useNativeDriver: true,
         }),
       ]).start();
@@ -48,12 +49,12 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
       Animated.parallel([
         Animated.timing(centerButtonScale, {
           toValue: 1,
-          duration: 200,
+          duration: A11Y.ANIMATION_NORMAL,
           useNativeDriver: true,
         }),
         Animated.timing(centerButtonRotation, {
           toValue: 0,
-          duration: 300,
+          duration: A11Y.ANIMATION_NORMAL,
           useNativeDriver: true,
         }),
       ]).start();
@@ -183,6 +184,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     // Add subtle hover state
     backgroundColor: "transparent",
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centerButton: {
     height: 64,
@@ -194,6 +199,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: -24,
+    minWidth: SIZING.MIN_TOUCH_TARGET + 20, // Center button is larger
+    minHeight: SIZING.MIN_TOUCH_TARGET + 20,
     // Add sophisticated glow effect
     shadowColor: "#00912C", // Company specified primary green base
     shadowOffset: { width: 0, height: 0 },

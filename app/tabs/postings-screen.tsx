@@ -638,6 +638,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       shadowRadius: isActive ? 3 : 0,
                       elevation: isActive ? 2 : 0,
                     }}
+                    accessibilityRole="tab"
+                    accessibilityLabel={tab.label}
+                    accessibilityState={{ selected: isActive }}
+                    accessibilityHint={`Switch to ${tab.label} tab`}
                   >
                     <Text
                       className={cn(
@@ -710,7 +714,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <TouchableOpacity 
+                            key={f} 
+                            onPress={() => setWorkTypeFilter(f)} 
+                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Filter by ${label} work in progress`}
+                            accessibilityState={{ selected }}
+                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} work`}
+                          >
                             <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                           </TouchableOpacity>
                         )
@@ -788,7 +800,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <TouchableOpacity 
+                            key={f} 
+                            onPress={() => setWorkTypeFilter(f)} 
+                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Filter by ${label} postings`}
+                            accessibilityState={{ selected }}
+                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} bounties`}
+                          >
                             <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                           </TouchableOpacity>
                         )
