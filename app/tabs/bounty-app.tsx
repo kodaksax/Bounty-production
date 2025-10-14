@@ -91,7 +91,7 @@ function BountyAppInner() {
 
   // Calculate distance - uses real geolocation when available, falls back to mock
   const calculateDistance = useCallback((bountyLocation: string) => {
-    if (!bountyLocation) return 999 // Unknown location goes to end
+    if (!bountyLocation) return null // Return null for missing location (will show "Location TBD")
 
     // If user has location permission and coordinates
     if (userLocation && permission?.granted) {
@@ -141,9 +141,11 @@ function BountyAppInner() {
     // Apply distance filter if active (only for in-person bounties)
     if (distanceFilter !== null && userLocation && permission?.granted) {
       list = list.filter((b) => {
-        // Don't filter out online/remote bounties
+        // Don't filter out online/remote bounties or bounties with no location
         if (b.work_type === 'online') return true
         const distance = calculateDistance(b.location || "")
+        // Keep bounties with no location data (they'll show "Location TBD")
+        if (distance === null) return true
         return distance <= distanceFilter
       })
     }
@@ -153,8 +155,16 @@ function BountyAppInner() {
       // Highest amount first
       list.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
     } else {
-      // default by proximity
-      list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
+      // default by proximity - null distances (missing location) go to end
+      list.sort((a, b) => {
+        const distA = calculateDistance(a.location || "")
+        const distB = calculateDistance(b.location || "")
+        // Put null distances at the end
+        if (distA === null && distB === null) return 0
+        if (distA === null) return 1
+        if (distB === null) return -1
+        return distA - distB
+      })
     }
     return list
   }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance])

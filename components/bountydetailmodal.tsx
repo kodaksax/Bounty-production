@@ -31,7 +31,7 @@ interface BountyDetailModalProps {
     username?: string
     title: string
     price: number
-    distance: number
+    distance: number | null
     description?: string
     user_id?: string
     work_type?: 'online' | 'in_person'
@@ -398,6 +398,8 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                     <MaterialIcons name="wifi" size={14} color="#10b981" />
                     <Text style={styles.onlineText}>Online</Text>
                   </View>
+                ) : bounty.distance === null ? (
+                  <Text style={styles.distanceText}>Location TBD</Text>
                 ) : (
                   <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
                 )}

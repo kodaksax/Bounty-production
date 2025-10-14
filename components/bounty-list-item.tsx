@@ -11,7 +11,7 @@ export interface BountyListItemProps {
   title: string
   username?: string
   price: number
-  distance: number
+  distance: number | null
   description?: string
   isForHonor?: boolean
   user_id?: string
@@ -65,6 +65,8 @@ export function BountyListItem({ id, title, username, price, distance, descripti
                 <MaterialIcons name="wifi" size={10} color="#10b981" />
                 <Text style={styles.onlineText}>Online</Text>
               </View>
+            ) : distance === null ? (
+              <Text style={styles.distance}>Location TBD</Text>
             ) : (
               <Text style={styles.distance}>{distance} mi</Text>
             )}
