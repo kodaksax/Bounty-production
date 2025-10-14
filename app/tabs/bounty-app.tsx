@@ -271,9 +271,10 @@ function BountyAppInner() {
         description={item.description}
         isForHonor={Boolean(item.is_for_honor)}
         user_id={item.user_id}
+        work_type={item.work_type}
       />
     )
-  }, []);
+  }, [calculateDistance]);
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) {
