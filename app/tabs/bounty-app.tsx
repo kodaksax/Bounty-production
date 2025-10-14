@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useLocation } from 'app/hooks/useLocation'
 import { MessengerScreen } from "app/tabs/messenger-screen"
 import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
@@ -16,6 +17,7 @@ import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
 import { bountyService } from '../../lib/services/bounty-service'
+import { locationService } from '../../lib/services/location-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 
@@ -48,6 +50,10 @@ function BountyAppInner() {
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
+  
+  // Location hook for calculating real distances
+  const { location: userLocation, permission } = useLocation()
+  const [distanceFilter, setDistanceFilter] = useState<number | null>(null) // Max distance in miles, null = no filter
   
   // Check if onboarding is needed (useUserProfile provides completeness)
   const { isComplete, loading: profileLoading } = useUserProfile()
@@ -83,18 +89,33 @@ function BountyAppInner() {
     { id: "forkids", label: "For Honor", icon: "favorite" as const },
   ], [])
 
-  // Calculate distance (mock function - in a real app, this would use geolocation)
-  const calculateDistance = (location: string) => {
-    // More deterministic mock distance calculation based on location string
-    if (!location) return 20 // Default for empty locations
+  // Calculate distance - uses real geolocation when available, falls back to mock
+  const calculateDistance = useCallback((bountyLocation: string) => {
+    if (!bountyLocation) return 999 // Unknown location goes to end
 
-    // Use the string length as a seed for a more consistent but still random-looking distance
-    const seed = location.length
-    const hash = location.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    // If user has location permission and coordinates
+    if (userLocation && permission?.granted) {
+      // Try to parse bounty location if it has coordinates
+      // Format: "lat,lng" or just address string
+      const coordMatch = bountyLocation.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/)
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1])
+        const lng = parseFloat(coordMatch[2])
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return locationService.calculateDistance(
+            userLocation,
+            { latitude: lat, longitude: lng },
+            'miles'
+          )
+        }
+      }
+    }
 
-    // Generate a distance between 1 and 15 miles
+    // Fallback: deterministic mock distance calculation based on location string
+    const seed = bountyLocation.length
+    const hash = bountyLocation.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
     return 1 + ((hash % seed) % 15)
-  }
+  }, [userLocation, permission])
 
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
@@ -116,6 +137,17 @@ function BountyAppInner() {
         )
       }
     }
+    
+    // Apply distance filter if active (only for in-person bounties)
+    if (distanceFilter !== null && userLocation && permission?.granted) {
+      list = list.filter((b) => {
+        // Don't filter out online/remote bounties
+        if (b.work_type === 'online') return true
+        const distance = calculateDistance(b.location || "")
+        return distance <= distanceFilter
+      })
+    }
+    
     // Sorting
     if (activeCategory === "highpaying") {
       // Highest amount first
@@ -125,7 +157,7 @@ function BountyAppInner() {
       list.sort((a, b) => calculateDistance(a.location || "") - calculateDistance(b.location || ""))
     }
     return list
-  }, [bounties, activeCategory])
+  }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance])
 
   // Load bounties from backend
   const PAGE_SIZE = 20
@@ -328,6 +360,42 @@ function BountyAppInner() {
               }}
             />
           </View>
+          {/* Distance Filter - only show if location permission granted */}
+          {permission?.granted && userLocation && (
+            <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <MaterialIcons name="near-me" size={16} color="#d1fae5" />
+                <Text style={{ color: '#d1fae5', fontSize: 12, fontWeight: '600' }}>Distance:</Text>
+                {[5, 10, 25, 50].map((miles) => (
+                  <TouchableOpacity
+                    key={miles}
+                    onPress={() => setDistanceFilter(distanceFilter === miles ? null : miles)}
+                    style={[
+                      styles.distanceChip,
+                      distanceFilter === miles && styles.distanceChipActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.distanceChipLabel,
+                        distanceFilter === miles && styles.distanceChipLabelActive,
+                      ]}
+                    >
+                      {miles}mi
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {distanceFilter !== null && (
+                  <TouchableOpacity
+                    onPress={() => setDistanceFilter(null)}
+                    style={styles.distanceClearButton}
+                  >
+                    <MaterialIcons name="close" size={16} color="#d1fae5" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
         </Animated.View>
         <LinearGradient
           colors={["rgba(5,150,105,0.0)", "rgba(5,150,105,0.25)", "rgba(5,150,105,0.55)"]}
@@ -436,6 +504,11 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#a7f3d0' },
   chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
   chipLabelActive: { color: '#052e1b' },
+  distanceChip: { backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 12, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  distanceChipActive: { backgroundColor: '#6ee7b7' },
+  distanceChipLabel: { color: '#d1fae5', fontSize: 12, fontWeight: '600' },
+  distanceChipLabelActive: { color: '#052e1b' },
+  distanceClearButton: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.3)', justifyContent: 'center', alignItems: 'center' },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
   // searchOverlay removed (search is its own route now)
 })

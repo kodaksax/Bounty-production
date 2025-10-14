@@ -10,6 +10,7 @@ import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
+import { LocationSettingsScreen } from "./settings/location-settings-screen"
 import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
 import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
 import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
@@ -19,7 +20,7 @@ interface SettingsScreenProps {
   navigation?: any // Accept navigation prop for navigation actions
 }
 
-type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'help' | 'contact' | 'terms' | 'faq'
+type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' | 'help' | 'contact' | 'terms' | 'faq'
 
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
@@ -67,6 +68,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   }
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
+  if (panel === 'location') return <LocationSettingsScreen onBack={() => setPanel('root')} />
   if (panel === 'help') return <HelpSupportScreen onBack={() => setPanel('root')} onNavigateContact={() => setPanel('contact')} onNavigateTerms={() => setPanel('terms')} onNavigateFAQ={() => setPanel('faq')} />
   if (panel === 'contact') return <ContactSupportScreen onBack={() => setPanel('help')} />
   if (panel === 'terms') return <TermsPrivacyScreen onBack={() => setPanel('help')} />
@@ -110,6 +112,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="Open"
           onPrimary={() => setPanel('notifications')}
           icon="notifications"
+        />
+        <SettingsCard
+          title="Location & Visibility"
+          description="Manage location permissions, saved addresses, and control how location data is used for finding nearby bounties and distance calculations."
+          primaryLabel="Open"
+          onPrimary={() => setPanel('location')}
+          icon="place"
         />
         <SettingsCard
           title="Help & Support"
