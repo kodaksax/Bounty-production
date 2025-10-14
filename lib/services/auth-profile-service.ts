@@ -4,10 +4,10 @@
  * Ensures tight coupling between Supabase auth and profile data
  */
 
-import { Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '../supabase';
-import { logger } from '../utils/error-logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../supabase';
+import { logger } from '../utils/error-logger';
 
 const PROFILE_CACHE_KEY = 'BE:authProfile';
 const PROFILE_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
@@ -34,6 +34,7 @@ export class AuthProfileService {
   private currentSession: Session | null = null;
   private currentProfile: AuthProfile | null = null;
   private listeners: Array<(profile: AuthProfile | null) => void> = [];
+  private externalProfileCache = new Map<string, CachedProfile>();
 
   private constructor() {}
 
@@ -42,6 +43,73 @@ export class AuthProfileService {
       AuthProfileService.instance = new AuthProfileService();
     }
     return AuthProfileService.instance;
+  }
+
+  /**
+   * Fetch a profile by ID without mutating the authenticated profile state.
+   * Useful for looking up other users (e.g., bounty posters) while keeping the
+   * current session profile intact. Results are cached briefly to avoid
+   * refetching for the same card renders.
+   */
+  async getProfileById(userId: string, options: { bypassCache?: boolean } = {}): Promise<AuthProfile | null> {
+    if (!isSupabaseConfigured) {
+      return null;
+    }
+
+    const { bypassCache = false } = options;
+    if (!bypassCache) {
+      const cached = this.externalProfileCache.get(userId);
+      if (cached && Date.now() - cached.timestamp < PROFILE_CACHE_EXPIRY) {
+        return cached.profile;
+      }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No profile row for this user yet
+          return null;
+        }
+        throw error;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      const profile: AuthProfile = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        avatar: data.avatar,
+        about: data.about,
+        phone: data.phone,
+        balance: data.balance || 0,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+
+      if (!bypassCache) {
+        this.externalProfileCache.set(userId, {
+          profile,
+          timestamp: Date.now(),
+        });
+      }
+
+      return profile;
+    } catch (error) {
+      logger.error('Error fetching profile by id', { userId, error });
+      if (!bypassCache) {
+        this.externalProfileCache.delete(userId);
+      }
+      return null;
+    }
   }
 
   /**
@@ -153,30 +221,14 @@ export class AuthProfileService {
       const email = this.currentSession?.user?.email;
 
       // Check if profile already exists (race condition protection)
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const existing = await this.getProfileById(userId, { bypassCache: true });
 
       if (existing) {
         // Profile was created by another process, use it
-        const profile: AuthProfile = {
-          id: existing.id,
-          username: existing.username,
-          email: existing.email,
-          avatar: existing.avatar,
-          about: existing.about,
-          phone: existing.phone,
-          balance: existing.balance || 0,
-          created_at: existing.created_at,
-          updated_at: existing.updated_at,
-        };
-
-        this.currentProfile = profile;
-        await this.cacheProfile(profile);
-        this.notifyListeners(profile);
-        return profile;
+        this.currentProfile = existing;
+        await this.cacheProfile(existing);
+        this.notifyListeners(existing);
+        return existing;
       }
 
       // Create new minimal profile
@@ -196,33 +248,21 @@ export class AuthProfileService {
         if (error.code === '23505') {
           logger.warning('Profile already exists (concurrent creation)', { userId });
           // Fetch the existing profile
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
+          const existingProfile = await this.getProfileById(userId, { bypassCache: true });
 
           if (existingProfile) {
-            const profile: AuthProfile = {
-              id: existingProfile.id,
-              username: existingProfile.username,
-              email: existingProfile.email,
-              avatar: existingProfile.avatar,
-              about: existingProfile.about,
-              phone: existingProfile.phone,
-              balance: existingProfile.balance || 0,
-              created_at: existingProfile.created_at,
-              updated_at: existingProfile.updated_at,
-            };
-
-            this.currentProfile = profile;
-            await this.cacheProfile(profile);
-            this.notifyListeners(profile);
-            return profile;
+            this.currentProfile = existingProfile;
+            await this.cacheProfile(existingProfile);
+            this.notifyListeners(existingProfile);
+            return existingProfile;
           }
         }
 
-        logger.error('Error creating minimal profile', { userId, error });
+        if (error.code === '42501') {
+          logger.error('Supabase RLS blocked profile insert. Grant authenticated users insert access on public.profiles (id = auth.uid()).', { userId, error });
+        } else {
+          logger.error('Error creating minimal profile', { userId, error });
+        }
         return null;
       }
 
