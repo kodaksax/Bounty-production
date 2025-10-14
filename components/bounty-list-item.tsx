@@ -13,9 +13,10 @@ export interface BountyListItemProps {
   distance: number
   description?: string
   isForHonor?: boolean
+  user_id?: string
 }
 
-export function BountyListItem({ id, title, username, price, distance, description, isForHonor }: BountyListItemProps) {
+export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
 
   return (
@@ -56,7 +57,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username, title, price, distance, description }}
+          bounty={{ id, username, title, price, distance, description, user_id }}
           onClose={() => setShowDetail(false)}
         />
       )}

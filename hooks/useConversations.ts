@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Conversation } from '../lib/types';
 import { messageService } from '../lib/services/message-service';
+import * as messagingService from '../lib/services/messaging';
 
 interface UseConversationsResult {
   conversations: Conversation[];
@@ -53,10 +54,18 @@ export function useConversations(): UseConversationsResult {
   useEffect(() => {
     fetchConversations();
     
-    // Set up polling for new messages (replace with WebSocket later)
-    const interval = setInterval(fetchConversations, 30000); // Poll every 30s
+    // Listen for real-time updates from the messaging service
+    const handleConversationsUpdated = () => {
+      fetchConversations();
+    };
     
-    return () => clearInterval(interval);
+    messagingService.on('conversationsUpdated', handleConversationsUpdated);
+    messagingService.on('messageSent', handleConversationsUpdated);
+    
+    return () => {
+      messagingService.off('conversationsUpdated', handleConversationsUpdated);
+      messagingService.off('messageSent', handleConversationsUpdated);
+    };
   }, []);
 
   return {
