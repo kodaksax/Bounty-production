@@ -25,7 +25,7 @@ export default function PayoutScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance, logTransaction } = useWallet();
+  const { balance, logTransaction, releaseFunds } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +82,17 @@ export default function PayoutScreen() {
     try {
       setIsProcessing(true);
 
+      // Release escrowed funds (this updates escrow transaction and logs release)
+      const released = await releaseFunds(
+        Number(bounty.id),
+        bounty.accepted_by || 'hunter', // In production, get actual hunter ID
+        bounty.title
+      );
+
+      if (!released) {
+        throw new Error('Failed to release escrowed funds - no active escrow found');
+      }
+
       // Update bounty status to completed
       const updated = await bountyService.update(Number(bounty?.id), {
         status: 'completed',
@@ -91,20 +102,9 @@ export default function PayoutScreen() {
         throw new Error('Failed to update bounty status');
       }
 
-      // Log wallet transaction for payout release
-      await logTransaction({
-        type: 'bounty_completed',
-        amount: -bounty.amount,
-        details: {
-          title: bounty.title,
-          status: 'released',
-          bounty_id: bounty.id,
-        },
-      });
-
       Alert.alert(
         'Success',
-        'Payout has been released successfully! The bounty is now completed and will be archived.',
+        `Payout of $${bounty.amount.toFixed(2)} has been released successfully! The funds have been transferred to the hunter. The bounty is now completed and will be archived.`,
         [
           {
             text: 'OK',
