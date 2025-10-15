@@ -558,16 +558,42 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           {/* Header */}
           <View className="flex-row justify-between items-center px-4">
             {/* Left: icon + title aligned like messenger (no back icon) */}
-            <View className="flex-row items-center gap-3">
-              <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-              <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons 
+                name="gps-fixed" 
+                size={24} 
+                color="#ffffff" 
+                accessibilityElementsHidden={true}
+              />
+              <Text 
+                className="text-lg font-bold tracking-wider text-white"
+                accessibilityRole="header"
+              >
+                BOUNTY
+              </Text>
             </View>
 
             {/* Right: $40 placeholder and bookmark below it */}
             <View className="flex items-end">
-              <Text className="text-white font-medium">$ {balance.toFixed(2)}</Text>
-              <TouchableOpacity className="mt-1 text-white p-2 touch-target-min" onPress={() => setShowArchivedBounties(true)}>
-                <MaterialIcons name="bookmark" size={20} color="#ffffff" />
+              <Text 
+                className="text-white font-medium"
+                accessibilityLabel={`Account balance: $${balance.toFixed(2)}`}
+              >
+                $ {balance.toFixed(2)}
+              </Text>
+              <TouchableOpacity 
+                className="mt-1 text-white p-2 touch-target-min" 
+                onPress={() => setShowArchivedBounties(true)}
+                accessibilityRole="button"
+                accessibilityLabel="View archived bounties"
+                accessibilityHint="Opens a list of your archived bounties"
+              >
+                <MaterialIcons 
+                  name="bookmark" 
+                  size={20} 
+                  color="#ffffff" 
+                  accessibilityElementsHidden={true}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -612,6 +638,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       shadowRadius: isActive ? 3 : 0,
                       elevation: isActive ? 2 : 0,
                     }}
+                    accessibilityRole="tab"
+                    accessibilityLabel={tab.label}
+                    accessibilityState={{ selected: isActive }}
+                    accessibilityHint={`Switch to ${tab.label} tab`}
                   >
                     <Text
                       className={cn(
@@ -684,7 +714,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <TouchableOpacity 
+                            key={f} 
+                            onPress={() => setWorkTypeFilter(f)} 
+                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Filter by ${label} work in progress`}
+                            accessibilityState={{ selected }}
+                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} work`}
+                          >
                             <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                           </TouchableOpacity>
                         )
@@ -762,7 +800,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity key={f} onPress={() => setWorkTypeFilter(f)} className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}>
+                          <TouchableOpacity 
+                            key={f} 
+                            onPress={() => setWorkTypeFilter(f)} 
+                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Filter by ${label} postings`}
+                            accessibilityState={{ selected }}
+                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} bounties`}
+                          >
                             <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                           </TouchableOpacity>
                         )

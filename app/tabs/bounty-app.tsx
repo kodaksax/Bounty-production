@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
+import { SPACING, SIZING, TYPOGRAPHY, HEADER_LAYOUT } from '../../lib/constants/accessibility'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
@@ -61,9 +62,9 @@ function BountyAppInner() {
   const { profile: normalizedProfile } = useNormalizedProfile()
   const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false)
 
-  // Collapsing header config
-  const HEADER_EXPANDED = 150
-  const HEADER_COLLAPSED = 60
+  // Collapsing header config (using standardized constants)
+  const HEADER_EXPANDED = HEADER_LAYOUT.expandedHeight
+  const HEADER_COLLAPSED = HEADER_LAYOUT.collapsedHeight
   const headerHeight = scrollY.interpolate({
     inputRange: [0, HEADER_EXPANDED - HEADER_COLLAPSED],
     outputRange: [HEADER_EXPANDED + headerTopPad, HEADER_COLLAPSED + headerTopPad],
@@ -332,10 +333,26 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-            <Animated.Text style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}>BOUNTY</Animated.Text>
+            <MaterialIcons 
+              name="gps-fixed" 
+              size={HEADER_LAYOUT.iconSize} 
+              color="#ffffff"
+              accessibilityElementsHidden={true}
+            />
+            <Animated.Text 
+              style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}
+              accessibilityRole="header"
+            >
+              BOUNTY
+            </Animated.Text>
           </View>
-          <TouchableOpacity onPress={() => setActiveScreen('wallet')}>
+          <TouchableOpacity 
+            onPress={() => setActiveScreen('wallet')}
+            accessibilityRole="button"
+            accessibilityLabel={`Account balance: $${balance.toFixed(2)}`}
+            accessibilityHint="Tap to view wallet and transactions"
+            style={styles.balanceButton}
+          >
             <Text style={styles.headerBalance}>$ {balance.toFixed(2)}</Text>
           </TouchableOpacity>
         </View>
@@ -402,8 +419,18 @@ function BountyAppInner() {
                         setDistanceDropdownOpen((s) => !s)
                       }}
                       style={[styles.chip, isActive && styles.chipActive, !permission?.granted ? styles.disabledChip : undefined]}
+                      accessibilityRole="button"
+                      accessibilityLabel={distanceFilter ? `Filter by ${distanceFilter} miles, currently active` : 'Filter by distance'}
+                      accessibilityHint={distanceFilter ? 'Tap to clear distance filter' : 'Tap to select distance radius'}
+                      accessibilityState={{ selected: isActive, disabled: !permission?.granted }}
                     >
-                      <MaterialIcons name={item.icon} size={16} color={isActive ? '#052e1b' : '#d1fae5'} style={{ marginRight: 8 }} />
+                      <MaterialIcons 
+                        name={item.icon} 
+                        size={SIZING.ICON_SMALL} 
+                        color={isActive ? '#052e1b' : '#d1fae5'} 
+                        style={{ marginRight: SPACING.COMPACT_GAP }}
+                        accessibilityElementsHidden={true}
+                      />
                       <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{distanceFilter ? `${distanceFilter}mi` : item.label}</Text>
                     </TouchableOpacity>
                   )
@@ -412,12 +439,17 @@ function BountyAppInner() {
                   <TouchableOpacity
                     onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
                     style={[styles.chip, isActive && styles.chipActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}
+                    accessibilityHint={isActive ? 'Tap to remove filter and show all bounties' : `Tap to filter bounties by ${item.label}`}
+                    accessibilityState={{ selected: isActive }}
                   >
                     <MaterialIcons
                       name={item.icon}
-                      size={16}
+                      size={SIZING.ICON_SMALL}
                       color={isActive ? '#052e1b' : '#d1fae5'}
-                      style={{ marginRight: 8 }}
+                      style={{ marginRight: SPACING.COMPACT_GAP }}
+                      accessibilityElementsHidden={true}
                     />
                     <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
                   </TouchableOpacity>
@@ -558,35 +590,120 @@ export function BountyApp() {
   )
 }
 
-// Styles (consolidated)
+// Styles (consolidated with standardized spacing and sizing)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
   dashboardArea: { flex: 1 },
   collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { marginLeft: 8, fontSize: 20, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  headerBalance: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  searchWrapper: { paddingHorizontal: 16, marginBottom: 8 },
-  searchButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.35)', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
-  searchIcon: { marginRight: 8 },
-  searchText: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
-  filtersRow: { paddingVertical: 8 },
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL, 
+    paddingBottom: SPACING.COMPACT_GAP 
+  },
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    gap: HEADER_LAYOUT.iconToTitleGap 
+  },
+  headerTitle: { 
+    fontSize: HEADER_LAYOUT.titleFontSize, 
+    fontWeight: 'bold', 
+    color: '#ffffff', 
+    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE 
+  },
+  balanceButton: {
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+  headerBalance: { 
+    fontSize: HEADER_LAYOUT.balanceFontSize, 
+    fontWeight: 'bold', 
+    color: '#ffffff' 
+  },
+  searchWrapper: { 
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL, 
+    marginBottom: SPACING.COMPACT_GAP 
+  },
+  searchButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(5,46,27,0.35)', 
+    borderRadius: 999, 
+    paddingVertical: 10, 
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    minHeight: SIZING.MIN_TOUCH_TARGET 
+  },
+  searchIcon: { marginRight: SPACING.COMPACT_GAP },
+  searchText: { 
+    color: 'rgba(255,255,255,0.85)', 
+    fontSize: TYPOGRAPHY.SIZE_SMALL 
+  },
+  filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
   gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 14, height: 36, borderRadius: 999, marginRight: 8 },
+  chip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(5,46,27,0.2)', 
+    paddingHorizontal: 14, 
+    height: 36, 
+    borderRadius: 999, 
+    marginRight: SPACING.COMPACT_GAP,
+    minHeight: SIZING.MIN_TOUCH_TARGET 
+  },
   chipActive: { backgroundColor: '#a7f3d0' },
-  chipLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
+  chipLabel: { 
+    color: '#d1fae5', 
+    fontSize: TYPOGRAPHY.SIZE_SMALL, 
+    fontWeight: '600' 
+  },
   chipLabelActive: { color: '#052e1b' },
-  distanceChip: { backgroundColor: 'rgba(5,46,27,0.2)', paddingHorizontal: 12, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  distanceChip: { 
+    backgroundColor: 'rgba(5,46,27,0.2)', 
+    paddingHorizontal: SPACING.ELEMENT_GAP, 
+    height: 28, 
+    borderRadius: 14, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
   distanceChipActive: { backgroundColor: '#6ee7b7' },
-  distanceChipLabel: { color: '#d1fae5', fontSize: 12, fontWeight: '600' },
+  distanceChipLabel: { 
+    color: '#d1fae5', 
+    fontSize: TYPOGRAPHY.SIZE_XSMALL, 
+    fontWeight: '600' 
+  },
   distanceChipLabelActive: { color: '#052e1b' },
-  distanceClearButton: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.3)', justifyContent: 'center', alignItems: 'center' },
+  distanceClearButton: { 
+    width: SIZING.ICON_LARGE, 
+    height: SIZING.ICON_LARGE, 
+    borderRadius: SIZING.ICON_LARGE / 2, 
+    backgroundColor: 'rgba(239,68,68,0.3)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
   disabledChip: { opacity: 0.5 },
-  distanceDropdown: { position: 'absolute', top: 48, right: 16, backgroundColor: 'rgba(2,44,34,0.9)', padding: 8, borderRadius: 8, zIndex: 60 },
-  distanceOption: { paddingVertical: 8, paddingHorizontal: 12 },
-  dropdownNotice: { color: '#f3fff9', padding: 8, fontSize: 12 },
+  distanceDropdown: { 
+    position: 'absolute', 
+    top: 48, 
+    right: SPACING.SCREEN_HORIZONTAL, 
+    backgroundColor: 'rgba(2,44,34,0.9)', 
+    padding: SPACING.COMPACT_GAP, 
+    borderRadius: SPACING.COMPACT_GAP, 
+    zIndex: 60 
+  },
+  distanceOption: { 
+    paddingVertical: SPACING.COMPACT_GAP, 
+    paddingHorizontal: SPACING.ELEMENT_GAP 
+  },
+  dropdownNotice: { 
+    color: '#f3fff9', 
+    padding: SPACING.COMPACT_GAP, 
+    fontSize: TYPOGRAPHY.SIZE_XSMALL 
+  },
   // searchOverlay removed (search is its own route now)
 })
 export default function BountyAppRoute() {
