@@ -22,11 +22,11 @@ export function useNormalizedProfile(userId?: string) {
       return;
     }
 
-    const looksLikeUUID = typeof id === 'string' && id.includes('-') && id.length > 16;
-    if (!looksLikeUUID) {
-      setSupabaseProfile(null);
-      return;
-    }
+    // Always attempt to load a Supabase profile for the provided id. In
+    // previous implementations we only fetched when the id looked like a
+    // UUID (contained '-' and was long). That prevented fetching public
+    // profiles for some poster ids. Remove that heuristic so `public_profiles`
+    // fallback (implemented in auth-profile-service) can be used.
 
     setSbLoading(true);
     try {

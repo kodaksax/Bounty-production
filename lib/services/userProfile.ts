@@ -154,7 +154,7 @@ export const userProfileService = {
       const key = this.storageKey(resolvedUserId);
       console.log('[userProfile] Resolving profile. resolvedUserId=', resolvedUserId, 'storageKey=', key);
       const profileJson = await AsyncStorage.getItem(key);
-      if (!profileJson) {
+  if (!profileJson) {
         // No per-user profile found.
         // If we have a resolved user id, try legacy single-key storage and migrate it for this user.
         const legacy = await AsyncStorage.getItem(STORAGE_KEY);
@@ -181,9 +181,79 @@ export const userProfileService = {
           return null;
         }
 
-        const idToLog = resolvedUserId;
-        console.warn('[userProfile] No profile found for user:', idToLog, 'storageKey=', key);
-        return null;
+        // If we reached here, there's a resolved userId but no local profile.
+        // Try fetching the canonical profile from Supabase (backend) so that
+        // other users' usernames / avatars display correctly instead of
+        // falling back to 'Unknown Poster'. Cache the result locally for
+        // subsequent loads.
+        try {
+          console.log('[userProfile] No local profile; attempting remote fetch for user:', resolvedUserId);
+
+          // First try the canonical 'profiles' table (may contain sensitive fields
+          // and might only be accessible for the current user). If that fails or
+          // returns no row, fall back to 'public_profiles' which contains the
+          // public-safe fields (username, avatar, display name) for other users.
+          let remoteData: any | null = null;
+          let remoteError: any = null;
+
+          try {
+            const res = await supabase
+              .from('profiles')
+              .select('id,username,display_name:displayName,avatar,location')
+              .eq('id', resolvedUserId)
+              .single();
+            remoteData = res.data ?? null;
+            remoteError = res.error ?? null;
+          } catch (e) {
+            remoteData = null;
+            remoteError = e;
+          }
+
+          // If profiles table returned nothing or access was denied, try public_profiles
+          if (!remoteData) {
+            try {
+              const pub = await supabase
+                .from('public_profiles')
+                .select('id,username,display_name:displayName,avatar,location')
+                .eq('id', resolvedUserId)
+                .single();
+              if (pub.error) {
+                // Both attempts failed; log and return null
+                console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, pub.error.message || pub.error);
+              } else {
+                remoteData = pub.data ?? null;
+              }
+            } catch (e) {
+              console.warn('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
+            }
+          }
+
+          if (!remoteData) {
+            console.warn('[userProfile] No remote profile found (profiles/public_profiles) for user:', resolvedUserId, 'priorError=', remoteError);
+            return null;
+          }
+
+          // Normalize field names to our ProfileData shape
+          const normalized = {
+            username: remoteData.username || '',
+            displayName: remoteData.display_name || remoteData.displayName || undefined,
+            avatar: remoteData.avatar || undefined,
+            location: remoteData.location || undefined,
+          } as ProfileData;
+
+          // Cache locally under the per-user key so future reads are fast
+          try {
+            await AsyncStorage.setItem(key, JSON.stringify(normalized));
+            console.log('[userProfile] Cached remote profile locally for user:', resolvedUserId);
+          } catch (e) {
+            console.warn('[userProfile] Failed to cache remote profile locally:', e);
+          }
+
+          return normalized;
+        } catch (e) {
+          console.error('[userProfile] Error fetching remote profile:', e);
+          return null;
+        }
       }
 
       const profile = JSON.parse(profileJson);

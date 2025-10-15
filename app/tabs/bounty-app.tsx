@@ -516,7 +516,7 @@ function BountyAppInner() {
         keyExtractor={keyExtractor}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: HEADER_EXPANDED + headerTopPad + 8,
+          paddingTop: HEADER_EXPANDED + headerTopPad + 10,
           paddingBottom: 160, // large enough so last item scrolls beneath nav
         }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}

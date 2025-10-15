@@ -68,34 +68,64 @@ export class AuthProfileService {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      // Try canonical profiles table first
+      let data: any = null;
+      let error: any = null;
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // No profile row for this user yet
+      try {
+        const res = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        data = res.data ?? null;
+        error = res.error ?? null;
+      } catch (e) {
+        data = null;
+        error = e;
+      }
+
+      // If profiles returned an error or no data, attempt public_profiles fallback
+      if (!data) {
+        try {
+          const pub = await supabase
+            .from('public_profiles')
+            .select('id,username,display_name:displayName,avatar,location')
+            .eq('id', userId)
+            .maybeSingle();
+          if (pub.error) {
+            // If both attempts fail, surface a warning and return null
+            logger.warning('public_profiles fetch error', { userId, error: pub.error });
+            return null;
+          }
+
+          if (!pub.data) {
+            // No public profile either
+            return null;
+          }
+
+          data = pub.data;
+        } catch (e) {
+          logger.error('Error fetching public_profiles', { userId, error: e });
           return null;
         }
-        throw error;
       }
 
       if (!data) {
         return null;
       }
 
+      // Map returned row (from profiles or public_profiles) into AuthProfile shape
       const profile: AuthProfile = {
         id: data.id,
         username: data.username,
-        email: data.email,
-        avatar: data.avatar,
-        about: data.about,
-        phone: data.phone,
+        email: data.email || undefined,
+        avatar: data.avatar || undefined,
+        about: data.about || undefined,
+        phone: data.phone || undefined,
         balance: data.balance || 0,
-        created_at: data.created_at,
-        updated_at: data.updated_at,
+        created_at: data.created_at || undefined,
+        updated_at: data.updated_at || undefined,
       };
 
       if (!bypassCache) {

@@ -31,7 +31,7 @@ export const SPACING = {
   
   // List spacing
   LIST_ITEM_GAP: 2,           // Gap between list items
-  LIST_SECTION_GAP: 16,       // Gap between list sections
+  LIST_SECTION_GAP: 12,       // Gap between list sections
 } as const;
 
 // ============================================================================
@@ -61,7 +61,7 @@ export const SIZING = {
   AVATAR_XLARGE: 96,
   
   // Header sizes
-  HEADER_EXPANDED: 150,
+  HEADER_EXPANDED: 160,
   HEADER_COLLAPSED: 60,
   
   // Bottom navigation
