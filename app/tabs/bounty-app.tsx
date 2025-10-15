@@ -351,10 +351,13 @@ function BountyAppInner() {
             onPress={() => setActiveScreen('wallet')}
             accessibilityRole="button"
             accessibilityLabel={`Account balance: $${balance.toFixed(2)}`}
-            accessibilityHint="Tap to view wallet and transactions"
-            style={styles.balanceButton}
+            accessibilityHint="Tap to view wallet and add money"
+            style={styles.balanceContainer}
           >
-            <Text style={styles.headerBalance}>$ {balance.toFixed(2)}</Text>
+            <View style={styles.balanceCard}>
+              <MaterialIcons name="account-balance-wallet" size={16} color="#6ee7b7" style={{ marginRight: 6 }} />
+              <Text style={styles.headerBalance}>${balance.toFixed(2)}</Text>
+            </View>
           </TouchableOpacity>
         </View>
         <Animated.View style={{ opacity: extraContentOpacity }}>
@@ -614,14 +617,24 @@ const styles = StyleSheet.create({
     color: '#ffffff', 
     letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE 
   },
-  balanceButton: {
+  balanceContainer: {
     minWidth: SIZING.MIN_TOUCH_TARGET,
     minHeight: SIZING.MIN_TOUCH_TARGET,
     justifyContent: 'center',
     alignItems: 'flex-end',
   },
+  balanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#047857',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#6ee7b7',
+  },
   headerBalance: { 
-    fontSize: HEADER_LAYOUT.balanceFontSize, 
+    fontSize: 14, 
     fontWeight: 'bold', 
     color: '#ffffff' 
   },

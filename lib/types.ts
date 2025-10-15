@@ -97,11 +97,17 @@ export interface UserRating {
 // Wallet Transaction
 export interface WalletTransaction {
   id: string;
-  type: "escrow" | "release" | "refund";
+  type: "escrow" | "release" | "refund" | "deposit" | "withdrawal";
   amount: Money;
   bountyId?: string;
   createdAt: string;
+  status?: "pending" | "completed" | "failed";
   disputeStatus?: "none" | "pending" | "resolved";
+  details?: {
+    title?: string;
+    method?: string;
+    counterparty?: string;
+  };
 }
 
 // Location & Address Types
