@@ -5,6 +5,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authProfileService } from './auth-profile-service';
+import { supabase } from '../supabase';
 
 const STORAGE_KEY = 'BE:userProfile';
 const PROFILES_KEY = 'BE:allProfiles'; // For username uniqueness check
@@ -117,15 +119,75 @@ export function checkProfileCompleteness(profile: ProfileData | null): ProfileCo
 
 export const userProfileService = {
   /**
-   * Get current user profile
+   * Helper to compute a storage key per user. If userId is not provided,
+   * prefer the authenticated user id from authProfileService, falling back
+   * to a generic 'current-user' key for tests or unauthenticated flows.
    */
-  async getProfile(): Promise<ProfileData | null> {
+  storageKey(userId?: string) {
+    const resolved = userId || authProfileService.getAuthUserId() || 'current-user';
+    return `${STORAGE_KEY}:${resolved}`;
+  },
+
+  /**
+   * Get profile for a specific user. If no userId is provided, this will
+   * return the profile for the currently authenticated user (if available),
+   * otherwise the legacy 'current-user' profile.
+   */
+  async getProfile(userId?: string): Promise<ProfileData | null> {
     try {
-      const profileJson = await AsyncStorage.getItem(STORAGE_KEY);
-      if (!profileJson) return null;
-      
+      // Prefer canonical Supabase session user id (most up-to-date), then
+      // explicit param, then authProfileService fallback.
+      let resolvedUserId: string | undefined;
+      try {
+        const { data } = await supabase.auth.getSession();
+        resolvedUserId = data?.session?.user?.id ?? undefined;
+      } catch (e) {
+        resolvedUserId = undefined;
+      }
+
+      // If explicit userId provided, prefer it over session (useful for admin lookups)
+      if (userId) resolvedUserId = userId;
+
+      // Final fallback to authProfileService
+      if (!resolvedUserId) resolvedUserId = authProfileService.getAuthUserId() ?? undefined;
+
+      const key = this.storageKey(resolvedUserId);
+      console.log('[userProfile] Resolving profile. resolvedUserId=', resolvedUserId, 'storageKey=', key);
+      const profileJson = await AsyncStorage.getItem(key);
+      if (!profileJson) {
+        // No per-user profile found.
+        // If we have a resolved user id, try legacy single-key storage and migrate it for this user.
+        const legacy = await AsyncStorage.getItem(STORAGE_KEY);
+  if (legacy && resolvedUserId) {
+          try {
+            const legacyProfile = JSON.parse(legacy);
+            // Persist a copy under the new per-user key so future loads
+            // return the correct user-specific profile.
+            await AsyncStorage.setItem(key, legacy);
+            console.log('[userProfile] Migrated legacy profile to per-user storage for user:', resolvedUserId, 'storageKey=', key);
+            console.log('[userProfile] Loaded profile for:', legacyProfile.username || 'unknown', sanitizePhone(legacyProfile.phone), 'for userId=', resolvedUserId);
+            return legacyProfile;
+          } catch (e) {
+            console.warn('[userProfile] Failed to migrate legacy profile:', e);
+            return null;
+          }
+        }
+
+        // Do NOT return the legacy global profile when there's no resolved
+        // authenticated user. Returning a legacy profile here causes the app
+        // to show another user's profile while auth is still initializing.
+        if (!resolvedUserId) {
+          console.warn('[userProfile] No authenticated user resolved yet; not returning legacy profile. storageKey=', key);
+          return null;
+        }
+
+        const idToLog = resolvedUserId;
+        console.warn('[userProfile] No profile found for user:', idToLog, 'storageKey=', key);
+        return null;
+      }
+
       const profile = JSON.parse(profileJson);
-      console.log('[userProfile] Loaded profile for:', profile.username || 'unknown', sanitizePhone(profile.phone));
+      console.log('[userProfile] Loaded profile for:', profile.username || 'unknown', sanitizePhone(profile.phone), 'for userId=', resolvedUserId, 'storageKey=', this.storageKey(resolvedUserId));
       return profile;
     } catch (error) {
       console.error('[userProfile] Error loading profile:', error);
@@ -137,7 +199,7 @@ export const userProfileService = {
    * Save profile data
    * Phone is stored but never rendered in UI
    */
-  async saveProfile(data: ProfileData): Promise<{ success: boolean; error?: string }> {
+  async saveProfile(data: ProfileData, userId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Validate username
       const validation = validateUsername(data.username);
@@ -147,7 +209,8 @@ export const userProfileService = {
 
       // Check uniqueness
       // Pass a stable current user id so the same user can keep their username
-      const isUnique = await isUsernameUnique(data.username, 'current-user');
+      const currentUserId = userId || authProfileService.getAuthUserId() || 'current-user';
+      const isUnique = await isUsernameUnique(data.username, currentUserId);
       if (!isUnique) {
         return { success: false, error: 'Username is already taken' };
       }
@@ -158,12 +221,14 @@ export const userProfileService = {
       }
 
       // Save to storage
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      
-      // Update profiles index for uniqueness checking
+      const key = this.storageKey(userId);
+      await AsyncStorage.setItem(key, JSON.stringify(data));
+
+      // Update profiles index for uniqueness checking. Use the resolved user id
+      // as the map key so uniqueness checks are accurate across multiple users.
       const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
       const profiles = profilesJson ? JSON.parse(profilesJson) : {};
-      profiles['current-user'] = data;
+      profiles[currentUserId] = data;
       await AsyncStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
 
       console.log('[userProfile] Profile saved:', data.username, sanitizePhone(data.phone));
@@ -177,19 +242,19 @@ export const userProfileService = {
   /**
    * Update profile fields
    */
-  async updateProfile(updates: Partial<ProfileData>): Promise<{ success: boolean; error?: string }> {
+  async updateProfile(updates: Partial<ProfileData>, userId?: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const current = await this.getProfile();
+      const current = await this.getProfile(userId);
       if (!current) {
         // No existing profile: treat this as a create (upsert)
         if (!updates.username) {
           return { success: false, error: 'Username is required to create profile' };
         }
-        return await this.saveProfile(updates as ProfileData);
+        return await this.saveProfile(updates as ProfileData, userId);
       }
 
       const updated = { ...current, ...updates };
-      return await this.saveProfile(updated);
+      return await this.saveProfile(updated, userId);
     } catch (error) {
       console.error('[userProfile] Error updating profile:', error);
       return { success: false, error: 'Failed to update profile' };
@@ -199,15 +264,17 @@ export const userProfileService = {
   /**
    * Clear profile (for testing/logout)
    */
-  async clearProfile(): Promise<void> {
+  async clearProfile(userId?: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      const key = this.storageKey(userId);
+      await AsyncStorage.removeItem(key);
       // Also remove from the uniqueness index
       const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
       if (profilesJson) {
         const profiles = JSON.parse(profilesJson);
+        const resolved = userId || authProfileService.getAuthUserId() || 'current-user';
         if (profiles && typeof profiles === 'object') {
-          delete profiles['current-user'];
+          delete profiles[resolved];
           // If no profiles remain, remove the index key entirely
           if (Object.keys(profiles).length === 0) {
             await AsyncStorage.removeItem(PROFILES_KEY);
@@ -225,8 +292,8 @@ export const userProfileService = {
   /**
    * Check if profile is complete
    */
-  async checkCompleteness(): Promise<ProfileCompleteness> {
-    const profile = await this.getProfile();
+  async checkCompleteness(userId?: string): Promise<ProfileCompleteness> {
+    const profile = await this.getProfile(userId);
     return checkProfileCompleteness(profile);
   },
 };

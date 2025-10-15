@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { userProfileService, type ProfileCompleteness } from '../lib/services/userProfile';
+import { useAuthContext } from './use-auth-context';
 
 interface ProfileData {
   username: string;
@@ -31,16 +32,18 @@ export function useUserProfile(): UseUserProfileResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completeness, setCompleteness] = useState<ProfileCompleteness | null>(null);
+  const { session } = useAuthContext();
+  const authUserId = session?.user?.id;
 
   const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const data = await userProfileService.getProfile();
+      // Pass explicit userId so we load the profile for the authenticated user
+      const data = await userProfileService.getProfile(authUserId);
       setProfile(data);
       
-      const complete = await userProfileService.checkCompleteness();
+      const complete = await userProfileService.checkCompleteness(authUserId);
       setCompleteness(complete);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profile');
@@ -48,16 +51,16 @@ export function useUserProfile(): UseUserProfileResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authUserId]);
 
   const saveProfile = useCallback(async (data: ProfileData) => {
     try {
       setError(null);
-      const result = await userProfileService.saveProfile(data);
+      const result = await userProfileService.saveProfile(data, authUserId);
       
       if (result.success) {
         setProfile(data);
-        const complete = await userProfileService.checkCompleteness();
+        const complete = await userProfileService.checkCompleteness(authUserId);
         setCompleteness(complete);
       } else {
         setError(result.error || 'Failed to save profile');
@@ -69,12 +72,12 @@ export function useUserProfile(): UseUserProfileResult {
       setError(errorMsg);
       return { success: false, error: errorMsg };
     }
-  }, []);
+  }, [authUserId]);
 
   const updateProfile = useCallback(async (updates: Partial<ProfileData>) => {
     try {
       setError(null);
-      const result = await userProfileService.updateProfile(updates);
+      const result = await userProfileService.updateProfile(updates, authUserId);
       
       if (result.success) {
         await fetchProfile();
@@ -88,11 +91,11 @@ export function useUserProfile(): UseUserProfileResult {
       setError(errorMsg);
       return { success: false, error: errorMsg };
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, authUserId]);
 
   const clearProfile = useCallback(async () => {
     try {
-      await userProfileService.clearProfile();
+      await userProfileService.clearProfile(authUserId);
       setProfile(null);
       setCompleteness({ isComplete: false, missingFields: ['username'] });
     } catch (err) {
@@ -104,6 +107,7 @@ export function useUserProfile(): UseUserProfileResult {
     await fetchProfile();
   }, [fetchProfile]);
 
+  // Re-fetch profile when the authenticated user changes
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
