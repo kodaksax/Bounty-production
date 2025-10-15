@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthContext } from "../../hooks/use-auth-context";
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -122,11 +123,17 @@ export default function UserProfileScreen() {
         {/* Avatar and Name */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {profile?.name?.[0]?.toUpperCase() || profile?.username?.[1]?.toUpperCase() || "U"}
-              </Text>
-            </View>
+            <Avatar style={styles.avatar}>
+              <AvatarImage 
+                src={profile?.avatar || "/placeholder.svg?height=80&width=80"} 
+                alt={profile?.username || "User"} 
+              />
+              <AvatarFallback style={styles.avatarFallback}>
+                <Text style={styles.avatarText}>
+                  {profile?.name?.[0]?.toUpperCase() || profile?.username?.[0]?.toUpperCase() || "U"}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
           </View>
           <Text style={styles.displayName}>{profile?.name || profile?.username}</Text>
           <Text style={styles.username}>{profile?.username}</Text>
@@ -347,7 +354,13 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
+    borderWidth: 2,
+    borderColor: "#10b981",
+  },
+  avatarFallback: {
     backgroundColor: "#10b981",
+    width: "100%",
+    height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },
