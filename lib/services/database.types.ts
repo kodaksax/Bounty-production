@@ -19,6 +19,9 @@ export type Bounty = {
   // Rating aggregates for the bounty poster
   averageRating?: number
   ratingCount?: number
+  // Profile data from joined query (populated when fetched with profile join)
+  username?: string
+  poster_avatar?: string
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)
