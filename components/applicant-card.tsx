@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 
@@ -20,6 +21,7 @@ export function ApplicantCard({
 }: ApplicantCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
+  const router = useRouter();
 
   const handleAccept = async () => {
     setIsProcessing(true);
@@ -53,10 +55,16 @@ export function ApplicantCard({
     }
   };
 
+  const handleProfilePress = () => {
+    if (request.user_id) {
+      router.push(`/profile/${request.user_id}`);
+    }
+  };
+
   return (
     <View style={styles.card}>
-      {/* Header with avatar and applicant info */}
-      <View style={styles.header}>
+      {/* Header with avatar and applicant info - Clickable to navigate to profile */}
+      <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!request.user_id}>
         <Avatar style={styles.avatar}>
           <AvatarImage 
             src={request.profile?.avatar_url || '/placeholder.svg?height=48&width=48'} 
@@ -81,7 +89,11 @@ export function ApplicantCard({
             </Text>
           </View>
         </View>
-      </View>
+        
+        {request.user_id && (
+          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+        )}
+      </TouchableOpacity>
 
       {/* Bounty details */}
       <View style={styles.bountySection}>

@@ -369,10 +369,10 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 disabled={!bounty.user_id}
               >
                 <Avatar style={styles.avatar}>
-                  <AvatarImage src="/placeholder.svg?height=40&width=40" alt={displayUsername} />
+                  <AvatarImage src={normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
                   <AvatarFallback style={styles.avatarFallback}>
                     <Text style={styles.avatarText}>
-                      {displayUsername.substring(1, 3).toUpperCase()}
+                      {displayUsername.substring(0, 2).toUpperCase()}
                     </Text>
                   </AvatarFallback>
                 </Avatar>
