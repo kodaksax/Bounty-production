@@ -5,7 +5,9 @@ import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { SPACING, SIZING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { useRouter } from 'expo-router'
 
 export interface BountyListItemProps {
   id: number
@@ -17,16 +19,21 @@ export interface BountyListItemProps {
   isForHonor?: boolean
   user_id?: string
   work_type?: 'online' | 'in_person'
+  poster_avatar?: string
 }
 
-export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type }: BountyListItemProps) {
+export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type, poster_avatar }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
+  const router = useRouter()
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id)
 
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
+  
+  // Determine which avatar to show: prop > profile > placeholder
+  const avatarUrl = poster_avatar || posterProfile?.avatar
 
   useEffect(() => {
-    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Unknown Poster'
+    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Loading...' -> 'Unknown Poster'
     // Never fall back to the current user's profile
     if (username) {
       setResolvedUsername(username)
@@ -38,13 +45,22 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       return
     }
 
-    // Only show 'Unknown Poster' if we're done loading
+    // Show 'Unknown Poster' only if we're done loading and still no username
     if (!profileLoading) {
       setResolvedUsername('Unknown Poster')
+    } else {
+      setResolvedUsername('Loading...')
     }
   }, [username, posterProfile?.username, profileLoading])
 
 
+
+  const handleAvatarPress = (e: any) => {
+    e.stopPropagation()
+    if (user_id) {
+      router.push(`/profile/${user_id}`)
+    }
+  }
 
   return (
     <>
@@ -56,15 +72,24 @@ export function BountyListItem({ id, title, username, price, distance, descripti
         accessibilityLabel={`Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`}
         accessibilityHint="Tap to view bounty details and apply"
       >
-        {/* Leading icon/avatar */}
-        <View style={styles.leadingIconWrap}>
-          <MaterialIcons 
-            name="paid" 
-            size={18} 
-            color="#a7f3d0" 
-            accessibilityElementsHidden={true}
-          />
-        </View>
+        {/* Leading avatar - clickable to view profile */}
+        <TouchableOpacity 
+          onPress={handleAvatarPress} 
+          disabled={!user_id}
+          style={styles.leadingAvatarWrap}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${resolvedUsername}'s profile`}
+          accessibilityHint="Tap to view poster's profile"
+        >
+          <Avatar style={styles.avatar}>
+            <AvatarImage src={avatarUrl || "/placeholder.svg?height=36&width=36"} alt={resolvedUsername} />
+            <AvatarFallback style={styles.avatarFallback}>
+              <Text style={styles.avatarText}>
+                {resolvedUsername.substring(0, 2).toUpperCase()}
+              </Text>
+            </AvatarFallback>
+          </Avatar>
+        </TouchableOpacity>
 
         {/* Main content */}
         <View style={styles.mainContent}>
@@ -101,7 +126,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type }}
+          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar }}
           onClose={() => setShowDetail(false)}
         />
       )}
@@ -120,16 +145,27 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     minHeight: SIZING.MIN_TOUCH_TARGET + SPACING.ELEMENT_GAP,
   },
-  leadingIconWrap: {
+  leadingAvatarWrap: {
+    marginRight: SPACING.ELEMENT_GAP,
+  },
+  avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#064e3b', // dark emerald
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.ELEMENT_GAP,
     borderWidth: 1,
     borderColor: '#6ee7b780', // emerald-400/50
+  },
+  avatarFallback: {
+    backgroundColor: '#064e3b', // dark emerald
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#a7f3d0',
+    fontSize: 12,
+    fontWeight: '700',
   },
   mainContent: {
     flex: 1,

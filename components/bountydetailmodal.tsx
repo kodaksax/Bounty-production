@@ -37,6 +37,7 @@ interface BountyDetailModalProps {
     work_type?: 'online' | 'in_person'
     attachments?: AttachmentMeta[]
     attachments_json?: string
+    poster_avatar?: string
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -61,7 +62,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
 
   useEffect(() => {
-    // Resolution priority: bounty.username -> normalizedPoster.username -> 'Unknown Poster'
+    // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Unknown Poster'
     // Never fall back to the current user's profile
     if (bounty.username) {
       setDisplayUsername(bounty.username)
@@ -73,13 +74,15 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       return
     }
 
-    // Only show 'Unknown Poster' if we're done loading
+    // Show 'Unknown Poster' only if we're done loading and still no username
     if (!profileLoading) {
       // Debug: log when we can't resolve a username
       if (bounty.user_id) {
         console.log('[BountyDetailModal] Could not resolve username for user_id:', bounty.user_id, 'Profile:', normalizedPoster)
       }
       setDisplayUsername('Unknown Poster')
+    } else {
+      setDisplayUsername('Loading...')
     }
   }, [bounty.username, normalizedPoster?.username, profileLoading, bounty.user_id, normalizedPoster])
 
@@ -376,7 +379,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 disabled={!bounty.user_id}
               >
                 <Avatar style={styles.avatar}>
-                  <AvatarImage src={normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
+                  <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
                   <AvatarFallback style={styles.avatarFallback}>
                     <Text style={styles.avatarText}>
                       {displayUsername.substring(0, 2).toUpperCase()}

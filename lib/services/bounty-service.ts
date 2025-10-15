@@ -41,12 +41,29 @@ export const bountyService = {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('bounties')
-          .select('*')
+          .select(`
+            *,
+            profiles!bounties_user_id_fkey (
+              username,
+              avatar
+            )
+          `)
           .eq('id', id as any)
           .single()
 
         if (error) throw error
-        return (data as unknown as Bounty) ?? null
+        
+        // Transform data to flatten profile info
+        if (data) {
+          const bounty = {
+            ...data,
+            username: (data as any).profiles?.username,
+            poster_avatar: (data as any).profiles?.avatar,
+            profiles: undefined,
+          }
+          return bounty as Bounty
+        }
+        return null
       }
 
   const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(id))}`
@@ -86,7 +103,13 @@ export const bountyService = {
         const offset = options?.offset ?? 0
         let sbQuery = supabase
           .from('bounties')
-          .select('*')
+          .select(`
+            *,
+            profiles!bounties_user_id_fkey (
+              username,
+              avatar
+            )
+          `)
           .eq('status', 'open')
           .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
           .order('created_at', { ascending: false })
@@ -94,7 +117,16 @@ export const bountyService = {
 
         const { data, error } = await sbQuery
         if (error) throw error
-        return (data as unknown as Bounty[]) ?? []
+        
+        // Transform data to flatten profile info
+        const bounties = (data || []).map((item: any) => ({
+          ...item,
+          username: item.profiles?.username,
+          poster_avatar: item.profiles?.avatar,
+          profiles: undefined,
+        }))
+        
+        return bounties as Bounty[]
       }
 
       // API fallback: if backend supports /api/bounties?search=...
@@ -131,9 +163,16 @@ export const bountyService = {
     try {
       // Prefer Supabase when configured
       if (isSupabaseConfigured) {
+        // Join with profiles to get username and avatar
         let query = supabase
           .from('bounties')
-          .select('*')
+          .select(`
+            *,
+            profiles!bounties_user_id_fkey (
+              username,
+              avatar
+            )
+          `)
           .order('created_at', { ascending: false })
 
         if (options?.status) query = query.eq('status', options.status)
@@ -147,7 +186,16 @@ export const bountyService = {
 
         const { data, error } = await query
         if (error) throw error
-        return (data as unknown as Bounty[]) ?? []
+        
+        // Transform data to flatten profile info into bounty object
+        const bounties = (data || []).map((item: any) => ({
+          ...item,
+          username: item.profiles?.username,
+          poster_avatar: item.profiles?.avatar,
+          profiles: undefined, // Remove nested profiles object
+        }))
+        
+        return bounties as Bounty[]
       }
 
   const API_URL = `${getApiBaseUrl()}/api/bounties`

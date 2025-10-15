@@ -284,13 +284,14 @@ function BountyAppInner() {
       <BountyListItem
         id={item.id}
         title={item.title}
-        username={item.user_id ? undefined : '@Jon_Doe'}
+        username={item.username}
         price={Number(item.amount)}
         distance={distance}
         description={item.description}
         isForHonor={Boolean(item.is_for_honor)}
         user_id={item.user_id}
         work_type={item.work_type}
+        poster_avatar={item.poster_avatar}
       />
     )
   }, [calculateDistance]);
