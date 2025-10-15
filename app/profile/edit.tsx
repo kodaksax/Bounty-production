@@ -24,7 +24,10 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
-  const currentUserId = getCurrentUserId();
+  
+  // IMPORTANT: Always get the current user ID from session to prevent data leaks
+  // Do NOT use a static or cached userId - it must be derived from the active session
+  const currentUserId = session?.user?.id || getCurrentUserId();
   
   // Use normalized profile for display and both services for update operations
   const { profile, loading, error } = useNormalizedProfile(currentUserId);
@@ -45,6 +48,7 @@ export default function EditProfileScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
 
+  // Clear form data when user changes to prevent data leaks
   React.useEffect(() => {
     if (profile) {
       const data = {
@@ -58,7 +62,7 @@ export default function EditProfileScreen() {
       setFormData(data);
       setInitialData(data);
     }
-  }, [profile]);
+  }, [profile, currentUserId]); // Include currentUserId to reset form when user changes
 
   // Check if form is dirty (has changes)
   const isDirty = React.useMemo(() => {

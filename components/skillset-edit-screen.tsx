@@ -10,6 +10,7 @@ interface SkillsetEditScreenProps {
   onBack?: () => void
   onSave?: (skills: Skill[]) => void
   initialSkills?: Skill[]
+  userId?: string // User ID for scoped storage to prevent data leaks
 }
 
 interface Skill {
@@ -23,7 +24,7 @@ const ICON_LIBRARY = [
   'code','gps-fixed','favorite','public','build','security','star','psychology','terminal','bug-report','camera','chat','school','palette','extension','language','cloud','schedule','storage','bolt','map','handshake','health-and-safety'
 ] as const
 
-export function SkillsetEditScreen({ onBack, onSave, initialSkills }: SkillsetEditScreenProps) {
+export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: SkillsetEditScreenProps) {
   const [skills, setSkills] = useState<Skill[]>(() => initialSkills && initialSkills.length ? initialSkills : [
     { id: "1", icon: "code", text: "Knows English, Spanish" },
     { id: "2", icon: "gps-fixed", text: "Private Investigator Certification" },
@@ -33,6 +34,9 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills }: SkillsetEd
   const [selectedSkill, setSelectedSkill] = useState<string>("1")
   const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
   const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color="#ffffff" />
+  
+  // User-specific storage key to prevent data leaks between users
+  const SKILLS_STORAGE_KEY = `profileSkills:${userId || 'anon'}`;
 
   // If prop changes while open (unlikely), sync once.
   useEffect(() => {
@@ -65,7 +69,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills }: SkillsetEd
   const handleSave = async () => {
     const cleaned = skills.filter((skill) => skill.text.trim() !== "")
     try {
-      await AsyncStorage.setItem('profileSkills', JSON.stringify(cleaned))
+      await AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(cleaned))
       setBanner('Skills saved')
       setTimeout(()=>setBanner(null), 1500)
     } catch {
@@ -78,10 +82,10 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills }: SkillsetEd
   // Persist on change (debounced simple approach)
   useEffect(() => {
     const t = setTimeout(() => {
-      AsyncStorage.setItem('profileSkills', JSON.stringify(skills)).catch(() => {})
+      AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(skills)).catch(() => {})
     }, 250)
     return () => clearTimeout(t)
-  }, [skills])
+  }, [skills, SKILLS_STORAGE_KEY])
 
   const attachCredential = async (skillId: string) => {
     try {
