@@ -218,7 +218,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Removed test simulation functions for activity
 
   if (isEditing) {
-    return <SkillsetEditScreen initialSkills={skills} onBack={() => setIsEditing(false)} onSave={handleSaveSkills} />
+    return <SkillsetEditScreen initialSkills={skills} userId={authUserId} onBack={() => setIsEditing(false)} onSave={handleSaveSkills} />
   }
 
   if (showSettings) {

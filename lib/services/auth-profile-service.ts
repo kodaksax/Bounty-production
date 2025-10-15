@@ -461,6 +461,14 @@ export class AuthProfileService {
       const draftKey = `editProfile:draft:${userId}`;
       await AsyncStorage.removeItem(draftKey);
       
+      // Clear skills data
+      const skillsKey = `profileSkills:${userId}`;
+      await AsyncStorage.removeItem(skillsKey);
+      
+      // Clear profile data
+      const profileDataKey = `profileData:${userId}`;
+      await AsyncStorage.removeItem(profileDataKey);
+      
       // Clear profile cache
       await this.clearCache(userId);
       
