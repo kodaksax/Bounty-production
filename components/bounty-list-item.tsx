@@ -21,9 +21,9 @@ export interface BountyListItemProps {
 
 export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
-  const { profile: posterProfile } = useNormalizedProfile(user_id)
+  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id)
 
-  const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Unknown Poster')
+  const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
 
   useEffect(() => {
     // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Unknown Poster'
@@ -38,8 +38,11 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       return
     }
 
-    setResolvedUsername('Unknown Poster')
-  }, [username, posterProfile?.username])
+    // Only show 'Unknown Poster' if we're done loading
+    if (!profileLoading) {
+      setResolvedUsername('Unknown Poster')
+    }
+  }, [username, posterProfile?.username, profileLoading])
 
 
 

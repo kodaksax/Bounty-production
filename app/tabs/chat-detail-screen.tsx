@@ -12,6 +12,7 @@ import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
+import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import type { Conversation, Message } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { getCurrentUserId } from "../../lib/utils/data-utils"
@@ -61,6 +62,17 @@ export function ChatDetailScreen({
   const otherUserId = !conversation.isGroup && conversation.participantIds
     ? conversation.participantIds.find(id => id !== currentUserId)
     : null
+  
+  // Fetch the other user's profile for 1:1 chats
+  const { profile: otherUserProfile } = useNormalizedProfile(otherUserId || undefined)
+  
+  // Use profile data if available for 1:1 chats
+  const displayName = !conversation.isGroup && otherUserProfile?.username 
+    ? otherUserProfile.username 
+    : conversation.name
+  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
+    ? otherUserProfile.avatar 
+    : conversation.avatar
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text)
@@ -161,7 +173,7 @@ export function ChatDetailScreen({
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => {
-              if (otherUserId) {
+              if (otherUserId && !conversation.isGroup) {
                 router.push(`/profile/${otherUserId}`)
               }
             }}
@@ -169,13 +181,13 @@ export function ChatDetailScreen({
             className="flex-row items-center flex-1"
           >
             <Avatar className="h-10 w-10 mr-3">
-              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
               <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {conversation.name.substring(0, 2).toUpperCase()}
+                {displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <View>
-              <Text className="font-medium">{conversation.name}</Text>
+              <Text className="font-medium">{displayName}</Text>
               {conversation.isGroup && (
                 <Text className="text-xs text-emerald-300">
                   {conversation.participantIds?.length || 0} members

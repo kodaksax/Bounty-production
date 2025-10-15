@@ -56,8 +56,8 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const currentUserId = getCurrentUserId()
 
   // Resolve poster identity - ONLY from bounty.user_id, never from current user
-  const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Unknown Poster')
-  const { profile: normalizedPoster } = useNormalizedProfile(bounty.user_id)
+  const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
+  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(bounty.user_id)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
 
   useEffect(() => {
@@ -73,8 +73,15 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       return
     }
 
-    setDisplayUsername('Unknown Poster')
-  }, [bounty.username, normalizedPoster?.username])
+    // Only show 'Unknown Poster' if we're done loading
+    if (!profileLoading) {
+      // Debug: log when we can't resolve a username
+      if (bounty.user_id) {
+        console.log('[BountyDetailModal] Could not resolve username for user_id:', bounty.user_id, 'Profile:', normalizedPoster)
+      }
+      setDisplayUsername('Unknown Poster')
+    }
+  }, [bounty.username, normalizedPoster?.username, profileLoading, bounty.user_id, normalizedPoster])
 
   // Parse and load attachments
   useEffect(() => {
@@ -369,10 +376,10 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 disabled={!bounty.user_id}
               >
                 <Avatar style={styles.avatar}>
-                  <AvatarImage src="/placeholder.svg?height=40&width=40" alt={displayUsername} />
+                  <AvatarImage src={normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
                   <AvatarFallback style={styles.avatarFallback}>
                     <Text style={styles.avatarText}>
-                      {displayUsername.substring(1, 3).toUpperCase()}
+                      {displayUsername.substring(0, 2).toUpperCase()}
                     </Text>
                   </AvatarFallback>
                 </Avatar>

@@ -11,6 +11,7 @@ import { getCurrentUserId } from "lib/utils/data-utils"
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
 import { useAuthContext } from '../hooks/use-auth-context'
+import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 
 interface Message extends ChatMessage {
   time: string
@@ -84,6 +85,17 @@ export function ChatDetailScreen({
   
   // Get the other participant's ID (not the current user)
   const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
+  
+  // Fetch the other user's profile for 1:1 chats
+  const { profile: otherUserProfile } = useNormalizedProfile(otherUserId)
+  
+  // Use profile data if available for 1:1 chats
+  const displayName = !conversation.isGroup && otherUserProfile?.username 
+    ? otherUserProfile.username 
+    : conversation.name
+  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
+    ? otherUserProfile.avatar 
+    : conversation.avatar
 
   const handleSendMessage = (text: string) => {
     const newMsg: Message = {
@@ -147,20 +159,20 @@ export function ChatDetailScreen({
           <TouchableOpacity 
             className="flex-row items-center"
             onPress={() => {
-              if (otherUserId) {
+              if (otherUserId && !conversation.isGroup) {
                 router.push(`/profile/${otherUserId}`)
               }
             }}
-            disabled={!otherUserId}
+            disabled={!otherUserId || conversation.isGroup}
           >
             <Avatar className="h-10 w-10 mr-2">
-              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
               <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {conversation.name.substring(0, 2).toUpperCase()}
+                {displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <View>
-              <Text className="font-medium">{conversation.name}</Text>
+              <Text className="font-medium">{displayName}</Text>
               
             </View>
           </TouchableOpacity>

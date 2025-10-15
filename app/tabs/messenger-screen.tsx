@@ -9,6 +9,7 @@ import React, { useCallback, useState } from "react"
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
+import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
@@ -165,9 +166,20 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   // Get the other participant's ID (not the current user)
   const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
   
+  // Fetch the other user's profile for 1:1 chats
+  const { profile: otherUserProfile } = useNormalizedProfile(otherUserId)
+  
+  // Use profile data if available for 1:1 chats
+  const displayName = !conversation.isGroup && otherUserProfile?.username 
+    ? otherUserProfile.username 
+    : conversation.name
+  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
+    ? otherUserProfile.avatar 
+    : conversation.avatar
+  
   const handleAvatarPress = (e: any) => {
     e.stopPropagation()
-    if (otherUserId) {
+    if (otherUserId && !conversation.isGroup) {
       router.push(`/profile/${otherUserId}`)
     }
   }
@@ -180,9 +192,9 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
             <GroupAvatar />
           ) : (
             <Avatar className="h-12 w-12">
-              <AvatarImage src={conversation.avatar} alt={conversation.name} />
+              <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={displayName} />
               <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {conversation.name.substring(0, 2).toUpperCase()}
+                {displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           )}
@@ -191,7 +203,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 
       <View className="ml-3 flex-1 min-w-0">
         <View className="flex-row justify-between items-center">
-          <Text className="font-medium text-white">{conversation.name}</Text>
+          <Text className="font-medium text-white">{displayName}</Text>
           <Text className="text-xs text-emerald-300">{time}</Text>
         </View>
         <View className="flex-row justify-between items-center mt-1">
