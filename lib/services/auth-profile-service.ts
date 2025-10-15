@@ -9,8 +9,11 @@ import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
 
-const PROFILE_CACHE_KEY = 'BE:authProfile';
+const PROFILE_CACHE_KEY_PREFIX = 'BE:authProfile';
 const PROFILE_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
+// Helper to generate user-specific cache key
+const getProfileCacheKey = (userId: string) => `${PROFILE_CACHE_KEY_PREFIX}:${userId}`;
 
 export interface AuthProfile {
   id: string; // User ID from Supabase auth
@@ -116,13 +119,22 @@ export class AuthProfileService {
    * Set the current session and fetch/sync profile
    */
   async setSession(session: Session | null): Promise<void> {
+    const previousUserId = this.currentSession?.user?.id;
     this.currentSession = session;
     
     if (!session) {
       this.currentProfile = null;
-      await this.clearCache();
+      // Clear cache for the previous user if switching users
+      if (previousUserId) {
+        await this.clearCache(previousUserId);
+      }
       this.notifyListeners(null);
       return;
+    }
+
+    // If switching users, clear the previous user's cache
+    if (previousUserId && previousUserId !== session.user.id) {
+      await this.clearCache(previousUserId);
     }
 
     // Fetch and sync profile for authenticated user
@@ -193,7 +205,7 @@ export class AuthProfileService {
       logger.error('Error fetching profile', { userId, error });
       
       // Try to load from cache
-      const cached = await this.loadFromCache();
+      const cached = await this.loadFromCache(userId);
       if (cached && cached.id === userId) {
         this.currentProfile = cached;
         this.notifyListeners(cached);
@@ -395,7 +407,8 @@ export class AuthProfileService {
         profile,
         timestamp: Date.now(),
       };
-      await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cached));
+      const cacheKey = getProfileCacheKey(profile.id);
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(cached));
     } catch (error) {
       logger.error('Error caching profile', { error });
     }
@@ -404,9 +417,10 @@ export class AuthProfileService {
   /**
    * Load profile from cache
    */
-  private async loadFromCache(): Promise<AuthProfile | null> {
+  private async loadFromCache(userId: string): Promise<AuthProfile | null> {
     try {
-      const cachedJson = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+      const cacheKey = getProfileCacheKey(userId);
+      const cachedJson = await AsyncStorage.getItem(cacheKey);
       if (!cachedJson) {
         return null;
       }
@@ -426,13 +440,33 @@ export class AuthProfileService {
   }
 
   /**
-   * Clear profile cache
+   * Clear profile cache for a specific user
    */
-  private async clearCache(): Promise<void> {
+  private async clearCache(userId: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+      const cacheKey = getProfileCacheKey(userId);
+      await AsyncStorage.removeItem(cacheKey);
     } catch (error) {
       logger.error('Error clearing profile cache', { error });
+    }
+  }
+
+  /**
+   * Clear all user-specific draft data (edit profile drafts, etc.)
+   * Should be called on logout to prevent data leaks
+   */
+  async clearUserDraftData(userId: string): Promise<void> {
+    try {
+      // Clear edit profile draft
+      const draftKey = `editProfile:draft:${userId}`;
+      await AsyncStorage.removeItem(draftKey);
+      
+      // Clear profile cache
+      await this.clearCache(userId);
+      
+      logger.info('Cleared user draft data', { userId });
+    } catch (error) {
+      logger.error('Error clearing user draft data', { error });
     }
   }
 }

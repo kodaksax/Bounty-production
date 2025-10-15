@@ -63,10 +63,23 @@ export function EditProfileScreen({
     },
   })
 
-  // Draft persistence keys
-  const DRAFT_KEY = 'editProfile:draft';
+  // Draft persistence keys - MUST be user-specific to prevent data leaks
+  const userId = authProfile?.id || 'anon';
+  const DRAFT_KEY = `editProfile:draft:${userId}`;
 
-  // Hydrate draft on mount
+  // Reset form data when userId changes to prevent data leaks between users
+  React.useEffect(() => {
+    // Clear form state to prevent showing previous user's data
+    setName(authProfile?.username || normalized?.name || localProfile?.displayName || initialName);
+    setTitle(normalized?.title || "");
+    setLocation((normalized as any)?.location || "");
+    setPortfolio((normalized as any)?.portfolio || "");
+    setBio(authProfile?.about || normalized?.bio || localProfile?.location || "");
+    setAvatar(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar);
+    setPendingAvatarRemoteUri(undefined);
+  }, [userId]); // Reset when userId changes
+
+  // Hydrate draft on mount (only if userId hasn't changed)
   React.useEffect(() => {
     (async () => {
       try {
@@ -82,7 +95,7 @@ export function EditProfileScreen({
         }
       } catch {}
     })();
-  }, []);
+  }, [DRAFT_KEY]);
 
   // Persist draft on changes (debounced)
   React.useEffect(() => {
@@ -91,7 +104,7 @@ export function EditProfileScreen({
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(payload)).catch(() => {});
     }, 250);
     return () => clearTimeout(t);
-  }, [name, title, location, portfolio, bio, avatar]);
+  }, [name, title, location, portfolio, bio, avatar, DRAFT_KEY]);
   
   // Show loading state if profiles are still loading
   const isLoading = authLoading || normalizedLoading

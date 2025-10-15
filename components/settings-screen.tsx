@@ -166,6 +166,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // SecureStore to clear tokens
               // eslint-disable-next-line @typescript-eslint/no-var-requires
               const SecureStore = require('expo-secure-store');
+              // Auth profile service to clear drafts
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const { authProfileService } = require('../lib/services/auth-profile-service');
+
+              // Get current user ID before signing out
+              const currentUserId = authProfile?.id;
 
               // Sign out from Supabase
               const { error } = await supabase.auth.signOut();
@@ -173,6 +179,15 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 console.error('[Logout] Supabase signout error:', error);
                 Alert.alert('Sign Out Failed', 'Unable to sign out. Please try again.');
                 return;
+              }
+
+              // Clear user-specific draft data to prevent data leaks
+              if (currentUserId) {
+                try {
+                  await authProfileService.clearUserDraftData(currentUserId);
+                } catch (e) {
+                  console.warn('[Logout] Draft cleanup failed', e);
+                }
               }
 
               // Clear any stored tokens (best-effort)
