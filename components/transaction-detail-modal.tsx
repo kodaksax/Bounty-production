@@ -3,8 +3,9 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { cn } from "lib/utils"
+import { receiptService } from "lib/services/receipt-service"
 import { useEffect, useRef, useState } from "react"
-import { Text, TouchableOpacity, View } from "react-native"
+import { Alert, Text, TouchableOpacity, View } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
 
 interface TransactionDetailModalProps {
@@ -14,6 +15,7 @@ interface TransactionDetailModalProps {
 
 export function TransactionDetailModal({ transaction, onClose }: TransactionDetailModalProps) {
   const [isClosing, setIsClosing] = useState(false)
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Handle close animation
@@ -22,6 +24,21 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
     setTimeout(() => {
       onClose()
     }, 300)
+  }
+
+  // Handle receipt generation
+  const handleGenerateReceipt = async () => {
+    setIsGeneratingReceipt(true)
+    try {
+      const success = await receiptService.shareReceipt(transaction as any)
+      if (!success) {
+        Alert.alert('Receipt Generation', 'Unable to share receipt on this device.')
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate receipt. Please try again.')
+    } finally {
+      setIsGeneratingReceipt(false)
+    }
   }
 
   // Handle click outside to close
@@ -206,10 +223,36 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
           </View>
         </View>
 
-        {/* Action Button */}
-        <View className="p-5 pt-0">
-          <TouchableOpacity onPress={handleClose} className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium">
-            <Text className="text-center text-white">Close</Text>
+        {/* Escrow Status if applicable */}
+        {(transaction as any).escrowStatus && (
+          <View className="mx-5 mb-4 p-4 bg-emerald-700/50 rounded-lg border border-emerald-600">
+            <View className="flex flex-row items-center mb-2">
+              <MaterialIcons name="lock" size={20} color="#10b981" />
+              <Text className="text-sm font-bold text-white ml-2">Escrow Information</Text>
+            </View>
+            <Text className="text-sm text-emerald-200">
+              {(transaction as any).escrowStatus === 'funded' && 'Funds are held in escrow until bounty completion.'}
+              {(transaction as any).escrowStatus === 'released' && 'Funds have been released to the hunter.'}
+              {(transaction as any).escrowStatus === 'pending' && 'Escrow is pending verification.'}
+            </Text>
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        <View className="p-5 pt-0 space-y-3">
+          <TouchableOpacity 
+            onPress={handleGenerateReceipt} 
+            disabled={isGeneratingReceipt}
+            className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium flex-row items-center justify-center"
+          >
+            <MaterialIcons name="receipt" size={20} color="#ffffff" />
+            <Text className="text-center text-white ml-2 font-medium">
+              {isGeneratingReceipt ? 'Generating...' : 'Generate Receipt'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={handleClose} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium">
+            <Text className="text-center text-white font-medium">Close</Text>
           </TouchableOpacity>
         </View>
       </View>

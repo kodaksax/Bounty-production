@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 // Local transaction shape (subset aligning with transaction history component)
-export type WalletTransactionType = 'deposit' | 'withdrawal' | 'bounty_posted' | 'bounty_completed' | 'bounty_received';
+export type WalletTransactionType = 'deposit' | 'withdrawal' | 'bounty_posted' | 'bounty_completed' | 'bounty_received' | 'escrow' | 'release' | 'refund';
 export interface WalletTransactionRecord {
   id: string;
   type: WalletTransactionType;
@@ -16,6 +16,7 @@ export interface WalletTransactionRecord {
     bounty_id?: number;
   };
   disputeStatus?: "none" | "pending" | "resolved";
+  escrowStatus?: "funded" | "pending" | "released";
 }
 
 interface WalletContextValue {
@@ -29,6 +30,8 @@ interface WalletContextValue {
   logTransaction: (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => Promise<WalletTransactionRecord>;
   clearAllTransactions: () => Promise<void>;
   updateDisputeStatus: (transactionId: string, status: "none" | "pending" | "resolved") => Promise<void>;
+  createEscrow: (bountyId: number, amount: number, title: string, posterId: string) => Promise<WalletTransactionRecord>;
+  releaseFunds: (bountyId: number, hunterId: string, title: string) => Promise<boolean>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -138,6 +141,77 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, [persistTransactions]);
 
+  // Create escrow transaction when poster accepts a request
+  const createEscrow = useCallback(async (bountyId: number, amount: number, title: string, posterId: string) => {
+    if (amount <= 0 || Number.isNaN(amount)) {
+      throw new Error('Invalid escrow amount');
+    }
+    
+    // Check if poster has sufficient balance
+    if (balance < amount) {
+      throw new Error('Insufficient balance to create escrow');
+    }
+
+    // Deduct from balance
+    setBalance(prev => {
+      const next = prev - amount;
+      persist(next);
+      return next;
+    });
+
+    // Log escrow transaction
+    const record = await logTransaction({
+      type: 'escrow',
+      amount: -amount, // outflow negative
+      details: { 
+        title,
+        bounty_id: bountyId,
+        status: 'pending'
+      },
+      escrowStatus: 'funded',
+    });
+
+    return record;
+  }, [balance, persist, logTransaction]);
+
+  // Release escrowed funds to hunter when bounty is completed
+  const releaseFunds = useCallback(async (bountyId: number, hunterId: string, title: string) => {
+    // Find the escrow transaction for this bounty
+    const escrowTx = transactions.find(
+      tx => tx.type === 'escrow' && tx.details.bounty_id === bountyId && tx.escrowStatus === 'funded'
+    );
+
+    if (!escrowTx) {
+      console.error('No funded escrow found for bounty:', bountyId);
+      return false;
+    }
+
+    const amount = Math.abs(escrowTx.amount);
+
+    // Update escrow transaction status
+    setTransactions(prev => {
+      const next = prev.map(tx => 
+        tx.id === escrowTx.id ? { ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } : tx
+      );
+      persistTransactions(next);
+      return next;
+    });
+
+    // Log release transaction (this would go to hunter's wallet in real system)
+    await logTransaction({
+      type: 'release',
+      amount: amount, // positive for the release record
+      details: { 
+        title,
+        bounty_id: bountyId,
+        counterparty: hunterId,
+        status: 'completed'
+      },
+    });
+
+    return true;
+  }, [transactions, logTransaction, persistTransactions]);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
@@ -149,6 +223,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     logTransaction,
     clearAllTransactions,
     updateDisputeStatus,
+    createEscrow,
+    releaseFunds,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

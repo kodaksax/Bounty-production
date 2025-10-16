@@ -87,7 +87,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
   // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
   const STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
-  const { balance, deposit } = useWallet()
+  const { balance, deposit, createEscrow } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
@@ -342,11 +342,46 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Request not found")
       }
 
+      // Check if poster has sufficient balance for paid bounties
+      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
+        if (balance < request.bounty.amount) {
+          Alert.alert(
+            'Insufficient Balance',
+            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
+            ]
+          )
+          return
+        }
+      }
+
       // ANNOTATION: This API call should be transactional on your backend.
       const result = await bountyRequestService.acceptRequest(requestId)
 
       if (!result) {
         throw new Error("Failed to accept request")
+      }
+
+      // Create escrow transaction for paid bounties
+      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
+        try {
+          await createEscrow(
+            Number(request.bounty.id),
+            request.bounty.amount,
+            request.bounty.title,
+            currentUserId
+          )
+          console.log('✅ Escrow created for bounty:', request.bounty.id)
+        } catch (escrowError) {
+          console.error('Error creating escrow:', escrowError)
+          Alert.alert(
+            'Escrow Creation Failed',
+            'Failed to create escrow transaction. The request has been accepted but funds were not secured. Please contact support.',
+            [{ text: 'OK' }]
+          )
+        }
       }
 
       // Auto-create a conversation for coordination
@@ -378,7 +413,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
           'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount} will be held securely until completion.\n💬 A conversation has been created to coordinate.`,
+          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.`,
           [
             { text: 'View Conversation', onPress: () => setActiveScreen('create') },
             { text: 'OK' }

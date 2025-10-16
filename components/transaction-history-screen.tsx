@@ -60,7 +60,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       let filtered = walletTransactions as Transaction[]
       if (activeFilter === 'deposits') filtered = filtered.filter(t => t.type === 'deposit')
       else if (activeFilter === 'withdrawals') filtered = filtered.filter(t => t.type === 'withdrawal')
-      else if (activeFilter === 'bounties') filtered = filtered.filter(t => t.type.startsWith('bounty_'))
+      else if (activeFilter === 'bounties') filtered = filtered.filter(t => t.type.startsWith('bounty_') || t.type === 'escrow' || t.type === 'release' || t.type === 'refund')
 
       // Sort newest first
       filtered = [...filtered].sort((a,b) => b.date.getTime() - a.date.getTime())
@@ -119,6 +119,12 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         return <MaterialIcons name="check-circle" size={20} color="#60a5fa" />
       case "bounty_received":
         return <MaterialIcons name="credit-card" size={20} color="#a78bfa" />
+      case "escrow":
+        return <MaterialIcons name="lock" size={20} color="#f59e0b" />
+      case "release":
+        return <MaterialIcons name="lock-open" size={20} color="#10b981" />
+      case "refund":
+        return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
   }
 
@@ -135,6 +141,12 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         return `Completed Bounty: ${transaction.details.title || "Unknown"}`
       case "bounty_received":
         return `Received Bounty Payment: ${transaction.details.title || "Unknown"}`
+      case "escrow":
+        return `Escrow Hold: ${transaction.details.title || "Unknown"}`
+      case "release":
+        return `Escrow Released: ${transaction.details.title || "Unknown"}`
+      case "refund":
+        return `Refund: ${transaction.details.title || "Unknown"}`
     }
   }
 
@@ -271,6 +283,12 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                           <View className="flex justify-between items-center mt-1">
                             <View className="flex-row items-center gap-2">
                               <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
+                              {(transaction as any).escrowStatus && (
+                                <View className="flex-row items-center bg-amber-500/80 px-2 py-0.5 rounded-full">
+                                  <MaterialIcons name="lock" size={10} color="#fff" />
+                                  <Text className="text-[10px] text-white font-bold ml-1">{(transaction as any).escrowStatus.toUpperCase()}</Text>
+                                </View>
+                              )}
                               {(transaction as any).disputeStatus === "pending" && (
                                 <View className="flex-row items-center bg-red-500/80 px-2 py-0.5 rounded-full">
                                   <MaterialIcons name="warning" size={10} color="#fff" />
