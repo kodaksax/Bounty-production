@@ -4,8 +4,8 @@
  * This file demonstrates how to use the messaging service in various scenarios.
  */
 
-import { messagingService } from '../lib/services/messaging';
 import { messageService } from '../lib/services/message-service';
+import { messagingService } from '../lib/services/messaging';
 import { getCurrentUserId } from '../lib/utils/data-utils';
 
 // ============================================================================
@@ -70,7 +70,7 @@ async function example_autoCreateChatOnAccept(
 // Example 3: Using the messaging service in a React component
 // ============================================================================
 import { useEffect, useState } from 'react';
-import type { Conversation, Message } from '../lib/types';
+import type { Conversation } from '../lib/types';
 
 function ExampleMessengerComponent() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -115,14 +115,14 @@ async function example_sendMessage(
   const currentUserId = getCurrentUserId();
   
   try {
-    const message = await messageService.sendMessage(
+    const res = await messageService.sendMessage(
       conversationId,
       messageText,
       currentUserId
     );
-    
-    console.log('Message sent:', message.id);
-    return message;
+    const message = (res as any).message ?? res;
+    console.log('Message sent:', (message as any).id);
+    return message as any;
   } catch (error) {
     console.error('Failed to send message:', error);
     throw error;

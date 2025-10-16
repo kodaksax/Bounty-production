@@ -191,8 +191,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Update escrow transaction status
     setTransactions(prev => {
       const next = prev.map(tx => 
-        tx.id === escrowTx.id ? { ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } : tx
-      );
+        tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
+      ) as WalletTransactionRecord[];
       persistTransactions(next);
       return next;
     });

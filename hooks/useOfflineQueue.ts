@@ -16,7 +16,12 @@ export function useOfflineQueue() {
       setIsOnline(offlineQueueService.getOnlineStatus());
     });
 
-    return unsubscribe;
+    // offlineQueueService.addListener returns a function that may return a boolean (Set.delete return).
+    // Wrap it to ensure the cleanup callback returns void (useEffect expects void or a void-returning function).
+    return () => {
+      // Call unsubscribe and ignore its return value
+      try { unsubscribe(); } catch {}
+    };
   }, []);
 
   return {

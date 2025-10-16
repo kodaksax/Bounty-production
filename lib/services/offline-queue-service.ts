@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import type { Bounty, Message } from '../types';
+import type { Bounty } from './database.types';
 
 // Queue item types
 export type QueueItemType = 'bounty' | 'message';

@@ -1,8 +1,8 @@
-import type { Message, Conversation } from '../types';
-import { offlineQueueService } from './offline-queue-service';
 import NetInfo from '@react-native-community/netinfo';
-import * as messagingService from './messaging';
+import type { Conversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
+import * as messagingService from './messaging';
+import { offlineQueueService } from './offline-queue-service';
 
 export const messageService = {
   /**
@@ -140,7 +140,11 @@ export const messageService = {
    * Report a message
    */
   reportMessage: async (messageId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
-    const message = messages.find(m => m.id === messageId);
+    // Load current messages from messaging service storage
+    const allMessages = await messagingService.getMessages('')
+      .catch(() => [] as any[]);
+
+    const message = allMessages.find(m => m.id === messageId);
     if (!message) {
       return { success: false, error: 'Message not found' };
     }
@@ -155,9 +159,12 @@ export const messageService = {
    * Update message status
    */
   updateMessageStatus: async (messageId: string, status: 'delivered' | 'read'): Promise<void> => {
-    const message = messages.find(m => m.id === messageId);
+    const allMessages = await messagingService.getMessages('')
+      .catch(() => [] as any[]);
+    const message = allMessages.find((m: any) => m.id === messageId);
     if (message) {
       message.status = status;
+      await messagingService.sendMessage(message.conversationId, message.text, message.senderId).catch(() => {});
     }
   },
 

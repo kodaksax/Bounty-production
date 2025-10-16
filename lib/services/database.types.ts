@@ -19,6 +19,8 @@ export type Bounty = {
   // Rating aggregates for the bounty poster
   averageRating?: number
   ratingCount?: number
+  // If a bounty has been accepted, store the accepting hunter's id (optional)
+  accepted_by?: string
   // Profile data from joined query (populated when fetched with profile join)
   username?: string
   poster_avatar?: string
@@ -48,6 +50,9 @@ export type Profile = {
   updated_at?: string
   display_name?: string
   location?: string
+  // Aggregated rating stats (optional; populated by joined queries)
+  averageRating?: number
+  ratingCount?: number
 }
 
 export type Skill = {

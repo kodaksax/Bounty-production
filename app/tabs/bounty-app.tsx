@@ -13,10 +13,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
-import { SPACING, SIZING, TYPOGRAPHY, HEADER_LAYOUT } from '../../lib/constants/accessibility'
+import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
@@ -346,18 +347,7 @@ function BountyAppInner() {
               BOUNTY
             </Animated.Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => setActiveScreen('wallet')}
-            accessibilityRole="button"
-            accessibilityLabel={`Account balance: $${balance.toFixed(2)}`}
-            accessibilityHint="Tap to view wallet and add money"
-            style={styles.balanceContainer}
-          >
-            <View style={styles.balanceCard}>
-              <MaterialIcons name="account-balance-wallet" size={16} color="#6ee7b7" style={{ marginRight: 6 }} />
-              <Text style={styles.headerBalance}>${balance.toFixed(2)}</Text>
-            </View>
-          </TouchableOpacity>
+          <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
         </View>
         <Animated.View style={{ opacity: extraContentOpacity }}>
           {/* Search Bar */}

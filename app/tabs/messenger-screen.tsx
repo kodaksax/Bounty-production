@@ -7,13 +7,14 @@ import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useCallback, useState } from "react"
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
+import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
-import { OfflineStatusBadge } from '../../components/offline-status-badge'
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -100,7 +101,7 @@ export function MessengerScreen({
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
             <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
-          <Text className="text-lg font-bold text-white">$ {balance.toFixed(2)}</Text>
+          <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
         </View>
       </View>
 

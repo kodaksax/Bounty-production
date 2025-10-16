@@ -3,7 +3,7 @@
 /**
  * Test helper to validate apply request creation
  */
-function validateApplyRequest(bountyId, userId, bountyUserId) {
+function validateApplyRequest(bountyId: number | string, userId: string, bountyUserId: string) {
   // Check if user is trying to apply to their own bounty
   if (userId === bountyUserId) {
     return {
@@ -34,7 +34,7 @@ function validateApplyRequest(bountyId, userId, bountyUserId) {
 /**
  * Test helper to validate accept request flow
  */
-function validateAcceptRequest(requestId, requestStatus) {
+function validateAcceptRequest(requestId: number, requestStatus: string) {
   // Check if request ID is valid
   if (!requestId || requestId < 1) {
     return {
@@ -57,7 +57,7 @@ function validateAcceptRequest(requestId, requestStatus) {
 /**
  * Test helper to validate conversation creation params
  */
-function validateConversationParams(participantIds, name) {
+function validateConversationParams(participantIds: string[], name: string) {
   // Check if participant IDs are provided
   if (!participantIds || participantIds.length === 0) {
     return {

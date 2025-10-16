@@ -8,10 +8,10 @@ import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { WithdrawScreen } from "../../components/withdraw-screen";
-import { SPACING, SIZING, TYPOGRAPHY, HEADER_LAYOUT } from '../../lib/constants/accessibility';
-import { useWallet } from '../../lib/wallet-context';
-import { useStripe } from '../../lib/stripe-context';
+import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { stripeService } from '../../lib/services/stripe-service';
+import { useStripe } from '../../lib/stripe-context';
+import { useWallet } from '../../lib/wallet-context';
 
 
 interface WalletScreenProps {
@@ -56,7 +56,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         <View style={styles.headerTitleRow}>
           <MaterialIcons 
             name="gps-fixed" 
-            size={HEADER_LAYOUT.iconSize} 
+            size={HEADER_LAYOUT.iconSize + 4} 
             color="#fff" 
             accessibilityElementsHidden={true}
           />
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 32,
+    paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     backgroundColor: '#059669',
     gap: HEADER_LAYOUT.iconToTitleGap,

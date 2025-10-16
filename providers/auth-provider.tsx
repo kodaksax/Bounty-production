@@ -1,7 +1,7 @@
+import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
-import type { Session } from '@supabase/supabase-js'
-import { PropsWithChildren, use, useContext, useEffect, useState } from 'react'
+import { PropsWithChildren, useContext, useEffect, useState } from 'react'
 import { authProfileService } from '../lib/services/auth-profile-service'
 
 type AuthData = {
@@ -79,9 +79,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       setProfile(authProfile)
       setIsLoading(false)
       
-      // Email verification gate: Also check profile for email_verified flag
-      if (authProfile?.email_verified !== undefined) {
-        setIsEmailVerified(authProfile.email_verified)
+      // Email verification gate: Also check profile for email_verified flag (some profile shapes include this field)
+      if (authProfile && (('email_verified' in authProfile) || (authProfile as any).email_verified !== undefined)) {
+        setIsEmailVerified((authProfile as any).email_verified)
       }
     })
 

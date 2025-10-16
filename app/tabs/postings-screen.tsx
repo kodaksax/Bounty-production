@@ -23,6 +23,7 @@ import { EditPostingModal } from "../../components/edit-posting-modal"
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
 
@@ -608,25 +609,21 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               </Text>
             </View>
 
-            {/* Right: $40 placeholder and bookmark below it */}
-            <View className="flex items-end">
-              <Text 
-                className="text-white font-medium"
-                accessibilityLabel={`Account balance: $${balance.toFixed(2)}`}
-              >
-                $ {balance.toFixed(2)}
-              </Text>
-              <TouchableOpacity 
-                className="mt-1 text-white p-2 touch-target-min" 
+            {/* Right: Wallet balance pill and bookmark (inline) */}
+            <View className="flex-row items-center">
+              {/* Balance pill sits to the left, bookmark to the right */}
+              <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+              <TouchableOpacity
+                className="ml-3 p-2 touch-target-min"
                 onPress={() => setShowArchivedBounties(true)}
                 accessibilityRole="button"
                 accessibilityLabel="View archived bounties"
                 accessibilityHint="Opens a list of your archived bounties"
               >
-                <MaterialIcons 
-                  name="bookmark" 
-                  size={20} 
-                  color="#ffffff" 
+                <MaterialIcons
+                  name="bookmark"
+                  size={20}
+                  color="#ffffff"
                   accessibilityElementsHidden={true}
                 />
               </TouchableOpacity>

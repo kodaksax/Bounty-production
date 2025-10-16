@@ -11,7 +11,7 @@ import { TransactionDetailModal } from "./transaction-detail-modal"
 
 export interface Transaction {
   id: string
-  type: "deposit" | "withdrawal" | "bounty_posted" | "bounty_completed" | "bounty_received"
+  type: "deposit" | "withdrawal" | "bounty_posted" | "bounty_completed" | "bounty_received" | "escrow" | "release" | "refund"
   amount: number
   date: Date
   details: {
@@ -21,6 +21,9 @@ export interface Transaction {
     counterparty?: string
     bounty_id?: number
   }
+  // Optional runtime-only fields for UI badges
+  escrowStatus?: string
+  disputeStatus?: "none" | "pending" | "resolved"
 }
 
 export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
