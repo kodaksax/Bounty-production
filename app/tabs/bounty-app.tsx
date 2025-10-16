@@ -21,7 +21,6 @@ import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
-
 // Calendar removed in favor of Profile as the last tab
 
 // Use the proper Bounty type from database types

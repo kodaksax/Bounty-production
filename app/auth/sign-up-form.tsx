@@ -3,15 +3,18 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { validateEmail, validatePassword } from '../../lib/utils/auth-validation'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
+import useScreenBackground from '../../lib/hooks/useScreenBackground'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { validateEmail } from '../../lib/utils/auth-validation'
 
 export default function SignUpRoute() {
   return <SignUpForm />
 }
 
 export function SignUpForm() {
+  // set status/safe-area color for this screen
+  useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

@@ -2,15 +2,19 @@ import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import "../global.css";
 import { useAuthContext } from '../hooks/use-auth-context';
 import { AdminProvider } from '../lib/admin-context';
+import { COLORS } from "../lib/constants/accessibility";
+import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { StripeProvider } from '../lib/stripe-context';
 import AuthProvider from '../providers/auth-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+
 
 // Load test utilities in development
 if (__DEV__) {
@@ -26,17 +30,38 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-// Add styles for React Native
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669', // emerald-600
-  },
-  inner: {
-    flex: 1,
-    // Add any additional styling needed for "iphone-container"
-  },
-});
+// Simple luminance check to pick light/dark content for the status bar
+const getBarStyleForHex = (hex: string): "light" | "dark" => {
+  // strip #
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16) / 255;
+  const g = parseInt(h.substring(2, 4), 16) / 255;
+  const b = parseInt(h.substring(4, 6), 16) / 255;
+  // relative luminance
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.5 ? "dark" : "light";
+};
+
+const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
+  const insets = useSafeAreaInsets();
+  const barStyle = getBarStyleForHex(bgColor);
+
+  return (
+    <View style={[styles.container, { backgroundColor: bgColor }]}>
+      {/* top safe area behind status icons (time, battery, network) */}
+      <View style={{ height: insets.top, backgroundColor: bgColor }} />
+
+      {/* app content */}
+      <View style={styles.content}>{children}</View>
+
+      {/* bottom safe area behind home indicator */}
+      <View style={{ height: insets.bottom || 0, backgroundColor: bgColor }} />
+
+      {/* status bar; expo-status-bar maps to appropriate platform APIs */}
+      <StatusBar style={barStyle} backgroundColor={bgColor} />
+    </View>
+  );
+};
 
 class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -137,27 +162,48 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       console.warn('[RuntimeCheck] instrumentation failed', e)
     }
   }
-  return (
-    <SafeAreaProvider>
-  <SafeAreaView style={styles.container}>
+  const LayoutContent = () => {
+    const { color } = useBackgroundColor();
+    return (
+      <RootFrame bgColor={color}>
         {showBranded ? (
           <BrandedSplash />
         ) : (
           <AuthProvider>
-          <AdminProvider>
-            <StripeProvider>
-              <RootErrorBoundary>
-                <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                  <View style={styles.inner}>
-                    <Slot />
-                  </View>
-                </ThemeProvider>
-              </RootErrorBoundary>
-            </StripeProvider>
-          </AdminProvider>
+            <AdminProvider>
+              <StripeProvider>
+                <RootErrorBoundary>
+                  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                    <View style={styles.inner}>
+                      <Slot />
+                    </View>
+                  </ThemeProvider>
+                </RootErrorBoundary>
+              </StripeProvider>
+            </AdminProvider>
           </AuthProvider>
         )}
-      </SafeAreaView>
+      </RootFrame>
+    );
+  };
+
+  return (
+    <SafeAreaProvider>
+      <BackgroundColorProvider>
+        <LayoutContent />
+      </BackgroundColorProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#059669', // emerald-600
+  },
+  inner: {
+    flex: 1,
+    // Add any additional styling needed for "iphone-container"
+  },
+  content: { flex: 1 },
+});

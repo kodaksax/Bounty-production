@@ -9,8 +9,9 @@ import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { Checkbox } from '../../components/ui/checkbox'
-import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { ROUTES } from '../../lib/routes'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -19,6 +20,8 @@ export default function SignInRoute() {
 }
 
 export function SignInForm() {
+  // set status/safe-area color for this screen
+  useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
