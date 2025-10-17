@@ -13,7 +13,7 @@ export interface CreateBountyPayload {
   work_type: 'online' | 'in_person';
   timeline?: string;
   skills_required?: string;
-  user_id: string;
+  poster_id: string;
   status: 'open';
 }
 
@@ -46,6 +46,7 @@ export const bountyService = {
         work_type: draft.workType,
         timeline: draft.timeline || '',
         skills_required: draft.skills || '',
+        poster_id: getCurrentUserId(),
         user_id: getCurrentUserId(),
         status: 'open',
       };

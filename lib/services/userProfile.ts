@@ -5,8 +5,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authProfileService } from './auth-profile-service';
 import { supabase } from '../supabase';
+import { authProfileService } from './auth-profile-service';
 
 const STORAGE_KEY = 'BE:userProfile';
 const PROFILES_KEY = 'BE:allProfiles'; // For username uniqueness check
@@ -199,7 +199,7 @@ export const userProfileService = {
           try {
             const res = await supabase
               .from('profiles')
-              .select('id,username,display_name:displayName,avatar,location')
+              .select('id,username,displayName:display_name,avatar,location')
               .eq('id', resolvedUserId)
               .single();
             remoteData = res.data ?? null;
@@ -214,12 +214,16 @@ export const userProfileService = {
             try {
               const pub = await supabase
                 .from('public_profiles')
-                .select('id,username,display_name:displayName,avatar,location')
+                .select('id,username,displayName:display_name,avatar,location')
                 .eq('id', resolvedUserId)
                 .single();
               if (pub.error) {
-                // Both attempts failed; log and return null
-                console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, pub.error.message || pub.error);
+                // Both attempts failed; log and return null. Include error details and the select used.
+                console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, {
+                  select: 'id,username,displayName:display_name,avatar,location',
+                  errorCode: pub.error?.code,
+                  errorMessage: pub.error?.message || pub.error,
+                });
               } else {
                 remoteData = pub.data ?? null;
               }

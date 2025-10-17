@@ -7,7 +7,9 @@ export type Bounty = {
   location: string
   timeline: string
   skills_required: string
-  user_id: string
+  poster_id: string
+  // Backwards-compatible alias for older code expecting user_id
+  user_id?: string
   created_at: string
   status: "open" | "in_progress" | "completed" | "archived"
   distance?: number
@@ -66,7 +68,7 @@ export type Skill = {
 export type BountyRequest = {
   id: number
   bounty_id: number
-  user_id: string
+  hunter_id: string
   status: "pending" | "accepted" | "rejected"
   created_at: string
 }

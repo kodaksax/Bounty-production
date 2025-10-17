@@ -26,7 +26,7 @@ export type Bounty = {
   description: string;
   amount: number;
   is_for_honor: boolean;
-  user_id: string;
+  poster_id: string;
   location?: string;
   created_at?: string;
   status?: string;
@@ -123,13 +123,13 @@ export const createBountyWithValidationUtil = async (
 
   try {
     // Check if the user exists first
-    let user = await profileService.getById(bountyData.user_id)
+  let user = await profileService.getById(bountyData.poster_id)
 
     // If user doesn't exist, create a default profile
     if (!user) {
       console.log("User doesn't exist, creating default profile...")
       const defaultProfile = {
-        id: bountyData.user_id,
+        id: bountyData.poster_id,
         username: "@Jon_Doe",
         avatar_url: "/placeholder.svg?height=40&width=40",
   about: "",
@@ -139,7 +139,7 @@ export const createBountyWithValidationUtil = async (
       }
 
       try {
-        user = await profileService.create(defaultProfile)
+  user = await profileService.create(defaultProfile)
         if (!user) {
           console.warn("Failed to create default profile, continuing anyway...")
         }

@@ -1,9 +1,41 @@
+import NetInfo from '@react-native-community/netinfo';
 import type { Bounty } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
-import NetInfo from '@react-native-community/netinfo';
+
+// Helper: if the profiles relationship no longer exists in the DB schema, fallback
+// to fetching bounties without the join and then separately fetch profiles by poster_id
+// and attach username/avatar to the bounty objects.
+async function attachProfilesToBounties(items: any[]) {
+  if (!items || items.length === 0) return items
+  try {
+    const ids = Array.from(new Set(items.map(i => i.poster_id).filter(Boolean)))
+    if (ids.length === 0) return items
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, username, avatar')
+      .in('id', ids)
+
+    if (error) {
+      logger.warning('Could not fetch profiles for bounties fallback', { error })
+      return items.map((it: any) => ({ ...it }))
+    }
+
+    const map = new Map<string, any>()
+    ;(profiles || []).forEach((p: any) => map.set(String(p.id), p))
+    return items.map((it: any) => ({
+      ...it,
+      username: map.get(String(it.poster_id))?.username,
+      poster_avatar: map.get(String(it.poster_id))?.avatar,
+    }))
+  } catch (e) {
+    // If anything goes wrong, return original items
+    logger.warning('attachProfilesToBounties fallback failed', { error: (e as any)?.message })
+    return items
+  }
+}
 
 // API Configuration
 function getApiBaseUrl() {
@@ -43,7 +75,7 @@ export const bountyService = {
           .from('bounties')
           .select(`
             *,
-            profiles!bounties_user_id_fkey (
+            profiles!bounties_profiles_fkey (
               username,
               avatar
             )
@@ -51,12 +83,32 @@ export const bountyService = {
           .eq('id', id as any)
           .single()
 
-        if (error) throw error
+        if (error) {
+          // Supabase returns a plain object for errors. If the relationship to
+          // profiles was removed, fallback to join-less retrieval and attach profiles.
+          const msg = (error as any)?.message ?? JSON.stringify(error)
+          logger.error('Supabase getById error', { error })
+          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
+            // Fetch bounty without join and then attach profile
+            const { data: raw, error: rawErr } = await supabase
+              .from('bounties')
+              .select('*')
+              .eq('id', id as any)
+              .single()
+
+            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr))
+            const withProfile = await attachProfilesToBounties([raw])
+            return (withProfile[0] as unknown as Bounty) ?? null
+          }
+          throw new Error(msg)
+        }
         
         // Transform data to flatten profile info
         if (data) {
           const bounty = {
             ...data,
+            poster_id: (data as any).user_id ?? (data as any).poster_id,
+            user_id: (data as any).user_id ?? (data as any).poster_id,
             username: (data as any).profiles?.username,
             poster_avatar: (data as any).profiles?.avatar,
             profiles: undefined,
@@ -105,7 +157,7 @@ export const bountyService = {
           .from('bounties')
           .select(`
             *,
-            profiles!bounties_user_id_fkey (
+            profiles!bounties_profiles_fkey (
               username,
               avatar
             )
@@ -116,11 +168,31 @@ export const bountyService = {
           .range(offset, offset + limit - 1)
 
         const { data, error } = await sbQuery
-        if (error) throw error
+        if (error) {
+          const msg = (error as any)?.message ?? JSON.stringify(error)
+          logger.error('Supabase search error', { error, query: q })
+          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
+            // Query without join then attach profiles
+            const { data: dataNoJoin, error: rawErr } = await supabase
+              .from('bounties')
+              .select('*')
+              .eq('status', 'open')
+              .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+              .order('created_at', { ascending: false })
+              .range(offset, offset + limit - 1)
+
+            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr))
+            const merged = await attachProfilesToBounties(dataNoJoin || [])
+            return merged as Bounty[]
+          }
+          throw new Error(msg)
+        }
         
         // Transform data to flatten profile info
         const bounties = (data || []).map((item: any) => ({
           ...item,
+          poster_id: item.user_id ?? item.poster_id,
+          user_id: item.user_id ?? item.poster_id,
           username: item.profiles?.username,
           poster_avatar: item.profiles?.avatar,
           profiles: undefined,
@@ -168,7 +240,7 @@ export const bountyService = {
           .from('bounties')
           .select(`
             *,
-            profiles!bounties_user_id_fkey (
+            profiles!bounties_profiles_fkey (
               username,
               avatar
             )
@@ -176,7 +248,7 @@ export const bountyService = {
           .order('created_at', { ascending: false })
 
         if (options?.status) query = query.eq('status', options.status)
-        if (options?.userId) query = query.eq('user_id', options.userId)
+        if (options?.userId) query = query.eq('poster_id', options.userId)
         if (options?.workType) query = query.eq('work_type', options.workType)
         if (!options?.includeArchived) query = query.neq('status', 'archived')
 
@@ -185,11 +257,31 @@ export const bountyService = {
         query = query.range(offset, offset + limit - 1)
 
         const { data, error } = await query
-        if (error) throw error
+        if (error) {
+          const msg = (error as any)?.message ?? JSON.stringify(error)
+          logger.error('Supabase getAll error', { error, options })
+          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
+            // Fetch without join then attach profiles
+            let qNoJoin: any = supabase.from('bounties').select('*').order('created_at', { ascending: false })
+            if (options?.status) qNoJoin = qNoJoin.eq('status', options.status)
+              if (options?.userId) qNoJoin = qNoJoin.eq('poster_id', options.userId)
+            if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType)
+            if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived')
+            qNoJoin = qNoJoin.range(offset, offset + limit - 1)
+
+            const { data: dataNoJoin, error: rawErr } = await qNoJoin
+            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr))
+            const merged = await attachProfilesToBounties(dataNoJoin || [])
+            return (merged || []).map((i: any) => ({ ...i, user_id: i.poster_id })) as Bounty[]
+          }
+          throw new Error(msg)
+        }
         
         // Transform data to flatten profile info into bounty object
         const bounties = (data || []).map((item: any) => ({
           ...item,
+          poster_id: item.user_id ?? item.poster_id,
+          user_id: item.user_id ?? item.poster_id,
           username: item.profiles?.username,
           poster_avatar: item.profiles?.avatar,
           profiles: undefined, // Remove nested profiles object
@@ -201,8 +293,8 @@ export const bountyService = {
   const API_URL = `${getApiBaseUrl()}/api/bounties`
       const params = new URLSearchParams()
 
-      if (options?.status) params.append("status", options.status)
-      if (options?.userId) params.append("user_id", options.userId)
+  if (options?.status) params.append("status", options.status)
+  if (options?.userId) params.append("poster_id", options.userId)
       if (options?.workType) params.append('work_type', options.workType)
       if (options?.limit != null) params.append('limit', String(options.limit))
       if (options?.offset != null) params.append('offset', String(options.offset))

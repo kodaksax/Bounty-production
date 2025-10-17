@@ -1,7 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Bounty } from "lib/services/database.types";
 import { logger } from "lib/utils/error-logger";
 import { z } from "zod";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 // ANNOTATION: This schema should be defined in a shared location, e.g., 'lib/validation/bounty-schema.ts'
@@ -90,7 +90,7 @@ try {
       })
 
       if (status) params.append("status", status)
-      if (userId) params.append("userId", userId)
+  if (userId) params.append("poster_id", userId)
       if (search) params.append("search", search)
 
       const response = await fetch(`${API_URL}?${params.toString()}`, {
@@ -152,14 +152,15 @@ try {
    * Create a new bounty with validation
    */
   async create(
-    bountyData: BountyFormValues & { user_id: string },
+    bountyData: BountyFormValues & ({ user_id: string } | { poster_id: string }),
   ): Promise<{ bounty: Bounty | null; error: Error | null }> {
     try {
       // Validate bounty data
-      const validatedData = bountySchema.parse(bountyData)
+  const validatedData = bountySchema.parse(bountyData)
 
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
       const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const posterId = (bountyData as any).poster_id || (bountyData as any).user_id
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -167,7 +168,7 @@ try {
           // ANNOTATION: Add authentication headers if required.
           // 'Authorization': `Bearer ${your_auth_token}`
         },
-        body: JSON.stringify({ ...validatedData, user_id: bountyData.user_id }),
+        body: JSON.stringify({ ...validatedData, poster_id: posterId }),
       })
 
       if (!response.ok) {
@@ -251,7 +252,7 @@ try {
  async updateLocalCache(bounty: Bounty): Promise<void> {
     try {
       // Update user's bounties cache
-      const userCacheKey = `bounties_cache_${JSON.stringify({ userId: bounty.user_id })}`
+  const userCacheKey = `bounties_cache_${JSON.stringify({ userId: bounty.poster_id })}`
       const userCachedString = await AsyncStorage.getItem(userCacheKey)
 
       if (userCachedString) {

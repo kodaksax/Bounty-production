@@ -90,12 +90,21 @@ export class AuthProfileService {
         try {
           const pub = await supabase
             .from('public_profiles')
-            .select('id,username,display_name:displayName,avatar,location')
+            // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
+            // to a camelCase property so the app can read `displayName` safely.
+            .select('id,username,displayName:display_name,avatar,location')
             .eq('id', userId)
             .maybeSingle();
           if (pub.error) {
             // If both attempts fail, surface a warning and return null
-            logger.warning('public_profiles fetch error', { userId, error: pub.error });
+            // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
+            logger.warning('public_profiles fetch error', {
+              userId,
+              select: "id,username,displayName:display_name,avatar,location",
+              errorCode: pub.error?.code,
+              errorMessage: pub.error?.message || pub.error,
+              rawError: pub.error,
+            });
             return null;
           }
 

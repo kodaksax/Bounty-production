@@ -1,10 +1,10 @@
 // components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import React, { useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -56,15 +56,18 @@ export function ApplicantCard({
   };
 
   const handleProfilePress = () => {
-    if (request.user_id) {
-      router.push(`/profile/${request.user_id}`);
+    const id = (request as any).hunter_id || (request as any).user_id
+    if (id) {
+      router.push(`/profile/${id}`);
     }
   };
+
+  const profileId = (request as any).hunter_id || (request as any).user_id
 
   return (
     <View style={styles.card}>
       {/* Header with avatar and applicant info - Clickable to navigate to profile */}
-      <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!request.user_id}>
+      <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!profileId}>
         <Avatar style={styles.avatar}>
           <AvatarImage 
             src={request.profile?.avatar_url || '/placeholder.svg?height=48&width=48'} 
@@ -90,9 +93,9 @@ export function ApplicantCard({
           </View>
         </View>
         
-        {request.user_id && (
+        {profileId ? (
           <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
-        )}
+        ) : null}
       </TouchableOpacity>
 
       {/* Bounty details */}

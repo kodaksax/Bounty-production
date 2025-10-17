@@ -4,22 +4,22 @@ import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Modal,
-  Platform,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Modal,
+    Platform,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import type { AttachmentMeta } from '../lib/services/database.types'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
+import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
 import { reportService } from '../lib/services/report-service'
 import type { Message } from '../lib/types'
@@ -34,6 +34,7 @@ interface BountyDetailModalProps {
     distance: number | null
     description?: string
     user_id?: string
+  poster_id?: string
     work_type?: 'online' | 'in_person'
     attachments?: AttachmentMeta[]
     attachments_json?: string
@@ -56,9 +57,10 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
 
-  // Resolve poster identity - ONLY from bounty.user_id, never from current user
+  // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
-  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(bounty.user_id)
+  const posterId = bounty.poster_id || bounty.user_id
+  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
 
   useEffect(() => {
@@ -77,8 +79,8 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
     // Show 'Unknown Poster' only if we're done loading and still no username
     if (!profileLoading) {
       // Debug: log when we can't resolve a username
-      if (bounty.user_id) {
-        console.log('[BountyDetailModal] Could not resolve username for user_id:', bounty.user_id, 'Profile:', normalizedPoster)
+      if (posterId) {
+        console.log('[BountyDetailModal] Could not resolve username for poster_id:', posterId, 'Profile:', normalizedPoster)
       }
       setDisplayUsername('Unknown Poster')
     } else {
@@ -281,7 +283,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
     }
 
     // Check if user is trying to apply to their own bounty
-    if (bounty.user_id === currentUserId) {
+    if (posterId === currentUserId) {
       Alert.alert('Cannot Apply', 'You cannot apply to your own bounty.')
       return
     }
@@ -290,7 +292,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
     try {
       const request = await bountyRequestService.create({
         bounty_id: bounty.id,
-        user_id: currentUserId,
+        hunter_id: currentUserId,
         status: 'pending',
       })
 
@@ -372,11 +374,11 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
               <TouchableOpacity 
                 style={styles.userInfo}
                 onPress={() => {
-                  if (bounty.user_id) {
-                    router.push(`/profile/${bounty.user_id}`)
+                  if (posterId) {
+                    router.push(`/profile/${posterId}`)
                   }
                 }}
-                disabled={!bounty.user_id}
+                disabled={!posterId}
               >
                 <Avatar style={styles.avatar}>
                   <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
@@ -390,7 +392,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                   <Text style={styles.username}>{displayUsername}</Text>
                   <Text style={styles.postTime}>Posted 2h ago</Text>
                 </View>
-                {bounty.user_id && (
+                {posterId && (
                   <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
                 )}
               </TouchableOpacity>
@@ -462,7 +464,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
           </View>
 
           {/* Contact Section */}
-          {bounty.user_id && bounty.user_id !== currentUserId && (
+          {posterId && posterId !== currentUserId && (
             <View style={styles.contactContainer}>
               <Text style={styles.sectionHeader}>Contact</Text>
               <TouchableOpacity 

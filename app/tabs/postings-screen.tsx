@@ -271,7 +271,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   location: formData.workType === 'in_person' ? formData.location : '',
   timeline: formData.timeline,
   skills_required: formData.skills,
-  user_id: currentUserId, // Use authenticated user ID
+  poster_id: currentUserId,
+  user_id: currentUserId, // Use authenticated user ID (back-compat)
   status: "open", // Ensure this matches the expected type
   work_type: formData.workType,
   is_time_sensitive: formData.isTimeSensitive,
@@ -388,8 +389,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       // Auto-create a conversation for coordination
       try {
         const { messageService } = await import('lib/services/message-service')
+        const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
         const conversation = await messageService.getOrCreateConversation(
-          [request.user_id],
+          [hunterIdForConv],
           request.profile?.username || 'Hunter',
           request.bounty?.id?.toString()
         )

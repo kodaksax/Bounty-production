@@ -77,6 +77,9 @@ CREATE TABLE bounties (
     location text,
     timeline text,
     skills_required text,
+    -- New field: poster_id is the canonical FK to profiles.id (backfill from user_id)
+    poster_id uuid,
+    -- Backwards-compatible column (legacy): many parts of the repo still reference user_id
     user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     status bounty_status_enum NOT NULL DEFAULT 'open',
     work_type work_type_enum NOT NULL DEFAULT 'online',
@@ -104,6 +107,9 @@ CREATE TABLE skills (
 CREATE TABLE bounty_requests (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     bounty_id uuid NOT NULL REFERENCES bounties(id) ON DELETE CASCADE,
+    -- New field: hunter_id is the canonical applicant reference to profiles.id
+    hunter_id uuid,
+    -- Legacy column kept for compatibility
     user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     status request_status_enum NOT NULL DEFAULT 'pending',
     created_at timestamptz NOT NULL DEFAULT NOW(),
@@ -167,11 +173,14 @@ BEFORE UPDATE ON wallet_transactions
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- Indexes for performance
+-- Indexes: include poster/hunter indexes to support joins
 CREATE INDEX idx_bounties_user_id ON bounties(user_id);
+CREATE INDEX IF NOT EXISTS idx_bounties_poster_id ON bounties(poster_id);
 CREATE INDEX idx_bounties_status ON bounties(status);
 CREATE INDEX idx_bounties_created_at ON bounties(created_at);
 CREATE INDEX idx_bounty_requests_bounty_id ON bounty_requests(bounty_id);
 CREATE INDEX idx_bounty_requests_user_id ON bounty_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_bounty_requests_hunter_id ON bounty_requests(hunter_id);
 CREATE INDEX idx_skills_user_id ON skills(user_id);
 CREATE INDEX idx_wallet_transactions_user_id ON wallet_transactions(user_id);
 CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);

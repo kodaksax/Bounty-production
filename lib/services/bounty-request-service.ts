@@ -45,7 +45,7 @@ export const bountyRequestService = {
 
         if (options?.status) query = query.eq('status', options.status)
   if (options?.bountyId) query = query.eq('bounty_id', String(options.bountyId))
-        if (options?.userId) query = query.eq('user_id', options.userId)
+  if (options?.userId) query = query.eq('hunter_id', options.userId)
 
         const { data, error } = await query
         if (error) throw error
@@ -55,7 +55,7 @@ export const bountyRequestService = {
       const params = new URLSearchParams()
       if (options?.status) params.append("status", options.status)
   if (options?.bountyId) params.append("bounty_id", String(options.bountyId))
-      if (options?.userId) params.append("user_id", options.userId)
+  if (options?.userId) params.append("hunter_id", options.userId)
 
       const url = `${API_BASE_URL}/api/bounty-requests${params.toString() ? `?${params.toString()}` : ''}`
       const response = await fetch(url)
@@ -84,15 +84,15 @@ export const bountyRequestService = {
           .order('created_at', { ascending: false })
         if (options?.status) rq = rq.eq('status', options.status)
   if (options?.bountyId) rq = rq.eq('bounty_id', String(options.bountyId))
-        if (options?.userId) rq = rq.eq('user_id', options.userId)
+  if (options?.userId) rq = rq.eq('hunter_id', options.userId)
 
         const { data: reqs, error } = await rq
         if (error) throw error
         const requests = (reqs as unknown as BountyRequest[]) ?? []
         if (requests.length === 0) return []
 
-  const bountyIds = Array.from(new Set(requests.map(r => String((r as any).bounty_id)).filter(Boolean))) as string[]
-  const userIds = Array.from(new Set(requests.map(r => String((r as any).user_id)).filter(Boolean))) as string[]
+    const bountyIds = Array.from(new Set(requests.map(r => String((r as any).bounty_id)).filter(Boolean))) as string[]
+  const userIds = Array.from(new Set(requests.map(r => String((r as any).hunter_id)).filter(Boolean))) as string[]
 
         const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }] = await Promise.all([
           bountyIds.length ? supabase.from('bounties').select('*').in('id', bountyIds) : Promise.resolve({ data: [], error: null } as any),
@@ -107,7 +107,7 @@ export const bountyRequestService = {
         const result: BountyRequestWithDetails[] = requests.map(r => ({
           ...(r as any),
           bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
-          profile: profileMap.get(String((r as any).user_id)) as Profile,
+          profile: profileMap.get(String((r as any).hunter_id)) as Profile,
         }))
         return result
       }
