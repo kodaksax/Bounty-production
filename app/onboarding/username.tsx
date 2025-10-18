@@ -4,6 +4,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -35,6 +36,12 @@ export default function UsernameScreen() {
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [isValid, setIsValid] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+
+  useEffect(() => {
+    // load prior acceptance if any
+    AsyncStorage.getItem('BE:acceptedLegal').then((v) => setAccepted(v === 'true')).catch(() => {});
+  }, []);
 
   // Validate username on change
   useEffect(() => {
@@ -78,9 +85,11 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    if (!isValid || checking || !userId) return;
+    if (!isValid || checking || !userId || !accepted) return;
 
     try {
+      // persist acceptance
+      try { await AsyncStorage.setItem('BE:acceptedLegal', 'true'); } catch {}
       // Save username to local profile service
       const result = await updateProfile({ 
         username,
@@ -190,11 +199,29 @@ export default function UsernameScreen() {
           </View>
         </View>
 
+        {/* Legal acceptance */}
+        <View style={styles.legalBox}>
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setAccepted(!accepted)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: accepted }}
+          >
+            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+            <Text style={styles.legalText}>
+              I agree to the
+            </Text>
+            <Text onPress={() => router.push('/legal/terms')} style={styles.linkText}> Terms of Service</Text>
+            <Text style={styles.legalText}> and</Text>
+            <Text onPress={() => router.push('/legal/privacy')} style={styles.linkText}> Privacy Policy</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Next Button */}
         <TouchableOpacity
-          style={[styles.nextButton, (!isValid || checking) && styles.nextButtonDisabled]}
+          style={[styles.nextButton, (!isValid || checking || !accepted) && styles.nextButtonDisabled]}
           onPress={handleNext}
-          disabled={!isValid || checking}
+          disabled={!isValid || checking || !accepted}
         >
           <Text style={styles.nextButtonText}>
             {checking ? 'Checking...' : 'Next'}
@@ -242,6 +269,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 16,
+  },
+  legalBox: {
+    backgroundColor: 'rgba(5,46,27,0.5)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.3)',
+    marginBottom: 16,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  legalText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+  },
+  linkText: {
+    color: '#e5fffb',
+    textDecorationLine: 'underline',
+    fontSize: 13,
   },
   inputSection: {
     marginBottom: 32,

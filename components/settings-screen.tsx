@@ -3,9 +3,9 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
-import { useAdmin } from "../lib/admin-context"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
+import { useAdmin } from "../lib/admin-context"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -126,6 +126,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="Open"
           onPrimary={() => setPanel('help')}
           icon="help-center"
+        />
+        <SettingsCard
+          title="Legal: Terms & Privacy"
+          description="Read our Terms of Service and Privacy Policy."
+          primaryLabel="View"
+          onPrimary={() => setPanel('terms')}
+          icon="gavel"
         />
         
         {/* Dev Tools Section (only visible in __DEV__ mode) */}
