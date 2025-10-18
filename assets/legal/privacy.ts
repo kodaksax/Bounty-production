@@ -2,97 +2,94 @@ export const PRIVACY_TEXT = `PRIVACY POLICY
 
 Last updated October 18, 2025
 
-This Privacy Notice for Bounty finder (doing business as Bounty) ("we," "us," or "our"), describes how and why we might access, collect, store, use, and/or share ("process") your personal information when you use our services ("Services"), including when you:
+This Privacy Notice for Bounty finder (doing business as "Bounty") describes how and why we access, collect, store, use, and/or share ("process") your personal information when you use our mobile Services.
 
-- Download and use our mobile application (Bounty), or any other application of ours that links to this Privacy Notice
-- Use Bounty. BOUNTY makes it fast and safe to post small jobs ("bounties"), get matched with a hunter, coordinate in-app, and settle payment via an escrow flow. Designed for trust, speed, and clarity.
-- Engage with us in other related ways, including any sales, marketing, or events
+Questions or concerns? Reading this Privacy Notice will help you understand your privacy rights and choices. If you do not agree with our policies and practices, please do not use our Services. Contact us at Support@bountyfinder.app.
 
-Questions or concerns? Reading this Privacy Notice will help you understand your privacy rights and choices. We are responsible for making decisions about how your personal information is processed. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at Support@bountyfinder.app.
+WHAT INFORMATION DO WE COLLECT?
 
-SUMMARY OF KEY POINTS
+We collect the following categories of information:
 
-What personal information do we process? When you visit, use, or navigate our Services, we may process personal information depending on how you interact with us and the Services, the choices you make, and the products and features you use.
+Account and Profile: name, username, email address, phone number (optional, private), profile photo, location you provide, and settings.
 
-Do we process any sensitive personal information? We do not process sensitive personal information.
+Payment and Transaction: we integrate with Stripe and Apple Pay. We do not store full payment card numbers. We may receive limited payment metadata from Stripe (for example: last four digits, brand, expiration month/year, billing zip) and transaction identifiers needed to operate escrow and payouts.
 
-Do we collect any information from third parties? We do not collect any information from third parties.
+Location: precise or approximate location if you grant permission (foreground or background) to support nearby bounty discovery and distance calculations. You can disable or remove permission in your device settings and in the app's Location & Visibility settings.
 
-How do we process your information? We process your information to provide, improve, and administer our Services, communicate with you, for security and fraud prevention, and to comply with law. We may also process your information for other purposes with your consent. We process your information only when we have a valid legal reason to do so.
+Device and Usage: device type, OS version, app version, identifiers (for example, a push token), logs and diagnostics, and in-app actions needed to secure and improve the Services.
 
-In what situations and with which parties do we share personal information? We may share information in specific situations and with specific third parties.
+Communications and Content: messages you send in the app (for example, chat content), support emails, and feedback.
 
-How do we keep your information safe? We have adequate organizational and technical processes and procedures in place to protect your personal information. However, no electronic transmission over the internet or information storage technology can be guaranteed to be 100% secure.
+Sources of information: you (when you create an account or use the app), your device, and our service providers (for example, payment processors). We do not buy data and we do not collect from data brokers.
 
-What are your rights? Depending on where you are located geographically, the applicable privacy law may mean you have certain rights regarding your personal information.
+HOW DO WE USE YOUR INFORMATION?
 
-How do you exercise your rights? The easiest way to exercise your rights is by submitting a data subject access request, or by contacting us. We will consider and act upon any request in accordance with applicable data protection laws.
+We process information to:
+- provide and operate the Services (account, authentication, matchmaking, chat, escrow and payouts)
+- maintain safety, security, fraud prevention, and integrity of the platform
+- send important notices (changes to terms, security, transactions)
+- provide support and respond to requests
+- improve performance, reliability, and user experience
+- comply with law and enforce our terms
 
-1. WHAT INFORMATION DO WE COLLECT?
+THIRD-PARTY PROCESSORS
 
-Personal information you disclose to us: names, phone numbers, email addresses, usernames, passwords, contact preferences, debit/credit card numbers, billing addresses, contact or authentication data.
+We use trusted processors to run key parts of the Service. They process your information on our behalf under agreements that require appropriate safeguards.
 
-Sensitive Information: We do not process sensitive information.
+- Supabase (authentication, database, storage). Privacy: https://supabase.com/privacy
+- Stripe and Stripe Connect (payments, escrow, payouts, KYC as applicable). Privacy: https://stripe.com/privacy
+- Apple Pay (Apple Payments tokens on supported devices). Privacy: https://www.apple.com/legal/privacy/data/en/apple-pay/
 
-Payment Data: We may collect data necessary to process your payment if you choose to make purchases. All payment data is handled and stored by Stripe and Apple. See their privacy notices for details.
+We do not sell or share personal information for cross-context behavioral advertising.
 
-Social Media Login Data: We may provide you the option to register using your social media accounts.
+WHEN DO WE SHARE INFORMATION?
 
-Application Data: Geolocation, mobile device access (camera, microphone, storage, sms), and push notifications with your permission.
+- With processors listed above
+- With other users as necessary to operate a bounty (for example, your username and profile; your phone number is never public)
+- For legal reasons (to comply with law, enforce terms, protect users)
+- In connection with a corporate transaction (merger or acquisition)
 
-2. HOW DO WE PROCESS YOUR INFORMATION?
+COOKIES AND SIMILAR TECHNOLOGIES (MOBILE)
 
-We process your personal information for: account creation and authentication; delivering services; support; administrative communications; orders and payments; user-to-user communications; feedback; marketing; testimonials; protecting our Services; improving our Services; identifying usage trends; and to comply with legal obligations.
+We are currently mobile only. We do not use web cookies for the app experience. The app may use device identifiers and SDK storage (for example, a push token) to deliver functionality, security, and notifications. You can:
+- control push notifications in your device settings
+- control location permissions in your device settings and in-app Location & Visibility
+- we do not use advertising SDKs for behavioral ads
 
-3. WHEN AND WITH WHOM DO WE SHARE YOUR PERSONAL INFORMATION?
+HOW LONG DO WE KEEP INFORMATION?
 
-Business Transfers; when we use Google Maps Platform APIs; other users in public areas of the Services as applicable.
+We retain information only as long as necessary for the purposes described above, including maintaining transaction records for compliance and accounting, resolving disputes, and enforcing agreements. When no longer needed, we delete or de-identify data.
 
-4. DO WE USE COOKIES AND OTHER TRACKING TECHNOLOGIES?
+HOW DO WE KEEP INFORMATION SAFE?
 
-We may use cookies and similar technologies to access or store information.
+We implement technical and organizational measures appropriate to the risk (for example, encryption in transit, access controls). No method of transmission or storage is 100% secure.
 
-5. HOW DO WE HANDLE YOUR SOCIAL LOGINS?
+CHILDREN
 
-If you choose to register or log in using a social media account, we may have access to certain information about you.
+Our Services are intended for users 18+. We do not knowingly collect personal information from children under 18.
 
-6. HOW LONG DO WE KEEP YOUR INFORMATION?
+YOUR PRIVACY RIGHTS (UNITED STATES)
 
-We keep your information for as long as necessary to fulfill the purposes outlined, unless otherwise required by law.
+Depending on your state of residence, you may have rights to:
+- request access to, or a copy of, your information
+- request correction or deletion
+- request details about our processing and disclosures
+- appeal a decision we make about your request
 
-7. HOW DO WE KEEP YOUR INFORMATION SAFE?
+We do not sell or share personal information as defined by the California Consumer Privacy Act (CCPA/CPRA). We do not use or disclose sensitive personal information for purposes beyond those permitted by law.
 
-We implement appropriate technical and organizational security measures.
+To exercise rights, email Support@bountyfinder.app or submit a request via our data request portal. We will verify your request and respond within the time required by applicable law.
 
-8. DO WE COLLECT INFORMATION FROM MINORS?
+DO NOT TRACK
 
-We do not knowingly collect data from or market to children under 18 years of age.
+We do not respond to browser-based Do Not Track signals. Mobile app tracking limits can be managed in device settings.
 
-9. WHAT ARE YOUR PRIVACY RIGHTS?
+CHANGES TO THIS NOTICE
 
-Depending on your location, you may have rights to access, correct, delete, or restrict processing of your personal information.
+We may update this Notice to reflect changes to our practices. The "Last updated" date indicates the latest revision.
 
-10. CONTROLS FOR DO-NOT-TRACK FEATURES
+CONTACT US
 
-We do not currently respond to DNT signals.
-
-11. DO UNITED STATES RESIDENTS HAVE SPECIFIC PRIVACY RIGHTS?
-
-Certain state-specific rights may apply.
-
-12. DO OTHER REGIONS HAVE SPECIFIC PRIVACY RIGHTS?
-
-For example, Republic of South Africa rights are acknowledged with regulator contact details available at inforegulator.org.za.
-
-13. DO WE MAKE UPDATES TO THIS NOTICE?
-
-Yes. We will update this notice as necessary to stay compliant with relevant laws.
-
-14. HOW CAN YOU CONTACT US ABOUT THIS NOTICE?
-
-Email Support@bountyfinder.app or mail: Bounty finder, 25552 Adriana st, Mission Viejo, CA 92691, United States.
-
-15. HOW CAN YOU REVIEW, UPDATE, OR DELETE THE DATA WE COLLECT FROM YOU?
-
-Submit a data subject access request or contact us to exercise applicable rights.
+Email: Support@bountyfinder.app
+Mail: Bounty finder, 25552 Adriana St, Mission Viejo, CA 92691, United States
 `;

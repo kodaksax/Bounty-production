@@ -213,5 +213,107 @@ The Services may invite you to chat, contribute to, or participate in blogs, mes
 - You have the written consent, release, and/or permission of each and every identifiable individual person in your Contributions to use the name or likeness of each and every such identifiable individual person to enable inclusion and use of your Contributions in any manner contemplated by the Services and these Legal Terms.
 - Your Contributions are not false, inaccurate, or misleading.
 
-... (Further sections 11-31 continue in the same spirit as provided in your Terms document) ...
+11. CONTRIBUTION LICENSE
+
+By submitting Contributions, you grant us the licenses described above solely to operate and improve the Services, subject to applicable law.
+
+12. GUIDELINES FOR REVIEWS
+
+Reviews must be truthful, based on actual experiences, and comply with these Legal Terms.
+
+13. MOBILE APPLICATION LICENSE
+
+Subject to these Legal Terms, we grant you a limited, non-transferable license to use the App on devices you own or control.
+
+14. SOCIAL MEDIA
+
+If the Services enable social features, you must comply with both our terms and the third party platform terms.
+
+15. SERVICES MANAGEMENT
+
+We may monitor the Services for violations and take appropriate action.
+
+16. PRIVACY POLICY
+
+Please review our Privacy Policy for details on how we process personal information.
+
+17. COPYRIGHT INFRINGEMENTS
+
+See our copyright policy for notice procedures.
+
+18. TERM AND TERMINATION
+
+We may suspend or terminate your access for any breach of these Legal Terms. You may stop using the Services at any time.
+
+19. MODIFICATIONS AND INTERRUPTIONS
+
+We may change, suspend, or discontinue the Services. We are not liable for downtime or data loss.
+
+20. GOVERNING LAW
+
+These Legal Terms are governed by the laws of the State of California, without regard to conflict of law principles.
+
+21. DISPUTE RESOLUTION
+
+Informal Resolution: Contact support@bountyfinder.app within 30 days of the issue. We'll work with you to resolve it.
+
+Binding Arbitration and Class Action Waiver: If not resolved informally, disputes between you and us will be resolved by binding arbitration on an individual basis under the Federal Arbitration Act and applicable AAA rules. You waive the right to participate in a class action or class arbitration. You may opt out within 30 days of accepting these Legal Terms by emailing support@bountyfinder.app with subject "Arbitration Opt Out" and your account email.
+
+Small Claims: Either party may pursue an individual claim in small claims court within its jurisdictional limits.
+
+22. CORRECTIONS
+
+We may correct errors, inaccuracies, or omissions in the Services or Legal Terms at any time.
+
+23. DISCLAIMER
+
+THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+24. LIMITATIONS OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE ARE NOT LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM: (A) YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE SERVICES; (B) ANY CONDUCT OR CONTENT OF ANY THIRD PARTY ON THE SERVICES; OR (C) UNAUTHORIZED ACCESS, USE, OR ALTERATION OF YOUR TRANSMISSIONS OR CONTENT. OUR TOTAL LIABILITY SHALL NOT EXCEED THE GREATER OF (I) AMOUNTS YOU PAID TO US FOR THE SERVICES IN THE 12 MONTHS PRECEDING THE CLAIM OR (II) $100.
+
+25. INDEMNIFICATION
+
+You agree to indemnify and hold us harmless from claims arising out of your use of the Services, violation of these Legal Terms, or violation of any rights of a third party.
+
+26. USER DATA
+
+We are not responsible for data loss. You are responsible for backing up your data.
+
+27. ELECTRONIC COMMUNICATIONS, TRANSACTIONS, AND SIGNATURES
+
+You consent to receive electronic communications and agree that electronic signatures are valid.
+
+28. SMS TEXT MESSAGING
+
+If you opt in to SMS, message and data rates may apply. You can opt out at any time.
+
+29. CALIFORNIA USERS AND RESIDENTS
+
+California residents may have additional rights. Contact us for details.
+
+30. PAYMENTS & ESCROW
+
+Funding and Holding: When a poster funds a bounty, funds may be authorized or captured and held in escrow via Stripe or Stripe Connect until release conditions are met.
+
+Release: Funds are released to the hunter when the poster confirms completion in-app, or as otherwise specified by the bounty terms. We may delay release to complete fraud checks or resolve disputes.
+
+Fees: We may charge service fees disclosed at checkout. Stripe and bank fees may also apply.
+
+Stripe Connect and Payouts: Hunters must provide accurate information to create or link a Stripe account to receive payouts. Payout timing and limits are subject to Stripe policies and bank processing.
+
+Chargebacks and Reversals: If a payment is reversed or charged back, we may deduct amounts from your pending or future payouts. You are responsible for providing evidence to contest chargebacks.
+
+Taxes: You are responsible for applicable taxes. Stripe or we may issue tax forms when required by law.
+
+Cancellation & Refunds: Posters can request cancellation before work starts; refunds are subject to the bounty state and our dispute policy.
+
+31. USER CONDUCT
+
+You agree to: post only lawful bounties; provide accurate information; respect others; refrain from fraud, spam, scraping, reverse engineering, or interfering with the Services; not attempt to circumvent payment or escrow flows; comply with all applicable laws and regulations.
+
+CONTACT US
+
+support@bountyfinder.app
 `;
