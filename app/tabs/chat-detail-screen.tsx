@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageActions } from "../../components/MessageActions"
 import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
+import { ReportModal } from "../../components/ReportModal"
 import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
@@ -51,6 +52,7 @@ export function ChatDetailScreen({
   const { balance } = useWallet()
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
   const [showComposer, setShowComposer] = useState(false)
   const [composerText, setComposerText] = useState('')
   const listRef = useRef<FlatList<Message>>(null)
@@ -109,21 +111,8 @@ export function ChatDetailScreen({
 
   const handleReport = async () => {
     if (!selectedMessageId) return
-    Alert.alert(
-      'Report Message',
-      'Are you sure you want to report this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Report',
-          style: 'destructive',
-          onPress: async () => {
-            await reportMessage(selectedMessageId)
-            Alert.alert('Reported', 'Message has been reported')
-          },
-        },
-      ]
-    )
+    setShowActions(false)
+    setShowReportModal(true)
   }
 
   const handlePinnedMessagePress = () => {
@@ -326,6 +315,18 @@ export function ChatDetailScreen({
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={() => {
+          setShowReportModal(false)
+          setSelectedMessageId(null)
+        }}
+        contentType="message"
+        contentId={selectedMessageId || ''}
+        contentTitle="Message"
+      />
     </View>
   )
 }

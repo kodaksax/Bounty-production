@@ -18,6 +18,7 @@ export default function AdminDashboard() {
     { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
     { id: 'reports', title: 'Reports', icon: 'report', route: '/(admin)/reports' },
+    { id: 'blocked', title: 'Blocked Users', icon: 'block', route: '/(admin)/blocked-users' },
   ];
 
   if (error && !metrics) {
