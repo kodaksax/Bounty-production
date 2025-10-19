@@ -198,6 +198,41 @@ BEGIN
     END IF;
 END $$;
 
+-- Reports table for content moderation
+CREATE TABLE IF NOT EXISTS reports (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    content_type text NOT NULL, -- 'bounty', 'profile', 'message'
+    content_id text NOT NULL,
+    reason text NOT NULL, -- 'spam', 'harassment', 'inappropriate', 'fraud'
+    details text,
+    status text NOT NULL DEFAULT 'pending', -- 'pending', 'reviewed', 'resolved', 'dismissed'
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER trg_reports_updated_at
+BEFORE UPDATE ON reports
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX idx_reports_user_id ON reports(user_id);
+CREATE INDEX idx_reports_content_type ON reports(content_type);
+CREATE INDEX idx_reports_status ON reports(status);
+CREATE INDEX idx_reports_created_at ON reports(created_at);
+
+-- Blocked users table
+CREATE TABLE IF NOT EXISTS blocked_users (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    blocker_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    blocked_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_block UNIQUE (blocker_id, blocked_id),
+    CONSTRAINT no_self_block CHECK (blocker_id != blocked_id)
+);
+
+CREATE INDEX idx_blocked_users_blocker_id ON blocked_users(blocker_id);
+CREATE INDEX idx_blocked_users_blocked_id ON blocked_users(blocked_id);
+
 -- BountyExpo Database Schema
 -- This script creates the necessary tables for the BountyExpo application
 

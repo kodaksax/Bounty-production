@@ -136,3 +136,23 @@ export interface DistanceFilter {
   maxDistance: number; // in miles
   unit: 'miles' | 'km';
 }
+
+// Report Types
+export interface Report {
+  id: string;
+  user_id: string; // reporter
+  content_type: 'bounty' | 'profile' | 'message';
+  content_id: string;
+  reason: 'spam' | 'harassment' | 'inappropriate' | 'fraud';
+  details?: string;
+  status: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface BlockedUser {
+  id: string;
+  blocker_id: string; // user who blocked
+  blocked_id: string; // user who is blocked
+  createdAt: string;
+}
