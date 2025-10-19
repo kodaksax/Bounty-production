@@ -1305,6 +1305,136 @@ app.delete('/users/:id', async (req, res) => {
   }
 });
 
+// ==================== REPORTS ENDPOINTS ====================
+
+// Create a new report
+app.post('/api/reports', async (req, res) => {
+  let conn;
+  try {
+    const { user_id, content_type, content_id, reason, details } = req.body;
+    
+    // Validation
+    if (!user_id || !content_type || !content_id || !reason) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: user_id, content_type, content_id, and reason are required' 
+      });
+    }
+    
+    // Validate content_type
+    const validContentTypes = ['bounty', 'profile', 'message'];
+    if (!validContentTypes.includes(content_type)) {
+      return res.status(400).json({ 
+        error: 'Invalid content_type. Must be one of: bounty, profile, message' 
+      });
+    }
+    
+    // Validate reason
+    const validReasons = ['spam', 'harassment', 'inappropriate', 'fraud'];
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({ 
+        error: 'Invalid reason. Must be one of: spam, harassment, inappropriate, fraud' 
+      });
+    }
+    
+    conn = await connect();
+    
+    // Insert report
+    const id = uuidv4();
+    await conn.execute(
+      `INSERT INTO reports (id, user_id, content_type, content_id, reason, details, status, created_at, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, user_id, content_type, content_id, reason, details || '', 'pending']
+    );
+    
+    // Fetch and return the created report
+    const [rows] = await conn.execute('SELECT * FROM reports WHERE id = ?', [id]);
+    res.status(201).json(rows[0]);
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to create report');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Get all reports (admin only - should add auth middleware in production)
+app.get('/api/reports', async (req, res) => {
+  let conn;
+  try {
+    const { status, content_type } = req.query;
+    
+    conn = await connect();
+    
+    let query = 'SELECT * FROM reports';
+    const conditions = [];
+    const params = [];
+    
+    if (status) {
+      conditions.push('status = ?');
+      params.push(status);
+    }
+    
+    if (content_type) {
+      conditions.push('content_type = ?');
+      params.push(content_type);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const [rows] = await conn.execute(query, params);
+    res.json(rows);
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch reports');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Update report status (admin only)
+app.patch('/api/reports/:id', async (req, res) => {
+  let conn;
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+    
+    const validStatuses = ['pending', 'reviewed', 'resolved', 'dismissed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status. Must be one of: pending, reviewed, resolved, dismissed' 
+      });
+    }
+    
+    conn = await connect();
+    
+    await conn.execute(
+      'UPDATE reports SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, id]
+    );
+    
+    const [rows] = await conn.execute('SELECT * FROM reports WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    res.json(rows[0]);
+    
+  } catch (error) {
+    handleError(res, error, 'Failed to update report');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
 // ==================== SERVER STARTUP ====================
 
 const RAW_PORT = process.env.API_PORT || process.env.PORT || 3001;
