@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
@@ -6,24 +7,23 @@ import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuthContext } from "../../hooks/use-auth-context";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
-import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { AchievementsGrid } from "../../components/achievements-grid";
+import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { SkillsetChips } from "../../components/skillset-chips";
-import { bountyService } from "../../lib/services/bounty-service";
+import { useAuthContext } from "../../hooks/use-auth-context";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 import { reportService } from "../../lib/services/report-service";
 
@@ -239,7 +239,7 @@ export default function UserProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10b981" />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -250,8 +250,8 @@ export default function UserProfileScreen() {
 
   if (error || !profile) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
+      <View style={styles.container}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top - 8, 6) }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -274,9 +274,9 @@ export default function UserProfileScreen() {
   const displayError = !dismissedError && (error || followError);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
@@ -297,22 +297,25 @@ export default function UserProfileScreen() {
         {isOwnProfile && <View style={{ width: 40 }} />}
       </View>
 
-      {/* More Menu Dropdown */}
+      {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
       {showMoreMenu && !isOwnProfile && (
-        <View style={styles.moreMenuContainer}>
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-            <MaterialIcons name="share" size={20} color="#a7f3d0" />
-            <Text style={styles.moreMenuText}>Share Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
-            <MaterialIcons name="report" size={20} color="#fbbf24" />
-            <Text style={styles.moreMenuText}>Report</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
-            <MaterialIcons name="block" size={20} color="#ef4444" />
-            <Text style={styles.moreMenuText}>Block</Text>
-          </TouchableOpacity>
-        </View>
+        <Pressable style={styles.moreMenuWrapper} onPress={() => setShowMoreMenu(false)}>
+          <View style={styles.moreMenuBackdrop} />
+          <View style={[styles.moreMenuContainer, { top: 48 }]}>
+            <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
+              <MaterialIcons name="share" size={20} color="#a7f3d0" />
+              <Text style={styles.moreMenuText}>Share Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
+              <MaterialIcons name="report" size={20} color="#fbbf24" />
+              <Text style={styles.moreMenuText}>Report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
+              <MaterialIcons name="block" size={20} color="#ef4444" />
+              <Text style={styles.moreMenuText}>Block</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
       )}
 
       {/* Error Banner */}
@@ -467,6 +470,22 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     zIndex: 100,
+  },
+  moreMenuWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
+  },
+  moreMenuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
   moreMenuItem: {
     flexDirection: "row",
