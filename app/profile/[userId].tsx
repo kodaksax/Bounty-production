@@ -21,11 +21,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { SkillsetChips } from "../../components/skillset-chips";
-import { useAuthContext } from "../../hooks/use-auth-context";
+import { ReportModal } from "../../components/ReportModal";
+import { bountyService } from "../../lib/services/bounty-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
+import { blockingService } from "../../lib/services/blocking-service";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthContext } from "../../hooks/use-auth-context";
 import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
-import { reportService } from "../../lib/services/report-service";
 
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -46,6 +49,8 @@ export default function UserProfileScreen() {
 
   const [dismissedError, setDismissedError] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
   const [stats, setStats] = useState({
     jobsAccepted: 0,
@@ -56,6 +61,22 @@ export default function UserProfileScreen() {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const isOwnProfile = userId === currentUserId;
+
+  // Check if user is blocked
+  useEffect(() => {
+    const checkBlockStatus = async () => {
+      if (!userId || isOwnProfile) return;
+      try {
+        const result = await blockingService.isUserBlocked(userId);
+        if (result.isBlocked !== undefined) {
+          setIsBlocked(result.isBlocked);
+        }
+      } catch (error) {
+        console.error('[UserProfileScreen] Error checking block status:', error);
+      }
+    };
+    checkBlockStatus();
+  }, [userId, isOwnProfile]);
 
   // Fetch statistics for the user
   useEffect(() => {
@@ -185,17 +206,41 @@ export default function UserProfileScreen() {
   };
 
   const handleBlock = () => {
+    const actionText = isBlocked ? 'Unblock' : 'Block';
+    const actionVerb = isBlocked ? 'unblock' : 'block';
+    const message = isBlocked
+      ? `Are you sure you want to unblock ${profile?.username}? They will be able to contact you again.`
+      : `Are you sure you want to block ${profile?.username}? You will not see their posts and they won't be able to contact you.`;
+
     Alert.alert(
-      'Block User',
-      `Are you sure you want to block ${profile?.username}? You will not see their posts and they won't be able to contact you.`,
+      `${actionText} User`,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Block',
+          text: actionText,
           style: 'destructive',
           onPress: async () => {
-            // TODO: Implement block functionality
-            Alert.alert('Blocked', `You have blocked ${profile?.username}`);
+            try {
+              const result = isBlocked
+                ? await blockingService.unblockUser(userId!)
+                : await blockingService.blockUser(userId!);
+
+              if (result.success) {
+                setIsBlocked(!isBlocked);
+                Alert.alert(
+                  isBlocked ? 'Unblocked' : 'Blocked',
+                  isBlocked
+                    ? `You have unblocked ${profile?.username}`
+                    : `You have blocked ${profile?.username}`
+                );
+              } else {
+                Alert.alert('Error', result.error || `Failed to ${actionVerb} user.`);
+              }
+            } catch (error) {
+              console.error(`Error ${actionVerb}ing user:`, error);
+              Alert.alert('Error', `An error occurred while ${actionVerb}ing this user.`);
+            }
             setShowMoreMenu(false);
           },
         },
@@ -204,37 +249,8 @@ export default function UserProfileScreen() {
   };
 
   const handleReport = () => {
-    Alert.alert(
-      'Report User',
-      'Why are you reporting this user?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Spam',
-          onPress: async () => {
-            const result = await reportService.reportUser(userId!, 'spam');
-            if (result.success) {
-              Alert.alert('Report Submitted', 'Thank you for helping keep our community safe.');
-            } else {
-              Alert.alert('Error', result.error || 'Failed to submit report.');
-            }
-            setShowMoreMenu(false);
-          },
-        },
-        {
-          text: 'Inappropriate',
-          onPress: async () => {
-            const result = await reportService.reportUser(userId!, 'inappropriate');
-            if (result.success) {
-              Alert.alert('Report Submitted', 'Thank you for helping keep our community safe.');
-            } else {
-              Alert.alert('Error', result.error || 'Failed to submit report.');
-            }
-            setShowMoreMenu(false);
-          },
-        },
-      ]
-    );
+    setShowReportModal(true);
+    setShowMoreMenu(false);
   };
 
   if (loading) {
@@ -423,6 +439,15 @@ export default function UserProfileScreen() {
           <AchievementsGrid badgesEarned={stats.badgesEarned} />
         </View>
       </ScrollView>
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        contentType="profile"
+        contentId={userId || ''}
+        contentTitle={profile?.username}
+      />
     </View>
   );
 }

@@ -16,12 +16,12 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
+import { ReportModal } from "./ReportModal"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
-import { reportService } from '../lib/services/report-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 
@@ -53,6 +53,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
   const [isCreatingChat, setIsCreatingChat] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
@@ -152,25 +153,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
 
   // Handle Report button
   const handleReport = () => {
-    Alert.alert(
-      'Report Bounty',
-      'Are you sure you want to report this bounty? Our moderation team will review it.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Report',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await reportService.reportBounty(bounty.id);
-            if (result.success) {
-              Alert.alert('Report Submitted', 'Thank you for helping keep our community safe. We will review this bounty.');
-            } else {
-              Alert.alert('Error', result.error || 'Failed to submit report. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    setShowReportModal(true);
   };
 
   // Handle attachment open
@@ -507,6 +490,15 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
           </View>
         </View>
       </View>
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        contentType="bounty"
+        contentId={String(bounty.id)}
+        contentTitle={bounty.title}
+      />
     </Modal>
   )
 }
