@@ -22,6 +22,7 @@ export interface AuthProfile {
   avatar?: string;
   about?: string;
   phone?: string;
+  age_verified?: boolean;
   balance: number;
   created_at?: string;
   updated_at?: string;
@@ -132,6 +133,7 @@ export class AuthProfileService {
         avatar: data.avatar || undefined,
         about: data.about || undefined,
         phone: data.phone || undefined,
+        age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
         balance: data.balance || 0,
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
@@ -228,6 +230,7 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
@@ -268,8 +271,10 @@ export class AuthProfileService {
     try {
       // Generate a temporary username from email or user ID
       // This will be replaced during onboarding
-      const username = this.currentSession?.user?.email?.split('@')[0] || `user_${userId.slice(0, 8)}`;
-      const email = this.currentSession?.user?.email;
+  const username = this.currentSession?.user?.email?.split('@')[0] || `user_${userId.slice(0, 8)}`;
+  const email = this.currentSession?.user?.email;
+  const metaAgeVerified = (this.currentSession?.user?.user_metadata as any)?.age_verified;
+  const age_verified = typeof metaAgeVerified === 'boolean' ? metaAgeVerified : false;
 
       // Check if profile already exists (race condition protection)
       const existing = await this.getProfileById(userId, { bypassCache: true });
@@ -290,6 +295,7 @@ export class AuthProfileService {
           username: username,
           email: email,
           balance: 0,
+          age_verified: age_verified,
         })
         .select()
         .single();
