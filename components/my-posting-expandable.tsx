@@ -1,10 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons'
+import type { Attachment } from 'lib/types'
 import type { Bounty } from 'lib/services/database.types'
 import { messageService } from 'lib/services/message-service'
 import type { Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native'
 import { BountyCard } from './bounty-card'
+import { AnimatedSection } from './ui/animated-section'
+import { AttachmentsList } from './ui/attachments-list'
+import { MessageBar } from './ui/message-bar'
+import { RatingStars } from './ui/rating-stars'
+import { Stepper } from './ui/stepper'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -31,6 +37,8 @@ const STAGES = [
 
 export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
+  const [wipExpanded, setWipExpanded] = useState(false)
+  const [ratingDraft, setRatingDraft] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -60,6 +68,26 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
 
+  // Parse attachments from bounty
+  const attachments: Attachment[] = useMemo(() => {
+    if (!bounty.attachments_json) return []
+    try {
+      const parsed = JSON.parse(bounty.attachments_json)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }, [bounty.attachments_json])
+
+  const handleSendMessage = async (text: string) => {
+    if (!conversation) throw new Error('No conversation')
+    await messageService.sendMessage(conversation.id, text, currentUserId)
+  }
+
+  const currentStageIndex = useMemo(() => {
+    return STAGES.findIndex(s => s.id === currentStage)
+  }, [currentStage])
+
   return (
     <View>
       <BountyCard
@@ -81,19 +109,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             )}
           </View>
 
-          {/* Timeline bubbles */}
-          <View style={styles.timelineRow}>
-            {STAGES.map((s, idx) => {
-              const isActive = s.id === currentStage
-              const isCompleted = STAGES.findIndex(x => x.id === s.id) < STAGES.findIndex(x => x.id === currentStage)
-              return (
-                <View key={s.id} style={styles.timelineItem}>
-                  <View style={[styles.bubble, isCompleted ? styles.bubbleCompleted : isActive ? styles.bubbleActive : styles.bubbleIdle]} />
-                  {idx < STAGES.length - 1 && <View style={styles.connector} />}
-                </View>
-              )
-            })}
-          </View>
+          {/* Timeline bubbles - using new Stepper component */}
+          <Stepper stages={STAGES} activeIndex={currentStageIndex} variant="compact" />
 
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
@@ -105,6 +122,56 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 <Text style={styles.infoText}>Your application is pending. We’ll notify you when the poster accepts.</Text>
               )}
             </View>
+          )}
+
+          {/* Work in Progress section - only when in_progress status */}
+          {bounty.status === 'in_progress' && (
+            <AnimatedSection
+              title="Work in progress"
+              expanded={wipExpanded}
+              onToggle={() => setWipExpanded(!wipExpanded)}
+            >
+              {isOwner ? (
+                <View style={{ gap: 16 }}>
+                  {/* Poster view: Message bar, attachments, rating */}
+                  {conversation && (
+                    <MessageBar
+                      conversationId={conversation.id}
+                      onSendMessage={handleSendMessage}
+                      placeholder="Send a quick message to the hunter..."
+                    />
+                  )}
+                  
+                  <AttachmentsList attachments={attachments} />
+                  
+                  <RatingStars
+                    rating={ratingDraft}
+                    onRatingChange={setRatingDraft}
+                    label="Rate This Bounty:"
+                  />
+                </View>
+              ) : (
+                <View style={{ gap: 16 }}>
+                  {/* Hunter view: Instructions, attachments, next button */}
+                  <View style={styles.infoBox}>
+                    <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
+                    <Text style={styles.infoText}>
+                      Begin work on the bounty; once complete press the next button.
+                    </Text>
+                  </View>
+                  
+                  <AttachmentsList attachments={attachments} />
+                  
+                  <TouchableOpacity
+                    style={styles.primaryBtn}
+                    onPress={() => onGoToReview?.(String(bounty.id))}
+                  >
+                    <Text style={styles.primaryText}>Next</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </AnimatedSection>
           )}
 
           {/* Quick actions */}

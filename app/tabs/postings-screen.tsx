@@ -366,6 +366,39 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Failed to accept request")
       }
 
+      const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
+
+      // Update bounty status to in_progress and set accepted_by
+      if (request.bounty) {
+        try {
+          await bountyService.update(Number(request.bounty.id), {
+            status: 'in_progress',
+            accepted_by: hunterIdForConv,
+          })
+          console.log('✅ Bounty status updated to in_progress:', request.bounty.id)
+        } catch (statusError) {
+          console.error('Error updating bounty status:', statusError)
+          // Continue with the flow even if status update fails
+        }
+      }
+
+      // Remove all competing requests for this bounty (cleanup)
+      const competingRequests = bountyRequests.filter(
+        req => req.bounty_id === request.bounty_id && req.id !== requestId
+      )
+      
+      if (competingRequests.length > 0) {
+        try {
+          await Promise.all(
+            competingRequests.map(req => bountyRequestService.delete(Number(req.id)))
+          )
+          console.log(`✅ Removed ${competingRequests.length} competing requests`)
+        } catch (cleanupError) {
+          console.error('Error cleaning up competing requests:', cleanupError)
+          // Continue even if cleanup fails
+        }
+      }
+
       // Create escrow transaction for paid bounties
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         try {
@@ -389,7 +422,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       // Auto-create a conversation for coordination
       try {
         const { messageService } = await import('lib/services/message-service')
-        const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
         const conversation = await messageService.getOrCreateConversation(
           [hunterIdForConv],
           request.profile?.username || 'Hunter',
@@ -409,8 +441,24 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         // Don't fail the whole operation if conversation creation fails
       }
 
-      // Update local state
-      setBountyRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "accepted" } : req)))
+      // Update local state - mark request as accepted and remove competing ones
+      setBountyRequests((prev) => 
+        prev
+          .map((req) => (req.id === requestId ? { ...req, status: "accepted" } : req))
+          .filter(req => req.bounty_id !== request.bounty_id || req.id === requestId)
+      )
+
+      // Update bounty in local state
+      setMyBounties((prev) =>
+        prev.map((b) =>
+          b.id === request.bounty.id
+            ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
+            : b
+        )
+      )
+
+      // Reload data to ensure consistency
+      loadMyBounties()
 
       // Show escrow instructions if it's a paid bounty
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {

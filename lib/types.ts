@@ -156,3 +156,26 @@ export interface BlockedUser {
   blocked_id: string; // user who is blocked
   createdAt: string;
 }
+
+// Bounty Request
+export interface Request {
+  id: string;
+  bountyId: string;
+  hunterId: string;
+  posterId?: string;
+  status: "pending" | "accepted" | "rejected";
+  createdAt: string;
+}
+
+// Attachment metadata for bounties
+export interface Attachment {
+  id: string;
+  name: string;
+  uri: string;
+  mime?: string;
+  mimeType?: string;
+  size?: number;
+  remoteUri?: string;
+  status?: 'pending' | 'uploading' | 'uploaded' | 'failed';
+  progress?: number;
+}
