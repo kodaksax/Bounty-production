@@ -494,8 +494,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Failed to reject request")
       }
 
-      // Update local state
-      setBountyRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "rejected" } : req)))
+      // Update local state - remove the rejected request from the list
+      setBountyRequests((prev) => prev.filter((req) => req.id !== requestId))
+      
+      // Show confirmation toast
+      Alert.alert('Request Rejected', 'The request has been rejected.', [{ text: 'OK' }])
     } catch (err: any) {
       console.error("Error rejecting request:", err)
       setError(err.message || "Failed to reject request")
