@@ -340,6 +340,36 @@ export default function HunterPayoutScreen() {
               </View>
             )}
 
+            {/* Receipt */}
+            {!bounty.is_for_honor && (
+              <View style={styles.receiptCard}>
+                <View style={styles.receiptHeader}>
+                  <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                  <Text style={styles.receiptTitle}>Transaction Receipt</Text>
+                </View>
+                <View style={styles.receiptDivider} />
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Bounty</Text>
+                  <Text style={styles.receiptValue}>{bounty.title}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Amount</Text>
+                  <Text style={styles.receiptValue}>${bounty.amount}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Date</Text>
+                  <Text style={styles.receiptValue}>{new Date().toLocaleDateString()}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Status</Text>
+                  <View style={styles.statusPill}>
+                    <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                    <Text style={styles.statusPillText}>Completed</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* Actions */}
             <View style={styles.actionsContainer}>
               <TouchableOpacity
@@ -648,6 +678,58 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  receiptCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  receiptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  receiptTitle: {
+    color: '#6ee7b7',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptLabel: {
+    color: 'rgba(255,254,245,0.7)',
+    fontSize: 14,
+  },
+  receiptValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    maxWidth: '60%',
+    textAlign: 'right',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    color: '#10b981',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

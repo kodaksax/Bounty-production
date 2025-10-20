@@ -11,6 +11,8 @@ import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { Stepper } from './ui/stepper'
+import { PosterReviewModal } from './poster-review-modal'
+import { completionService, type CompletionSubmission } from 'lib/services/completion-service'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -39,6 +41,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
   const [ratingDraft, setRatingDraft] = useState(0)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [hasSubmission, setHasSubmission] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -47,11 +51,17 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const list = await messageService.getConversations()
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
         if (mounted) setConversation(match)
+
+        // Check if there's a pending submission
+        if (bounty.status === 'in_progress' && variant === 'owner') {
+          const submission = await completionService.getSubmission(String(bounty.id))
+          if (mounted) setHasSubmission(!!submission && submission.status === 'pending')
+        }
       } catch {}
     }
     if (expanded) load()
     return () => { mounted = false }
-  }, [expanded, bounty.id])
+  }, [expanded, bounty.id, bounty.status, variant])
 
   const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' = useMemo(() => {
     if (bounty.status === 'in_progress') return 'working_progress'
@@ -134,6 +144,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               {isOwner ? (
                 <View style={{ gap: 16 }}>
                   {/* Poster view: Message bar, attachments, rating */}
+                  
+                  {/* Show review button if submission is pending */}
+                  {hasSubmission && (
+                    <TouchableOpacity
+                      style={styles.reviewSubmissionBtn}
+                      onPress={() => setShowReviewModal(true)}
+                    >
+                      <MaterialIcons name="rate-review" size={20} color="#fff" />
+                      <Text style={styles.reviewSubmissionText}>Review Submission</Text>
+                      <View style={styles.newBadge}>
+                        <Text style={styles.newBadgeText}>NEW</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
                   {conversation && (
                     <MessageBar
                       conversationId={conversation.id}
@@ -200,6 +225,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           )}
         </View>
       )}
+
+      {/* Poster Review Modal */}
+      {isOwner && (
+        <PosterReviewModal
+          visible={showReviewModal}
+          bountyId={String(bounty.id)}
+          hunterId={bounty.accepted_by || ''}
+          hunterName="Hunter" // TODO: Get actual hunter name
+          bountyAmount={bounty.amount || 0}
+          isForHonor={bounty.is_for_honor || false}
+          onClose={() => setShowReviewModal(false)}
+          onComplete={() => {
+            setShowReviewModal(false)
+            setHasSubmission(false)
+            // Trigger refresh
+          }}
+        />
+      )}
     </View>
   )
 }
@@ -237,4 +280,35 @@ const styles = StyleSheet.create({
   muted: { color: '#a7f3d0', fontSize: 12 },
   honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
   honorText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
+  reviewSubmissionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#fbbf24',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  reviewSubmissionText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  newBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
 })
