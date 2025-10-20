@@ -8,7 +8,7 @@ interface ErrorLogEntry {
   timestamp: Date
 }
 
-import NetInfo from '@react-native-community/netinfo'
+import NetInfo from '@react-native-community/netinfo';
 
 class ErrorLogger {
   private logs: ErrorLogEntry[] = []
@@ -88,17 +88,42 @@ class ErrorLogger {
       this.saveOfflineQueue()
     }
 
-    // Log to console
+    // Normalize any Error objects in context so React Native developer overlay
+    // and remote logging capture the message and stack (some Error properties
+    // are non-enumerable and show up as {}). Replace Error instances with
+    // plain objects containing name/message/stack.
+    const normalizedContext = (() => {
+      if (!context) return context
+      const out: Record<string, any> = {}
+      for (const k of Object.keys(context)) {
+        const v = (context as any)[k]
+        if (v instanceof Error) {
+          out[k] = { name: v.name, message: v.message, stack: v.stack }
+        } else if (v && typeof v === 'object') {
+          // If nested object contains an Error under `error` key, extract it
+          if ('error' in v && v.error instanceof Error) {
+            out[k] = { ...v, error: { name: v.error.name, message: v.error.message, stack: v.error.stack } }
+          } else {
+            out[k] = v
+          }
+        } else {
+          out[k] = v
+        }
+      }
+      return out
+    })()
+
+    // Log to console with normalized context so it's useful in RN overlay and logs
     switch (level) {
       case "info":
-        console.info(`[INFO] ${message}`, context)
+        console.info(`[INFO] ${message}`, normalizedContext)
         break
       case "warning":
-        console.warn(`[WARNING] ${message}`, context)
+        console.warn(`[WARNING] ${message}`, normalizedContext)
         break
       case "error":
       case "critical":
-        console.error(`[${level.toUpperCase()}] ${message}`, context)
+        console.error(`[${level.toUpperCase()}] ${message}`, normalizedContext)
         break
     }
 

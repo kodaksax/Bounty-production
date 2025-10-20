@@ -173,7 +173,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
       {/* Filters */}
       <View className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
-        <View className="flex space-x-3">
+        <View className="flex space-x-3" style={{ flexDirection: 'row' }}>
           <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
@@ -183,8 +183,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             )}
             onPress={() => handleFilterChange("all")}
           >
-            All Transactions
+            <Text style={{ color: activeFilter === 'all' ? '#fff' : '#d1fae5' }}>All Transactions</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
@@ -194,8 +195,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             )}
             onPress={() => handleFilterChange("deposits")}
           >
-            Deposits
+            <Text style={{ color: activeFilter === 'deposits' ? '#fff' : '#d1fae5' }}>Deposits</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
@@ -205,8 +207,9 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             )}
             onPress={() => handleFilterChange("withdrawals")}
           >
-            Withdrawals
+            <Text style={{ color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5' }}>Withdrawals</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             className={cn(
               "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
@@ -216,17 +219,17 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             )}
             onPress={() => handleFilterChange("bounties")}
           >
-            Bounties
+            <Text style={{ color: activeFilter === 'bounties' ? '#fff' : '#d1fae5' }}>Bounties</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Error message */}
       {error && (
-        <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
-          {error}
-          <TouchableOpacity className="float-right text-white p-2 touch-target-min" onPress={() => setError(null)}>
-            ✕
+        <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
+          <Text style={{ color: '#fff', fontSize: 14 }}>{error}</Text>
+          <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
+            <Text style={{ color: '#fff', fontSize: 16 }}>✕</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -328,8 +331,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             )}
 
             {!hasMore && (
-              <View className="py-4 text-center text-sm text-emerald-300">
-                {transactions.length > 0 ? "No more transactions" : "No transactions found"}
+              <View className="py-4 text-center">
+                <Text style={{ color: '#bbf7d0' }}>{transactions.length > 0 ? 'No more transactions' : 'No transactions found'}</Text>
               </View>
             )}
           </>

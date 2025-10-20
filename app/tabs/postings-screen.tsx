@@ -697,10 +697,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
           {/* Error message */}
           {error && (
-            <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg text-white text-sm">
-              {error}
-              <TouchableOpacity className="float-right text-white p-2 touch-target-min" onPress={() => setError(null)}>
-                ✕
+            <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
+              <Text style={{ color: 'white', fontSize: 14 }}>{error}</Text>
+              <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
+                <Text style={{ color: 'white', fontSize: 16 }}>✕</Text>
               </TouchableOpacity>
             </View>
           )}

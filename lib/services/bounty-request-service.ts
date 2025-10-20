@@ -25,7 +25,19 @@ export const bountyRequestService = {
       }
       return await response.json()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
+      // Normalize thrown values (Supabase often throws plain objects)
+      let error: Record<string, any>
+      if (err instanceof Error) {
+        error = { name: err.name, message: err.message, stack: err.stack }
+      } else if (err && typeof err === 'object') {
+        // Prefer any message property, then nested error.message, then JSON
+        const message = (err as any).message || (err as any).error?.message || (() => {
+          try { return JSON.stringify(err) } catch { return String(err) }
+        })()
+        error = { ...(err as Record<string, any>), message }
+      } else {
+        error = { message: String(err) }
+      }
       logger.error("Error fetching bounty request by ID", { id, error })
       return null
     }
@@ -65,7 +77,17 @@ export const bountyRequestService = {
       }
       return await response.json()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
+      let error: Record<string, any>
+      if (err instanceof Error) {
+        error = { name: err.name, message: err.message, stack: err.stack }
+      } else if (err && typeof err === 'object') {
+        const message = (err as any).message || (err as any).error?.message || (() => {
+          try { return JSON.stringify(err) } catch { return String(err) }
+        })()
+        error = { ...(err as Record<string, any>), message }
+      } else {
+        error = { message: String(err) }
+      }
       logger.error("Error fetching bounty requests", { options, error })
       return []
     }
@@ -88,11 +110,33 @@ export const bountyRequestService = {
 
         const { data: reqs, error } = await rq
         if (error) throw error
-        const requests = (reqs as unknown as BountyRequest[]) ?? []
-        if (requests.length === 0) return []
+            const requests = (reqs as unknown as BountyRequest[]) ?? []
+            if (requests.length === 0) return []
 
-    const bountyIds = Array.from(new Set(requests.map(r => String((r as any).bounty_id)).filter(Boolean))) as string[]
-  const userIds = Array.from(new Set(requests.map(r => String((r as any).hunter_id)).filter(Boolean))) as string[]
+        // Ensure we only convert non-null/undefined/non-empty values to strings.
+        // Converting `null` to String(null) gives "null" which leads to Postgres
+        // `invalid input syntax for type uuid: "null"` when used in `.in()` queries.
+        const bountyIds = Array.from(new Set(
+          requests
+            .map(r => (r as any).bounty_id)
+            .filter((id) => id !== null && id !== undefined && id !== '')
+            .map((id) => String(id))
+        )) as string[]
+
+        const userIds = Array.from(new Set(
+          requests
+            .map(r => (r as any).hunter_id)
+            .filter((id) => id !== null && id !== undefined && id !== '')
+            .map((id) => String(id))
+        )) as string[]
+
+        // Defensive logging when unexpected values would have been present
+        if (requests.some(r => (r as any).bounty_id == null)) {
+          logger.warning('Some bounty requests contain null bounty_id values; skipping nulls when fetching related bounties', { count: requests.length })
+        }
+        if (requests.some(r => (r as any).hunter_id == null)) {
+          logger.warning('Some bounty requests contain null hunter_id values; skipping nulls when fetching related profiles', { count: requests.length })
+        }
 
         const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }] = await Promise.all([
           bountyIds.length ? supabase.from('bounties').select('*').in('id', bountyIds) : Promise.resolve({ data: [], error: null } as any),
@@ -115,7 +159,7 @@ export const bountyRequestService = {
       const params = new URLSearchParams()
       if (options?.status) params.append("status", options.status)
   if (options?.bountyId) params.append("bounty_id", String(options.bountyId))
-      if (options?.userId) params.append("user_id", options.userId)
+  if (options?.userId) params.append("hunter_id", options.userId)
 
       // Backend returns joined bounty + profile details on the same endpoint
       const url = `${API_BASE_URL}/api/bounty-requests${params.toString() ? `?${params.toString()}` : ''}`
@@ -126,7 +170,17 @@ export const bountyRequestService = {
       }
       return await response.json()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
+      let error: Record<string, any>
+      if (err instanceof Error) {
+        error = { name: err.name, message: err.message, stack: err.stack }
+      } else if (err && typeof err === 'object') {
+        const message = (err as any).message || (err as any).error?.message || (() => {
+          try { return JSON.stringify(err) } catch { return String(err) }
+        })()
+        error = { ...(err as Record<string, any>), message }
+      } else {
+        error = { message: String(err) }
+      }
       logger.error("Error fetching bounty requests with details", { options, error })
       return []
     }

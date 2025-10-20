@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import TextGuard from './ui/TextGuard';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -65,7 +66,8 @@ export function ApplicantCard({
   const profileId = (request as any).hunter_id || (request as any).user_id
 
   return (
-    <View style={styles.card}>
+    <TextGuard>
+      <View style={styles.card}>
       {/* Header with avatar and applicant info - Clickable to navigate to profile */}
       <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!profileId}>
         <Avatar style={styles.avatar}>
@@ -78,21 +80,21 @@ export function ApplicantCard({
               {(request.profile?.username || 'U').substring(0, 2).toUpperCase()}
             </Text>
           </AvatarFallback>
-        </Avatar>
-        
-        <View style={styles.applicantInfo}>
+        </Avatar>{/* avoid whitespace text node */}
+
+        <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
           <Text style={styles.applicantName}>
             {request.profile?.username || 'Unknown User'}
           </Text>
           <View style={styles.ratingContainer}>
             <MaterialIcons name="star" size={14} color="#fbbf24" />
             <Text style={styles.ratingText}>
-              {request.profile?.averageRating?.toFixed(1) || '—'} 
+              {request.profile?.averageRating?.toFixed(1) || '—'}
               {request.profile?.ratingCount ? ` (${request.profile.ratingCount})` : ''}
             </Text>
           </View>
-        </View>
-        
+        </View>{/* avoid whitespace text node */}
+
         {profileId ? (
           <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
         ) : null}
@@ -102,7 +104,7 @@ export function ApplicantCard({
       <View style={styles.bountySection}>
         <Text style={styles.sectionLabel}>Applied for:</Text>
         <Text style={styles.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
-        {request.bounty?.amount && !request.bounty?.is_for_honor && (
+        {request.bounty?.amount > 0 && !request.bounty?.is_for_honor && (
           <View style={styles.amountBadge}>
             <Text style={styles.amountText}>${request.bounty.amount}</Text>
           </View>
@@ -125,10 +127,10 @@ export function ApplicantCard({
           {isProcessing && actionType === 'reject' ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialIcons name="close" size={18} color="#fff" />
               <Text style={styles.buttonText}>Reject</Text>
-            </>
+            </View>
           )}
         </TouchableOpacity>
 
@@ -151,10 +153,10 @@ export function ApplicantCard({
           {isProcessing && actionType === 'accept' ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialIcons name="check" size={18} color="#fff" />
               <Text style={styles.buttonText}>Accept</Text>
-            </>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -170,7 +172,8 @@ export function ApplicantCard({
           </Text>
         </View>
       )}
-    </View>
+      </View>
+    </TextGuard>
   );
 }
 
