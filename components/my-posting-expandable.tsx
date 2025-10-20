@@ -4,7 +4,17 @@ import type { Bounty } from 'lib/services/database.types'
 import { messageService } from 'lib/services/message-service'
 import type { Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
-import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native'
+import { 
+  ActivityIndicator,
+  LayoutAnimation, 
+  Platform, 
+  StyleSheet, 
+  Text, 
+  TextInput,
+  TouchableOpacity, 
+  UIManager, 
+  View 
+} from 'react-native'
 import { BountyCard } from './bounty-card'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
@@ -43,6 +53,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [ratingDraft, setRatingDraft] = useState(0)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [hasSubmission, setHasSubmission] = useState(false)
+  const [reviewExpanded, setReviewExpanded] = useState(false)
+  const [payoutExpanded, setPayoutExpanded] = useState(false)
+  
+  // Hunter completion submission state
+  const [timeElapsed, setTimeElapsed] = useState(0)
+  const [startTime] = useState(Date.now())
+  const [completionMessage, setCompletionMessage] = useState('')
+  const [proofItems, setProofItems] = useState<Array<{ id: string; type: 'image' | 'file'; name: string; size?: number }>>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -62,6 +81,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     if (expanded) load()
     return () => { mounted = false }
   }, [expanded, bounty.id, bounty.status, variant])
+  
+  // Timer for hunter completion
+  useEffect(() => {
+    if (!isOwner && bounty.status === 'in_progress' && reviewExpanded) {
+      const interval = setInterval(() => {
+        setTimeElapsed(Math.floor((Date.now() - startTime) / 1000))
+      }, 1000)
+      return () => clearInterval(interval)
+    }
+  }, [isOwner, bounty.status, reviewExpanded, startTime])
 
   const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' = useMemo(() => {
     if (bounty.status === 'in_progress') return 'working_progress'
@@ -92,6 +121,67 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const handleSendMessage = async (text: string) => {
     if (!conversation) throw new Error('No conversation')
     await messageService.sendMessage(conversation.id, text, currentUserId)
+  }
+  
+  const formatTime = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    if (minutes < 60) return `${minutes}m ${remainingSeconds}s`
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    return `${hours}h ${remainingMinutes}m`
+  }
+  
+  const handleSubmitCompletion = async () => {
+    if (proofItems.length === 0) {
+      alert('Please attach at least one proof of completion')
+      return
+    }
+    if (!completionMessage.trim()) {
+      alert('Please add a message describing your completed work')
+      return
+    }
+    
+    try {
+      setIsSubmitting(true)
+      await completionService.submitCompletion({
+        bounty_id: String(bounty.id),
+        hunter_id: currentUserId || '',
+        message: completionMessage.trim(),
+        proof_items: proofItems,
+      })
+      alert('Your work has been submitted for review!')
+      setReviewExpanded(false)
+      setPayoutExpanded(true)
+    } catch (err) {
+      console.error('Error submitting completion:', err)
+      alert('Failed to submit completion. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+  
+  const handleAddProof = () => {
+    // Mock adding proof - in real implementation would use file picker
+    const newProof = {
+      id: Date.now().toString(),
+      type: 'file' as const,
+      name: `proof_${proofItems.length + 1}.jpg`,
+      size: 1024 * 500, // 500KB
+    }
+    setProofItems([...proofItems, newProof])
+  }
+  
+  const handleRemoveProof = (id: string) => {
+    setProofItems(proofItems.filter(item => item.id !== id))
+  }
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '0 KB'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   const currentStageIndex = useMemo(() => {
@@ -189,9 +279,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   
                   <TouchableOpacity
                     style={styles.primaryBtn}
-                    onPress={() => onGoToReview?.(String(bounty.id))}
+                    onPress={() => setReviewExpanded(!reviewExpanded)}
                   >
-                    <Text style={styles.primaryText}>Next</Text>
+                    <Text style={styles.primaryText}>Ready to Submit</Text>
                     <MaterialIcons name="arrow-forward" size={18} color="#fff" />
                   </TouchableOpacity>
                 </View>
@@ -199,25 +289,157 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             </AnimatedSection>
           )}
 
-          {/* Quick actions */}
-          <View style={styles.actionsRow}>
-            {bounty.status === 'in_progress' ? (
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => onGoToReview?.(String(bounty.id))}>
-                <Text style={styles.primaryText}>{isOwner ? 'Go to Review & Verify' : 'Open Work In Progress'}</Text>
-                <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-              </TouchableOpacity>
-            ) : bounty.status === 'completed' ? (
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => onGoToPayout?.(String(bounty.id))}>
-                <Text style={styles.primaryText}>{isOwner ? 'Go to Payout' : 'View Payout Status'}</Text>
-                <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.muted}>{isOwner ? 'No actions until a request is accepted.' : 'No actions yet. You can start once the poster accepts.'}</Text>
-            )}
-          </View>
+          {/* Hunter Review & Verify Section - when ready to submit */}
+          {!isOwner && bounty.status === 'in_progress' && (
+            <AnimatedSection
+              title="Review & Verify"
+              expanded={reviewExpanded}
+              onToggle={() => setReviewExpanded(!reviewExpanded)}
+            >
+              <View style={{ gap: 16 }}>
+                {/* Timer */}
+                <View style={styles.timerContainer}>
+                  <Text style={styles.timerLabel}>Time Spent in Review</Text>
+                  <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
+                  <Text style={styles.timerHint}>Track your time on this task</Text>
+                </View>
+
+                {/* Message Input */}
+                <View>
+                  <Text style={styles.sectionTitle}>Message (cont):</Text>
+                  <TextInput
+                    style={styles.messageTextArea}
+                    placeholder="Describe your completed work..."
+                    placeholderTextColor="rgba(255,254,245,0.4)"
+                    value={completionMessage}
+                    onChangeText={setCompletionMessage}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={1000}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Proof Attachments */}
+                <View>
+                  <Text style={styles.sectionTitle}>Proof:</Text>
+                  {proofItems.map((item) => (
+                    <View key={item.id} style={styles.proofItem}>
+                      <View style={styles.proofIcon}>
+                        <MaterialIcons
+                          name={item.type === 'image' ? 'image' : 'insert-drive-file'}
+                          size={24}
+                          color="#6ee7b7"
+                        />
+                      </View>
+                      <View style={styles.proofInfo}>
+                        <Text style={styles.proofName}>{item.name}</Text>
+                        <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
+                        <MaterialIcons name="close" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  <TouchableOpacity
+                    style={styles.addFileBtn}
+                    onPress={handleAddProof}
+                  >
+                    <MaterialIcons name="add" size={20} color="#10b981" />
+                    <Text style={styles.addFileText}>Add File</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Submit Button */}
+                <TouchableOpacity
+                  style={[styles.primaryBtn, isSubmitting && styles.buttonDisabled]}
+                  onPress={handleSubmitCompletion}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryText}>Submit</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </AnimatedSection>
+          )}
+
+          {/* Payout Section - when completed */}
+          {bounty.status === 'completed' && (
+            <AnimatedSection
+              title="Payout"
+              expanded={payoutExpanded}
+              onToggle={() => setPayoutExpanded(!payoutExpanded)}
+            >
+              <View style={{ gap: 16 }}>
+                {/* Success Message */}
+                <View style={styles.successPanel}>
+                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
+                  <Text style={styles.successTitle}>Payout Released!</Text>
+                  <Text style={styles.successText}>
+                    {isOwner 
+                      ? 'You have approved the work and released payment.' 
+                      : 'Congratulations! The poster has approved your work and released the payment.'}
+                  </Text>
+                  
+                  {!bounty.is_for_honor && (
+                    <View style={styles.payoutAmountCard}>
+                      <Text style={styles.payoutLabel}>Payout Amount</Text>
+                      <Text style={styles.payoutAmount}>${bounty.amount}</Text>
+                      <Text style={styles.payoutSubtext}>
+                        {isOwner ? 'Released from escrow' : 'Added to your wallet balance'}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {bounty.is_for_honor && (
+                    <View style={styles.honorCard}>
+                      <MaterialIcons name="favorite" size={32} color="#ec4899" />
+                      <Text style={styles.honorTitle}>Completed for Honor</Text>
+                      <Text style={styles.honorText}>
+                        Thank you for contributing to the community!
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Transaction Receipt */}
+                {!bounty.is_for_honor && (
+                  <View style={styles.receiptCard}>
+                    <View style={styles.receiptHeader}>
+                      <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                      <Text style={styles.receiptTitle}>Transaction Receipt</Text>
+                    </View>
+                    <View style={styles.receiptDivider} />
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Bounty</Text>
+                      <Text style={styles.receiptValue}>{bounty.title}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Amount</Text>
+                      <Text style={styles.receiptValue}>${bounty.amount}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Date</Text>
+                      <Text style={styles.receiptValue}>{new Date().toLocaleDateString()}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Status</Text>
+                      <View style={styles.statusPill}>
+                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                        <Text style={styles.statusPillText}>Completed</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </AnimatedSection>
+          )}
 
           {/* Conversation hint */}
-          {!conversation && (
+          {!conversation && bounty.status === 'in_progress' && (
             <View style={styles.infoBox}>
               <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
               <Text style={styles.infoText}>{isOwner ? 'Conversation will appear after acceptance.' : 'A chat with the poster will appear once you’re accepted.'}</Text>
@@ -310,5 +532,204 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '800',
+  },
+  timerContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 12,
+  },
+  timerLabel: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timerValue: {
+    color: '#fff',
+    fontSize: 48,
+    fontWeight: '700',
+  },
+  timerHint: {
+    color: 'rgba(255,254,245,0.6)',
+    fontSize: 11,
+  },
+  messageTextArea: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  proofItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+    marginBottom: 8,
+  },
+  proofIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  proofInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  proofName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  proofSize: {
+    color: '#6ee7b7',
+    fontSize: 12,
+  },
+  addFileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#10b981',
+    borderStyle: 'dashed',
+  },
+  addFileText: {
+    color: '#10b981',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  successPanel: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  successTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  successText: {
+    color: 'rgba(255,254,245,0.8)',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  payoutAmountCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    width: '100%',
+  },
+  payoutLabel: {
+    color: '#6ee7b7',
+    fontSize: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  payoutAmount: {
+    color: '#10b981',
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  payoutSubtext: {
+    color: 'rgba(255,254,245,0.7)',
+    fontSize: 12,
+  },
+  honorCard: {
+    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    width: '100%',
+  },
+  honorTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  honorText: {
+    color: 'rgba(255,254,245,0.8)',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  receiptCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  receiptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  receiptTitle: {
+    color: '#6ee7b7',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptLabel: {
+    color: 'rgba(255,254,245,0.7)',
+    fontSize: 14,
+  },
+  receiptValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    maxWidth: '60%',
+    textAlign: 'right',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '600',
   },
 })
