@@ -1,4 +1,3 @@
-// app/in-progress/[bountyId]/hunter/review-and-verify.tsx - Review & verify with proof submission
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -17,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
+import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
@@ -37,14 +37,6 @@ const HUNTER_STAGES: StageInfo[] = [
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ];
 
-interface ProofItem {
-  id: string;
-  type: 'image' | 'file';
-  name: string;
-  url?: string;
-  size?: number;
-}
-
 export default function HunterReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
@@ -62,6 +54,8 @@ export default function HunterReviewAndVerifyScreen() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
+  const [startTime] = useState(Date.now());
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -77,7 +71,14 @@ export default function HunterReviewAndVerifyScreen() {
     loadData(routeBountyId);
     loadConversation(routeBountyId);
     loadProofItems();
-  }, [routeBountyId]);
+
+    // Start timer
+    const interval = setInterval(() => {
+      setTimeElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [routeBountyId, startTime]);
 
   const loadData = async (id: string) => {
     try {
@@ -191,10 +192,28 @@ export default function HunterReviewAndVerifyScreen() {
       return;
     }
 
+    if (!messageText.trim()) {
+      Alert.alert(
+        'Add a Message',
+        'Please add a message describing your completed work.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      // In real implementation, update bounty status and notify poster
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      
+      // Submit completion via service
+      await completionService.submitCompletion({
+        bounty_id: String(bounty?.id),
+        hunter_id: currentUserId,
+        message: messageText.trim(),
+        proof_items: proofItems,
+      });
+
+      // Update bounty status to indicate submission pending review
+      // (In real implementation, backend should handle this)
 
       Alert.alert(
         'Review Requested',
@@ -203,7 +222,7 @@ export default function HunterReviewAndVerifyScreen() {
           {
             text: 'OK',
             onPress: () => {
-              // Navigate to payout screen (disabled state)
+              // Navigate to payout screen (waiting state)
               if (routeBountyId) {
                 router.push({
                   pathname: '/in-progress/[bountyId]/hunter/payout',
@@ -220,6 +239,16 @@ export default function HunterReviewAndVerifyScreen() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const formatTime = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -308,14 +337,25 @@ export default function HunterReviewAndVerifyScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Bounty Info Card */}
+        {/* Bounty Info Card with Timer */}
         <View style={styles.bountyInfoCard}>
           <Text style={styles.bountyTitle} numberOfLines={2}>
             {bounty.title}
           </Text>
-          <Text style={styles.bountyAmount}>
-            {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
-          </Text>
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>Time Spent in Review</Text>
+            <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
+            <Text style={styles.timerHint}>Track your time on this task</Text>
+          </View>
+          <View style={styles.amountRow}>
+            <Text style={styles.bountyAmount}>
+              {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
+            </Text>
+            <View style={styles.distanceInfo}>
+              <MaterialIcons name="near-me" size={16} color="#6ee7b7" />
+              <Text style={styles.distanceText}>0 mi</Text>
+            </View>
+          </View>
         </View>
 
         {/* Timeline */}
@@ -363,34 +403,21 @@ export default function HunterReviewAndVerifyScreen() {
           </ScrollView>
         </View>
 
-        {/* Quick Messaging */}
-        {conversation && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Message to Poster</Text>
-            <View style={styles.messageInputContainer}>
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Type a message to the poster..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
-                onPress={handleSendMessage}
-                disabled={!messageText.trim() || isSendingMessage}
-              >
-                {isSendingMessage ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialIcons name="send" size={20} color="#fff" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {/* Message Input */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Message (cont):</Text>
+          <TextInput
+            style={styles.messageTextArea}
+            placeholder="Describe your completed work..."
+            placeholderTextColor="rgba(255,254,245,0.4)"
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+            numberOfLines={4}
+            maxLength={1000}
+            textAlignVertical="top"
+          />
+        </View>
 
         {/* Proof of Completion */}
         <View style={styles.section}>
@@ -418,7 +445,7 @@ export default function HunterReviewAndVerifyScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Request Review Button */}
+        {/* Submit Button */}
         <TouchableOpacity
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
           onPress={handleRequestReview}
@@ -427,10 +454,7 @@ export default function HunterReviewAndVerifyScreen() {
           {isSubmitting ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <>
-              <Text style={styles.submitButtonText}>Request Review</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
-            </>
+            <Text style={styles.submitButtonText}>Submit</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -515,17 +539,51 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
-    gap: 8,
+    gap: 12,
   },
   bountyTitle: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
   },
+  timerContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  timerLabel: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timerValue: {
+    color: '#fff',
+    fontSize: 48,
+    fontWeight: '700',
+  },
+  timerHint: {
+    color: 'rgba(255,254,245,0.6)',
+    fontSize: 11,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   bountyAmount: {
     color: '#10b981',
     fontSize: 20,
     fontWeight: '700',
+  },
+  distanceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  distanceText: {
+    color: '#6ee7b7',
+    fontSize: 14,
   },
   timelineContainer: {
     gap: 12,
@@ -588,6 +646,16 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     color: 'rgba(255,254,245,0.7)',
     fontSize: 13,
+  },
+  messageTextArea: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   messageInputContainer: {
     flexDirection: 'row',
