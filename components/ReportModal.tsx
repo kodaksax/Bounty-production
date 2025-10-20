@@ -92,7 +92,6 @@ export function ReportModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      transparent
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>

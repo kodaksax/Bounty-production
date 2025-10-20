@@ -137,28 +137,104 @@ export const bountyRequestService = {
    */
   async create(request: Omit<BountyRequest, "id" | "created_at">): Promise<BountyRequest | null> {
     try {
+      // Normalize payload: ensure the canonical column `hunter_id` is present.
+      // The DB table uses `hunter_id` (and poster_id), so don't add a `user_id`
+      // field which may not exist in the schema.
+      const normalizedRequest: any = { ...(request as any) }
+      if (!normalizedRequest.hunter_id && normalizedRequest.user_id) {
+        normalizedRequest.hunter_id = normalizedRequest.user_id
+      }
+
+      // Debug: log normalized payload so we can inspect what is sent to backend/Supabase
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[bountyRequestService.create] normalizedRequest ->', normalizedRequest)
+      }
+
+      // Before inserting into Supabase, ensure we don't send a `user_id` column
+      if ((normalizedRequest as any).user_id) {
+        delete (normalizedRequest as any).user_id
+      }
+
       if (isSupabaseConfigured) {
+        // Ensure poster_id is present to satisfy DB constraints. Fetch from bounties table if missing.
+        if (!normalizedRequest.poster_id && normalizedRequest.bounty_id) {
+          try {
+            // Only request poster_id; some DBs do not have legacy user_id column.
+            const { data: bountyRow, error: bountyErr } = await supabase
+              .from('bounties')
+              .select('poster_id')
+              .eq('id', String(normalizedRequest.bounty_id))
+              .single()
+
+            if (bountyErr) {
+              logger.error('Supabase error fetching bounty for poster_id', { bountyId: normalizedRequest.bounty_id, error: (bountyErr as any)?.message || bountyErr })
+              throw bountyErr
+            }
+
+            normalizedRequest.poster_id = (bountyRow as any)?.poster_id || null
+          } catch (fetchErr) {
+            const msg = `Failed to resolve poster_id for bounty ${normalizedRequest.bounty_id}`
+            logger.error(msg, { bountyId: normalizedRequest.bounty_id, error: (fetchErr as any)?.message || fetchErr })
+            throw new Error(msg)
+          }
+        }
+
+        // Remove legacy/incorrect user_id column before inserting (schema uses hunter_id/poster_id)
+        if ((normalizedRequest as any).user_id) delete (normalizedRequest as any).user_id
+
         const { data, error } = await supabase
           .from('bounty_requests')
-          .insert(request)
+          .insert(normalizedRequest)
           .select('*')
           .single()
-        if (error) throw error
+        if (error) {
+          // Log Supabase error details for better diagnostics
+          logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: (error as any)?.message || error })
+          throw error
+        }
         return (data as unknown as BountyRequest) ?? null
       }
+
       const response = await fetch(`${API_BASE_URL}/api/bounty-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+        body: JSON.stringify(normalizedRequest),
       })
+
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to create bounty request: ${errorText}`)
+        const errorText = await response.text().catch(() => '<no-body>')
+        // Log full response details so the client log exposes backend validation messages
+        logger.error('Backend rejected bounty request', {
+          request: normalizedRequest,
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText,
+        })
+        throw new Error(`Failed to create bounty request: ${response.status} ${response.statusText} — ${errorText}`)
       }
+
       return await response.json()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
-      logger.error("Error creating bounty request", { request, error })
+      // Preserve useful error information even when upstream libraries throw plain objects
+      let errorMessage = 'Unknown error'
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (err && typeof err === 'object') {
+        // Try common fields
+        if ('message' in err && typeof (err as any).message === 'string') {
+          errorMessage = (err as any).message
+        } else {
+          try {
+            errorMessage = JSON.stringify(err)
+          } catch (e) {
+            errorMessage = String(err)
+          }
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      }
+
+      logger.error('Error creating bounty request', { request: (request as any), error: errorMessage })
       return null
     }
   },

@@ -885,9 +885,10 @@ app.get('/api/bounty-requests', async (req, res) => {
         b.is_for_honor as bounty_is_for_honor,
         p.username as profile_username,
         p.avatar_url as profile_avatar_url
-      FROM bounty_requests br
-      LEFT JOIN bounties b ON br.bounty_id = b.id
-      LEFT JOIN profiles p ON br.user_id = p.id
+  FROM bounty_requests br
+  LEFT JOIN bounties b ON br.bounty_id = b.id
+  -- Profile should represent the hunter (applicant)
+  LEFT JOIN profiles p ON br.hunter_id = p.id
     `;
     
     const conditions = [];
@@ -905,7 +906,8 @@ app.get('/api/bounty-requests', async (req, res) => {
     }
     
     if (req.query.user_id) {
-      conditions.push('br.user_id = ?');
+      // Accept user_id query param as hunter_id filter for compatibility
+      conditions.push('br.hunter_id = ?');
       params.push(req.query.user_id);
     }
     
@@ -921,7 +923,7 @@ app.get('/api/bounty-requests', async (req, res) => {
     const transformedRows = rows.map(row => ({
       id: row.id,
       bounty_id: row.bounty_id,
-      user_id: row.user_id,
+  hunter_id: row.hunter_id,
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -935,7 +937,7 @@ app.get('/api/bounty-requests', async (req, res) => {
         is_for_honor: row.bounty_is_for_honor
       },
       profile: {
-        id: row.user_id,
+        id: row.hunter_id,
         username: row.profile_username,
         avatar_url: row.profile_avatar_url
       }
@@ -976,8 +978,9 @@ app.get('/api/bounty-requests/user/:userId', async (req, res) => {
   let conn;
   try {
     conn = await connect();
+    // Query by hunter_id (the canonical applicant column)
     const [rows] = await conn.execute(
-      'SELECT * FROM bounty_requests WHERE user_id = ? ORDER BY created_at DESC',
+      'SELECT * FROM bounty_requests WHERE hunter_id = ? ORDER BY created_at DESC',
       [req.params.userId]
     );
     res.json(rows);
@@ -993,19 +996,42 @@ app.post('/api/bounty-requests', async (req, res) => {
   let conn;
   try {
     conn = await connect();
-    const { bounty_id, user_id, status } = req.body;
-    
-    // Validation
-    if (!bounty_id || !user_id) {
-      return res.status(400).json({ error: 'bounty_id and user_id are required' });
+    const { bounty_id, hunter_id, status, message } = req.body;
+
+    // Validation: bounty_id and hunter_id are required
+    if (!bounty_id || !hunter_id) {
+      return res.status(400).json({ error: 'bounty_id and hunter_id are required' });
     }
-    
+
+    // Lookup bounty to determine poster_id (the user who posted the bounty).
+    // Also select legacy user_id as a safe fallback in case poster_id was not backfilled.
+    const [bountyRows] = await conn.execute('SELECT poster_id, user_id FROM bounties WHERE id = ?', [bounty_id]);
+    if (!bountyRows || bountyRows.length === 0) {
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+    const bountyRow = bountyRows[0];
+    // Prefer canonical poster_id; if missing, fall back to legacy user_id (and log the fallback).
+    let posterId = bountyRow.poster_id || null;
+    if (!posterId && bountyRow.user_id) {
+      posterId = bountyRow.user_id;
+      // Log the fallback server-side so ops can discover rows that need a DB backfill.
+      console.warn(`[bounty-requests] fallback: bounty.poster_id is null for bounty ${bounty_id}; using bounty.user_id (${posterId}) as poster_id`);
+    }
+    if (!posterId) {
+      return res.status(400).json({ error: 'Bounty missing poster_id' });
+    }
+
     const [result] = await conn.execute(
-      'INSERT INTO bounty_requests (bounty_id, user_id, status) VALUES (?, ?, ?)',
-      [bounty_id, user_id, status || 'pending']
+      'INSERT INTO bounty_requests (bounty_id, hunter_id, poster_id, status, message) VALUES (?, ?, ?, ?, ?)',
+      [bounty_id, hunter_id, posterId, status || 'pending', message || null]
     );
-    
-    const [rows] = await conn.execute('SELECT * FROM bounty_requests WHERE id = ?', [result.insertId]);
+
+    // For UUID primary keys we may not have an insertId; fetch the created row by
+    // bounty_id + hunter_id (most recent) to return the newly created request.
+    const [rows] = await conn.execute(
+      'SELECT * FROM bounty_requests WHERE bounty_id = ? AND hunter_id = ? ORDER BY created_at DESC LIMIT 1',
+      [bounty_id, hunter_id]
+    );
     res.status(201).json(rows[0]);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {

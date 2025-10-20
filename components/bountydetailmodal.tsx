@@ -16,7 +16,6 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
-import { ReportModal } from "./ReportModal"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
@@ -24,6 +23,7 @@ import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
+import { ReportModal } from "./ReportModal"
 
 interface BountyDetailModalProps {
   bounty: {

@@ -25,9 +25,7 @@ import { ReportModal } from "../../components/ReportModal";
 import { bountyService } from "../../lib/services/bounty-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { blockingService } from "../../lib/services/blocking-service";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthContext } from "../../hooks/use-auth-context";
-import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 
 export default function UserProfileScreen() {
