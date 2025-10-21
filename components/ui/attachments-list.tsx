@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Attachment } from 'lib/types';
 import React from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface AttachmentsListProps {
   attachments: Attachment[];
@@ -75,13 +75,11 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
   return (
     <View style={styles.container}>
       <Text style={styles.label}>Attachments</Text>
-      <FlatList
-        data={attachments}
-        renderItem={renderAttachment}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        contentContainerStyle={styles.listContent}
-      />
+      <View style={styles.listContent}>
+        {attachments.map((att) => (
+          <View key={att.id}>{renderAttachment({ item: att })}</View>
+        ))}
+      </View>
     </View>
   );
 }

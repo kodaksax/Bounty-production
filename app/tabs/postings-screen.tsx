@@ -12,7 +12,7 @@ import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View, findNodeHandle } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -102,6 +102,69 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
   // Expanded rows map for My Postings list
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
+  // When true we should not toggle rows on press (prevents taps firing after a scroll/drag)
+  const [isListScrolling, setIsListScrolling] = useState(false)
+  // Refs for lists so we can scroll items into view when expanded
+  const inProgressListRef = useRef<any>(null)
+  const myPostingsListRef = useRef<any>(null)
+
+  // Per-item native refs so we can measure exact layout relative to the list
+  const itemRefs = useRef<Record<string, any>>({})
+  // Pending scroll request (set when expanding an item, cleared after measuring)
+  const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
+
+  // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
+  const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
+    const key = String(bountyId)
+    // Toggle expansion first
+    setExpandedMap((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      return next
+    })
+
+    // If we're collapsing, no need to scroll
+    const willExpand = !expandedMap[key]
+
+    if (!willExpand) return
+    // Mark pending scroll — we'll measure and scroll when the expanded content calls back
+    pendingScrollRef.current = { list, key }
+  }
+
+  const measurePendingAndScroll = () => {
+    const pending = pendingScrollRef.current
+    if (!pending) return
+    const { list, key } = pending
+
+    // Clear pending early to avoid duplicate attempts
+    pendingScrollRef.current = null
+
+    try {
+      const listRef = list === 'inProgress' ? inProgressListRef.current : myPostingsListRef.current
+      const itemNode = itemRefs.current[key]
+      if (!listRef || !itemNode) return
+
+      const listHandle = findNodeHandle(listRef)
+      const itemHandle = findNodeHandle(itemNode)
+      if (!listHandle || !itemHandle) return
+
+      UIManager.measureLayout(
+        itemHandle,
+        listHandle,
+        () => {},
+        (x: number, y: number, width: number, height: number) => {
+          const TOP_PADDING = 72 // tuned to avoid header/sticky overlap
+          const targetOffset = Math.max(0, y - TOP_PADDING)
+          try {
+            listRef.scrollToOffset({ offset: targetOffset, animated: true })
+          } catch (err) {
+            try { listRef.scrollToIndex({ index: 0, animated: true }) } catch {}
+          }
+        }
+      )
+    } catch (err) {
+      console.warn('measure/scroll failed', err)
+    }
+  }
 
   // Ensure BottomNav is visible while on Postings screen and during create steps
   useEffect(() => {
@@ -717,7 +780,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
   }
   // Local row component to encapsulate expansion state per item
-  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; variant?: 'owner' | 'hunter' }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant }) => {
+  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; variant?: 'owner' | 'hunter'; isListScrolling?: boolean }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling }) => {
     return (
       <MyPostingExpandable
         bounty={bounty}
@@ -729,6 +792,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         onGoToReview={onGoToReview}
         onGoToPayout={onGoToPayout}
         variant={variant}
+        isListScrolling={isListScrolling}
+        onExpandedLayout={() => measurePendingAndScroll()}
       />
     )
   }
@@ -909,6 +974,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             ) : (
               activeTab === "inProgress" ? (
                 <FlatList
+                  ref={inProgressListRef}
                   data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={(item) => item.id.toString()}
                   extraData={{ inProgressBounties, expandedMap }}
@@ -933,17 +999,23 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       })}
                     </View>
                   )}
-                  renderItem={({ item: bounty }) => (
-                    <MyPostingRow
-                      bounty={bounty}
-                      currentUserId={currentUserId}
-                      expanded={!!expandedMap[String(bounty.id)]}
-                      onToggle={() => setExpandedMap((prev) => ({ ...prev, [String(bounty.id)]: !prev[String(bounty.id)] }))}
-                      // For hunter view, route to hunter-specific flows when applicable
-                      onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
-                      onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
-                      variant={'hunter'}
-                    />
+                  renderItem={({ item: bounty, index }) => (
+                    <View
+                      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
+                      collapsable={false}
+                    >
+                      <MyPostingRow
+                        bounty={bounty}
+                        currentUserId={currentUserId}
+                        expanded={!!expandedMap[String(bounty.id)]}
+                        onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
+                        // For hunter view, route to hunter-specific flows when applicable
+                        onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
+                        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
+                        variant={'hunter'}
+                        isListScrolling={isListScrolling}
+                      />
+                    </View>
                   )}
                   ListEmptyComponent={
                     isLoading.inProgress ? (
@@ -959,6 +1031,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     if (y > 2 && !showShadow) setShowShadow(true)
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
+                  onScrollBeginDrag={() => setIsListScrolling(true)}
+                  onScrollEndDrag={() => setTimeout(() => setIsListScrolling(false), 50)}
+                  onMomentumScrollEnd={() => setIsListScrolling(false)}
                   scrollEventThrottle={16}
                 />
               ) : activeTab === "requests" ? (
@@ -995,6 +1070,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 />
               ) : activeTab === "myPostings" ? (
                 <FlatList
+                  ref={myPostingsListRef}
                   data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={(item) => item.id.toString()}
                   extraData={{ myBounties, expandedMap }}
@@ -1019,18 +1095,24 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       })}
                     </View>
                   )}
-                  renderItem={({ item: bounty }) => (
-                    <MyPostingRow
-                      bounty={bounty}
-                      currentUserId={currentUserId}
-                      expanded={!!expandedMap[String(bounty.id)]}
-                      onToggle={() => setExpandedMap((prev) => ({ ...prev, [String(bounty.id)]: !prev[String(bounty.id)] }))}
-                      onEdit={() => handleEditBounty(bounty)}
-                      onDelete={() => handleDeleteBounty(bounty)}
-                      onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
-                      onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
-                      variant={'owner'}
-                    />
+                  renderItem={({ item: bounty, index }) => (
+                    <View
+                      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
+                      collapsable={false}
+                    >
+                      <MyPostingRow
+                        bounty={bounty}
+                        currentUserId={currentUserId}
+                        expanded={!!expandedMap[String(bounty.id)]}
+                        onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
+                        onEdit={() => handleEditBounty(bounty)}
+                        onDelete={() => handleDeleteBounty(bounty)}
+                        onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
+                        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
+                        variant={'owner'}
+                        isListScrolling={isListScrolling}
+                      />
+                    </View>
                   )}
                   ListEmptyComponent={
                     isLoading.myBounties ? (

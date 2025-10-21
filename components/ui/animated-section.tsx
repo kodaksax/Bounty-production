@@ -53,7 +53,13 @@ export function AnimatedSection({ title, expanded, onToggle, children }: Animate
           <MaterialIcons name="expand-more" size={24} color="#6ee7b7" />
         </Animated.View>
       </TouchableOpacity>
-      {expanded && <View style={styles.content}>{children}</View>}
+      {expanded && (
+        // Use pointerEvents='box-none' so the container itself doesn't block
+        // parent scroll gestures while children remain interactive.
+        <View style={styles.content} pointerEvents="box-none">
+          {children}
+        </View>
+      )}
     </View>
   );
 }

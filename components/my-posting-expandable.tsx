@@ -1,28 +1,27 @@
 import { MaterialIcons } from '@expo/vector-icons'
-import type { Attachment } from 'lib/types'
+import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
 import { messageService } from 'lib/services/message-service'
-import type { Conversation } from 'lib/types'
+import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
-import { 
-  ActivityIndicator,
-  LayoutAnimation, 
-  Platform, 
-  StyleSheet, 
-  Text, 
-  TextInput,
-  TouchableOpacity, 
-  UIManager, 
-  View 
+import {
+    ActivityIndicator,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
 import { BountyCard } from './bounty-card'
+import { PosterReviewModal } from './poster-review-modal'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { Stepper } from './ui/stepper'
-import { PosterReviewModal } from './poster-review-modal'
-import { completionService, type CompletionSubmission } from 'lib/services/completion-service'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -38,6 +37,8 @@ type Props = {
   onGoToReview?: (bountyId: string) => void
   onGoToPayout?: (bountyId: string) => void
   variant?: 'owner' | 'hunter'
+  isListScrolling?: boolean
+  onExpandedLayout?: () => void
 }
 
 const STAGES = [
@@ -45,9 +46,9 @@ const STAGES = [
   { id: 'working_progress', label: 'Working Progress', icon: 'trending-up' },
   { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-] as const
+]
 
-export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant }: Props) {
+export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
   const [ratingDraft, setRatingDraft] = useState(0)
@@ -82,6 +83,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     return () => { mounted = false }
   }, [expanded, bounty.id, bounty.status, variant])
   
+  // owner detection
+  const isOwner = useMemo(() => {
+    if (variant === 'owner') return true
+    if (variant === 'hunter') return false
+    return currentUserId === bounty.user_id
+  }, [variant, currentUserId, bounty.user_id])
+
   // Timer for hunter completion
   useEffect(() => {
     if (!isOwner && bounty.status === 'in_progress' && reviewExpanded) {
@@ -99,11 +107,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     return 'apply_work'
   }, [bounty.status])
 
-  const isOwner = useMemo(() => {
-    if (variant === 'owner') return true
-    if (variant === 'hunter') return false
-    return currentUserId === bounty.user_id
-  }, [variant, currentUserId, bounty.user_id])
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
 
@@ -193,17 +196,17 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       <BountyCard
         bounty={bounty}
         currentUserId={currentUserId}
-        onPress={() => { animate(); onToggle(); }}
+        onPress={() => { if (!isListScrolling) { animate(); onToggle(); } }}
         onEdit={onEdit}
         onDelete={onDelete}
       />
       {expanded && (
-        <View style={styles.panel}>
+        <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
           {/* Compact header row mirroring detail card */}
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Progress</Text>
             {bounty.is_for_honor ? (
-              <View style={styles.honorBadge}><MaterialIcons name="favorite" size={14} color="#052e1b" /><Text style={styles.honorText}>For Honor</Text></View>
+              <View style={styles.honorBadge}><MaterialIcons name="favorite" size={14} color="#052e1b" /><Text style={styles.honorBadgeText}>For Honor</Text></View>
             ) : (
               <Text style={styles.amount}>${bounty.amount}</Text>
             )}
@@ -398,7 +401,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <View style={styles.honorCard}>
                       <MaterialIcons name="favorite" size={32} color="#ec4899" />
                       <Text style={styles.honorTitle}>Completed for Honor</Text>
-                      <Text style={styles.honorText}>
+                      <Text style={styles.honorCardText}>
                         Thank you for contributing to the community!
                       </Text>
                     </View>
@@ -501,7 +504,7 @@ const styles = StyleSheet.create({
   primaryText: { color: '#fff', fontWeight: '600' },
   muted: { color: '#a7f3d0', fontSize: 12 },
   honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
-  honorText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
+  honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
   reviewSubmissionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -597,6 +600,12 @@ const styles = StyleSheet.create({
     color: '#6ee7b7',
     fontSize: 12,
   },
+  sectionTitle: {
+    color: '#a7f3d0',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
   addFileBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -675,7 +684,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  honorText: {
+  honorCardText: {
     color: 'rgba(255,254,245,0.8)',
     fontSize: 14,
     textAlign: 'center',
