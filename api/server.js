@@ -442,8 +442,13 @@ app.get('/api/bounties', async (req, res) => {
       params.push(validation.data.status);
     }
     
-    if (validation.data.user_id) {
-      conditions.push('user_id = ?');
+    // Accept either poster_id (preferred) or legacy user_id query param
+    if (validation.data.poster_id) {
+      conditions.push('poster_id = ?');
+      params.push(validation.data.poster_id);
+    } else if (validation.data.user_id) {
+      // Backwards compatibility: treat user_id as poster_id filter
+      conditions.push('poster_id = ?');
       params.push(validation.data.user_id);
     }
     
@@ -525,7 +530,8 @@ app.post('/api/bounties', async (req, res) => {
       location,
       timeline,
       skills_required,
-      user_id,
+      poster_id, // prefer poster_id
+      // support legacy user_id by mapping further down
       work_type,
       is_time_sensitive,
       deadline,
@@ -539,15 +545,60 @@ app.post('/api/bounties', async (req, res) => {
       });
     }
     
+    // Resolve posterId: prefer poster_id, fall back to legacy user_id if provided
+    let posterId = poster_id || validation.data.user_id || null;
+
+    // Ensure we have a username to satisfy DB NOT NULL constraints on bounties.username.
+    // If the profile does not exist, create a minimal profile row so the profile shown
+    // in the Profiles screen and used at sign-in will match this poster_id.
+    let posterUsername = null;
+    try {
+      if (posterId) {
+        const [profileRows] = await conn.execute('SELECT username FROM profiles WHERE id = ?', [posterId]);
+        if (profileRows && profileRows.length > 0) {
+          posterUsername = profileRows[0].username;
+        } else {
+          // Generate a deterministic fallback username based on the posterId so it's
+          // reproducible and easy to trace (e.g. @user_abcdef12).
+          const compact = String(posterId).replace(/-/g, '').slice(0, 8);
+          const generatedUsername = `@user_${compact}`;
+
+          try {
+            await conn.execute(
+              `INSERT INTO profiles (id, username, avatar_url, about, phone, balance)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE username = VALUES(username)`,
+              [posterId, generatedUsername, '/placeholder.svg?height=40&width=40', '', '', 40.0]
+            );
+            posterUsername = generatedUsername;
+            console.log('[create bounty] auto-created minimal profile for poster_id', posterId, 'username', generatedUsername);
+          } catch (createErr) {
+            console.warn('[create bounty] failed to auto-create profile (continuing):', (createErr && createErr.message) || createErr);
+            // As a last resort set a simple fallback username
+            posterUsername = `@user_${compact}`;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[create bounty] failed to lookup or create profile username', e && e.message ? e.message : e);
+      // Deterministic fallback when lookup fails
+      if (posterId) {
+        const compact = String(posterId).replace(/-/g, '').slice(0, 8);
+        posterUsername = `@user_${compact}`;
+      } else {
+        posterUsername = '@user_unknown';
+      }
+    }
+
     const [result] = await conn.execute(`
       INSERT INTO bounties (
         title, description, amount, is_for_honor, location, 
-        timeline, skills_required, user_id, work_type, 
+        timeline, skills_required, poster_id, username, work_type, 
         is_time_sensitive, deadline, attachments_json, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       title, description, amount || 0, is_for_honor || false, location,
-      timeline, skills_required, user_id, work_type || 'online',
+      timeline, skills_required, posterId, posterUsername, work_type || 'online',
       is_time_sensitive || false, deadline, attachments_json, 'open'
     ]);
     
@@ -579,7 +630,8 @@ app.post('/api/supabase/bounties', async (req, res) => {
       location: String(input.location || ''),
       timeline: String(input.timeline || ''),
       skills_required: String(input.skills_required || ''),
-      user_id: String(input.user_id || '').trim(),
+  // support legacy `user_id` by mapping to `poster_id`
+  poster_id: String(input.poster_id || input.user_id || '').trim(),
       status: input.status || 'open',
       work_type: input.work_type || 'online',
       is_time_sensitive: Boolean(input.is_time_sensitive || false),
@@ -590,36 +642,50 @@ app.post('/api/supabase/bounties', async (req, res) => {
     if (!record.title) return res.status(400).json({ error: 'title is required' })
     if (!record.description) return res.status(400).json({ error: 'description is required' })
     if (!record.is_for_honor && (!record.amount || record.amount <= 0)) return res.status(400).json({ error: 'amount must be > 0 for paid bounties' })
-    if (!record.user_id) return res.status(400).json({ error: 'user_id is required' })
+  if (!record.poster_id) return res.status(400).json({ error: 'poster_id is required' })
 
     // Ensure profile exists to satisfy potential FK constraints
     try {
+      // Try to fetch the profile and its username so we can populate the bounties.username field
       const { data: prof, error: profErr } = await supabaseAdmin
         .from('profiles')
-        .select('id')
-        .eq('id', record.user_id)
+        .select('id, username')
+        .eq('id', record.poster_id)
         .maybeSingle()
+
       if (profErr) {
         console.warn('[relay] profiles lookup error (non-fatal):', profErr.message)
       }
+
       if (!prof) {
+        // Auto-create a minimal profile so FK constraints are satisfied. Use a default username.
         const defaultProfile = {
-          id: record.user_id,
+          id: record.poster_id,
           username: '@Jon_Doe',
           balance: 40.0,
         }
+
         const { error: createProfErr } = await supabaseAdmin.from('profiles').insert(defaultProfile)
         if (createProfErr) {
           console.warn('[relay] profile autocreate failed (continuing):', createProfErr.message)
         }
+
+        // Ensure we set the username on the record so the bounties insert satisfies NOT NULL
+        record.username = defaultProfile.username
+      } else {
+        // Use the existing profile username
+        record.username = prof.username || '@Jon_Doe'
       }
     } catch (e) {
       console.warn('[relay] profile ensure failed (continuing):', e?.message)
+      // As a last resort set a fallback username so the insert won't null-fail
+      record.username = record.username || '@Jon_Doe'
     }
 
     const { data, error } = await supabaseAdmin
+      // Remove any legacy user_id key before inserting to avoid schema mismatch
       .from('bounties')
-      .insert(record)
+      .insert(Object.assign({}, record, { user_id: undefined }))
       .select('*')
       .single()
 

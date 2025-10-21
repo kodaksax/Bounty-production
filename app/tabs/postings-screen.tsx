@@ -36,10 +36,11 @@ interface PostingsScreenProps {
   activeScreen: string
   setActiveScreen: (screen: string) => void
   onBountyPosted?: () => void // Callback when a bounty is successfully posted
+  onBountyAccepted?: (bountyId?: string | number) => void // Callback when a bounty is accepted
   setShowBottomNav?: (show: boolean) => void
 }
 
-export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, setShowBottomNav }: PostingsScreenProps) {
+export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
   const { session, isEmailVerified } = useAuthContext()
   const currentUserId = getCurrentUserId()
   const router = useRouter()
@@ -137,8 +138,16 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         setIsLoading((prev) => ({ ...prev, requests: false }))
         return
       }
+      // Only load requests for bounties that are currently OPEN.
+      // Once a bounty is accepted (in_progress) we should no longer show its requests in the Requests tab.
+      const openBounties = bounties.filter(b => b.status === 'open')
+      if (openBounties.length === 0) {
+        setBountyRequests([])
+        setIsLoading((prev) => ({ ...prev, requests: false }))
+        return
+      }
       setIsLoading((prev) => ({ ...prev, requests: true }))
-      const requestsPromises = bounties.map((b) => bountyRequestService.getAllWithDetails({ bountyId: b.id }))
+      const requestsPromises = openBounties.map((b) => bountyRequestService.getAllWithDetails({ bountyId: b.id }))
       const requestsArrays = await Promise.all(requestsPromises)
       setBountyRequests(requestsArrays.flat())
     } catch (e: any) {
@@ -271,8 +280,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   location: formData.workType === 'in_person' ? formData.location : '',
   timeline: formData.timeline,
   skills_required: formData.skills,
-  poster_id: currentUserId,
-  user_id: currentUserId, // Use authenticated user ID (back-compat)
+    poster_id: currentUserId,
   status: "open", // Ensure this matches the expected type
   work_type: formData.workType,
   is_time_sensitive: formData.isTimeSensitive,
@@ -338,10 +346,54 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   const handleAcceptRequest = async (requestId: number) => {
     try {
+      // Show quick-refresh UI for list transitions
+      setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
+
       // Find the request to get bounty and profile info
       const request = bountyRequests.find(req => req.id === requestId)
       if (!request) {
         throw new Error("Request not found")
+      }
+
+      // DEBUG: dump full request and preliminary identifiers to help diagnose update failures
+      try {
+        console.debug('DEBUG: handleAcceptRequest - request object:', JSON.parse(JSON.stringify(request)))
+      } catch (dumpErr) {
+        // JSON.stringify can fail for cyclic structures; fallback to shallow log
+        console.debug('DEBUG: handleAcceptRequest - request (shallow):', request)
+      }
+
+      const debugBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
+      console.debug('DEBUG: handleAcceptRequest - resolved bountyId:', debugBountyId, 'requestId:', requestId)
+
+      // Prepare identifiers and hunter id early for optimistic UI updates
+      const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
+      const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
+
+      // Optimistically remove all requests for this bounty so UI moves immediately
+      if (resolvedBountyId != null) {
+        setBountyRequests((prev) => prev.filter(req => String(req.bounty_id) !== String(resolvedBountyId)))
+      } else {
+        // If we don't know bounty id, at least remove the single request
+        setBountyRequests((prev) => prev.filter(req => req.id !== requestId))
+      }
+
+      // Optimistically update My Postings to in_progress
+      setMyBounties((prev) =>
+        prev.map((b) =>
+          String(b.id) === String(resolvedBountyId)
+            ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
+            : b
+        )
+      )
+
+      // If current user is the accepted hunter, optimistically add to In Progress list
+      if (String(hunterIdForConv) === String(currentUserId)) {
+        const newBounty = (request.bounty as Bounty) ?? ({ id: resolvedBountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
+        setInProgressBounties((prev) => {
+          if (resolvedBountyId != null && prev.some(pb => String(pb.id) === String(resolvedBountyId))) return prev
+          return [newBounty, ...prev]
+        })
       }
 
       // Check if poster has sufficient balance for paid bounties
@@ -359,38 +411,80 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // ANNOTATION: This API call should be transactional on your backend.
-      const result = await bountyRequestService.acceptRequest(requestId)
+  // ANNOTATION: This API call should be transactional on your backend.
+  console.log('Accept: calling bountyRequestService.acceptRequest for', requestId)
+  const result = await bountyRequestService.acceptRequest(requestId)
 
       if (!result) {
-        throw new Error("Failed to accept request")
+        // If accept failed server-side, inform the user and reload lists to reflect server state
+        console.error('Accept request failed for', requestId)
+        Alert.alert('Accept Failed', 'Failed to accept the request on the server. The UI may be out of sync; please refresh.')
+        // Reload lists to attempt to restore correct state
+        await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
+        return
       }
 
-      const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
-
       // Update bounty status to in_progress and set accepted_by
-      if (request.bounty) {
+      // Prefer the full bounty object id, but fall back to the canonical bounty_id
+      const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
+
+      // If we don't have the full bounty object available on the request, fetch it
+      let bountyObj: Bounty | null = (request.bounty as unknown as Bounty) ?? null
+      if (!bountyObj && bountyId != null) {
         try {
-          await bountyService.update(Number(request.bounty.id), {
+          console.log('Accept: fetching bounty details for', bountyId)
+          const fetched = await bountyService.getById(bountyId)
+          if (fetched) bountyObj = fetched
+          else console.warn('Accept: bountyService.getById returned null for', bountyId)
+        } catch (fetchErr) {
+          console.error('Accept: failed to fetch bounty details', fetchErr)
+          // continue: we still attempt update using bountyId, and skip escrow if bounty data missing
+        }
+      }
+  if (bountyId != null) {
+        try {
+          // Avoid passing null/undefined/NaN to the service. Pass the raw id so
+          // the service can decide whether it's a numeric or string id.
+          // (bountyService.update accepts a number in TS but handles API paths at runtime.)
+          // Use any cast to avoid TypeScript complaints while preserving runtime safety.
+          // If your backend expects numeric ids, ensure bounties are stored as numbers.
+          // We intentionally do not coerce to Number() here to avoid NaN.
+          // Only update the status on the server; the `accepted_by` column may not exist
+          // in all deployments (causes PGRST204). Keep `accepted_by` locally for UI only.
+          const updated = await (bountyService as any).update(bountyId, {
             status: 'in_progress',
-            accepted_by: hunterIdForConv,
           })
-          console.log('✅ Bounty status updated to in_progress:', request.bounty.id)
+          if (!updated) {
+            console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
+            // Diagnostic: fetch server bounty and log its current state
+            try {
+              const serverBounty = await bountyService.getById(bountyId)
+              console.debug('Diagnostic: server bounty state for', bountyId, serverBounty)
+              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}. Server bounty state logged to console.`)
+            } catch (srvErr) {
+              console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
+              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)} and failed to fetch server state.`)
+            }
+          } else {
+            console.log('✅ Bounty status updated to in_progress:', bountyId)
+          }
         } catch (statusError) {
           console.error('Error updating bounty status:', statusError)
           // Continue with the flow even if status update fails
         }
+      } else {
+        console.warn('Skipping server bounty update: missing bounty id on request', { request })
       }
 
       // Remove all competing requests for this bounty (cleanup)
       const competingRequests = bountyRequests.filter(
-        req => req.bounty_id === request.bounty_id && req.id !== requestId
+        req => String(req.bounty_id) === String(request.bounty_id) && req.id !== requestId
       )
-      
+
       if (competingRequests.length > 0) {
         try {
           await Promise.all(
-            competingRequests.map(req => bountyRequestService.delete(Number(req.id)))
+            competingRequests.map(req => bountyRequestService.delete((req.id as any)))
           )
           console.log(`✅ Removed ${competingRequests.length} competing requests`)
         } catch (cleanupError) {
@@ -399,16 +493,17 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // Create escrow transaction for paid bounties
-      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
+      // Create escrow transaction for paid bounties (use fetched or embedded bounty object)
+      const bountyForEscrow = bountyObj
+      if (bountyForEscrow && !bountyForEscrow.is_for_honor && bountyForEscrow.amount > 0) {
         try {
           await createEscrow(
-            Number(request.bounty.id),
-            request.bounty.amount,
-            request.bounty.title,
+            Number(bountyForEscrow.id),
+            bountyForEscrow.amount,
+            bountyForEscrow.title,
             currentUserId
           )
-          console.log('✅ Escrow created for bounty:', request.bounty.id)
+          console.log('✅ Escrow created for bounty:', bountyForEscrow.id)
         } catch (escrowError) {
           console.error('Error creating escrow:', escrowError)
           Alert.alert(
@@ -419,19 +514,19 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // Auto-create a conversation for coordination
+      // Auto-create a conversation for coordination (use bountyId as context)
       try {
         const { messageService } = await import('lib/services/message-service')
         const conversation = await messageService.getOrCreateConversation(
           [hunterIdForConv],
           request.profile?.username || 'Hunter',
-          request.bounty?.id?.toString()
+          String(bountyId)
         )
-        
-        // Send initial message with bounty context
+
+        // Send initial message with bounty context (use title if available)
         await messageService.sendMessage(
           conversation.id,
-          `Welcome! You've been selected for: "${request.bounty?.title}". Let's coordinate the details.`,
+          `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
           currentUserId
         )
 
@@ -441,24 +536,39 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         // Don't fail the whole operation if conversation creation fails
       }
 
-      // Update local state - mark request as accepted and remove competing ones
-      setBountyRequests((prev) => 
-        prev
-          .map((req) => (req.id === requestId ? { ...req, status: "accepted" } : req))
-          .filter(req => req.bounty_id !== request.bounty_id || req.id === requestId)
-      )
+      // Update local state - remove all requests for this bounty since it's now in progress
+      setBountyRequests((prev) => prev.filter(req => req.bounty_id !== request.bounty_id))
 
-      // Update bounty in local state
+      // Update bounty in local state (normalize ID comparison using resolved bountyId)
       setMyBounties((prev) =>
         prev.map((b) =>
-          b.id === request.bounty.id
+          String(b.id) === String(bountyId)
             ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
             : b
         )
       )
 
-      // Reload data to ensure consistency
-      loadMyBounties()
+      // If the current user is the accepted hunter, optimistically add the bounty to In Progress list
+      if (String(hunterIdForConv) === String(currentUserId)) {
+        // If the request includes a full bounty object, use it; otherwise insert a minimal placeholder
+        const newBounty = (request.bounty as Bounty) ?? ({ id: bountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
+        setInProgressBounties((prev) => {
+          if (prev.some(pb => String(pb.id) === String(bountyId))) return prev
+          return [newBounty, ...prev]
+        })
+      }
+
+      // Reload data to ensure consistency across tabs (quick refresh for user)
+      await Promise.allSettled([loadMyBounties(), loadInProgress()])
+
+      // Notify parent that a bounty was accepted so higher-level feeds can refresh
+      try {
+        if (typeof onBountyAccepted === 'function') {
+          onBountyAccepted(bountyId ?? request.bounty_id)
+        }
+      } catch (notifyErr) {
+        console.error('Error calling onBountyAccepted callback:', notifyErr)
+      }
 
       // Show escrow instructions if it's a paid bounty
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
@@ -484,24 +594,33 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       console.error("Error accepting request:", err)
       setError(err.message || "Failed to accept request")
     }
+    finally {
+      setIsLoading((prev) => ({ ...prev, requests: false, myBounties: false, inProgress: false }))
+    }
   }
 
   const handleRejectRequest = async (requestId: number) => {
     try {
-      const rejectedRequest = await bountyRequestService.rejectRequest(requestId)
+      // Show quick-refresh indicator for requests
+      setIsLoading((prev) => ({ ...prev, requests: true }))
 
-      if (!rejectedRequest) {
-        throw new Error("Failed to reject request")
+      // Delete the request entirely (user asked rejected requests be deleted)
+      const deleted = await bountyRequestService.delete(requestId)
+
+      if (!deleted) {
+        throw new Error("Failed to delete rejected request")
       }
 
       // Update local state - remove the rejected request from the list
       setBountyRequests((prev) => prev.filter((req) => req.id !== requestId))
-      
+
       // Show confirmation toast
-      Alert.alert('Request Rejected', 'The request has been rejected.', [{ text: 'OK' }])
+      Alert.alert('Request Rejected', 'The request has been rejected and removed.', [{ text: 'OK' }])
     } catch (err: any) {
       console.error("Error rejecting request:", err)
       setError(err.message || "Failed to reject request")
+    } finally {
+      setIsLoading((prev) => ({ ...prev, requests: false }))
     }
   }
 

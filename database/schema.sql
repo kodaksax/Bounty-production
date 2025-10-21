@@ -186,6 +186,25 @@ CREATE INDEX idx_wallet_transactions_user_id ON wallet_transactions(user_id);
 CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX idx_messages_conversation_id_created_at ON messages(conversation_id, created_at);
 
+-- Completion submissions
+CREATE TABLE IF NOT EXISTS completion_submissions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    bounty_id uuid NOT NULL REFERENCES bounties(id) ON DELETE CASCADE,
+    hunter_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+    message text,
+    proof_items jsonb,
+    submitted_at timestamptz NOT NULL DEFAULT NOW(),
+    status text NOT NULL DEFAULT 'pending', -- pending, approved, rejected, revision_requested
+    poster_feedback text,
+    revision_count integer DEFAULT 0,
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_completion_bounty_id ON completion_submissions(bounty_id);
+CREATE INDEX IF NOT EXISTS idx_completion_hunter_id ON completion_submissions(hunter_id);
+
+
 -- Optional: Seed a default test profile if the auth user exists
 DO $$
 DECLARE

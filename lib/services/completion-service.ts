@@ -53,7 +53,7 @@ export const completionService = {
           .select('*')
           .single();
 
-        if (error) throw error;
+  if (error) throw new Error(error?.message ?? JSON.stringify(error));
         
         return {
           ...data,
@@ -99,7 +99,7 @@ export const completionService = {
 
         if (error) {
           if (error.code === 'PGRST116') return null; // No rows
-          throw error;
+          throw new Error(error?.message ?? JSON.stringify(error));
         }
 
         return {

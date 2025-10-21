@@ -88,9 +88,11 @@ export const blockingService = {
         return { isBlocked: false };
       }
 
+      // Some DB schemas may not expose an `id` column on the relationship.
+      // Selecting a concrete column (blocker_id) avoids Postgres "column ... does not exist" errors.
       const { data, error } = await supabase
         .from('blocked_users')
-        .select('id')
+        .select('blocker_id')
         .eq('blocker_id', currentUserId)
         .eq('blocked_id', userId)
         .single();

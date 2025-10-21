@@ -356,10 +356,43 @@ export const bountyService = {
       }
 
       if (isSupabaseConfigured) {
+        // Normalize record to prefer poster_id and avoid sending legacy user_id column
+        const normalized = Object.assign({}, bounty) as any
+        normalized.poster_id = normalized.poster_id || normalized.user_id || undefined
+        // Remove legacy user_id to avoid inserting into a column that may not exist
+        if (Object.prototype.hasOwnProperty.call(normalized, 'user_id')) delete normalized.user_id
+
+        // Attempt to fetch poster's username from profiles so we can satisfy NOT NULL
+        // constraints on the Supabase/Postgres side. If this fails, fall back to a
+        // default username to avoid insertion errors.
+        try {
+          if (normalized.poster_id) {
+            const { data: profData, error: profErr } = await supabase
+              .from('profiles')
+              .select('username')
+              .eq('id', normalized.poster_id)
+              .maybeSingle()
+
+            if (!profErr && profData && profData.username) {
+              normalized.username = profData.username
+            } else {
+              const compactSource = normalized.poster_id ? ('' + normalized.poster_id) : ''
+              const compact = (compactSource.replace(/-/g, '').slice(0, 8)) || 'unknown'
+              normalized.username = normalized.username || `@user_${compact}`
+            }
+          } else {
+            const compactSource = normalized.poster_id ? ('' + normalized.poster_id) : ''
+            const compact = (compactSource.replace(/-/g, '').slice(0, 8)) || 'unknown'
+            normalized.username = normalized.username || `@user_${compact}`
+          }
+        } catch (e) {
+          normalized.username = normalized.username || '@Jon_Doe'
+        }
+
         // Try direct Supabase insert first (works if RLS permits anon/session)
         const { data, error } = await supabase
           .from('bounties')
-          .insert(bounty as any)
+          .insert(normalized as any)
           .select('*')
           .single()
 
@@ -386,14 +419,13 @@ export const bountyService = {
           const relayResp = await fetch(`${getApiBaseUrl()}/api/supabase/bounties`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...bounty,
+            body: JSON.stringify(Object.assign({}, normalized, {
               // Defaults to reduce DB constraint issues
-              status: (bounty as any).status || 'open',
-              timeline: (bounty as any).timeline ?? '',
-              skills_required: (bounty as any).skills_required ?? '',
-              work_type: (bounty as any).work_type || 'online',
-            }),
+              status: (normalized as any).status || 'open',
+              timeline: (normalized as any).timeline ?? '',
+              skills_required: (normalized as any).skills_required ?? '',
+              work_type: (normalized as any).work_type || 'online',
+            })),
           })
           if (!relayResp.ok) {
             const text = await relayResp.text()
@@ -437,8 +469,15 @@ export const bountyService = {
   /**
    * Update a bounty
    */
-  async update(id: number, updates: Partial<Omit<Bounty, "id" | "created_at">>): Promise<Bounty | null> {
+  async update(id: any, updates: Partial<Omit<Bounty, "id" | "created_at">>): Promise<Bounty | null> {
     try {
+      // Defensive: ensure id is present and not null/undefined/empty
+      if (id === null || id === undefined || id === '') {
+        const err = new Error('Invalid bounty id provided to bountyService.update')
+        logger.error('bounties:update called with invalid id', { id, updates })
+        // Return null so callers can handle the failure gracefully without throwing
+        return null
+      }
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('bounties')
@@ -451,7 +490,7 @@ export const bountyService = {
         return (data as unknown as Bounty) ?? null
       }
 
-  const API_URL = `${getApiBaseUrl()}/api/bounties/${id}`
+      const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(id))}`
       const response = await fetch(API_URL, {
         method: "PATCH",
         headers: {
@@ -467,8 +506,28 @@ export const bountyService = {
 
       return await response.json()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
-      logOnce('bounties:update', 'error', 'Error updating bounty (showing once until reload)', { id, updates, error })
+      // Build a rich error object for logging (handle plain objects thrown by some libs)
+      let richError: any
+      try {
+        if (err instanceof Error) {
+          richError = { name: err.name, message: err.message, stack: err.stack }
+        } else if (err && typeof err === 'object') {
+          richError = Object.assign({}, err)
+        } else {
+          richError = { message: String(err) }
+        }
+      } catch (e) {
+        richError = { message: 'Failed to serialize error', raw: String(err) }
+      }
+
+      // Log to console immediately for faster visibility during debugging
+      try {
+        console.error('bountyService.update error', { id, updates, error: richError })
+      } catch (e) {
+        // ignore
+      }
+
+      logOnce('bounties:update', 'error', 'Error updating bounty (showing once until reload)', { id, updates, error: richError })
       return null
     }
   },
