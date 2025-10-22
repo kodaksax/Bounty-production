@@ -5,15 +5,15 @@ import { messageService } from 'lib/services/message-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-    ActivityIndicator,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
@@ -51,11 +51,13 @@ const STAGES = [
 export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
+  const [readyToSubmitPressed, setReadyToSubmitPressed] = useState(false)
   const [ratingDraft, setRatingDraft] = useState(0)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [hasSubmission, setHasSubmission] = useState(false)
   const [reviewExpanded, setReviewExpanded] = useState(false)
   const [payoutExpanded, setPayoutExpanded] = useState(false)
+  const [readyRecord, setReadyRecord] = useState<{ bounty_id: string; hunter_id: string; ready_at: string } | null>(null)
   
   // Hunter completion submission state
   const [timeElapsed, setTimeElapsed] = useState(0)
@@ -63,6 +65,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [completionMessage, setCompletionMessage] = useState('')
   const [proofItems, setProofItems] = useState<Array<{ id: string; type: 'image' | 'file'; name: string; size?: number }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submissionPending, setSubmissionPending] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -77,9 +80,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           const submission = await completionService.getSubmission(String(bounty.id))
           if (mounted) setHasSubmission(!!submission && submission.status === 'pending')
         }
+        // Also check ready flag (hunter clicked Ready to Submit)
+        try {
+          const ready = await completionService.getReady(String(bounty.id))
+          if (mounted) setReadyRecord(ready)
+        } catch {}
       } catch {}
     }
-    if (expanded) load()
+    // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view
+    if (expanded || variant === 'owner') load()
     return () => { mounted = false }
   }, [expanded, bounty.id, bounty.status, variant])
   
@@ -100,12 +109,59 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     }
   }, [isOwner, bounty.status, reviewExpanded, startTime])
 
+  // Subscribe to ready-state realtime updates so poster's card unlocks immediately
+  useEffect(() => {
+    if (!bounty.id) return
+    let unsub: (() => void) | undefined
+    try {
+      unsub = completionService.subscribeReady(String(bounty.id), (rec) => {
+        setReadyRecord(rec)
+        if (variant === 'owner' && rec) {
+          // If owner sees a ready record, show review submission availability
+          setHasSubmission(true)
+        }
+      })
+    } catch (e) {
+      // ignore
+    }
+    return () => { try { unsub && unsub() } catch {} }
+  }, [bounty.id, variant])
+
+  // Subscribe to submission updates so hunter gets pushed back to WIP if poster requests revision
+  useEffect(() => {
+    if (!bounty.id) return
+    let unsub: (() => void) | undefined
+    try {
+      unsub = completionService.subscribeSubmission(String(bounty.id), (submission) => {
+        if (!submission) {
+          setHasSubmission(false)
+          return
+        }
+        setHasSubmission(submission.status === 'pending')
+        // If the poster requested a revision, and we're the hunter, move back to Work in Progress
+        if (!isOwner && submission.status === 'revision_requested') {
+          // Show feedback to hunter and move flow back
+          alert('Poster requested revisions: ' + (submission.poster_feedback || 'See poster feedback in Review.'))
+          setLocalStageOverride('working_progress')
+          setWipExpanded(true)
+          setReviewExpanded(false)
+        }
+      })
+    } catch (e) {
+      // ignore
+    }
+    return () => { try { unsub && unsub() } catch {} }
+  }, [bounty.id, isOwner])
+
   const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' = useMemo(() => {
     if (bounty.status === 'in_progress') return 'working_progress'
     if (bounty.status === 'completed') return 'payout'
     // We don't track 'review_verify' in status—user reaches it via flow; keep default as 'apply_work'
     return 'apply_work'
   }, [bounty.status])
+
+  // Local override to move the UI to a specific stage when user advances via buttons
+  const [localStageOverride, setLocalStageOverride] = useState<null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'>(null)
 
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
@@ -135,6 +191,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     const remainingMinutes = minutes % 60
     return `${hours}h ${remainingMinutes}m`
   }
+
+  const relativeTime = (iso?: string | null) => {
+    if (!iso) return 'just now'
+    try {
+      const then = new Date(iso).getTime()
+      const now = Date.now()
+      const delta = Math.floor((now - then) / 1000)
+      if (delta < 60) return `${delta}s ago`
+      if (delta < 3600) return `${Math.floor(delta / 60)}m ago`
+      if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`
+      return `${Math.floor(delta / 86400)}d ago`
+    } catch {
+      return 'just now'
+    }
+  }
   
   const handleSubmitCompletion = async () => {
     if (proofItems.length === 0) {
@@ -148,15 +219,32 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     
     try {
       setIsSubmitting(true)
-      await completionService.submitCompletion({
+
+      // Check for existing pending submission to avoid duplicates
+      const existing = await completionService.getSubmission(String(bounty.id))
+      if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId || '')) {
+        // Already have a pending submission from this hunter — avoid duplicate
+        alert('You already have a pending submission. Please wait for the poster to review or check your submission.')
+        setIsSubmitting(false)
+        setHasSubmission(true)
+        return
+      }
+
+      const resp = await completionService.submitCompletion({
         bounty_id: String(bounty.id),
         hunter_id: currentUserId || '',
         message: completionMessage.trim(),
         proof_items: proofItems,
       })
-      alert('Your work has been submitted for review!')
-      setReviewExpanded(false)
-      setPayoutExpanded(true)
+
+      if (resp) {
+        alert('Your work has been submitted for review!')
+        // Lock review UI and show waiting state
+        setSubmissionPending(true)
+        setHasSubmission(true)
+        setReviewExpanded(false)
+        setPayoutExpanded(true)
+      }
     } catch (err) {
       console.error('Error submitting completion:', err)
       alert('Failed to submit completion. Please try again.')
@@ -188,8 +276,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const currentStageIndex = useMemo(() => {
-    return STAGES.findIndex(s => s.id === currentStage)
-  }, [currentStage])
+    const stageToUse = localStageOverride || currentStage
+    return STAGES.findIndex(s => s.id === stageToUse)
+  }, [currentStage, localStageOverride])
 
   return (
     <View>
@@ -208,7 +297,30 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}><MaterialIcons name="favorite" size={14} color="#052e1b" /><Text style={styles.honorBadgeText}>For Honor</Text></View>
             ) : (
-              <Text style={styles.amount}>${bounty.amount}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.amount}>${bounty.amount}</Text>
+                {variant === 'owner' && readyRecord && (
+                  <TouchableOpacity
+                    style={styles.readyBadge}
+                    onPress={() => setShowReviewModal(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Hunter ready, opened review modal`}
+                  >
+                    <MaterialIcons name="hourglass-top" size={14} color="#052e1b" />
+                    <Text style={styles.readyBadgeText}>{`Hunter Ready · ${relativeTime(readyRecord.ready_at)}`}</Text>
+                  </TouchableOpacity>
+                )}
+                {isOwner && hasSubmission && (
+                  <TouchableOpacity
+                    style={styles.headerReviewBtn}
+                    onPress={() => setShowReviewModal(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open review modal"
+                  >
+                    <MaterialIcons name="rate-review" size={14} color="#052e1b" />
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </View>
 
@@ -232,7 +344,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Work in progress"
               expanded={wipExpanded}
-              onToggle={() => setWipExpanded(!wipExpanded)}
+              onToggle={() => {
+                // If the flow has been advanced (locked), prevent toggling WIP
+                if (readyToSubmitPressed || !!readyRecord) return
+                setWipExpanded(!wipExpanded)
+              }}
+              locked={readyToSubmitPressed || !!readyRecord}
             >
               {isOwner ? (
                 <View style={{ gap: 16 }}>
@@ -281,11 +398,27 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <AttachmentsList attachments={attachments} />
                   
                   <TouchableOpacity
-                    style={styles.primaryBtn}
-                    onPress={() => setReviewExpanded(!reviewExpanded)}
+                    style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
+                    onPress={async () => {
+                      // Persist ready state and advance UI
+                      const ok = await completionService.markReady(String(bounty.id), String(currentUserId || ''))
+                      if (ok) {
+                        setReadyToSubmitPressed(true)
+                        setWipExpanded(false)
+                        setReviewExpanded(true)
+                        setLocalStageOverride('review_verify')
+                        // update local readyRecord optimistically
+                        const now = new Date().toISOString()
+                        const rec = { bounty_id: String(bounty.id), hunter_id: String(currentUserId || ''), ready_at: now }
+                        setReadyRecord(rec)
+                      } else {
+                        alert('Failed to mark Ready. Please try again.')
+                      }
+                    }}
+                    disabled={readyToSubmitPressed || !!readyRecord}
                   >
                     <Text style={styles.primaryText}>Ready to Submit</Text>
-                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+                    <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'lock' : 'arrow-forward'} size={18} color="#fff" />
                   </TouchableOpacity>
                 </View>
               )}
@@ -297,74 +430,84 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Review & Verify"
               expanded={reviewExpanded}
-              onToggle={() => setReviewExpanded(!reviewExpanded)}
+              onToggle={() => {
+                // Prevent toggling open unless readyToSubmitPressed or a readyRecord exists or there's no pending submission
+                if (!readyToSubmitPressed && !readyRecord) return
+                if (submissionPending || hasSubmission) return
+                setReviewExpanded(!reviewExpanded)
+              }}
+              locked={!readyToSubmitPressed && !readyRecord || submissionPending || hasSubmission}
             >
               <View style={{ gap: 16 }}>
-                {/* Timer */}
-                <View style={styles.timerContainer}>
-                  <Text style={styles.timerLabel}>Time Spent in Review</Text>
-                  <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
-                  <Text style={styles.timerHint}>Track your time on this task</Text>
-                </View>
+                {/* If a submission is pending, show waiting state */}
+                {(submissionPending || hasSubmission) ? (
+                  <View style={styles.infoBox}>
+                    <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
+                    <Text style={styles.infoText}>Waiting for poster to review your submission.</Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Message Input */}
+                    <View>
+                      <Text style={styles.sectionTitle}>Message (cont):</Text>
+                      <TextInput
+                        style={styles.messageTextArea}
+                        placeholder="Describe your completed work..."
+                        placeholderTextColor="rgba(255,254,245,0.4)"
+                        value={completionMessage}
+                        onChangeText={setCompletionMessage}
+                        multiline
+                        numberOfLines={4}
+                        maxLength={1000}
+                        textAlignVertical="top"
+                      />
+                    </View>
 
-                {/* Message Input */}
-                <View>
-                  <Text style={styles.sectionTitle}>Message (cont):</Text>
-                  <TextInput
-                    style={styles.messageTextArea}
-                    placeholder="Describe your completed work..."
-                    placeholderTextColor="rgba(255,254,245,0.4)"
-                    value={completionMessage}
-                    onChangeText={setCompletionMessage}
-                    multiline
-                    numberOfLines={4}
-                    maxLength={1000}
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                {/* Proof Attachments */}
-                <View>
-                  <Text style={styles.sectionTitle}>Proof:</Text>
-                  {proofItems.map((item) => (
-                    <View key={item.id} style={styles.proofItem}>
-                      <View style={styles.proofIcon}>
-                        <MaterialIcons
-                          name={item.type === 'image' ? 'image' : 'insert-drive-file'}
-                          size={24}
-                          color="#6ee7b7"
-                        />
-                      </View>
-                      <View style={styles.proofInfo}>
-                        <Text style={styles.proofName}>{item.name}</Text>
-                        <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
-                        <MaterialIcons name="close" size={20} color="#ef4444" />
+                    {/* Proof Attachments */}
+                    <View>
+                      <Text style={styles.sectionTitle}>Proof:</Text>
+                      {proofItems.map((item) => (
+                        <View key={item.id} style={styles.proofItem}>
+                          <View style={styles.proofIcon}>
+                            <MaterialIcons
+                              name={item.type === 'image' ? 'image' : 'insert-drive-file'}
+                              size={24}
+                              color="#6ee7b7"
+                            />
+                          </View>
+                          <View style={styles.proofInfo}>
+                            <Text style={styles.proofName}>{item.name}</Text>
+                            <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
+                          </View>
+                          <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
+                            <MaterialIcons name="close" size={20} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                      <TouchableOpacity
+                        style={[styles.addFileBtn, !(readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
+                        onPress={handleAddProof}
+                        disabled={!(readyToSubmitPressed || !!readyRecord)}
+                      >
+                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#10b981" />
+                        <Text style={styles.addFileText}>{(readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}</Text>
                       </TouchableOpacity>
                     </View>
-                  ))}
-                  <TouchableOpacity
-                    style={styles.addFileBtn}
-                    onPress={handleAddProof}
-                  >
-                    <MaterialIcons name="add" size={20} color="#10b981" />
-                    <Text style={styles.addFileText}>Add File</Text>
-                  </TouchableOpacity>
-                </View>
 
-                {/* Submit Button */}
-                <TouchableOpacity
-                  style={[styles.primaryBtn, isSubmitting && styles.buttonDisabled]}
-                  onPress={handleSubmitCompletion}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.primaryText}>Submit</Text>
-                  )}
-                </TouchableOpacity>
+                    {/* Submit Button */}
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, isSubmitting && styles.buttonDisabled]}
+                      onPress={handleSubmitCompletion}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryText}>Submit</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </AnimatedSection>
           )}
@@ -456,7 +599,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         <PosterReviewModal
           visible={showReviewModal}
           bountyId={String(bounty.id)}
-          hunterId={bounty.accepted_by || ''}
+          hunterId={bounty.accepted_by || readyRecord?.hunter_id || ''}
           hunterName="Hunter" // TODO: Get actual hunter name
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
@@ -740,5 +883,25 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontSize: 12,
     fontWeight: '600',
+  },
+  readyBadge: {
+    backgroundColor: '#d1fae5',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  readyBadgeText: {
+    color: '#052e1b',
+    fontSize: 12,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+  headerReviewBtn: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(167,243,208,0.9)',
+    padding: 6,
+    borderRadius: 8,
   },
 })

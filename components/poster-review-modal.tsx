@@ -2,16 +2,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bountyService } from '../lib/services/bounty-service';
@@ -41,7 +41,7 @@ export function PosterReviewModal({
   onComplete,
 }: PosterReviewModalProps) {
   const insets = useSafeAreaInsets();
-  const { releaseEscrow } = useWallet();
+  const { releaseFunds } = useWallet();
 
   const [submission, setSubmission] = useState<CompletionSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,7 +88,7 @@ export function PosterReviewModal({
       // Release escrow if paid bounty
       if (!isForHonor && bountyAmount > 0) {
         try {
-          await releaseEscrow(Number(bountyId), bountyAmount, hunterId);
+          await releaseFunds(Number(bountyId), hunterId, `Bounty ${bountyId}`);
           console.log('✅ Escrow released for bounty:', bountyId);
         } catch (escrowError) {
           console.error('Error releasing escrow:', escrowError);

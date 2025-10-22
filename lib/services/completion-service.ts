@@ -42,6 +42,26 @@ export const completionService = {
   async submitCompletion(submission: Omit<CompletionSubmission, 'id' | 'submitted_at' | 'status'>): Promise<CompletionSubmission | null> {
     try {
       if (isSupabaseConfigured) {
+        // Prevent duplicate pending submissions for the same bounty + hunter
+        const { data: existing, error: fetchErr } = await supabase
+          .from('completion_submissions')
+          .select('*')
+          .eq('bounty_id', submission.bounty_id)
+          .eq('hunter_id', submission.hunter_id)
+          .eq('status', 'pending')
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+        if (existing) {
+          // Return the existing pending submission instead of creating a duplicate
+          return {
+            ...existing,
+            proof_items: JSON.parse(existing.proof_items || '[]'),
+          } as CompletionSubmission;
+        }
+
         const { data, error } = await supabase
           .from('completion_submissions')
           .insert({
@@ -53,8 +73,8 @@ export const completionService = {
           .select('*')
           .single();
 
-  if (error) throw new Error(error?.message ?? JSON.stringify(error));
-        
+        if (error) throw new Error(error?.message ?? JSON.stringify(error));
+
         return {
           ...data,
           proof_items: JSON.parse(data.proof_items || '[]'),
@@ -81,6 +101,54 @@ export const completionService = {
       logger.error('Error submitting completion', { submission, error });
       throw error;
     }
+  },
+
+  /**
+   * Subscribe to completion_submissions changes for a bounty. Calls onUpdate with the latest submission or null.
+   * Returns an unsubscribe function.
+   */
+  subscribeSubmission(bountyId: string, onUpdate: (submission: CompletionSubmission | null) => void) {
+    if (isSupabaseConfigured) {
+      try {
+        // Prefer channel API when available
+        // @ts-ignore
+        if (typeof (supabase as any).channel === 'function') {
+          // @ts-ignore
+          const channel = (supabase as any).channel(`completion_submissions:${bountyId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'completion_submissions', filter: `bounty_id=eq.${bountyId}` }, async (payload: any) => {
+              const latest = await (completionService as any).getSubmission(bountyId)
+              onUpdate(latest)
+            })
+            .subscribe()
+
+          return () => { try { (supabase as any).removeChannel(channel) } catch {} }
+        }
+
+        // Fallback classic subscription
+        // @ts-ignore
+        const sub = supabase.from(`completion_submissions:bounty_id=eq.${bountyId}`).on('*', async (payload: any) => {
+          const latest = await (completionService as any).getSubmission(bountyId)
+          onUpdate(latest)
+        }).subscribe()
+
+        return () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} }
+      } catch (e) {
+        logger.warning('Realtime submission subscription failed, falling back to polling', { bountyId, error: (e as any)?.message })
+      }
+    }
+
+    // Polling fallback
+    let mounted = true
+    const interval = (globalThis as any).setInterval(async () => {
+      if (!mounted) return
+      const rec = await (completionService as any).getSubmission(bountyId)
+      onUpdate(rec)
+    }, 3000)
+
+    // initial fetch
+    (async () => { const r = await completionService.getSubmission(bountyId); onUpdate(r) })()
+
+    return () => { mounted = false; (globalThis as any).clearInterval(interval) }
   },
 
   /**
@@ -120,6 +188,122 @@ export const completionService = {
       logger.error('Error fetching completion', { bountyId, error });
       return null;
     }
+  },
+
+  /**
+   * Mark the bounty as 'ready' for review by a hunter (persistence for Ready-to-Submit flag)
+   */
+  async markReady(bountyId: string, hunterId: string): Promise<boolean> {
+    try {
+      if (isSupabaseConfigured) {
+        const payload = {
+          bounty_id: bountyId,
+          hunter_id: hunterId,
+          ready_at: new Date().toISOString(),
+        }
+        const { error } = await supabase
+          .from('completion_ready')
+          .upsert(payload, { onConflict: 'bounty_id' })
+
+        if (error) throw error
+        return true
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hunter_id: hunterId }),
+      })
+      if (!response.ok) throw new Error('Failed to mark ready')
+      return true
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error')
+      logger.error('Error marking ready', { bountyId, hunterId, error })
+      return false
+    }
+  },
+
+  /**
+   * Get the ready record for a bounty
+   */
+  async getReady(bountyId: string): Promise<{ bounty_id: string; hunter_id: string; ready_at: string } | null> {
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('completion_ready')
+          .select('*')
+          .eq('bounty_id', bountyId)
+          .limit(1)
+          .maybeSingle()
+
+        if (error) throw error
+        return data || null
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`)
+      if (!response.ok) {
+        if (response.status === 404) return null
+        throw new Error('Failed to fetch ready state')
+      }
+      return await response.json()
+    } catch (err) {
+      logger.error('Error fetching ready state', { bountyId, error: (err as any)?.message })
+      return null
+    }
+  },
+
+  /**
+   * Subscribe to ready-state updates for a bounty. Returns an unsubscribe function.
+   * Tries realtime subscription when Supabase is configured; falls back to polling every 3s.
+   */
+  subscribeReady(bountyId: string, onUpdate: (record: { bounty_id: string; hunter_id: string; ready_at: string } | null) => void) {
+    if (isSupabaseConfigured) {
+      try {
+        // Attempt realtime subscription via Postgres changes
+        // Use the table-level subscription; if the client's supabase SDK doesn't support channel API,
+        // fall back to from(...).on(...).subscribe() pattern.
+        // Prefer supabase.channel if available (supabase-js v2+)
+        // @ts-ignore
+        if (typeof (supabase as any).channel === 'function') {
+          // @ts-ignore
+          const channel = (supabase as any).channel(`completion_ready:${bountyId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'completion_ready', filter: `bounty_id=eq.${bountyId}` }, (payload: any) => {
+              onUpdate(payload.new || null)
+            })
+            .subscribe()
+
+          return () => {
+            try { (supabase as any).removeChannel(channel) } catch { /* ignore */ }
+          }
+        }
+
+        // Fallback: classic subscription
+        // @ts-ignore
+        const sub = supabase.from(`completion_ready:bounty_id=eq.${bountyId}`).on('*', (payload: any) => {
+          onUpdate(payload.new || null)
+        }).subscribe()
+
+        return () => {
+          try { supabase.removeChannel && supabase.removeChannel(sub) } catch { /* ignore */ }
+        }
+      } catch (e) {
+        logger.warning('Realtime subscription failed, falling back to polling', { bountyId, error: (e as any)?.message })
+      }
+    }
+
+    // Polling fallback
+    let mounted = true
+    const interval = (globalThis as any).setInterval(async () => {
+      if (!mounted) return
+      // Use any-cast to avoid circular-typing issues inside the object literal
+      const record = await (completionService as any).getReady(bountyId)
+      onUpdate(record)
+    }, 3000)
+
+    // Initial fetch
+    (async () => { const r = await completionService.getReady(bountyId); onUpdate(r) })()
+
+  return () => { mounted = false; (globalThis as any).clearInterval(interval) }
   },
 
   /**

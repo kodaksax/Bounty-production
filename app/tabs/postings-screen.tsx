@@ -12,7 +12,7 @@ import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, Easing, FlatList, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View, findNodeHandle } from "react-native"
+import { ActivityIndicator, Alert, Animated, findNodeHandle, FlatList, InteractionManager, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -39,6 +39,39 @@ interface PostingsScreenProps {
   onBountyAccepted?: (bountyId?: string | number) => void // Callback when a bounty is accepted
   setShowBottomNav?: (show: boolean) => void
 }
+
+// Top-level stable row component to avoid remounting during parent state updates
+type MyPostingRowProps = {
+  bounty: Bounty
+  currentUserId?: string
+  expanded: boolean
+  onToggle: () => void
+  onEdit?: () => void
+  onDelete?: () => void
+  onGoToReview: (id: string) => void
+  onGoToPayout: (id: string) => void
+  variant?: 'owner' | 'hunter'
+  isListScrolling?: boolean
+  onExpandedLayout?: () => void
+}
+
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout }) {
+  return (
+    <MyPostingExpandable
+      bounty={bounty}
+      currentUserId={currentUserId}
+      expanded={expanded}
+      onToggle={onToggle}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      onGoToReview={onGoToReview}
+      onGoToPayout={onGoToPayout}
+      variant={variant}
+      isListScrolling={isListScrolling}
+      onExpandedLayout={onExpandedLayout}
+    />
+  )
+})
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
   const { session, isEmailVerified } = useAuthContext()
@@ -112,6 +145,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const itemRefs = useRef<Record<string, any>>({})
   // Pending scroll request (set when expanding an item, cleared after measuring)
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
+  // Prevent duplicate/measured re-entries while we're measuring
+  const measuringRef = useRef(false)
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
 
   // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
   const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
@@ -135,62 +171,66 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     if (!pending) return
     const { list, key } = pending
 
-    // Clear pending early to avoid duplicate attempts
-    pendingScrollRef.current = null
+    // If another measurement is already in-flight, skip — the in-flight measurement will clear the pending ref
+    if (measuringRef.current) return
+    measuringRef.current = true
 
-    try {
-      const listRef = list === 'inProgress' ? inProgressListRef.current : myPostingsListRef.current
-      const itemNode = itemRefs.current[key]
-      if (!listRef || !itemNode) return
+    InteractionManager.runAfterInteractions(() => {
+      // Clear pending early to avoid duplicate attempts
+      pendingScrollRef.current = null
 
-      const listHandle = findNodeHandle(listRef)
-      const itemHandle = findNodeHandle(itemNode)
-      if (!listHandle || !itemHandle) return
-
-      UIManager.measureLayout(
-        itemHandle,
-        listHandle,
-        () => {},
-        (x: number, y: number, width: number, height: number) => {
-          const TOP_PADDING = 72 // tuned to avoid header/sticky overlap
-          const targetOffset = Math.max(0, y - TOP_PADDING)
-          try {
-            listRef.scrollToOffset({ offset: targetOffset, animated: true })
-          } catch (err) {
-            try { listRef.scrollToIndex({ index: 0, animated: true }) } catch {}
-          }
+      try {
+        const listRef = list === 'inProgress' ? inProgressListRef.current : myPostingsListRef.current
+        const itemNode = itemRefs.current[key]
+        // If the item was collapsed since the request, bail out
+        if (!listRef || !itemNode || !expandedMap[key]) {
+          measuringRef.current = false
+          return
         }
-      )
-    } catch (err) {
-      console.warn('measure/scroll failed', err)
-    }
+
+        const listHandle = findNodeHandle(listRef)
+        const itemHandle = findNodeHandle(itemNode)
+        if (!listHandle || !itemHandle) {
+          measuringRef.current = false
+          return
+        }
+
+        // Measure item position relative to list, then measure list viewport size to ensure full visibility
+        UIManager.measureLayout(
+          itemHandle,
+          listHandle,
+          () => { measuringRef.current = false },
+          (x: number, y: number, width: number, height: number) => {
+            UIManager.measure(listHandle, (_lx: number, _ly: number, _listWidth: number, listHeight: number, _px: number, _py: number) => {
+              const TOP_PADDING = Math.max(72, headerHeight + insets.top + 12)
+              const bottomReserved = Math.max(insets.bottom, 12) + BOTTOM_NAV_OFFSET
+              const available = Math.max(120, listHeight - TOP_PADDING - bottomReserved)
+
+              const offsetTop = Math.max(0, y - TOP_PADDING)
+              const offsetEnsureBottom = Math.max(0, y + height - available)
+              const desiredOffset = Math.max(0, Math.min(offsetTop, offsetEnsureBottom))
+
+              // Brief highlight so user sees the expanded region
+              setHighlightedKey(key)
+              setTimeout(() => setHighlightedKey(null), 900)
+
+              try {
+                listRef.scrollToOffset({ offset: desiredOffset, animated: true })
+              } catch (err) {
+                try { listRef.scrollToIndex({ index: 0, animated: true }) } catch {}
+              }
+
+              measuringRef.current = false
+            })
+          }
+        )
+      } catch (err) {
+        measuringRef.current = false
+        console.warn('measure/scroll failed', err)
+      }
+    })
   }
-
-  // Ensure BottomNav is visible while on Postings screen and during create steps
-  useEffect(() => {
-    setShowBottomNav?.(true)
-  }, [setShowBottomNav])
-
-  // Derived lowBalance (current) for animation trigger context (only for new tab)
-  const currentLowBalance = React.useMemo(() => !formData.isForHonor && formData.amount > balance, [formData.isForHonor, formData.amount, balance])
-
-  useEffect(() => {
-    if (activeTab !== 'new') return
-    // Trigger once when transitioning from not low -> low
-    if (!prevLowBalance.current && currentLowBalance) {
-      // Run a shake sequence
-      lowBalanceAnim.setValue(0)
-      const sequence = [
-        Animated.timing(lowBalanceAnim, { toValue: 1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
-        Animated.timing(lowBalanceAnim, { toValue: -1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
-        Animated.timing(lowBalanceAnim, { toValue: 1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
-        Animated.timing(lowBalanceAnim, { toValue: -1, duration: 50, useNativeDriver: true, easing: Easing.linear }),
-        Animated.timing(lowBalanceAnim, { toValue: 0, duration: 40, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-      ]
-      Animated.sequence(sequence).start()
-    }
-    prevLowBalance.current = currentLowBalance
-  }, [currentLowBalance, activeTab, lowBalanceAnim])
+  
   // Deadline now simple text entry; dedicated screen removed
 
   // ---- Data Loaders (refreshed after post and when opening screen) ----
@@ -351,6 +391,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   attachments_json: formData.attachments.filter(a => a.status === 'uploaded').length ? JSON.stringify(formData.attachments.filter(a => a.status === 'uploaded')) : undefined,
 
       }
+
+
 
       // Create the bounty using our service
       const bounty = await bountyService.create(bountyData)
@@ -780,23 +822,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
   }
   // Local row component to encapsulate expansion state per item
-  const MyPostingRow: React.FC<{ bounty: Bounty; currentUserId?: string; expanded: boolean; onToggle: () => void; onEdit?: () => void; onDelete?: () => void; onGoToReview: (id: string) => void; onGoToPayout: (id: string) => void; variant?: 'owner' | 'hunter'; isListScrolling?: boolean }> = ({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling }) => {
-    return (
-      <MyPostingExpandable
-        bounty={bounty}
-        currentUserId={currentUserId}
-        expanded={expanded}
-        onToggle={onToggle}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onGoToReview={onGoToReview}
-        onGoToPayout={onGoToPayout}
-        variant={variant}
-        isListScrolling={isListScrolling}
-        onExpandedLayout={() => measurePendingAndScroll()}
-      />
-    )
-  }
+  // NOTE: MyPostingRow is defined as a top-level component below to avoid recreating
+  // the component type on every render. See bottom of file for the stable component.
 
 
   // Using shared MyPostingExpandable for consistent look-and-feel; no extra helpers needed here

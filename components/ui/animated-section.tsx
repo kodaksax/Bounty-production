@@ -11,13 +11,14 @@ interface AnimatedSectionProps {
   expanded: boolean;
   onToggle: () => void;
   children: React.ReactNode;
+  locked?: boolean;
 }
 
 /**
  * Collapsible/animated section with header and expandable content.
  * Uses LayoutAnimation for smooth expansion/collapse.
  */
-export function AnimatedSection({ title, expanded, onToggle, children }: AnimatedSectionProps) {
+export function AnimatedSection({ title, expanded, onToggle, children, locked = false }: AnimatedSectionProps) {
   const rotateAnim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
   useEffect(() => {
@@ -47,11 +48,16 @@ export function AnimatedSection({ title, expanded, onToggle, children }: Animate
         accessibilityRole="button"
         accessibilityLabel={`${title} section, ${expanded ? 'expanded' : 'collapsed'}`}
         accessibilityHint="Tap to toggle section"
+        disabled={(locked ?? false)}
       >
         <Text style={styles.title}>{title}</Text>
-        <Animated.View style={{ transform: [{ rotate }] }}>
-          <MaterialIcons name="expand-more" size={24} color="#6ee7b7" />
-        </Animated.View>
+        {locked ? (
+          <MaterialIcons name="lock" size={20} color="rgba(255,255,255,0.45)" />
+        ) : (
+          <Animated.View style={{ transform: [{ rotate }] }}>
+            <MaterialIcons name="expand-more" size={24} color="#6ee7b7" />
+          </Animated.View>
+        )}
       </TouchableOpacity>
       {expanded && (
         // Use pointerEvents='box-none' so the container itself doesn't block
