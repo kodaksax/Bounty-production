@@ -53,9 +53,10 @@ type MyPostingRowProps = {
   variant?: 'owner' | 'hunter'
   isListScrolling?: boolean
   onExpandedLayout?: () => void
+  onRefresh?: () => void
 }
 
-export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout }) {
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
   return (
     <MyPostingExpandable
       bounty={bounty}
@@ -69,6 +70,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
       variant={variant}
       isListScrolling={isListScrolling}
       onExpandedLayout={onExpandedLayout}
+      onRefresh={onRefresh}
     />
   )
 })
@@ -297,6 +299,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setIsLoading((prev) => ({ ...prev, inProgress: false }))
     }
   }, [currentUserId])
+
+  // Combined refresh for both hunter and poster views
+  const refreshAll = React.useCallback(async () => {
+    await Promise.all([loadMyBounties(), loadInProgress()])
+  }, [loadMyBounties, loadInProgress])
 
   const handleChooseAmount = (val: number) => {
     setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
@@ -1041,6 +1048,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
                         variant={'hunter'}
                         isListScrolling={isListScrolling}
+                        onRefresh={refreshAll}
                       />
                     </View>
                   )}
@@ -1138,6 +1146,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
                         variant={'owner'}
                         isListScrolling={isListScrolling}
+                        onRefresh={refreshAll}
                       />
                     </View>
                   )}

@@ -39,6 +39,7 @@ type Props = {
   variant?: 'owner' | 'hunter'
   isListScrolling?: boolean
   onExpandedLayout?: () => void
+  onRefresh?: () => void
 }
 
 const STAGES = [
@@ -48,7 +49,7 @@ const STAGES = [
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ]
 
-export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout }: Props) {
+export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
   const [readyToSubmitPressed, setReadyToSubmitPressed] = useState(false)
@@ -244,6 +245,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         setHasSubmission(true)
         setReviewExpanded(false)
         setPayoutExpanded(true)
+        // Trigger parent refresh to update list
+        if (onRefresh) onRefresh()
       }
     } catch (err) {
       console.error('Error submitting completion:', err)
@@ -411,6 +414,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         const now = new Date().toISOString()
                         const rec = { bounty_id: String(bounty.id), hunter_id: String(currentUserId || ''), ready_at: now }
                         setReadyRecord(rec)
+                        // Trigger parent refresh to update list
+                        if (onRefresh) onRefresh()
                       } else {
                         alert('Failed to mark Ready. Please try again.')
                       }
@@ -608,6 +613,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             setShowReviewModal(false)
             setHasSubmission(false)
             // Trigger refresh
+            if (onRefresh) onRefresh()
           }}
         />
       )}
