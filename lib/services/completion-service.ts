@@ -338,6 +338,34 @@ export const completionService = {
   },
 
   /**
+   * Approve submission and complete bounty (combined poster action)
+   * This wraps approveCompletion and also updates bounty status to completed.
+   * Note: Caller is responsible for releasing escrow funds if needed.
+   */
+  async approveSubmission(bountyId: string, options?: { posterFeedback?: string; rating?: number }): Promise<boolean> {
+    try {
+      // Get the submission first
+      const submission = await completionService.getSubmission(bountyId);
+      if (!submission) {
+        throw new Error('No submission found for bounty');
+      }
+
+      // Approve the submission
+      await completionService.approveCompletion(submission.id!);
+
+      // Update bounty status using bountyService
+      const { bountyService } = await import('./bounty-service');
+      await bountyService.update(Number(bountyId), { status: 'completed' });
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error approving submission', { bountyId, error });
+      throw error;
+    }
+  },
+
+  /**
    * Request revision (poster action)
    */
   async requestRevision(submissionId: string, feedback: string): Promise<boolean> {

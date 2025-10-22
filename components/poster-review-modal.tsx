@@ -14,7 +14,6 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bountyService } from '../lib/services/bounty-service';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
 import { useWallet } from '../lib/wallet-context';
 import { RatingStars } from './ui/rating-stars';
@@ -77,13 +76,8 @@ export function PosterReviewModal({
     try {
       setIsProcessing(true);
 
-      // Approve the completion
-      await completionService.approveCompletion(submission.id!);
-
-      // Update bounty status to completed
-      await bountyService.update(Number(bountyId), {
-        status: 'completed',
-      });
+      // Approve submission (handles completion approval + bounty status update)
+      await completionService.approveSubmission(bountyId);
 
       // Release escrow if paid bounty
       if (!isForHonor && bountyAmount > 0) {
@@ -177,7 +171,20 @@ export function PosterReviewModal({
       );
     } catch (err) {
       console.error('Error submitting rating:', err);
-      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+      // Even if rating fails, we should still complete since approval already happened
+      Alert.alert(
+        'Rating Error',
+        'Failed to submit rating, but the bounty has been completed successfully.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              onClose();
+              onComplete();
+            },
+          },
+        ]
+      );
     } finally {
       setIsProcessing(false);
     }
