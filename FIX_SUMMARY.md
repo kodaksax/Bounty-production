@@ -141,6 +141,7 @@ POSTER SIDE:
 1. **Database Migration**
    ```bash
    # Connect to database and run migration
+   # Note: Migration file uses simplified date format (YYYYMMDD) instead of full timestamp
    psql $DATABASE_URL -f services/api/migrations/20251024_add_completion_ready_table.sql
    
    # Or if using Supabase, run the SQL in the SQL editor
@@ -158,7 +159,7 @@ POSTER SIDE:
 ## Additional Notes
 
 - The fix is backward compatible - existing bounties won't be affected
-- The `completion_ready` table is optional in the flow - if a hunter skips "Ready to Submit" and goes directly to submission, the flow still works
+- The `completion_ready` table enables the "Ready to Submit" checkpoint feature. While the code was written to use it, the missing table caused database errors when hunters tried to mark work as ready. With the table now added, hunters can mark work as ready before submitting, providing better UX by unlocking the review section progressively.
 - The poster review modal (`PosterReviewModal`) was already implemented and working correctly - it just wasn't accessible from the My Postings tab
 - All existing completion service methods work correctly with the new table
 - Realtime subscriptions use Supabase's realtime features when configured, falling back to polling if not available
