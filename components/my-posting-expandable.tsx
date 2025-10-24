@@ -79,7 +79,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
           const submission = await completionService.getSubmission(String(bounty.id))
-          if (mounted) setHasSubmission(!!submission && submission.status === 'pending')
+          const foundSubmission = !!submission && submission.status === 'pending'
+          if (mounted) {
+            setHasSubmission(foundSubmission)
+            // Auto-expand Review & Verify section when submission is detected
+            if (foundSubmission) {
+              setReviewExpanded(true)
+              setWipExpanded(false)
+            }
+          }
         }
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
@@ -138,7 +146,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           setHasSubmission(false)
           return
         }
-        setHasSubmission(submission.status === 'pending')
+        const isPending = submission.status === 'pending'
+        setHasSubmission(isPending)
+        
+        // If poster gets a new submission, auto-expand Review & Verify section
+        if (isOwner && isPending) {
+          setReviewExpanded(true)
+          setWipExpanded(false)
+        }
+        
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
         if (!isOwner && submission.status === 'revision_requested') {
           // Show feedback to hunter and move flow back
@@ -427,6 +443,46 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   </TouchableOpacity>
                 </View>
               )}
+            </AnimatedSection>
+          )}
+
+          {/* Poster Review & Verify Section - when hunter has submitted */}
+          {isOwner && bounty.status === 'in_progress' && hasSubmission && (
+            <AnimatedSection
+              title="Review & Verify"
+              expanded={reviewExpanded}
+              onToggle={() => setReviewExpanded(!reviewExpanded)}
+            >
+              <View style={{ gap: 16 }}>
+                <View style={styles.infoBox}>
+                  <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
+                  <Text style={styles.infoText}>
+                    The hunter has submitted their work for review. Review the submission and approve or request changes.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.reviewSubmissionBtn}
+                  onPress={() => setShowReviewModal(true)}
+                >
+                  <MaterialIcons name="rate-review" size={20} color="#fff" />
+                  <Text style={styles.reviewSubmissionText}>Review Submission</Text>
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Navigate to full review screen option */}
+                {onGoToReview && (
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { backgroundColor: 'rgba(16, 185, 129, 0.3)' }]}
+                    onPress={() => onGoToReview(String(bounty.id))}
+                  >
+                    <Text style={styles.primaryText}>Open Review Screen</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </AnimatedSection>
           )}
 
