@@ -1,6 +1,7 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ROUTES } from '../../../lib/routes';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -155,7 +156,7 @@ export default function ReviewAndVerifyScreen() {
         <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -166,7 +167,7 @@ export default function ReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backIcon} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Review & Verify</Text>

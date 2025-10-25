@@ -80,19 +80,20 @@ export function PosterReviewModal({
       await completionService.approveSubmission(bountyId);
 
       // Release escrow if paid bounty
-      if (!isForHonor && bountyAmount > 0) {
-        try {
-          await releaseFunds(Number(bountyId), hunterId, `Bounty ${bountyId}`);
-          console.log('✅ Escrow released for bounty:', bountyId);
-        } catch (escrowError) {
-          console.error('Error releasing escrow:', escrowError);
-          Alert.alert(
-            'Payment Issue',
-            'Work approved but payment release failed. Please contact support.',
-            [{ text: 'OK' }]
-          );
+        if (!isForHonor && bountyAmount > 0) {
+          try {
+            // Pass bountyId through as string (wallet now accepts string|number)
+            await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
+            console.log('✅ Escrow released for bounty:', bountyId);
+          } catch (escrowError) {
+            console.error('Error releasing escrow:', escrowError);
+            Alert.alert(
+              'Payment Issue',
+              'Work approved but payment release failed. Please contact support.',
+              [{ text: 'OK' }]
+            );
+          }
         }
-      }
 
       // Show rating form
       setShowRatingForm(true);

@@ -13,7 +13,7 @@ export interface WalletTransactionRecord {
     method?: string;
     status?: string;
     counterparty?: string;
-    bounty_id?: number;
+    bounty_id?: string | number;
   };
   disputeStatus?: "none" | "pending" | "resolved";
   escrowStatus?: "funded" | "pending" | "released";
@@ -30,8 +30,8 @@ interface WalletContextValue {
   logTransaction: (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => Promise<WalletTransactionRecord>;
   clearAllTransactions: () => Promise<void>;
   updateDisputeStatus: (transactionId: string, status: "none" | "pending" | "resolved") => Promise<void>;
-  createEscrow: (bountyId: number, amount: number, title: string, posterId: string) => Promise<WalletTransactionRecord>;
-  releaseFunds: (bountyId: number, hunterId: string, title: string) => Promise<boolean>;
+  createEscrow: (bountyId: string | number, amount: number, title: string, posterId: string) => Promise<WalletTransactionRecord>;
+  releaseFunds: (bountyId: string | number, hunterId: string, title: string) => Promise<boolean>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -142,7 +142,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [persistTransactions]);
 
   // Create escrow transaction when poster accepts a request
-  const createEscrow = useCallback(async (bountyId: number, amount: number, title: string, posterId: string) => {
+  const createEscrow = useCallback(async (bountyId: string | number, amount: number, title: string, posterId: string) => {
     if (amount <= 0 || Number.isNaN(amount)) {
       throw new Error('Invalid escrow amount');
     }
@@ -159,13 +159,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return next;
     });
 
-    // Log escrow transaction
+    // Log escrow transaction (store bounty_id as string to avoid type mismatches)
     const record = await logTransaction({
       type: 'escrow',
       amount: -amount, // outflow negative
       details: { 
         title,
-        bounty_id: bountyId,
+        bounty_id: String(bountyId),
         status: 'pending'
       },
       escrowStatus: 'funded',
@@ -175,10 +175,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [balance, persist, logTransaction]);
 
   // Release escrowed funds to hunter when bounty is completed
-  const releaseFunds = useCallback(async (bountyId: number, hunterId: string, title: string) => {
-    // Find the escrow transaction for this bounty
+  const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
+    // Find the escrow transaction for this bounty (compare as strings to handle UUIDs)
+    const bountyIdStr = String(bountyId);
     const escrowTx = transactions.find(
-      tx => tx.type === 'escrow' && tx.details.bounty_id === bountyId && tx.escrowStatus === 'funded'
+      tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
     );
 
     if (!escrowTx) {
@@ -203,7 +204,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       amount: amount, // positive for the release record
       details: { 
         title,
-        bounty_id: bountyId,
+        bounty_id: String(bountyId),
         counterparty: hunterId,
         status: 'completed'
       },

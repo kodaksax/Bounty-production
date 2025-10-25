@@ -610,7 +610,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       if (bountyForEscrow && !bountyForEscrow.is_for_honor && bountyForEscrow.amount > 0) {
         try {
           await createEscrow(
-            Number(bountyForEscrow.id),
+            // bounty IDs may be UUID strings; pass through as-is
+            bountyForEscrow.id,
             bountyForEscrow.amount,
             bountyForEscrow.title,
             currentUserId

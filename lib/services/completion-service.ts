@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
+import { getCurrentUserId } from 'lib/utils/data-utils';
 import { logger } from 'lib/utils/error-logger';
 
 export interface CompletionSubmission {
@@ -353,9 +354,10 @@ export const completionService = {
       // Approve the submission
       await completionService.approveCompletion(submission.id!);
 
-      // Update bounty status using bountyService
-      const { bountyService } = await import('./bounty-service');
-      await bountyService.update(Number(bountyId), { status: 'completed' });
+  // Update bounty status using bountyService
+  // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
+  const { bountyService } = await import('./bounty-service');
+  await bountyService.update(bountyId, { status: 'completed' });
 
       return true;
     } catch (err) {
@@ -406,28 +408,43 @@ export const completionService = {
    */
   async submitRating(rating: Omit<Rating, 'id' | 'created_at'>): Promise<Rating | null> {
     try {
+      // Defensive: ensure from_user_id/to_user_id look valid. If from_user_id is empty,
+      // try to populate from current session helper. This prevents inserting empty strings
+      // into UUID columns which causes DB errors like "invalid input syntax for type uuid: \"\"".
+      const payload: Omit<Rating, 'id' | 'created_at'> & { created_at?: string } = {
+        ...rating,
+        created_at: new Date().toISOString(),
+      };
+
+      if (!payload.from_user_id || String(payload.from_user_id).trim() === '') {
+        const uid = getCurrentUserId();
+        if (uid) payload.from_user_id = uid;
+      }
+
+      if (!payload.from_user_id || !payload.to_user_id) {
+        throw new Error('Missing required rating fields: from_user_id and to_user_id must be provided');
+      }
+
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('ratings')
-          .insert({
-            ...rating,
-            created_at: new Date().toISOString(),
-          })
+          .insert(payload)
           .select('*')
           .single();
 
-        if (error) throw error;
+        if (error) throw new Error(error?.message ?? JSON.stringify(error));
         return data as Rating;
       }
 
       const response = await fetch(`${API_BASE_URL}/api/ratings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rating),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit rating');
+        const errText = await response.text();
+        throw new Error(`Failed to submit rating: ${errText}`);
       }
 
       return await response.json();
