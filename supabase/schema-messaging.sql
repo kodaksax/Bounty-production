@@ -226,13 +226,15 @@ CREATE POLICY "Users can delete their own messages"
 -- Add tables to Realtime publication
 -- ====================================
 
--- Drop existing publication if it exists and recreate
-DROP PUBLICATION IF EXISTS supabase_realtime;
+-- Alternative: If supabase_realtime already exists, just add tables
+ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE conversation_participants;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 
-CREATE PUBLICATION supabase_realtime FOR TABLE
-  conversations,
-  conversation_participants,
-  messages;
+-- Note: If you get an error that tables are already in the publication, that's OK!
+-- If you need to recreate the publication from scratch, use:
+-- DROP PUBLICATION IF EXISTS supabase_realtime;
+-- CREATE PUBLICATION supabase_realtime FOR TABLE conversations, conversation_participants, messages;
 
 -- ====================================
 -- Storage Bucket for Profile Pictures
@@ -247,6 +249,11 @@ ON CONFLICT (id) DO NOTHING;
 -- Storage Policies for Profile Pictures
 -- ====================================
 
+-- IMPORTANT: Profile pictures should be stored with the path format:
+-- <user_id>/<filename>
+-- This ensures users can only access their own profile pictures for upload/update/delete
+-- while maintaining public read access for all users
+
 -- Allow public read access to all profile pictures
 DROP POLICY IF EXISTS "Public can view profile pictures" ON storage.objects;
 CREATE POLICY "Public can view profile pictures"
@@ -254,6 +261,7 @@ CREATE POLICY "Public can view profile pictures"
   USING (bucket_id = 'Profilepictures');
 
 -- Allow authenticated users to upload their own profile picture
+-- Files must be in a folder named after the user's ID
 DROP POLICY IF EXISTS "Users can upload their own profile picture" ON storage.objects;
 CREATE POLICY "Users can upload their own profile picture"
   ON storage.objects FOR INSERT

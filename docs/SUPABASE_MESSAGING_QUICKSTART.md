@@ -129,12 +129,13 @@ function ChatScreen({ conversationId }) {
 - [x] Swipe-to-delete conversations
 - [x] RLS policies for security
 - [x] Automatic timestamp updates
+- [x] Message pinning (schema support - UI integration pending)
 
 ### 🚧 Limitations
-- Pin/unpin messages not yet implemented in backend
-- Group chats not fully implemented (schema supports it)
-- Media attachments not implemented
+- Group chats not fully implemented (schema supports it, UI is 1:1 only)
+- Media attachments not implemented (schema has media_url field)
 - Message read receipts not implemented
+- Pin/unpin UI actions need to be connected to backend
 
 ## Architecture
 
@@ -260,6 +261,6 @@ WHERE tablename IN ('conversations', 'conversation_participants', 'messages');
 
 ## References
 
-- [Full Setup Guide](./docs/SUPABASE_MESSAGING_SETUP.md)
+- [Full Setup Guide](../docs/SUPABASE_MESSAGING_SETUP.md)
 - [Supabase Realtime Docs](https://supabase.com/docs/guides/realtime)
 - [Supabase RLS Docs](https://supabase.com/docs/guides/auth/row-level-security)
