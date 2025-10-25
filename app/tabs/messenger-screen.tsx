@@ -6,12 +6,14 @@ import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useCallback, useState } from "react"
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from "react-native"
+import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
+import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
@@ -48,7 +50,7 @@ export function MessengerScreen({
 }) {
   const { session } = useAuthContext()
   const currentUserId = getCurrentUserId()
-  const { conversations, loading, error, markAsRead, refresh } = useConversations()
+  const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const { balance } = useWallet()
 
@@ -64,6 +66,27 @@ export function MessengerScreen({
     refresh() // Refresh conversation list when returning
   }
 
+  const handleDeleteConversation = (conversation: Conversation) => {
+    Alert.alert(
+      'Delete Conversation',
+      `Are you sure you want to delete your conversation with ${conversation.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteConversation(conversation.id)
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete conversation')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   // Optimized keyExtractor for FlatList
   const keyExtractor = useCallback((item: Conversation) => item.id, []);
 
@@ -71,7 +94,8 @@ export function MessengerScreen({
   const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
     <ConversationItem 
       conversation={item} 
-      onPress={() => handleConversationClick(item.id)} 
+      onPress={() => handleConversationClick(item.id)}
+      onDelete={() => handleDeleteConversation(item)}
     />
   ), []);
 
@@ -157,9 +181,14 @@ export function MessengerScreen({
 interface ConversationItemProps {
   conversation: Conversation
   onPress: () => void
+  onDelete: () => void
 }
 
-const ConversationItem = React.memo<ConversationItemProps>(function ConversationItem({ conversation, onPress }) {
+const ConversationItem = React.memo<ConversationItemProps>(function ConversationItem({ 
+  conversation, 
+  onPress, 
+  onDelete 
+}) {
   const router = useRouter()
   const currentUserId = getCurrentUserId()
   const time = formatConversationTime(conversation.updatedAt);
@@ -178,6 +207,12 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
     ? otherUserProfile.avatar 
     : conversation.avatar
   
+  // Generate initials for fallback
+  const initials = generateInitials(
+    otherUserProfile?.username,
+    otherUserProfile?.name
+  );
+  
   const handleAvatarPress = (e: any) => {
     e.stopPropagation()
     if (otherUserId && !conversation.isGroup) {
@@ -185,40 +220,57 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
     }
   }
   
+  // Render swipe action (delete button)
+  const renderRightActions = () => (
+    <TouchableOpacity
+      className="bg-red-500 justify-center items-center px-6 rounded-lg my-1 mr-2"
+      onPress={onDelete}
+    >
+      <MaterialIcons name="delete" size={24} color="white" />
+      <Text className="text-white text-xs mt-1">Delete</Text>
+    </TouchableOpacity>
+  );
+  
   return (
-    <TouchableOpacity className="flex-row items-center p-3 rounded-lg" onPress={onPress}>
-      <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
-        <View className="relative">
-          {conversation.isGroup ? (
-            <GroupAvatar />
-          ) : (
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={displayName} />
-              <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {displayName.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          )}
+    <Swipeable
+      renderRightActions={renderRightActions}
+      overshootRight={false}
+      friction={2}
+    >
+      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-emerald-600" onPress={onPress}>
+        <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
+          <View className="relative">
+            {conversation.isGroup ? (
+              <GroupAvatar />
+            ) : (
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={displayName} />
+                <AvatarFallback className="bg-emerald-700 text-emerald-200">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <View className="ml-3 flex-1 min-w-0">
+          <View className="flex-row justify-between items-center">
+            <Text className="font-medium text-white">{displayName}</Text>
+            <Text className="text-xs text-emerald-300">{time}</Text>
+          </View>
+          <View className="flex-row justify-between items-center mt-1">
+            <Text className={cn("text-sm truncate max-w-[200px]", "text-emerald-200")}>
+              {conversation.lastMessage || 'No messages yet'}
+            </Text>
+            {(conversation.unread ?? 0) > 0 && (
+              <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
+                <Text className="text-white text-xs">{conversation.unread}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
-
-      <View className="ml-3 flex-1 min-w-0">
-        <View className="flex-row justify-between items-center">
-          <Text className="font-medium text-white">{displayName}</Text>
-          <Text className="text-xs text-emerald-300">{time}</Text>
-        </View>
-        <View className="flex-row justify-between items-center mt-1">
-          <Text className={cn("text-sm truncate max-w-[200px]", "text-emerald-200")}>
-            {conversation.lastMessage || 'No messages yet'}
-          </Text>
-          {(conversation.unread ?? 0) > 0 && (
-            <View className="bg-blue-500 rounded-full h-5 w-5 flex items-center justify-center">
-              <Text className="text-white text-xs">{conversation.unread}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+    </Swipeable>
   )
 });
 

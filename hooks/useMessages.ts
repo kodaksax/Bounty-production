@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Clipboard } from 'react-native';
-import type { Message } from '../lib/types';
-import { messageService } from '../lib/services/message-service';
-import { socketStub, useMessageStatus } from './useSocketStub';
-import * as messagingService from '../lib/services/messaging';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import type { Message } from '../types';
+import * as supabaseMessaging from '../services/supabase-messaging';
+import { getCurrentUserId } from '../utils/data-utils';
 
 interface UseMessagesResult {
   messages: Message[];
@@ -24,35 +24,24 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
+  const currentUserId = getCurrentUserId();
 
   const fetchMessages = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await messageService.getMessages(conversationId);
+      const data = await supabaseMessaging.fetchMessages(conversationId);
       setMessages(data);
 
-      // Fetch pinned message
-      const pinned = await messageService.getPinnedMessage(conversationId);
-      setPinnedMessage(pinned);
+      // Find pinned message
+      const pinned = data.find(m => m.isPinned);
+      setPinnedMessage(pinned || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages');
     } finally {
       setLoading(false);
     }
   };
-
-  // Handle message status updates from socket
-  const handleStatusUpdate = useCallback((messageId: string, status: 'delivered' | 'read') => {
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === messageId ? { ...m, status } : m
-      )
-    );
-    messageService.updateMessageStatus(messageId, status);
-  }, []);
-
-  useMessageStatus(handleStatusUpdate);
 
   const sendMessage = async (text: string) => {
     try {
@@ -62,7 +51,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
         conversationId,
-        senderId: 'current-user',
+        senderId: currentUserId,
         text,
         createdAt: new Date().toISOString(),
         status: 'sending',
@@ -70,95 +59,39 @@ export function useMessages(conversationId: string): UseMessagesResult {
       
       setMessages(prev => [...prev, tempMessage]);
 
-      // Send to server
-      const { message, error: sendError } = await messageService.sendMessage(conversationId, text);
+      // Send to Supabase
+      const message = await supabaseMessaging.sendMessage(conversationId, text, currentUserId);
       
-      if (sendError) {
-        setError(sendError);
-      }
-
       // Replace temp message with real one
       setMessages(prev => 
         prev.map(m => m.id === tempMessage.id ? message : m)
       );
-
-      // Simulate status transitions using socket stub
-      socketStub.simulateMessageStatusTransition(message.id);
-
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
+      // Remove failed temp message
+      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
     }
   };
 
   const retryMessage = async (messageId: string) => {
     try {
-      // Update status to sending
-      setMessages(prev => 
-        prev.map(m => 
-          m.id === messageId 
-            ? { ...m, status: 'sending' as const }
-            : m
-        )
-      );
-
-      const { success } = await messageService.retryMessage(messageId);
-      
-      if (success) {
-        // Poll for updated status
-        setTimeout(async () => {
-          const updatedMessages = await messageService.getMessages(conversationId);
-          setMessages(updatedMessages);
-        }, 1000);
-      }
+      // For now, just refetch messages
+      await fetchMessages();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to retry message');
     }
   };
 
   const pinMessage = async (messageId: string) => {
-    try {
-      // Optimistic update
-      setMessages(prev =>
-        prev.map(m => ({
-          ...m,
-          isPinned: m.conversationId === conversationId ? m.id === messageId : m.isPinned,
-        }))
-      );
-
-      const message = messages.find(m => m.id === messageId);
-      if (message) {
-        setPinnedMessage(message);
-      }
-
-      const { success, error: pinError } = await messageService.pinMessage(messageId);
-      if (!success && pinError) {
-        setError(pinError);
-        // Rollback on error
-        await fetchMessages();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pin message');
-      await fetchMessages();
-    }
+    // Pin/unpin is not implemented in Supabase service yet
+    // For now, just show error
+    setError('Pin message feature not yet implemented');
   };
 
   const unpinMessage = async (messageId: string) => {
-    try {
-      // Optimistic update
-      setMessages(prev =>
-        prev.map(m => m.id === messageId ? { ...m, isPinned: false } : m)
-      );
-      setPinnedMessage(null);
-
-      const { success, error: unpinError } = await messageService.unpinMessage(messageId);
-      if (!success && unpinError) {
-        setError(unpinError);
-        await fetchMessages();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unpin message');
-      await fetchMessages();
-    }
+    // Pin/unpin is not implemented in Supabase service yet
+    // For now, just show error
+    setError('Unpin message feature not yet implemented');
   };
 
   const copyMessage = async (messageId: string) => {
@@ -174,10 +107,8 @@ export function useMessages(conversationId: string): UseMessagesResult {
 
   const reportMessage = async (messageId: string) => {
     try {
-      const { success, error: reportError } = await messageService.reportMessage(messageId);
-      if (!success && reportError) {
-        setError(reportError);
-      }
+      // Report functionality would need backend implementation
+      console.log('Report message:', messageId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to report message');
     }
@@ -188,19 +119,42 @@ export function useMessages(conversationId: string): UseMessagesResult {
   };
 
   useEffect(() => {
-    fetchMessages();
+    let subscription: RealtimeChannel | null = null;
 
-    // Listen for real-time updates from the messaging service
-    const handleMessagesUpdated = () => {
-      fetchMessages();
+    const init = async () => {
+      // Initial fetch
+      await fetchMessages();
+
+      // Subscribe to Realtime updates
+      subscription = supabaseMessaging.subscribeToMessages(
+        conversationId,
+        (newMessage) => {
+          if (newMessage) {
+            // Add new message if it's not from current user (avoid duplicates from optimistic updates)
+            if (newMessage.senderId !== currentUserId) {
+              setMessages(prev => {
+                // Check if message already exists
+                if (prev.some(m => m.id === newMessage.id)) {
+                  return prev;
+                }
+                return [...prev, newMessage];
+              });
+            }
+          } else {
+            // Refetch on update
+            fetchMessages();
+          }
+        }
+      );
     };
-    
-    messagingService.on('messagesUpdated', handleMessagesUpdated);
-    messagingService.on('messageSent', handleMessagesUpdated);
-    
+
+    init();
+
     return () => {
-      messagingService.off('messagesUpdated', handleMessagesUpdated);
-      messagingService.off('messageSent', handleMessagesUpdated);
+      // Cleanup subscription
+      if (subscription) {
+        supabaseMessaging.unsubscribe(`messages:${conversationId}`);
+      }
     };
   }, [conversationId]);
 

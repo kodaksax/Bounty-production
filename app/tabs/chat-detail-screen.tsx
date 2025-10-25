@@ -14,6 +14,7 @@ import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
+import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
 import { getCurrentUserId } from "../../lib/utils/data-utils"
@@ -75,6 +76,12 @@ export function ChatDetailScreen({
   const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
     ? otherUserProfile.avatar 
     : conversation.avatar
+  
+  // Generate initials for fallback
+  const initials = generateInitials(
+    otherUserProfile?.username,
+    otherUserProfile?.name
+  );
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text)
@@ -128,14 +135,14 @@ export function ChatDetailScreen({
       <MessageBubble
         id={message.id}
         text={message.text}
-        isUser={message.senderId === 'current-user'}
+        isUser={message.senderId === currentUserId}
         status={message.status}
         isPinned={message.isPinned}
         onLongPress={handleLongPress}
         onRetry={handleRetry}
       />
     )
-  }, [handleLongPress, handleRetry])
+  }, [handleLongPress, handleRetry, currentUserId])
 
   const renderFooter = () => {
     const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0
@@ -172,7 +179,7 @@ export function ChatDetailScreen({
             <Avatar className="h-10 w-10 mr-3">
               <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
               <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {displayName.substring(0, 2).toUpperCase()}
+                {initials}
               </AvatarFallback>
             </Avatar>
             <View>
