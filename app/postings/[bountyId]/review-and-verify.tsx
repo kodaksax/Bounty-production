@@ -1,7 +1,6 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ROUTES } from '../../../lib/routes';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { ROUTES } from '../../../lib/routes';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
