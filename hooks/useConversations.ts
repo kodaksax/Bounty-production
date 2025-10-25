@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import type { Conversation } from '../lib/types';
 import { messageService } from '../lib/services/message-service';
-import * as messagingService from '../lib/services/messaging';
+import * as supabaseMessaging from '../lib/services/supabase-messaging';
+import { getCurrentUserId } from '../lib/utils/data-utils';
 
 interface UseConversationsResult {
   conversations: Conversation[];
@@ -9,18 +11,20 @@ interface UseConversationsResult {
   error: string | null;
   refresh: () => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
 }
 
 export function useConversations(): UseConversationsResult {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const currentUserId = getCurrentUserId();
 
   const fetchConversations = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await messageService.getConversations();
+      const data = await supabaseMessaging.fetchConversations(currentUserId);
       setConversations(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversations');
@@ -40,8 +44,21 @@ export function useConversations(): UseConversationsResult {
     );
 
     try {
-      await messageService.markAsRead(conversationId);
+      await supabaseMessaging.markAsRead(conversationId, currentUserId);
     } catch (err) {
+      // Revert on error
+      await fetchConversations();
+    }
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    // Optimistic update
+    setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+
+    try {
+      await supabaseMessaging.softDeleteConversation(conversationId, currentUserId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete conversation');
       // Revert on error
       await fetchConversations();
     }
@@ -52,21 +69,31 @@ export function useConversations(): UseConversationsResult {
   };
 
   useEffect(() => {
-    fetchConversations();
-    
-    // Listen for real-time updates from the messaging service
-    const handleConversationsUpdated = () => {
-      fetchConversations();
+    let subscription: RealtimeChannel | null = null;
+
+    const init = async () => {
+      // Initial fetch
+      await fetchConversations();
+
+      // Subscribe to Realtime updates
+      subscription = supabaseMessaging.subscribeToConversations(
+        currentUserId,
+        () => {
+          // Refetch conversations on any update
+          fetchConversations();
+        }
+      );
     };
-    
-    messagingService.on('conversationsUpdated', handleConversationsUpdated);
-    messagingService.on('messageSent', handleConversationsUpdated);
-    
+
+    init();
+
     return () => {
-      messagingService.off('conversationsUpdated', handleConversationsUpdated);
-      messagingService.off('messageSent', handleConversationsUpdated);
+      // Cleanup subscription
+      if (subscription) {
+        supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
+      }
     };
-  }, []);
+  }, [currentUserId]);
 
   return {
     conversations,
@@ -74,5 +101,6 @@ export function useConversations(): UseConversationsResult {
     error,
     refresh,
     markAsRead,
+    deleteConversation,
   };
 }

@@ -83,14 +83,22 @@ export const MessageBubble = memo(({
       delayLongPress={500}
     >
       <View className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}>
-        <View className={cn('px-3 py-2 rounded-2xl', isUser ? 'bg-white rounded-br-none' : 'bg-emerald-700/60 rounded-bl-none')}>
+        <View className={cn(
+          'px-3 py-2 rounded-2xl',
+          isUser 
+            ? 'bg-emerald-500 rounded-br-none' // Current user: emerald-500, right-aligned
+            : 'bg-neutral-200 rounded-bl-none' // Peer: neutral-200, left-aligned
+        )}>
           {isPinned && (
             <View style={styles.pinnedBadge}>
               <MaterialIcons name="push-pin" size={12} color="#fbbf24" />
               <Text style={styles.pinnedText}>Pinned</Text>
             </View>
           )}
-          <Text className={cn('text-sm', isUser ? 'text-gray-900' : 'text-white')}>{text}</Text>
+          <Text className={cn(
+            'text-sm',
+            isUser ? 'text-white' : 'text-gray-900' // Current user: white text; Peer: dark text
+          )}>{text}</Text>
           {renderStatusIcon()}
         </View>
         {/* Retry button for failed messages */}
