@@ -13,6 +13,9 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
+import { messageService } from '../../lib/services/message-service'
+import { logClientError as _logClientError } from '../../lib/services/monitoring'
+import { navigationIntent } from '../../lib/services/navigation-intent'
 import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
 import { useWallet } from '../../lib/wallet-context'
@@ -55,10 +58,91 @@ export function MessengerScreen({
   const { balance } = useWallet()
 
   const handleConversationClick = async (id: string) => {
-    await markAsRead(id)
+    await markConversationReadSafe(id)
     setActiveConversation(id)
     onConversationModeChange?.(true)
   }
+
+  // Utility: determine if id is a UUID (v4-ish) — used to avoid calling Supabase with local ids
+  function isUuid(id?: string | null) {
+    if (!id) return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+  }
+
+  // Safely mark conversation as read: if id is a canonical UUID, call hook's markAsRead (Supabase).
+  // Otherwise use local messageService.markAsRead to avoid invalid-UUID errors.
+  async function markConversationReadSafe(convId: string) {
+    try {
+      if (isUuid(convId)) {
+        await markAsRead(convId)
+      } else {
+        // local conv id (conv-...), use local message service
+        try { await messageService.markAsRead(convId) } catch (e) { /* best-effort */ }
+      }
+    } catch (e) {
+      try { _logClientError('markConversationReadSafe failed', { err: String(e), convId }) } catch {}
+    }
+  }
+
+  // If another screen set a pending conversation id (e.g. after accept flow), open it
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const pending = await navigationIntent.getAndClearPendingConversationId()
+        if (!mounted || !pending) return
+
+        // Quick check in the current conversations list
+        const found = conversations.find(c => c.id === pending)
+        if (found) {
+          setActiveConversation(found.id)
+          onConversationModeChange?.(true)
+            try { await markConversationReadSafe(found.id) } catch {}
+          return
+        }
+
+        // Try to fetch the conversation directly from the message store with a few retries.
+        // This handles the race where the posting flow created the convo just before navigation.
+        let conv = null
+        const maxAttempts = 5
+        for (let i = 0; i < maxAttempts && mounted; i++) {
+          try {
+            conv = await messageService.getConversation(pending)
+          } catch (err) {
+            conv = null
+          }
+          if (conv) break
+          // small backoff
+          await new Promise((res) => setTimeout(res, 200))
+        }
+
+        if (!mounted) return
+
+        if (conv) {
+          // Ensure the hook-backed list is refreshed so the inbox shows the new convo
+          try { await refresh() } catch {}
+          setActiveConversation(conv.id)
+          onConversationModeChange?.(true)
+            try { await markConversationReadSafe(conv.id) } catch {}
+          return
+        }
+
+        // Fallback: refresh the list and try one last time
+        try { await refresh() } catch {}
+        const after = conversations.find(c => c.id === pending) || (await messageService.getConversation(pending))
+        if (after) {
+          setActiveConversation(after.id)
+          onConversationModeChange?.(true)
+         try { await markConversationReadSafe(after.id) } catch {}
+        }
+      } catch (e) {
+        console.warn('Messenger: failed to open pending conversation', e)
+        try { _logClientError('Messenger failed to open pending conversation', { error: String(e) }) } catch {}
+      }
+    })()
+    return () => { mounted = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleBackToInbox = () => {
     setActiveConversation(null)
@@ -123,7 +207,7 @@ export function MessengerScreen({
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
-            <Text className="text-lg font-bold tracking-wider text-white">BOUNTY</Text>
+            <Text className="text-2xl font-bold tracking-wider text-white">BOUNTY</Text>
           </View>
           <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
         </View>

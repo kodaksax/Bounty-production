@@ -157,16 +157,27 @@ CREATE POLICY "Participants can update conversations"
 -- Conversation Participants Policies
 -- ====================================
 
+-- Helper function: check whether a user is an active participant in a conversation
+-- Use SECURITY DEFINER so the function can query the table without triggering RLS recursion
+CREATE OR REPLACE FUNCTION is_user_participant(p_conv_id uuid, p_user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM conversation_participants
+    WHERE conversation_id = p_conv_id
+      AND user_id = p_user_id
+      AND deleted_at IS NULL
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Users can view participants of conversations they're in
 DROP POLICY IF EXISTS "Users can view conversation participants" ON conversation_participants;
 CREATE POLICY "Users can view conversation participants"
   ON conversation_participants FOR SELECT
   USING (
-    conversation_id IN (
-      SELECT conversation_id FROM conversation_participants
-      WHERE user_id = auth.uid()
-        AND deleted_at IS NULL
-    )
+    -- auth.uid() returns text, cast to uuid for the helper function
+    is_user_participant(conversation_id, auth.uid()::uuid)
   );
 
 -- Users can add participants when creating/joining conversations

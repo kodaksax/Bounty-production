@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Clipboard } from 'react-native';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import type { Message } from '../types';
-import * as supabaseMessaging from '../services/supabase-messaging';
-import { getCurrentUserId } from '../utils/data-utils';
+import { useEffect, useState } from 'react';
+import { Clipboard } from 'react-native';
+import * as supabaseMessaging from '../lib/services/supabase-messaging';
+import type { Message } from '../lib/types';
+import { getCurrentUserId } from '../lib/utils/data-utils';
 
 interface UseMessagesResult {
   messages: Message[];

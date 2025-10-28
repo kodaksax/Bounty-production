@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -36,11 +36,27 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
     await onSubmit();
   };
 
+  const listRef = useRef<FlatList<any> | null>(null)
+
+  // When this screen mounts, ensure list is scrolled to top so the header is visible
+  useEffect(() => {
+    try {
+      // Slight delay lets layout settle in nested contexts
+      const t = setTimeout(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false })
+      }, 50)
+      return () => clearTimeout(t)
+    } catch (e) {
+      // ignore
+    }
+  }, [])
+
   return (
     <View className="flex-1 bg-emerald-600">
       {/* Use FlatList to ensure reliable scrolling inside available area */}
       {/** build sections dynamically so list can scroll properly **/}
       <FlatList
+        ref={(r) => { listRef.current = r }}
         data={useMemo(() => {
           const sections: string[] = ['header', 'title', 'description', 'compensation', 'location'];
           if (draft.timeline || draft.skills) sections.push('optional');
@@ -50,6 +66,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         keyExtractor={(item) => item}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled={true}
+        // Ensure contentContainer expands so the bottom action bar doesn't overlap small content
+        removeClippedSubviews={false}
         contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
         renderItem={({ item }) => {
           switch (item) {

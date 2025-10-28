@@ -1,8 +1,11 @@
 import NetInfo from '@react-native-community/netinfo';
+import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
 import * as messagingService from './messaging';
+import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
+import * as supabaseMessaging from './supabase-messaging';
 
 export const messageService = {
   /**
@@ -105,6 +108,37 @@ export const messageService = {
       ? participantIds 
       : [...participantIds, userId];
     
+    // Try to create via Supabase RPC if available (preferred) so the canonical
+    // backend stores the conversation and other clients can see it.
+    try {
+      // Convert to array of uuids (strings)
+      const pids = allParticipants.map(String)
+  const { data, error } = await supabase.rpc('rpc_create_conversation', { p_participant_ids: pids, p_bounty_id: bountyId ? String(bountyId) : null, p_name: name })
+      if (error) {
+        throw error
+      }
+
+      const convId = (data as any) ?? null
+      if (convId) {
+        // Refresh conversations from Supabase and return the created one
+        try {
+          const list = await supabaseMessaging.fetchConversations(userId)
+          const found = list.find(c => String(c.id) === String(convId))
+          if (found) {
+            logClientInfo('Created conversation via RPC', { convId, participantIds: pids })
+            return found
+          }
+          } catch (fetchErr) {
+          // Fall through to local fallback
+          logClientError('Created conversation but failed to fetch from supabase', { err: fetchErr, convId })
+        }
+      }
+    } catch (rpcErr) {
+      // Log and fall back to local messaging layer
+      try { logClientError('rpc_create_conversation failed', { err: rpcErr }) } catch {}
+    }
+
+    // Fallback: create in local persistent layer
     return messagingService.getOrCreateConversation(allParticipants, name, bountyId);
   },
 

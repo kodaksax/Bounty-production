@@ -1,9 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
-import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useAddressLibrary } from 'app/hooks/useAddressLibrary';
-import React, { useState, useEffect } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View, FlatList, ActivityIndicator } from 'react-native';
+import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import React, { useEffect, useRef, useState } from 'react';
+import { FlatList, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SavedAddress } from '../../../lib/types';
 
@@ -92,12 +92,21 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
   const isValid = draft.workType === 'online' || !validateLocation(draft.location, draft.workType);
 
+  const scrollRef = useRef<any>(null)
+  useEffect(() => {
+    const t = setTimeout(() => scrollRef.current?.scrollTo?.({ y: 0, animated: false }), 50)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
     <View className="flex-1 bg-emerald-600">
       <ScrollView
+        ref={scrollRef}
         className="flex-1 px-4 pt-2"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        nestedScrollEnabled={true}
+        removeClippedSubviews={false}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Work Type Selection */}
         <View className="mb-6">

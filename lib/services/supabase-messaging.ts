@@ -16,8 +16,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
-import type { Conversation, Message } from '../types';
 import { supabase } from '../supabase';
+import type { Conversation, Message } from '../types';
+import { logClientError } from './monitoring';
 
 // Storage keys for local cache
 const CONVERSATIONS_CACHE_KEY = '@bountyexpo:conversations_cache';
@@ -270,24 +271,56 @@ export async function sendMessage(
   senderId: string
 ): Promise<Message> {
   try {
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_id: senderId,
-        text,
-      })
-      .select()
-      .single();
+    // First, try the canonical column name 'text'
+    let attemptFields: Array<Record<string, any>> = [
+      { conversation_id: conversationId, sender_id: senderId, text },
+      // fallback alternatives in case DB schema uses a different column name
+      { conversation_id: conversationId, sender_id: senderId, body: text },
+      { conversation_id: conversationId, sender_id: senderId, message: text },
+      { conversation_id: conversationId, sender_id: senderId, content: text },
+    ];
 
-    if (error) throw error;
+    let inserted: any = null;
+    let lastError: any = null;
+
+    for (const fields of attemptFields) {
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .insert(fields)
+          .select()
+          .single();
+
+        if (error) throw error;
+        inserted = data;
+        break;
+      } catch (err) {
+        lastError = err;
+        // If error indicates missing column for the attempted field, continue to next
+        const msg = String((err && (err as any).message) || err);
+        if (msg.includes("Could not find the 'text' column") || msg.includes('column') && msg.includes('does not exist')) {
+          // try next candidate
+          continue;
+        }
+        // For other errors, break and rethrow after logging
+        break;
+      }
+    }
+
+    if (!inserted) {
+      // All attempts failed; log and throw the last error
+      try { logClientError('Error sending message via supabase: all insert variants failed', { err: lastError, conversationId, senderId }) } catch {}
+      throw lastError || new Error('Failed to insert message (unknown reason)');
+    }
+
+    const resolvedText = inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
 
     const message: Message = {
-      id: data.id,
-      conversationId: data.conversation_id,
-      senderId: data.sender_id,
-      text: data.text,
-      createdAt: data.created_at,
+      id: inserted.id,
+      conversationId: inserted.conversation_id,
+      senderId: inserted.sender_id,
+      text: resolvedText,
+      createdAt: inserted.created_at,
       status: 'sent',
     };
 
@@ -297,6 +330,7 @@ export async function sendMessage(
     return message;
   } catch (error) {
     console.error('Error sending message:', error);
+    try { logClientError('Error sending message', { err: error, conversationId, senderId }) } catch {}
     throw error;
   }
 }

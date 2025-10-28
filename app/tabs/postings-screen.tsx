@@ -628,25 +628,77 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       }
 
       // Auto-create a conversation for coordination (use bountyId as context)
-      try {
-        const { messageService } = await import('lib/services/message-service')
-        const conversation = await messageService.getOrCreateConversation(
-          [hunterIdForConv],
-          request.profile?.username || 'Hunter',
-          String(bountyId)
-        )
+        try {
+        // Use Supabase RPC to create conversation via SECURITY DEFINER function
+        // This avoids RLS rejections from client-side inserts.
+        const { navigationIntent } = await import('lib/services/navigation-intent')
+        const { logClientError, logClientInfo } = await import('lib/services/monitoring')
+        const { supabase } = await import('lib/supabase')
 
-        // Send initial message with bounty context (use title if available)
-        await messageService.sendMessage(
-          conversation.id,
-          `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
-          currentUserId
-        )
+        try {
+          const participantIds = [currentUserId, String(hunterIdForConv)]
+          const convName = request.profile?.username || (bountyObj as any)?.title || 'Conversation'
+          const { data, error } = await supabase.rpc('rpc_create_conversation', { p_participant_ids: participantIds, p_bounty_id: String(bountyId), p_name: convName })
+          if (error) throw error
+          const convId = (data as any) ?? null
 
-        console.log('✅ Conversation created for accepted request:', conversation.id)
+          if (convId) {
+            // send initial message via supabase function or messages table
+            try {
+              // Use supabase-messaging sendMessage to persist message
+              const supabaseMessaging = await import('lib/services/supabase-messaging')
+              await supabaseMessaging.sendMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+            } catch (msgErr) {
+              console.warn('Failed to send initial message via supabase messaging:', msgErr)
+              logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
+            }
+
+            try { await navigationIntent.setPendingConversationId(String(convId)) } catch (e) {}
+            console.log('✅ Supabase RPC conversation created for accepted request:', convId)
+            logClientInfo('Supabase RPC conversation created', { convId, bountyId })
+          }
+        } catch (rpcErr: any) {
+          // If RPC failed, fallback to local conversation and log error
+          logClientError('Error creating conversation via rpc_create_conversation', { error: rpcErr })
+          throw rpcErr
+        }
       } catch (convError) {
-        console.error('Error creating conversation:', convError)
-        // Don't fail the whole operation if conversation creation fails
+        console.error('Error creating supabase conversation:', convError)
+        // If creating the conversation in Supabase fails (for example RLS denies
+        // the insert), fall back to the local persistent layer so the user still
+        // has a conversation to coordinate in the app.
+        try {
+          const { messageService } = await import('lib/services/message-service')
+          const { navigationIntent } = await import('lib/services/navigation-intent')
+          const { logClientError } = await import('lib/services/monitoring')
+
+          const localConv = await messageService.getOrCreateConversation(
+            [hunterIdForConv],
+            request.profile?.username || 'Hunter',
+            String(bountyId)
+          )
+
+          // Send initial local message (best-effort)
+          try {
+            await messageService.sendMessage(
+              localConv.id,
+              `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
+              currentUserId
+            )
+          } catch (localMsgErr) {
+            console.warn('Failed to send initial local message:', localMsgErr)
+            logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
+          }
+
+          try { await navigationIntent.setPendingConversationId(localConv.id) } catch (e) { /* best-effort */ }
+          console.warn('Falling back to local conversation due to supabase error; local conv id:', localConv.id)
+        } catch (fallbackErr) {
+          console.error('Fallback to local conversation also failed:', fallbackErr)
+          try {
+            const { logClientError } = await import('lib/services/monitoring')
+            logClientError('Fallback to local conversation failed', { err: fallbackErr })
+          } catch {}
+        }
       }
 
       // Update local state - remove all requests for this bounty since it's now in progress

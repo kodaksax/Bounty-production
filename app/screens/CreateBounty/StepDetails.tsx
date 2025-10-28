@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,12 +56,21 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
 
   const isValid = !validateDescription(draft.description);
 
+  const scrollRef = useRef<any>(null)
+  useEffect(() => {
+    const t = setTimeout(() => scrollRef.current?.scrollTo?.({ y: 0, animated: false }), 50)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
     <View className="flex-1 bg-emerald-600">
       <ScrollView
+        ref={scrollRef}
         className="flex-1 px-4 pt-2"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        nestedScrollEnabled={true}
+        removeClippedSubviews={false}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Description Input */}
         <View className="mb-6">
