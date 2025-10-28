@@ -13,6 +13,7 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
+import { HEADER_LAYOUT, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { messageService } from '../../lib/services/message-service'
 import { logClientError as _logClientError } from '../../lib/services/monitoring'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -52,6 +53,7 @@ export function MessengerScreen({
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
   const { session } = useAuthContext()
+  const router = useRouter()
   const currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
@@ -202,12 +204,26 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ marginTop: -20 }}>
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
-            <MaterialIcons name="my-location" size={20} color="white" style={{ marginRight: 8 }} />
-            <Text className="text-2xl font-bold tracking-wider text-white">BOUNTY</Text>
+            <MaterialIcons
+              name="my-location"
+              size={HEADER_LAYOUT.iconSize}
+              color="white"
+              style={{ marginRight: HEADER_LAYOUT.iconToTitleGap }}
+            />
+            <Text
+              style={{
+                fontSize: HEADER_LAYOUT.titleFontSize,
+                fontWeight: 'bold',
+                letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
+                color: '#ffffff',
+              }}
+            >
+              BOUNTY
+            </Text>
           </View>
           <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
         </View>
@@ -215,17 +231,27 @@ export function MessengerScreen({
 
       <View className="px-4 py-2 flex-row justify-between items-center">
         <Text className="text-xl font-bold text-white">INBOX</Text>
-        <View className="flex-row gap-4">
-          <TouchableOpacity onPress={refresh}>
+
+        {/* Right-side actions: refresh, create new group (icon), and offline badge */}
+        <View className="flex-row items-center gap-4">
+          <TouchableOpacity onPress={refresh} className="p-2 rounded">
             <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity>
-            <Text className="text-sm text-white">New Group</Text>
+
+          {/* New Group icon button styled as rounded square with plus */}
+          <TouchableOpacity
+            onPress={() => router.push('/tabs/choose-people-screen' as any)}
+            className="rounded-lg"
+            accessibilityLabel="Create new group"
+          >
+            {/* Removed white border so icon has no encircling stroke */}
+            <View className="h-8 w-8 rounded-lg flex items-center justify-center">
+              <MaterialIcons name="add-box" size={20} color="white" />
+            </View>
           </TouchableOpacity>
+
+          <OfflineStatusBadge />
         </View>
-        
-        {/* Offline status badge */}
-        <OfflineStatusBadge />
       </View>
 
       {error && (

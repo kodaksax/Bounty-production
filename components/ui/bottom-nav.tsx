@@ -1,8 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
-import { SIZING, A11Y } from "../../lib/constants/accessibility";
-import { useHapticFeedback } from "lib/haptic-feedback";
+import { A11Y, SIZING } from "../../lib/constants/accessibility";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
@@ -120,7 +120,10 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
           accessibilityLabel="Search and browse postings"
           accessibilityState={{ selected: activeScreen === "postings" }}
         >
-          <MaterialIcons name="search" color={activeScreen === "postings" ? "#fffef5" : "#c3c3c4"} size={24} />
+          {/* Container sized slightly larger (no border) so the icon aligns with nearby profile icon touch target */}
+          <View style={styles.navIconContainer}>
+            <MaterialIcons name="edit-note" color={activeScreen === "postings" ? "#fffef5" : "#c3c3c4"} size={28} />
+          </View>
         </TouchableOpacity>
         {showAdmin ? (
           <TouchableOpacity 
@@ -131,7 +134,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
             accessibilityLabel="Admin panel"
             accessibilityState={{ selected: activeScreen === "admin" }}
           >
-            <MaterialIcons name="admin-panel-settings" color={activeScreen === "admin" ? "#00dc50" : "#c3c3c4"} size={24} />
+            <MaterialIcons name="admin-panel-settings" color={activeScreen === "admin" ? "#00dc50" : "#c3c3c4"} size={28} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
@@ -142,7 +145,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
             accessibilityLabel="View and edit profile"
             accessibilityState={{ selected: activeScreen === "profile" }}
           >
-            <MaterialIcons name="person" color={activeScreen === "profile" ? "#fffef5" : "#c3c3c4"} size={24} />
+            <MaterialIcons name="person" color={activeScreen === "profile" ? "#fffef5" : "#c3c3c4"} size={28} />
           </TouchableOpacity>
         )}
       </View>
@@ -216,5 +219,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 32,
+  },
+  navIconContainer: {
+    // Slightly larger touch target matching other nav buttons but without a visible border
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
   },
 });

@@ -12,12 +12,12 @@ import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { ReportModal } from "../../components/ReportModal"
 import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
-import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
+import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
-import { useWallet } from '../../lib/wallet-context'
 import { getCurrentUserId } from "../../lib/utils/data-utils"
+import { useWallet } from '../../lib/wallet-context'
 
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -162,7 +162,10 @@ export function ChatDetailScreen({
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
       {/* Header */}
-      <View className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b border-emerald-500">
+      <View
+        className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
+        style={{ borderBottomColor: '#047857' }}
+      >
         <View className="flex-row items-center flex-1">
           <TouchableOpacity onPress={onBack} className="mr-3">
             <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
@@ -350,9 +353,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 12,
-    backgroundColor: '#047857', // emerald-700
+    // Make the area outside the rounded message box match the main screen
+    // (use emerald-600 to match `bg-emerald-600` on the root View)
+    backgroundColor: '#059669', // emerald-600
     borderTopWidth: 1,
-    borderTopColor: '#059669',
+    // use a slightly darker border so the input area still reads as separate
+    borderTopColor: '#047857', // emerald-700
   },
   inputButton: {
     flexDirection: 'row',

@@ -18,6 +18,7 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { ROUTES } from '../lib/routes'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
@@ -216,8 +217,8 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       if (onNavigateToChat) {
         onNavigateToChat(conversation.id)
       } else {
-        // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
-  router.push('/tabs/messenger' as any)
+    // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
+  router.push(ROUTES.TABS.MESSENGER as any)
       }
     } catch (error) {
       console.error('Error creating conversation:', error)

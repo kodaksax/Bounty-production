@@ -4,28 +4,29 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
+import { ROUTES } from 'lib/routes';
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
-import { SkillsetChips } from "../../components/skillset-chips";
 import { ReportModal } from "../../components/ReportModal";
-import { bountyService } from "../../lib/services/bounty-service";
-import { bountyRequestService } from "../../lib/services/bounty-request-service";
-import { blockingService } from "../../lib/services/blocking-service";
+import { SkillsetChips } from "../../components/skillset-chips";
 import { useAuthContext } from "../../hooks/use-auth-context";
+import { blockingService } from "../../lib/services/blocking-service";
+import { bountyRequestService } from "../../lib/services/bounty-request-service";
+import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 
 export default function UserProfileScreen() {
@@ -163,8 +164,8 @@ export default function UserProfileScreen() {
 
       console.log('✅ Conversation created/retrieved:', conversation.id);
       
-      // Navigate to messenger
-      router.push('/tabs/messenger-screen' as any);
+  // Navigate to messenger
+  router.push(ROUTES.TABS.MESSENGER as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
       Alert.alert('Error', 'Failed to start conversation. Please try again.');
