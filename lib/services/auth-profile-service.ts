@@ -6,7 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from '../supabase';
+import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
 const PROFILE_CACHE_KEY_PREFIX = 'BE:authProfile';
@@ -243,11 +243,18 @@ export class AuthProfileService {
       }
 
       return null;
-    } catch (error) {
-      logger.error('Error fetching profile', { userId, error });
+    } catch (error: any) {
+      // Detect cases where the server returned an HTML error page (common when
+      // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
+      const msg = (error && (error.message || String(error))) || '';
+      if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
+        logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
+      } else {
+        logger.error('Error fetching profile', { userId, error });
+      }
       
       // Try to load from cache
-      const cached = await this.loadFromCache(userId);
+  const cached = await this.loadFromCache(userId);
       if (cached && cached.id === userId) {
         this.currentProfile = cached;
         this.notifyListeners(cached);

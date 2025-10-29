@@ -242,8 +242,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
         </View>
       )}
-      {/* Header — left: BOUNTY brand, right: back + settings */}
-      <View className="flex-row items-center justify-between p-4 pt-8">
+  {/* Header — left: BOUNTY brand, right: back + settings */}
+  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
         <View className="flex-row items-center gap-2">
           <MaterialIcons 
             name="gps-fixed" 
@@ -251,8 +251,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             color="#ffffff" 
             accessibilityElementsHidden={true}
           />
-          <Text 
-            className="text-lg font-bold tracking-wider text-white"
+          <Text
+            style={{ fontSize: 20, fontWeight: '700', letterSpacing: 1 }}
+            className="text-white"
             accessibilityRole="header"
           >
             BOUNTY
@@ -341,8 +342,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
         {/* Activity section removed per requirements */}
 
-        {/* History Link */}
-        <View className="px-4 py-2">
+        {/* History Link (raised by 20px) */}
+        <View style={{ marginTop: -20 }} className="px-4 py-2">
           <TouchableOpacity
             className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
             onPress={() => {
