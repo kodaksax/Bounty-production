@@ -56,7 +56,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         <View style={styles.headerTitleRow}>
           <MaterialIcons 
             name="gps-fixed" 
-            size={HEADER_LAYOUT.iconSize + 4} 
+            size={24} 
             color="#fff" 
             accessibilityElementsHidden={true}
           />
@@ -206,12 +206,16 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     backgroundColor: '#059669',
-    gap: HEADER_LAYOUT.iconToTitleGap,
+    gap: 8,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: HEADER_LAYOUT.iconToTitleGap,
+    gap: 8,
+    transform: [
+      { translateY: -2 },
+      { translateX: -2 },
+    ],
   },
   headerTitle: {
     color: '#fff',
