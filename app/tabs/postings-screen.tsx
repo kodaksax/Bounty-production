@@ -916,25 +916,26 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           ]}
         >
           {/* Header */}
-          <View className="flex-row justify-between items-center px-4">
+            <View className="flex-row justify-between items-center px-4">
             {/* Left: icon + title aligned like messenger (no back icon) */}
-            <View className="flex-row items-center gap-2">
+            <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
               <MaterialIcons 
                 name="gps-fixed" 
                 size={24} 
                 color="#ffffff" 
                 accessibilityElementsHidden={true}
               />
-              <Text 
-                className="text-lg font-bold tracking-wider text-white"
-                accessibilityRole="header"
-              >
-                BOUNTY
-              </Text>
+                <Text
+                  style={{ fontSize: 20, marginLeft: 8 }}
+                  className="font-bold tracking-wider text-white"
+                  accessibilityRole="header"
+                >
+                  BOUNTY
+                </Text>
             </View>
 
             {/* Right: Wallet balance pill and bookmark (inline) */}
-            <View className="flex-row items-center">
+            <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
               {/* Balance pill sits to the left, bookmark to the right */}
               <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
               <TouchableOpacity
@@ -961,7 +962,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
           {/* Title (centered below header) */}
           <View className="px-4">
-            <Text className="text-white text-xl font-bold tracking-wide uppercase text-center w-full">
+            <Text style={{ fontSize: 20 }} className="text-white font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
                 : activeTab === "requests"

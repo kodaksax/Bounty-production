@@ -225,7 +225,9 @@ export function MessengerScreen({
               BOUNTY
             </Text>
           </View>
-          <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
+          <View style={{ transform: [{ translateX: -2 }, { translateY: 1 }] }}>
+            <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
+          </View>
         </View>
       </View>
 

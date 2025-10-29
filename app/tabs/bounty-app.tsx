@@ -599,7 +599,11 @@ const styles = StyleSheet.create({
   headerLeft: { 
     flexDirection: 'row', 
     alignItems: 'center',
-    gap: HEADER_LAYOUT.iconToTitleGap 
+    gap: HEADER_LAYOUT.iconToTitleGap,
+    transform: [
+      { translateX: -2 },
+      { translateY: -1 },
+    ],
   },
   headerTitle: { 
     fontSize: HEADER_LAYOUT.titleFontSize, 
