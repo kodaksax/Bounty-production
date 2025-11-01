@@ -1,6 +1,8 @@
 import { completionReleaseService } from './completion-release-service';
 import { OutboxEvent, outboxService } from './outbox-service';
 import { stripeConnectService } from './stripe-connect-service';
+import { refundService } from './refund-service';
+import { emailService } from './email-service';
 
 export class OutboxWorker {
   private isRunning = false;
@@ -119,6 +121,14 @@ export class OutboxWorker {
         await this.handleCompletionRelease(event);
         break;
       
+      case 'REFUND_RETRY':
+        await this.handleRefundRetry(event);
+        break;
+      
+      case 'BOUNTY_REFUNDED':
+        await this.handleBountyRefunded(event);
+        break;
+      
       default:
         console.warn(`⚠️  Unknown event type: ${event.type}`);
     }
@@ -219,6 +229,66 @@ export class OutboxWorker {
     
     // For now, just log the event
     console.log(`📝 Logged BOUNTY_COMPLETED event for bounty ${bountyId}`);
+  }
+
+  /**
+   * Handle REFUND_RETRY events - Retry failed refund processing
+   */
+  private async handleRefundRetry(event: OutboxEvent): Promise<void> {
+    const { bountyId, reason } = event.payload;
+    
+    console.log(`🔄 REFUND_RETRY: Retrying refund for bounty ${bountyId}`);
+    
+    try {
+      // Check if already refunded to prevent double processing
+      const alreadyRefunded = await refundService.isAlreadyRefunded(bountyId);
+      if (alreadyRefunded) {
+        console.log(`⚠️  Bounty ${bountyId} already refunded, skipping`);
+        return;
+      }
+
+      // Process the refund
+      const success = await refundService.processRefundFromOutbox(event.payload);
+      
+      if (success) {
+        console.log(`✅ REFUND_PROCESSED: Refund completed for bounty ${bountyId}`);
+      } else {
+        throw new Error('Failed to process refund');
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to process refund retry for bounty ${bountyId}:`, error);
+      throw error; // Re-throw to trigger retry mechanism
+    }
+  }
+
+  /**
+   * Handle BOUNTY_REFUNDED events - Post-refund notifications
+   */
+  private async handleBountyRefunded(event: OutboxEvent): Promise<void> {
+    const { bountyId, creatorId, amount, refundId, reason, title } = event.payload;
+    
+    console.log(`💸 BOUNTY_REFUNDED: Refund processed for bounty "${title}" (${bountyId})`);
+    console.log(`💰 Refund Amount: $${amount / 100}, Refund ID: ${refundId}`);
+    
+    try {
+      // Send refund confirmation email
+      await emailService.sendRefundConfirmation(bountyId, creatorId, amount, reason);
+      
+      console.log(`📧 Refund confirmation email sent to creator ${creatorId}`);
+      
+      // In the future, this could:
+      // - Send push notifications
+      // - Update external systems
+      // - Trigger webhook calls
+      // - Log analytics events
+      
+      console.log(`📝 Logged BOUNTY_REFUNDED event for bounty ${bountyId}`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to send refund notification for bounty ${bountyId}:`, error);
+      // Don't throw - email failure shouldn't prevent event completion
+    }
   }
 }
 
