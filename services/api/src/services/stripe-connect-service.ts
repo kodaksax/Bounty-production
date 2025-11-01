@@ -201,32 +201,186 @@ class StripeConnectService {
         throw new Error('Cannot create escrow for zero amount bounties');
       }
 
-      // For testing, create a mock PaymentIntent
-      // In production, this would call Stripe API
-      const mockPaymentIntent: EscrowPaymentIntentResponse = {
-        paymentIntentId: `pi_escrow_${Date.now()}_${bountyId.slice(-8)}`,
-        clientSecret: `pi_escrow_${Date.now()}_${bountyId.slice(-8)}_secret_mock`,
+      // Get creator details for payment method
+      const creatorRecord = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, bounty.creator_id))
+        .limit(1);
+
+      if (!creatorRecord.length) {
+        throw new Error('Bounty creator not found');
+      }
+
+      // Create real Stripe PaymentIntent
+      const paymentIntent = await this.stripe!.paymentIntents.create({
         amount: bounty.amount_cents,
         currency: 'usd',
-        status: 'requires_payment_method',
-      };
+        capture_method: 'automatic', // Capture funds immediately
+        payment_method_types: ['card'],
+        metadata: {
+          bounty_id: bountyId,
+          creator_id: bounty.creator_id,
+          type: 'escrow',
+          bounty_title: bounty.title,
+        },
+        description: `Escrow for bounty: ${bounty.title}`,
+      });
 
       // Update bounty with payment intent ID
       await db
         .update(bounties)
         .set({ 
-          payment_intent_id: mockPaymentIntent.paymentIntentId,
+          payment_intent_id: paymentIntent.id,
           updated_at: new Date(),
         })
         .where(eq(bounties.id, bountyId));
 
-      console.log(`✅ Created escrow PaymentIntent ${mockPaymentIntent.paymentIntentId} for bounty ${bountyId} (${bounty.amount_cents} cents)`);
+      console.log(`✅ Created Stripe PaymentIntent ${paymentIntent.id} for bounty ${bountyId} (${bounty.amount_cents} cents)`);
 
-      return mockPaymentIntent;
+      return {
+        paymentIntentId: paymentIntent.id,
+        clientSecret: paymentIntent.client_secret || '',
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
+        status: paymentIntent.status,
+      };
 
     } catch (error) {
       console.error(`❌ Error creating escrow PaymentIntent for bounty ${bountyId}:`, error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new Error(`Stripe error: ${error.message}`);
+      }
       throw error;
+    }
+  }
+
+  /**
+   * Refund a PaymentIntent (for cancelled bounties)
+   */
+  async refundPaymentIntent(paymentIntentId: string, bountyId: string, reason?: string): Promise<{
+    success: boolean;
+    refundId?: string;
+    amount?: number;
+    error?: string;
+  }> {
+    this.ensureConfigured();
+
+    try {
+      // Get the payment intent to ensure it exists and is refundable
+      const paymentIntent = await this.stripe!.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        return {
+          success: false,
+          error: `Payment intent status is ${paymentIntent.status}, can only refund succeeded payments`,
+        };
+      }
+
+      // Create the refund
+      const refund = await this.stripe!.refunds.create({
+        payment_intent: paymentIntentId,
+        reason: (reason as any) || 'requested_by_customer',
+        metadata: {
+          bounty_id: bountyId,
+          type: 'bounty_cancellation',
+        },
+      });
+
+      console.log(`✅ Created refund ${refund.id} for PaymentIntent ${paymentIntentId} (${refund.amount} cents)`);
+
+      return {
+        success: true,
+        refundId: refund.id,
+        amount: refund.amount,
+      };
+
+    } catch (error) {
+      console.error(`❌ Error refunding PaymentIntent ${paymentIntentId}:`, error);
+      
+      let errorMessage = 'Unknown error';
+      if (error instanceof Stripe.errors.StripeError) {
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Check if a payment has sufficient funds and account is verified
+   */
+  async validatePaymentCapability(userId: string, amountCents: number): Promise<{
+    canPay: boolean;
+    error?: string;
+  }> {
+    this.ensureConfigured();
+
+    try {
+      const userRecord = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!userRecord.length) {
+        return {
+          canPay: false,
+          error: 'User not found',
+        };
+      }
+
+      const user = userRecord[0];
+
+      // Check if user has Stripe account for payment methods
+      if (!user.stripe_account_id) {
+        return {
+          canPay: false,
+          error: 'User has not set up payment method. Please complete Stripe onboarding first.',
+        };
+      }
+
+      // Verify the Stripe account is active
+      try {
+        const account = await this.stripe!.accounts.retrieve(user.stripe_account_id);
+        
+        if (!account.charges_enabled) {
+          return {
+            canPay: false,
+            error: 'User account is not verified to make payments. Please complete account verification.',
+          };
+        }
+      } catch (stripeError) {
+        console.error('Error checking Stripe account:', stripeError);
+        return {
+          canPay: false,
+          error: 'Unable to verify payment account status',
+        };
+      }
+
+      // Amount validation
+      if (amountCents < 50) { // Stripe minimum is $0.50
+        return {
+          canPay: false,
+          error: 'Amount must be at least $0.50',
+        };
+      }
+
+      return {
+        canPay: true,
+      };
+
+    } catch (error) {
+      console.error('Error validating payment capability:', error);
+      return {
+        canPay: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   }
 

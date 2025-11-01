@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { outboxService } from './outbox-service';
 import { walletService } from './wallet-service';
 import { realtimeService } from './realtime-service';
+import { emailService } from './email-service';
 
 export class BountyService {
   /**
@@ -61,6 +62,9 @@ export class BountyService {
             type: 'escrow',
             amount: bounty.amount_cents / 100, // Convert cents to dollars
           });
+
+          // Send escrow confirmation email
+          await emailService.sendEscrowConfirmation(bountyId, bounty.creator_id);
         }
 
         // Create outbox event for BOUNTY_ACCEPTED
