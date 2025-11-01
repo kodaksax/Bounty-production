@@ -151,19 +151,24 @@ export class RefundService {
       console.error(`❌ Error processing refund for bounty ${request.bountyId}:`, error);
       
       // Create outbox event for retry
+      // Sanitize error message to prevent injection attacks
+      const safeErrorMessage = error instanceof Error 
+        ? String(error.message).substring(0, 500) // Limit message length
+        : 'Unknown error';
+      
       await outboxService.createEvent({
         type: 'REFUND_RETRY',
         payload: {
           bountyId: request.bountyId,
           reason: request.reason,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: safeErrorMessage,
           attempt_timestamp: new Date().toISOString(),
         },
       });
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: safeErrorMessage,
       };
     }
   }

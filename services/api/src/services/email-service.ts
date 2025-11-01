@@ -266,6 +266,8 @@ The BountyExpo Team
    * Generate refund email
    */
   private generateRefundEmail(bounty: any, creator: any, amount: number, reason?: string): string {
+    const reasonLine = reason ? `Reason: ${reason}\n` : '';
+    
     return `
 Hello ${creator.handle},
 
@@ -275,8 +277,7 @@ REFUND DETAILS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Bounty ID: ${bounty.id}
 Refund Amount: $${(amount / 100).toFixed(2)}
-${reason ? `Reason: ${reason}` : ''}
-Date: ${new Date().toLocaleDateString()}
+${reasonLine}Date: ${new Date().toLocaleDateString()}
 Status: Refund Processed
 
 WHAT'S NEXT?

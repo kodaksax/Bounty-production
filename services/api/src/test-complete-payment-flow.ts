@@ -18,11 +18,11 @@ import { stripeConnectService } from './services/stripe-connect-service';
 import { walletService } from './services/wallet-service';
 import { eq } from 'drizzle-orm';
 
-// Test configuration
+// Test configuration - can be overridden via environment variables
 const TEST_CONFIG = {
-  useMockStripe: true, // Set to false to test with real Stripe API
-  bountyAmount: 10000, // $100.00 in cents
-  platformFeePercentage: 5, // 5%
+  useMockStripe: process.env.TEST_USE_REAL_STRIPE !== 'true', // Set TEST_USE_REAL_STRIPE=true to test with real Stripe API
+  bountyAmount: parseInt(process.env.TEST_BOUNTY_AMOUNT || '10000', 10), // $100.00 in cents by default
+  platformFeePercentage: parseInt(process.env.TEST_PLATFORM_FEE_PERCENTAGE || '5', 10), // 5% by default
 };
 
 // Color codes for console output

@@ -278,9 +278,13 @@ class StripeConnectService {
       }
 
       // Create the refund
+      // Map reason to Stripe's accepted values or default to 'requested_by_customer'
+      const stripeReason: 'duplicate' | 'fraudulent' | 'requested_by_customer' = 
+        reason === 'duplicate' || reason === 'fraudulent' ? reason : 'requested_by_customer';
+      
       const refund = await this.stripe!.refunds.create({
         payment_intent: paymentIntentId,
-        reason: (reason as any) || 'requested_by_customer',
+        reason: stripeReason,
         metadata: {
           bounty_id: bountyId,
           type: 'bounty_cancellation',
