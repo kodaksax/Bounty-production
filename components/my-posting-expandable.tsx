@@ -34,6 +34,7 @@ type Props = {
   onToggle: () => void
   onEdit?: () => void
   onDelete?: () => void
+  onWithdrawApplication?: () => void
   onGoToReview?: (bountyId: string) => void
   onGoToPayout?: (bountyId: string) => void
   variant?: 'owner' | 'hunter'
@@ -49,7 +50,7 @@ const STAGES = [
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ]
 
-export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
+export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
   const [readyToSubmitPressed, setReadyToSubmitPressed] = useState(false)
@@ -965,5 +966,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(167,243,208,0.9)',
     padding: 6,
     borderRadius: 8,
+  },
+  withdrawButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  withdrawButtonText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
 })
