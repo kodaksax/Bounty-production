@@ -4,6 +4,7 @@ import { bounties, users, walletTransactions } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { outboxService } from './outbox-service';
 import { walletService } from './wallet-service';
+import { emailService } from './email-service';
 
 export interface CompletionReleaseRequest {
   bountyId: string;
@@ -175,6 +176,15 @@ export class CompletionReleaseService {
           updated_at: new Date(),
         })
         .where(eq(bounties.id, request.bountyId));
+
+      // Send email receipts to both parties
+      await emailService.sendReleaseConfirmation(
+        request.bountyId,
+        bounty.creator_id,
+        request.hunterId,
+        releaseAmountCents,
+        platformFeeCents
+      );
 
       return {
         success: true,

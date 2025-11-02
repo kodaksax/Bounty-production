@@ -3,8 +3,16 @@ import { outboxEvents } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 
 // Define types directly here to avoid import issues
+export type OutboxEventType = 
+  | 'BOUNTY_ACCEPTED' 
+  | 'BOUNTY_COMPLETED' 
+  | 'ESCROW_HOLD' 
+  | 'COMPLETION_RELEASE'
+  | 'REFUND_RETRY'
+  | 'BOUNTY_REFUNDED';
+
 export interface CreateOutboxEventInput {
-  type: 'BOUNTY_ACCEPTED' | 'BOUNTY_COMPLETED' | 'ESCROW_HOLD' | 'COMPLETION_RELEASE';
+  type: OutboxEventType;
   payload: Record<string, any>;
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   retry_count?: number;
@@ -13,7 +21,7 @@ export interface CreateOutboxEventInput {
 
 export interface OutboxEvent {
   id: string;
-  type: 'BOUNTY_ACCEPTED' | 'BOUNTY_COMPLETED' | 'ESCROW_HOLD' | 'COMPLETION_RELEASE';
+  type: OutboxEventType;
   payload: Record<string, any>;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   retry_count: number;

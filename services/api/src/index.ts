@@ -7,6 +7,7 @@ import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
 import { stripeConnectService } from './services/stripe-connect-service';
 import { realtimeService } from './services/realtime-service';
+import { refundService } from './services/refund-service';
 import { registerAdminRoutes } from './routes/admin';
 import { eq } from 'drizzle-orm';
 
@@ -173,6 +174,72 @@ fastify.post('/bounties/:bountyId/complete', {
   }
 });
 
+// Cancel/refund bounty endpoint
+fastify.post('/bounties/:bountyId/cancel', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    const { reason } = request.body as { reason?: string };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const result = await refundService.processRefund({
+      bountyId,
+      reason,
+      cancelledBy: request.userId,
+    });
+    
+    if (!result.success) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    return { 
+      message: 'Bounty cancelled and refund processed successfully', 
+      bountyId,
+      refundId: result.refundId,
+      amount: result.amount,
+    };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/cancel endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to cancel bounty and process refund' 
+    });
+  }
+});
+
+// Validate payment capability endpoint
+fastify.post('/stripe/validate-payment', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply) => {
+  try {
+    const { amountCents } = request.body as { amountCents: number };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    if (!amountCents || amountCents <= 0) {
+      return reply.code(400).send({ error: 'Invalid amount' });
+    }
+
+    const result = await stripeConnectService.validatePaymentCapability(
+      request.userId,
+      amountCents
+    );
+    
+    return result;
+  } catch (error) {
+    console.error('Error in /stripe/validate-payment endpoint:', error);
+    const message = error instanceof Error ? error.message : 'Failed to validate payment capability';
+    return reply.code(500).send({ 
+      error: message 
+    });
+  }
+});
+
 // Stripe Connect onboarding link endpoint
 fastify.post('/stripe/connect/onboarding-link', {
   preHandler: authMiddleware
@@ -256,18 +323,29 @@ fastify.get('/events/stats', async (request, reply) => {
 // Root endpoint
 fastify.get('/', async (request, reply) => {
   return {
-    message: 'BountyExpo API',
+    message: 'BountyExpo API - Complete Escrow Payment Flow',
     version: '1.0.0',
     endpoints: {
       health: '/health',
       me: '/me (requires auth)',
       acceptBounty: '/bounties/:bountyId/accept (requires auth)',
       completeBounty: '/bounties/:bountyId/complete (requires auth)',
+      cancelBounty: '/bounties/:bountyId/cancel (requires auth)',
       stripeOnboardingLink: '/stripe/connect/onboarding-link (requires auth)',
       stripeConnectStatus: '/stripe/connect/status (requires auth)',
+      validatePayment: '/stripe/validate-payment (requires auth)',
       eventsSubscribe: '/events/subscribe (WebSocket endpoint)',
       eventsSubscribeInfo: '/events/subscribe-info',
       eventsStats: '/events/stats',
+    },
+    features: {
+      escrow: 'Automatic escrow on bounty acceptance',
+      release: 'Automatic fund release on completion with platform fee',
+      refund: 'Full refund on cancellation',
+      stripeConnect: 'Stripe Connect onboarding for hunters',
+      emailReceipts: 'Email receipts for all transactions',
+      errorHandling: 'Comprehensive error handling with retries',
+      edgeCases: 'Validation for insufficient funds and unverified accounts',
     }
   };
 });

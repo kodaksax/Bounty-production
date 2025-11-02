@@ -48,6 +48,7 @@ type MyPostingRowProps = {
   onToggle: () => void
   onEdit?: () => void
   onDelete?: () => void
+  onWithdrawApplication?: () => void
   onGoToReview: (id: string) => void
   onGoToPayout: (id: string) => void
   variant?: 'owner' | 'hunter'
@@ -56,7 +57,7 @@ type MyPostingRowProps = {
   onRefresh?: () => void
 }
 
-export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
   return (
     <MyPostingExpandable
       bounty={bounty}
@@ -65,6 +66,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
       onToggle={onToggle}
       onEdit={onEdit}
       onDelete={onDelete}
+      onWithdrawApplication={onWithdrawApplication}
       onGoToReview={onGoToReview}
       onGoToPayout={onGoToPayout}
       variant={variant}
@@ -865,6 +867,54 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     )
   }
 
+  const handleWithdrawApplication = async (bountyId: number | string) => {
+    Alert.alert(
+      "Withdraw Application",
+      "Are you sure you want to withdraw your application for this bounty?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Withdraw",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Get the bounty request for this bounty and current user
+              const requests = await bountyRequestService.getAll({
+                bountyId: String(bountyId),
+                userId: currentUserId,
+              })
+
+              if (requests.length === 0) {
+                throw new Error("No application found for this bounty")
+              }
+
+              const request = requests[0]
+
+              // Delete the bounty request
+              const success = await bountyRequestService.delete(request.id)
+
+              if (!success) {
+                throw new Error("Failed to withdraw application")
+              }
+
+              // Remove from in-progress list
+              setInProgressBounties((prev) => prev.filter((b) => b.id !== bountyId))
+
+              Alert.alert("Success", "Your application has been withdrawn.")
+            } catch (err: any) {
+              console.error("Error withdrawing application:", err)
+              Alert.alert("Error", err.message || "Failed to withdraw application")
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    )
+  }
+
   if (showArchivedBounties) {
     return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
   }
@@ -1097,6 +1147,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         currentUserId={currentUserId}
                         expanded={!!expandedMap[String(bounty.id)]}
                         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
+                        onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
                         // For hunter view, route to hunter-specific flows when applicable
                         onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
                         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
@@ -1194,8 +1245,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                         currentUserId={currentUserId}
                         expanded={!!expandedMap[String(bounty.id)]}
                         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
-                        onEdit={() => handleEditBounty(bounty)}
-                        onDelete={() => handleDeleteBounty(bounty)}
+                        onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
+                        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
                         onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
                         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
                         variant={'owner'}
