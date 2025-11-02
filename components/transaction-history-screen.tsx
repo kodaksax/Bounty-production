@@ -155,71 +155,108 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
-      {/* Header */}
-      <View className="flex flex-row items-center justify-between p-4 pt-safe">
+      {/* Header - improved spacing for iPhone */}
+      <View className="flex flex-row items-center justify-between p-5 pt-safe">
         <View className="flex flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
+          <Text className="text-xl font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
-        <TouchableOpacity onPress={onBack} className="p-2 touch-target-min ml-4">
-          <MaterialIcons name="arrow-back" size={24} color="#000000" />
+        <TouchableOpacity 
+          onPress={onBack} 
+          style={{ 
+            padding: 10, 
+            minWidth: 44, 
+            minHeight: 44,
+            justifyContent: 'center',
+            alignItems: 'center' 
+          }}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
       {/* Title */}
-      <View className="px-4 py-2">
-        <Text className="text-xl font-bold">Transaction History</Text>
+      <View className="px-5 py-3">
+        <Text className="text-2xl font-bold text-white">Transaction History</Text>
       </View>
 
-      {/* Filters */}
-      <View className="px-4 py-2 overflow-x-auto ios-scroll no-scrollbar">
-        <View className="flex space-x-3" style={{ flexDirection: 'row' }}>
+      {/* Filters - improved for iPhone */}
+      <View className="px-5 py-2 overflow-x-auto ios-scroll no-scrollbar">
+        <View className="flex space-x-3" style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity
-            className={cn(
-              "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
-              activeFilter === "all"
-                ? "bg-emerald-700 text-white"
-                : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
-            )}
+            style={{
+              paddingHorizontal: 18,
+              paddingVertical: 10,
+              borderRadius: 20,
+              backgroundColor: activeFilter === "all" ? '#047857' : 'rgba(4,120,87,0.4)',
+              minHeight: 44, // iOS touch target
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
             onPress={() => handleFilterChange("all")}
           >
-            <Text style={{ color: activeFilter === 'all' ? '#fff' : '#d1fae5' }}>All Transactions</Text>
+            <Text style={{ 
+              color: activeFilter === 'all' ? '#fff' : '#d1fae5',
+              fontWeight: activeFilter === 'all' ? '600' : '500',
+              fontSize: 15
+            }}>All Transactions</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={cn(
-              "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
-              activeFilter === "deposits"
-                ? "bg-emerald-700 text-white"
-                : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
-            )}
+            style={{
+              paddingHorizontal: 18,
+              paddingVertical: 10,
+              borderRadius: 20,
+              backgroundColor: activeFilter === "deposits" ? '#047857' : 'rgba(4,120,87,0.4)',
+              minHeight: 44,
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
             onPress={() => handleFilterChange("deposits")}
           >
-            <Text style={{ color: activeFilter === 'deposits' ? '#fff' : '#d1fae5' }}>Deposits</Text>
+            <Text style={{ 
+              color: activeFilter === 'deposits' ? '#fff' : '#d1fae5',
+              fontWeight: activeFilter === 'deposits' ? '600' : '500',
+              fontSize: 15
+            }}>Deposits</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={cn(
-              "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
-              activeFilter === "withdrawals"
-                ? "bg-emerald-700 text-white"
-                : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
-            )}
+            style={{
+              paddingHorizontal: 18,
+              paddingVertical: 10,
+              borderRadius: 20,
+              backgroundColor: activeFilter === "withdrawals" ? '#047857' : 'rgba(4,120,87,0.4)',
+              minHeight: 44,
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
             onPress={() => handleFilterChange("withdrawals")}
           >
-            <Text style={{ color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5' }}>Withdrawals</Text>
+            <Text style={{ 
+              color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5',
+              fontWeight: activeFilter === 'withdrawals' ? '600' : '500',
+              fontSize: 15
+            }}>Withdrawals</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={cn(
-              "px-4 py-2 rounded-full text-sm whitespace-nowrap touch-target-min",
-              activeFilter === "bounties"
-                ? "bg-emerald-700 text-white"
-                : "bg-emerald-700/50 text-emerald-200 hover:bg-emerald-700/70",
-            )}
+            style={{
+              paddingHorizontal: 18,
+              paddingVertical: 10,
+              borderRadius: 20,
+              backgroundColor: activeFilter === "bounties" ? '#047857' : 'rgba(4,120,87,0.4)',
+              minHeight: 44,
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
             onPress={() => handleFilterChange("bounties")}
           >
-            <Text style={{ color: activeFilter === 'bounties' ? '#fff' : '#d1fae5' }}>Bounties</Text>
+            <Text style={{ 
+              color: activeFilter === 'bounties' ? '#fff' : '#d1fae5',
+              fontWeight: activeFilter === 'bounties' ? '600' : '500',
+              fontSize: 15
+            }}>Bounties</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -264,24 +301,51 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
                   {group.transactions.map((transaction) => (
                     <TouchableOpacity
                       key={transaction.id}
-                      className="bg-emerald-700/50 rounded-lg p-3 touch-target-min active:bg-emerald-700/70 transition-colors"
+                      style={{
+                        backgroundColor: 'rgba(4,120,87,0.4)',
+                        borderRadius: 14,
+                        padding: 16,
+                        marginBottom: 12,
+                        minHeight: 80, // Comfortable touch target
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 2,
+                        elevation: 2
+                      }}
                       onPress={() => setSelectedTransaction(transaction)}
+                      activeOpacity={0.7}
                     >
-                      <View className="flex items-center gap-3">
-                        <View className="h-10 w-10 rounded-full bg-emerald-800/80 flex items-center justify-center">
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{
+                          height: 44,
+                          width: 44,
+                          borderRadius: 22,
+                          backgroundColor: 'rgba(5,150,105,0.5)',
+                          justifyContent: 'center',
+                          alignItems: 'center'
+                        }}>
                           {getTransactionIcon(transaction.type)}
                         </View>
 
-                        <View className="flex-1 min-w-0">
-                          <View className="flex justify-between items-center">
-                            <Text className="text-sm font-medium text-white truncate">
+                        <View style={{ flex: 1, marginLeft: 14 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <Text style={{
+                              fontSize: 15,
+                              fontWeight: '600',
+                              color: '#ffffff',
+                              flex: 1,
+                              marginRight: 8
+                            }} numberOfLines={2}>
                               {getTransactionTitle(transaction)}
                             </Text>
                             <Text
-                              className={cn(
-                                "text-sm font-bold",
-                                transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
-                              )}
+                              style={{
+                                fontSize: 16,
+                                fontWeight: '700',
+                                color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5',
+                                letterSpacing: 0.3
+                              }}
                             >
                               {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
                             </Text>

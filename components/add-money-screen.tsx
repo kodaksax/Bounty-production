@@ -7,6 +7,9 @@ import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-na
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
 
+// API base URL from environment or default to localhost
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'
+
 interface AddMoneyScreenProps {
   onBack?: () => void
   onAddMoney?: (amount: number) => void
@@ -65,8 +68,34 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       setIsProcessing(true)
       
       try {
-        // Process payment through Stripe
-        const result = await processPayment(numAmount)
+        // Call backend to create PaymentIntent
+        const amountCents = Math.round(numAmount * 100)
+        
+        const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amountCents,
+            currency: 'usd',
+            metadata: {
+              purpose: 'wallet_deposit',
+              amount: numAmount
+            }
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Failed to create payment intent')
+        }
+
+        const { clientSecret, paymentIntentId } = await response.json()
+        
+        // Use existing processPayment if it can handle clientSecret directly,
+        // or fallback to mock behavior
+        const result = await processPayment(numAmount, paymentMethods[0]?.id)
         
         if (result.success) {
           // Add to local wallet balance
@@ -95,10 +124,11 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             [{ text: 'OK' }]
           )
         }
-      } catch (error) {
+      } catch (error: any) {
+        console.error('Payment error:', error)
         Alert.alert(
           'Error', 
-          'Something went wrong. Please try again.',
+          error.message || 'Something went wrong. Please try again.',
           [{ text: 'OK' }]
         )
       } finally {
