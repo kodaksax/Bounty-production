@@ -138,7 +138,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         // Log transaction to local file
         const transactions = readTransactions();
         transactions.push({
-          id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           type: 'payment_intent.succeeded',
           stripePaymentIntentId: paymentIntent.id,
           amount: paymentIntent.amount,
@@ -159,7 +159,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         // Log refund transaction
         const transactions = readTransactions();
         transactions.push({
-          id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           type: 'charge.refunded',
           stripeChargeId: charge.id,
           amount: charge.amount_refunded,

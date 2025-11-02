@@ -93,8 +93,9 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
         const { clientSecret, paymentIntentId } = await response.json()
         
-        // Use existing processPayment if it can handle clientSecret directly,
-        // or fallback to mock behavior
+        // TODO: Use clientSecret with Stripe SDK to confirm payment
+        // For now, using existing processPayment which simulates success
+        // In production, this should be: stripe.confirmPayment({ clientSecret, paymentMethod: paymentMethods[0]?.id })
         const result = await processPayment(numAmount, paymentMethods[0]?.id)
         
         if (result.success) {

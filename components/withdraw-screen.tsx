@@ -37,14 +37,15 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
     
     try {
       // Call backend to create Connect account link
+      // TODO: Get user ID and email from authentication context (useAuth hook)
       const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: 'current_user_id', // TODO: Replace with actual user ID
-          email: 'user@example.com' // TODO: Replace with actual user email
+          userId: 'current_user_id', // TODO: Replace with actual user ID from auth context
+          email: 'user@example.com' // TODO: Replace with actual user email from auth context
         })
       });
 
@@ -135,7 +136,7 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
             amount: amountCents,
             currency: 'usd',
             metadata: {
-              userId: 'current_user_id' // TODO: Replace with actual user ID
+              userId: 'current_user_id' // TODO: Replace with actual user ID from auth context
             }
           })
         });
