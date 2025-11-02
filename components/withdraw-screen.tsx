@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useStripe } from '../lib/stripe-context';
 import { useWallet } from '../lib/wallet-context';
+import { useAuthContext } from '../hooks/use-auth-context';
+import { supabase } from '../lib/supabase';
 
 // API base URL from environment or default to localhost
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
@@ -24,6 +26,7 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
   
   const { withdraw } = useWallet();
   const { paymentMethods, isLoading } = useStripe();
+  const { session } = useAuthContext();
   
   // Set default selected method when payment methods load
   useEffect(() => {
@@ -32,56 +35,74 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
     }
   }, [paymentMethods, selectedMethod]);
 
+  // Check for existing Connect account on mount
+  useEffect(() => {
+    verifyConnectOnboarding();
+  }, []);
+
+  const verifyConnectOnboarding = async () => {
+    if (!session?.access_token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.onboarded) {
+          setHasConnectedAccount(true);
+          setConnectedAccountId(data.accountId);
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying Connect onboarding:', error);
+    }
+  };
+
   const handleConnectOnboarding = async () => {
     setIsOnboarding(true);
     
     try {
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
       // Call backend to create Connect account link
-      // TODO: Get user ID and email from authentication context (useAuth hook)
       const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          userId: 'current_user_id', // TODO: Replace with actual user ID from auth context
-          email: 'user@example.com' // TODO: Replace with actual user email from auth context
+          returnUrl: 'bountyexpo://wallet/connect/return',
+          refreshUrl: 'bountyexpo://wallet/connect/refresh'
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create account link');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create account link');
       }
 
-      const { url, accountId, message } = await response.json();
+      const { url, accountId } = await response.json();
       
-      // For mock response, show message
-      if (message && message.includes('mock')) {
-        Alert.alert(
-          'Connect Onboarding',
-          'This is a scaffold implementation. In production, you would be redirected to Stripe Connect onboarding.\n\nAccount ID: ' + accountId,
-          [
-            { 
-              text: 'Simulate Complete', 
-              onPress: () => {
-                setHasConnectedAccount(true);
-                setConnectedAccountId(accountId);
-              }
-            },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
+      // Open the Stripe Connect onboarding URL
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        
+        // After returning, verify onboarding status
+        setTimeout(async () => {
+          await verifyConnectOnboarding();
+        }, 2000);
       } else {
-        // Open the onboarding URL in browser
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
-          // In production, handle return URL to confirm completion
-          setHasConnectedAccount(true);
-          setConnectedAccountId(accountId);
-        } else {
-          throw new Error('Cannot open URL');
-        }
+        throw new Error('Cannot open Stripe Connect URL');
       }
     } catch (error: any) {
       console.error('Connect onboarding error:', error);
@@ -122,45 +143,38 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
     setIsProcessing(true);
     
     try {
-      if (hasConnectedAccount && connectedAccountId) {
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
+      if (hasConnectedAccount) {
         // Use Stripe Connect transfer
-        const amountCents = Math.round(withdrawalAmount * 100);
-        
         const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            accountId: connectedAccountId,
-            amount: amountCents,
-            currency: 'usd',
-            metadata: {
-              userId: 'current_user_id' // TODO: Replace with actual user ID from auth context
-            }
+            amount: withdrawalAmount,
+            currency: 'usd'
           })
         });
 
         if (!response.ok) {
-          throw new Error('Failed to initiate transfer');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to initiate transfer');
         }
 
-        const { transferId, status, estimatedArrival, message } = await response.json();
+        const { transferId, transactionId, estimatedArrival, message } = await response.json();
         
-        // Record withdrawal in wallet
-        const success = await withdraw(withdrawalAmount, {
-          method: 'Bank Transfer',
-          title: 'Withdrawal to Bank Account',
-          status: 'pending'
-        });
-
-        if (success) {
-          Alert.alert(
-            'Withdrawal Initiated',
-            message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated.\n\nEstimated arrival: 1-3 business days\n\nTransfer ID: ${transferId}`,
-            [{ text: 'OK', onPress: onBack }]
-          );
-        }
+        // The backend already created the transaction and updated balance
+        // Just show success message
+        Alert.alert(
+          'Withdrawal Initiated',
+          message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
+          [{ text: 'OK', onPress: onBack }]
+        );
       } else {
         // Use payment method (card refund - requires original payment)
         const success = await withdraw(withdrawalAmount, {

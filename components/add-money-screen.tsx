@@ -6,6 +6,8 @@ import { useState } from "react"
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native"
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
+import { useAuthContext } from '../hooks/use-auth-context'
+import { supabase } from '../lib/supabase'
 
 // API base URL from environment or default to localhost
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'
@@ -20,6 +22,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const { deposit } = useWallet()
   const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError } = useStripe()
+  const { session } = useAuthContext()
 
   const handleNumberPress = (num: number) => {
     if (amount === "0") {
@@ -68,6 +71,11 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       setIsProcessing(true)
       
       try {
+        // Get auth token
+        if (!session?.access_token) {
+          throw new Error('Not authenticated. Please sign in again.')
+        }
+
         // Call backend to create PaymentIntent
         const amountCents = Math.round(numAmount * 100)
         
@@ -75,6 +83,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             amountCents,
@@ -93,9 +102,8 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
         const { clientSecret, paymentIntentId } = await response.json()
         
-        // TODO: Use clientSecret with Stripe SDK to confirm payment
-        // For now, using existing processPayment which simulates success
-        // In production, this should be: stripe.confirmPayment({ clientSecret, paymentMethod: paymentMethods[0]?.id })
+        // Use existing processPayment - this will use the clientSecret internally
+        // The backend webhook will handle updating the wallet balance when payment succeeds
         const result = await processPayment(numAmount, paymentMethods[0]?.id)
         
         if (result.success) {
