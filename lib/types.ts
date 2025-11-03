@@ -179,3 +179,26 @@ export interface Attachment {
   status?: 'pending' | 'uploading' | 'uploaded' | 'failed';
   progress?: number;
 }
+
+// Notification Types
+export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data?: {
+    bountyId?: string;
+    messageId?: string;
+    userId?: string;
+    hunterId?: string;
+    senderId?: string;
+    followerId?: string;
+    amount?: number;
+    [key: string]: any;
+  };
+  read: boolean;
+  created_at: string;
+}

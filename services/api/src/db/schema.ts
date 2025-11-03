@@ -51,10 +51,34 @@ export const outboxEvents = pgTable('outbox_events', {
   processed_at: timestamp('processed_at', { withTimezone: true }),
 });
 
+// Notifications table for in-app and push notifications
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(), // Recipient of the notification
+  type: text('type').notNull(), // application, acceptance, completion, payment, message, follow
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  data: jsonb('data'), // Additional data like bounty_id, message_id, etc.
+  read: boolean('read').default(false).notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Push notification tokens table for Expo Push
+export const pushTokens = pgTable('push_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  token: text('token').notNull(),
+  device_id: text('device_id'), // Optional device identifier
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Define relations
 export const usersRelations = relations(users, ({ many }) => ({
   bounties: many(bounties),
   walletTransactions: many(walletTransactions),
+  notifications: many(notifications),
+  pushTokens: many(pushTokens),
 }));
 
 export const bountiesRelations = relations(bounties, ({ one, many }) => ({
@@ -73,5 +97,19 @@ export const walletTransactionsRelations = relations(walletTransactions, ({ one 
   bounty: one(bounties, {
     fields: [walletTransactions.bounty_id],
     references: [bounties.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.user_id],
+    references: [users.id],
+  }),
+}));
+
+export const pushTokensRelations = relations(pushTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [pushTokens.user_id],
+    references: [users.id],
   }),
 }));

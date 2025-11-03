@@ -12,6 +12,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { AdminProvider } from '../lib/admin-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
+import { NotificationProvider } from '../lib/context/notification-context';
 import { StripeProvider } from '../lib/stripe-context';
 import AuthProvider from '../providers/auth-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
@@ -173,13 +174,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <AdminProvider>
               <StripeProvider>
-                <RootErrorBoundary>
-                  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                    <View style={styles.inner}>
-                      <Slot />
-                    </View>
-                  </ThemeProvider>
-                </RootErrorBoundary>
+                <NotificationProvider>
+                  <RootErrorBoundary>
+                    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                      <View style={styles.inner}>
+                        <Slot />
+                      </View>
+                    </ThemeProvider>
+                  </RootErrorBoundary>
+                </NotificationProvider>
               </StripeProvider>
             </AdminProvider>
           </AuthProvider>

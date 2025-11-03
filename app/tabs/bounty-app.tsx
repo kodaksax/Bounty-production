@@ -6,6 +6,7 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { NotificationsBell } from 'components/notifications-bell'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -347,7 +348,10 @@ function BountyAppInner() {
               BOUNTY
             </Animated.Text>
           </View>
-          <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <NotificationsBell />
+            <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
+          </View>
         </View>
         <Animated.View style={{ opacity: extraContentOpacity }}>
           {/* Search Bar */}
