@@ -12,4 +12,7 @@ if (__DEV__) {
 	// eslint-disable-next-line no-console
 	console.log('[AppEntry] expo-router entry imported (navigation context should be established)');
 }
+// Note: Do NOT export a React component from this file. The `expo-router/entry` import above
+// establishes the navigation/root mounting. Root-level providers (Stripe, Theme, Auth, etc.)
+// are provided inside `app/_layout.tsx` so that `Slot` and navigation context are available.
 
