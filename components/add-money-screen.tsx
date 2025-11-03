@@ -8,6 +8,7 @@ import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
 import { useAuthContext } from '../hooks/use-auth-context'
 import { supabase } from '../lib/supabase'
+import { PaymentMethodsModal } from './payment-methods-modal'
 
 // API base URL from environment or default to localhost
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'
@@ -20,8 +21,9 @@ interface AddMoneyScreenProps {
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
   const { deposit } = useWallet()
-  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError } = useStripe()
+  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
   const { session } = useAuthContext()
 
   const handleNumberPress = (num: number) => {
@@ -62,8 +64,14 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       if (paymentMethods.length === 0) {
         Alert.alert(
           'No Payment Method', 
-          'Please add a payment method first to add money to your wallet.',
-          [{ text: 'OK' }]
+          'You need to add a payment method before you can add money to your wallet.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Add Payment Method', 
+              onPress: () => setShowPaymentMethodsModal(true)
+            }
+          ]
         )
         return
       }
@@ -245,6 +253,18 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Payment Methods Modal */}
+      {showPaymentMethodsModal && (
+        <PaymentMethodsModal
+          isOpen={showPaymentMethodsModal}
+          onClose={() => {
+            setShowPaymentMethodsModal(false)
+            // Refresh payment methods after closing
+            loadPaymentMethods()
+          }}
+        />
+      )}
     </View>
   )
 }
