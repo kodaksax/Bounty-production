@@ -17,7 +17,8 @@ async function testNotifications() {
   try {
     // 1. Create a test user if not exists
     console.log('1. Setting up test user...');
-    const testUserId = '00000000-0000-0000-0000-000000000001'; // Test UUID
+    // Generate a test UUID with recognizable pattern: test-0000-xxxx-xxxx-xxxxxxxxxxxx
+    const testUserId = '00000000-0000-4000-8000-000000000001'; // Valid UUID v4 test pattern
     
     let user = await db
       .select()

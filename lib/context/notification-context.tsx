@@ -119,11 +119,20 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   // Poll for new notifications every 30 seconds when app is active
   useEffect(() => {
+    // TODO: Optimize by using app state listener to pause when backgrounded
+    // import { AppState } from 'react-native';
+    // const subscription = AppState.addEventListener('change', nextAppState => {
+    //   if (nextAppState === 'active') refreshUnreadCount();
+    // });
+    
     const interval = setInterval(() => {
       refreshUnreadCount();
     }, 30000); // 30 seconds
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // subscription?.remove();
+    };
   }, [refreshUnreadCount]);
 
   const value: NotificationContextType = {

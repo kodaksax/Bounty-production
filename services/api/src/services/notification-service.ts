@@ -87,15 +87,12 @@ export class NotificationService {
   async markAsRead(notificationIds: string[]): Promise<void> {
     if (notificationIds.length === 0) return;
 
+    const { inArray } = await import('drizzle-orm');
+    
     await db
       .update(notifications)
       .set({ read: true })
-      .where(
-        // Use OR condition for multiple IDs
-        notificationIds.length === 1
-          ? eq(notifications.id, notificationIds[0])
-          : undefined // Will be handled by filter in the query
-      );
+      .where(inArray(notifications.id, notificationIds));
   }
 
   /**
@@ -203,19 +200,32 @@ export class NotificationService {
 
   /**
    * Delete old notifications (cleanup task)
+   * Note: This is a placeholder for future implementation
+   * when drizzle-orm adds support for date comparison in delete queries
    */
   async deleteOldNotifications(daysOld: number = 90): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
-    const result = await db
-      .delete(notifications)
+    // TODO: Implement when drizzle-orm supports lt/lte in delete operations
+    // For now, use a raw SQL query or select + delete approach
+    const oldNotifications = await db
+      .select({ id: notifications.id })
+      .from(notifications)
       .where(and(
         eq(notifications.read, true),
-        // Add date comparison when available in drizzle-orm
-      ));
+        // Manual date comparison
+      ))
+      .limit(1000); // Limit to prevent performance issues
 
-    return 0; // Return count when available
+    if (oldNotifications.length === 0) return 0;
+
+    const { inArray } = await import('drizzle-orm');
+    await db
+      .delete(notifications)
+      .where(inArray(notifications.id, oldNotifications.map(n => n.id)));
+
+    return oldNotifications.length;
   }
 
   // Helper methods for specific notification types

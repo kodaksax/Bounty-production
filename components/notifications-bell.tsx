@@ -34,13 +34,15 @@ export function NotificationsBell() {
     // Navigate based on notification type
     const data = notification.data || {};
     
+    // Note: Using type assertion here because expo-router's push method
+    // accepts dynamic routes but TypeScript can't infer them statically
     if (data.bountyId) {
-      router.push(`/bounty/${data.bountyId}` as any);
+      router.push(`/bounty/${data.bountyId}` as '/bounty/[id]');
     } else if (data.senderId) {
       // Navigate to messages
-      router.push('/tabs/bounty-app?screen=create' as any);
+      router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app');
     } else if (data.followerId) {
-      router.push(`/profile/${data.followerId}` as any);
+      router.push(`/profile/${data.followerId}` as '/profile/[id]');
     }
   };
 
