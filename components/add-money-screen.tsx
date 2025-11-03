@@ -2,8 +2,9 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
-import { useState } from "react"
-import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
+import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
 import { useAuthContext } from '../hooks/use-auth-context'
@@ -22,6 +23,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
   const [isProcessing, setIsProcessing] = useState(false)
   const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
+  const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
   const { deposit } = useWallet()
   const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
   const { session } = useAuthContext()
@@ -160,6 +162,79 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     }
   }
 
+  // Check Apple Pay availability on mount
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const available = await applePayService.isAvailable()
+        if (mounted) setIsApplePayAvailable(available)
+      } catch (e) {
+        // ignore
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const handleApplePayPress = async () => {
+    const numAmount = Number.parseFloat(amount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount')
+      return
+    }
+
+    if (numAmount < 0.5) {
+      Alert.alert('Minimum Amount', 'Amount must be at least $0.50')
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      const result = await applePayService.processPayment({
+        amount: numAmount,
+        description: 'Add Money to Wallet',
+      })
+
+      if (result.success) {
+        await deposit(numAmount, {
+          method: 'Apple Pay',
+          title: 'Added Money via Apple Pay',
+          status: 'completed',
+        })
+
+        Alert.alert(
+          'Success!',
+          `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                onAddMoney?.(numAmount)
+                onBack?.()
+              },
+            },
+          ]
+        )
+      } else if (result.errorCode === 'cancelled') {
+        // user cancelled - no alert
+        console.log('Apple Pay cancelled by user')
+      } else {
+        Alert.alert('Payment Failed', result.error || 'Unable to process Apple Pay payment.', [{ text: 'OK' }])
+      }
+    } catch (error) {
+      console.error('Apple Pay error:', error)
+      Alert.alert('Error', 'Something went wrong with Apple Pay. Please try again.', [{ text: 'OK' }])
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleCardPayment = async () => {
+    // Reuse existing card flow
+    await handleAddMoney()
+  }
+
   return (
     <View className="flex-1 bg-emerald-600">
       {/* Header */}
@@ -230,27 +305,77 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       {/* Add Button - fixed above home indicator */}
   <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 66 }}>
         <View className="px-4">
-          <TouchableOpacity
-            className={cn(
-              "w-full py-4 rounded-full flex-row items-center justify-center",
-              Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
+            {/* Apple Pay button (iOS only) */}
+            {Platform.OS === 'ios' && isApplePayAvailable && (
+              <TouchableOpacity
+                className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
+                style={{ backgroundColor: '#000000' }}
+                onPress={handleApplePayPress}
+                disabled={Number.parseFloat(amount) <= 0 || isProcessing}
+                activeOpacity={0.8}
+              >
+                {isProcessing ? (
+                  <>
+                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text className="text-center text-base font-medium text-white">Processing...</Text>
+                  </>
+                ) : (
+                  <>
+                    <MaterialIcons name="apple" size={22} color="#ffffff" />
+                    <Text className="text-white text-base font-medium ml-2">Pay</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             )}
-            disabled={Number.parseFloat(amount) <= 0 || isProcessing}
-            onPress={handleAddMoney}
-            activeOpacity={0.8}
-          >
-            {isProcessing ? (
-              <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                <Text className="text-center text-base font-medium text-white">Processing...</Text>
-              </>
-            ) : (
-              <Text className={cn(
-                "text-center text-base font-medium",
-                Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-              )}>Add Money</Text>
-            )}
-          </TouchableOpacity>
+
+            {/* Pay with Card (uses existing Stripe flow) */}
+            <TouchableOpacity
+              className={cn(
+                "w-full py-4 rounded-full flex-row items-center justify-center mb-3",
+                Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
+              )}
+              onPress={handleCardPayment}
+              disabled={Number.parseFloat(amount) <= 0 || isProcessing}
+              activeOpacity={0.8}
+            >
+              {isProcessing ? (
+                <>
+                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                  <Text className="text-center text-base font-medium text-white">Processing...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="credit-card" size={20} color="#ffffff" />
+                  <Text className={cn(
+                    "text-center text-base font-medium ml-2",
+                    Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+                  )}>Pay with Card</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Original Add Money button (keeps compatibility) */}
+            <TouchableOpacity
+              className={cn(
+                "w-full py-4 rounded-full flex-row items-center justify-center",
+                Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
+              )}
+              disabled={Number.parseFloat(amount) <= 0 || isProcessing}
+              onPress={handleAddMoney}
+              activeOpacity={0.8}
+            >
+              {isProcessing ? (
+                <>
+                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                  <Text className="text-center text-base font-medium text-white">Processing...</Text>
+                </>
+              ) : (
+                <Text className={cn(
+                  "text-center text-base font-medium",
+                  Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
+                )}>Add Money</Text>
+              )}
+            </TouchableOpacity>
         </View>
       </View>
 

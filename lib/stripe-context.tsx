@@ -2,6 +2,19 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 // Fixed import path: stripe-context.tsx sits in lib/, so services is a sibling folder under lib/
 import { CreatePaymentMethodData, StripePaymentMethod, stripeService } from './services/stripe-service';
 
+// Use environment variables like other services in the repo.
+// Prefer EXPO_PUBLIC_API_BASE_URL (Expo public env), then API_BASE_URL (legacy), then localhost.
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3001';
+
+export async function createPaymentIntent(amount: number) {
+  const res = await fetch(`${API_BASE_URL}/api/payments/create-payment-intent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount })
+  });
+  if (!res.ok) throw new Error('Failed to create payment intent');
+  return res.json(); // { clientSecret }
+}
 interface StripeContextType {
   isInitialized: boolean;
   isLoading: boolean;

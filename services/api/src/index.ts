@@ -1,19 +1,22 @@
-import Fastify from 'fastify';
 import dotenv from 'dotenv';
+import { eq } from 'drizzle-orm';
+import Fastify from 'fastify';
 import { db } from './db/connection';
 import { users } from './db/schema';
-import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from './middleware/auth';
+import { AuthenticatedRequest, authMiddleware } from './middleware/auth';
+import { registerAdminRoutes } from './routes/admin';
+import { registerApplePayRoutes } from './routes/apple-pay';
 import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
-import { stripeConnectService } from './services/stripe-connect-service';
 import { realtimeService } from './services/realtime-service';
 import { refundService } from './services/refund-service';
-import { registerAdminRoutes } from './routes/admin';
-import { eq } from 'drizzle-orm';
+import { stripeConnectService } from './services/stripe-connect-service';
 
+// After other route registrations
 // Load environment variables
 dotenv.config();
 
+// Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({
   logger: true
 });
@@ -355,7 +358,10 @@ const start = async () => {
   try {
     const port = parseInt(process.env.PORT || '3001', 10);
     const host = process.env.HOST || '0.0.0.0';
-    
+
+    // Register Apple Pay routes (async) now that `fastify` has been created
+    await registerApplePayRoutes(fastify);
+
     await startServer();
     await fastify.listen({ port, host });
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
