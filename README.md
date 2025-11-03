@@ -203,6 +203,49 @@ After running `pnpm dev`, these services will be available:
 | **Stripe Mock** | http://localhost:12111 | Mock payment processing |
 | **API Health** | http://localhost:3001/health | Health check endpoint |
 
+### Stripe Payment Server
+
+A minimal Express server (`server/`) handles Stripe payment operations:
+
+**Features:**
+- Payment Intent creation for wallet deposits
+- Webhook handling with signature verification
+- Stripe Connect scaffolds for withdrawals
+- Local transaction logging (demo mode)
+
+**Quick Start:**
+```bash
+# Navigate to server directory
+cd server
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your Stripe keys
+
+# Start the server
+npm start
+```
+
+**Endpoints:**
+- `GET /health` - Health check
+- `POST /payments/create-payment-intent` - Create payment intent
+- `POST /webhooks/stripe` - Handle Stripe webhooks
+- `POST /connect/create-account-link` - Stripe Connect onboarding
+- `POST /connect/transfer` - Initiate bank transfers
+
+**Configuration:**
+Set these in `server/.env`:
+```bash
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_secret_here
+PORT=3001
+```
+
+📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./STRIPE_INTEGRATION_BACKEND.md)
+
 ### Useful Commands
 
 ```bash

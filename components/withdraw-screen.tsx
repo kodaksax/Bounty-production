@@ -1,10 +1,14 @@
 
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useStripe } from '../lib/stripe-context';
 import { useWallet } from '../lib/wallet-context';
+import { useAuthContext } from '../hooks/use-auth-context';
+import { supabase } from '../lib/supabase';
 
+// API base URL from environment or default to localhost
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface WithdrawScreenProps {
   onBack?: () => void;
@@ -16,9 +20,13 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
   const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [customAmount, setCustomAmount] = useState<string>("");
+  const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
+  const [connectedAccountId, setConnectedAccountId] = useState<string>("");
+  const [isOnboarding, setIsOnboarding] = useState(false);
   
   const { withdraw } = useWallet();
   const { paymentMethods, isLoading } = useStripe();
+  const { session } = useAuthContext();
   
   // Set default selected method when payment methods load
   useEffect(() => {
@@ -27,12 +35,88 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
     }
   }, [paymentMethods, selectedMethod]);
 
-  const handleWithdraw = async () => {
-    if (!selectedMethod) {
-      Alert.alert('No Payment Method', 'Please select a payment method for withdrawal.');
-      return;
-    }
+  // Check for existing Connect account on mount
+  useEffect(() => {
+    verifyConnectOnboarding();
+  }, []);
 
+  const verifyConnectOnboarding = async () => {
+    if (!session?.access_token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.onboarded) {
+          setHasConnectedAccount(true);
+          setConnectedAccountId(data.accountId);
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying Connect onboarding:', error);
+    }
+  };
+
+  const handleConnectOnboarding = async () => {
+    setIsOnboarding(true);
+    
+    try {
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
+      // Call backend to create Connect account link
+      const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          returnUrl: 'bountyexpo://wallet/connect/return',
+          refreshUrl: 'bountyexpo://wallet/connect/refresh'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create account link');
+      }
+
+      const { url, accountId } = await response.json();
+      
+      // Open the Stripe Connect onboarding URL
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        
+        // After returning, verify onboarding status
+        setTimeout(async () => {
+          await verifyConnectOnboarding();
+        }, 2000);
+      } else {
+        throw new Error('Cannot open Stripe Connect URL');
+      }
+    } catch (error: any) {
+      console.error('Connect onboarding error:', error);
+      Alert.alert(
+        'Onboarding Failed',
+        error.message || 'Unable to start Connect onboarding. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsOnboarding(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
     if (withdrawalAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
       return;
@@ -43,28 +127,79 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       return;
     }
 
+    // Check if user has connected account for bank transfers
+    if (!hasConnectedAccount && !selectedMethod) {
+      Alert.alert(
+        'Setup Required',
+        'To withdraw funds, you need to either:\n\n1. Connect your bank account (recommended)\n2. Select a payment method',
+        [
+          { text: 'Connect Bank Account', onPress: handleConnectOnboarding },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      // In a real app, this would involve Stripe Express or similar for payouts
-      // For now, we'll simulate the withdrawal
-      const success = await withdraw(withdrawalAmount, {
-        method: paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
-        title: 'Withdrawal to Payment Method',
-        status: 'pending'
-      });
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
 
-      if (success) {
+      if (hasConnectedAccount) {
+        // Use Stripe Connect transfer
+        const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            amount: withdrawalAmount,
+            currency: 'usd'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to initiate transfer');
+        }
+
+        const { transferId, transactionId, estimatedArrival, message } = await response.json();
+        
+        // The backend already created the transaction and updated balance
+        // Just show success message
         Alert.alert(
           'Withdrawal Initiated',
-          `$${withdrawalAmount.toFixed(2)} withdrawal has been initiated. It may take 1-3 business days to process.`,
+          message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
           [{ text: 'OK', onPress: onBack }]
         );
       } else {
-        Alert.alert('Withdrawal Failed', 'Insufficient balance or invalid withdrawal amount.');
+        // Use payment method (card refund - requires original payment)
+        const success = await withdraw(withdrawalAmount, {
+          method: paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
+          title: 'Withdrawal to Payment Method',
+          status: 'pending'
+        });
+
+        if (success) {
+          Alert.alert(
+            'Withdrawal Initiated',
+            `$${withdrawalAmount.toFixed(2)} withdrawal has been initiated. It may take 1-3 business days to process.\n\nNote: For faster withdrawals, consider connecting your bank account.`,
+            [{ text: 'OK', onPress: onBack }]
+          );
+        } else {
+          Alert.alert('Withdrawal Failed', 'Insufficient balance or invalid withdrawal amount.');
+        }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to process withdrawal. Please try again.');
+    } catch (error: any) {
+      console.error('Withdrawal error:', error);
+      Alert.alert(
+        'Error', 
+        error.message || 'Failed to process withdrawal. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -116,6 +251,50 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
         <View style={styles.methodsBox}>
           <Text style={styles.methodsTitle}>Select Withdrawal Method</Text>
           
+          {/* Bank Account - Stripe Connect */}
+          {hasConnectedAccount ? (
+            <TouchableOpacity
+              style={[styles.methodRow, styles.methodRowActive]}
+              onPress={() => setSelectedMethod('')}
+            >
+              <View style={styles.methodIconCircle}>
+                <MaterialIcons name="account-balance" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodName}>Bank Account (Connected)</Text>
+                <Text style={styles.methodDetails}>Fastest withdrawal method • 1-3 business days</Text>
+              </View>
+              <View style={styles.methodCheckCircle}>
+                <MaterialIcons name="check" size={16} color="#34d399" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.methodRow, styles.methodRowInactive]}
+              onPress={handleConnectOnboarding}
+              disabled={isOnboarding}
+            >
+              <View style={styles.methodIconCircle}>
+                <MaterialIcons name="account-balance" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodName}>Connect Bank Account</Text>
+                <Text style={styles.methodDetails}>
+                  {isOnboarding ? 'Setting up...' : 'Recommended • Fastest withdrawals'}
+                </Text>
+              </View>
+              {isOnboarding ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <MaterialIcons name="arrow-forward" size={20} color="#6ee7b7" />
+              )}
+            </TouchableOpacity>
+          )}
+          
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: '#047857', marginVertical: 12 }} />
+          
+          {/* Payment Methods */}
           {isLoading ? (
             <View style={[styles.methodRow, { justifyContent: 'center', alignItems: 'center' }]}>
               <ActivityIndicator size="small" color="#ffffff" />
@@ -159,14 +338,18 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
             ))
           )}
           
-          {/* Note about bank accounts */}
+          {/* Processing time info */}
           <View style={styles.methodRowInactive}>
             <View style={styles.methodIconCircle}>
               <MaterialIcons name="info" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.methodName}>Bank Account Withdrawals</Text>
-              <Text style={styles.methodDetails}>Coming soon - direct bank transfers</Text>
+              <Text style={styles.methodName}>Processing Times</Text>
+              <Text style={styles.methodDetails}>
+                • Bank transfers: 1-3 business days{'\n'}
+                • Card refunds: 5-10 business days{'\n'}
+                Withdrawals are processed securely through Stripe
+              </Text>
             </View>
           </View>
         </View>
@@ -176,11 +359,11 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
           onPress={handleWithdraw}
           style={[
             styles.bottomButton,
-            withdrawalAmount > 0 && selectedMethod && !isProcessing
+            withdrawalAmount > 0 && (selectedMethod || hasConnectedAccount) && !isProcessing
               ? styles.bottomButtonActive 
               : styles.bottomButtonInactive,
           ]}
-          disabled={withdrawalAmount <= 0 || !selectedMethod || isProcessing}
+          disabled={withdrawalAmount <= 0 || (!selectedMethod && !hasConnectedAccount) || isProcessing}
         >
           {isProcessing ? (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>

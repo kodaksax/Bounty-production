@@ -7,6 +7,12 @@ import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from
 import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
+import { useAuthContext } from '../hooks/use-auth-context'
+import { supabase } from '../lib/supabase'
+import { PaymentMethodsModal } from './payment-methods-modal'
+
+// API base URL from environment or default to localhost
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -16,9 +22,11 @@ interface AddMoneyScreenProps {
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>("0")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
   const { deposit } = useWallet()
-  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError } = useStripe()
+  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
+  const { session } = useAuthContext()
 
   const handleNumberPress = (num: number) => {
     if (amount === "0") {
@@ -58,8 +66,14 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       if (paymentMethods.length === 0) {
         Alert.alert(
           'No Payment Method', 
-          'Please add a payment method first to add money to your wallet.',
-          [{ text: 'OK' }]
+          'You need to add a payment method before you can add money to your wallet.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Add Payment Method', 
+              onPress: () => setShowPaymentMethodsModal(true)
+            }
+          ]
         )
         return
       }
@@ -67,8 +81,40 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       setIsProcessing(true)
       
       try {
-        // Process payment through Stripe
-        const result = await processPayment(numAmount)
+        // Get auth token
+        if (!session?.access_token) {
+          throw new Error('Not authenticated. Please sign in again.')
+        }
+
+        // Call backend to create PaymentIntent
+        const amountCents = Math.round(numAmount * 100)
+        
+        const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            amountCents,
+            currency: 'usd',
+            metadata: {
+              purpose: 'wallet_deposit',
+              amount: numAmount
+            }
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Failed to create payment intent')
+        }
+
+        const { clientSecret, paymentIntentId } = await response.json()
+        
+        // Use existing processPayment - this will use the clientSecret internally
+        // The backend webhook will handle updating the wallet balance when payment succeeds
+        const result = await processPayment(numAmount, paymentMethods[0]?.id)
         
         if (result.success) {
           // Add to local wallet balance
@@ -97,10 +143,11 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             [{ text: 'OK' }]
           )
         }
-      } catch (error) {
+      } catch (error: any) {
+        console.error('Payment error:', error)
         Alert.alert(
           'Error', 
-          'Something went wrong. Please try again.',
+          error.message || 'Something went wrong. Please try again.',
           [{ text: 'OK' }]
         )
       } finally {
@@ -331,6 +378,18 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             </TouchableOpacity>
         </View>
       </View>
+
+      {/* Payment Methods Modal */}
+      {showPaymentMethodsModal && (
+        <PaymentMethodsModal
+          isOpen={showPaymentMethodsModal}
+          onClose={() => {
+            setShowPaymentMethodsModal(false)
+            // Refresh payment methods after closing
+            loadPaymentMethods()
+          }}
+        />
+      )}
     </View>
   )
 }
