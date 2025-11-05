@@ -6,6 +6,7 @@ import { users } from './db/schema';
 import { AuthenticatedRequest, authMiddleware } from './middleware/auth';
 import { registerAdminRoutes } from './routes/admin';
 import { registerApplePayRoutes } from './routes/apple-pay';
+import { registerNotificationRoutes } from './routes/notifications';
 import { bountyService } from './services/bounty-service';
 import { outboxWorker } from './services/outbox-worker';
 import { realtimeService } from './services/realtime-service';
@@ -27,6 +28,9 @@ const startServer = async () => {
   
   // Register admin routes with security middleware
   await registerAdminRoutes(fastify);
+  
+  // Register notification routes
+  await registerNotificationRoutes(fastify);
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {

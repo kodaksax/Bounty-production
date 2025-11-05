@@ -5,6 +5,7 @@ import { outboxService } from './outbox-service';
 import { walletService } from './wallet-service';
 import { realtimeService } from './realtime-service';
 import { emailService } from './email-service';
+import { notificationService } from './notification-service';
 
 export class BountyService {
   /**
@@ -84,6 +85,13 @@ export class BountyService {
         // Publish realtime event
         await realtimeService.publishBountyStatusChange(bountyId, 'in_progress');
 
+        // Send notification to hunter
+        try {
+          await notificationService.notifyBountyAcceptance(hunterId, bountyId, bounty.title);
+        } catch (error) {
+          console.error('Failed to send acceptance notification:', error);
+        }
+
         return { success: true };
       });
     } catch (error) {
@@ -152,6 +160,19 @@ export class BountyService {
 
         // Publish realtime event
         await realtimeService.publishBountyStatusChange(bountyId, 'completed');
+
+        // Send notifications
+        try {
+          // Notify the poster that bounty is complete
+          await notificationService.notifyBountyCompletion(bounty.creator_id, bountyId, bounty.title);
+          
+          // Notify the hunter about payment (if there's an amount)
+          if (bounty.amount_cents > 0 && completedBy) {
+            await notificationService.notifyPayment(completedBy, bounty.amount_cents, bountyId, bounty.title);
+          }
+        } catch (error) {
+          console.error('Failed to send completion notifications:', error);
+        }
 
         return { success: true };
       });

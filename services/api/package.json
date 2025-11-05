@@ -21,6 +21,7 @@
     "@supabase/supabase-js": "^2.38.5",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.29.0",
+    "expo-server-sdk": "^4.0.0",
     "fastify": "^4.24.3",
     "pg": "^8.11.3",
     "stripe": "^18.5.0",

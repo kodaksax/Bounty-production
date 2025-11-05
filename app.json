@@ -47,6 +47,14 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#10b981",
+          "sounds": ["./assets/sounds/notification.wav"]
+        }
+      ],
       "expo-secure-store",
       "expo-web-browser"
     ],
