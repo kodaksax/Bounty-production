@@ -3,10 +3,15 @@
 ## Overview
 The notifications system is now implemented in BOUNTYExpo with support for both in-app and push notifications. This guide explains how to trigger notifications from various parts of the application.
 
+**NEW:** User preferences are now integrated! Users can control which notification types they receive through the Settings → Notification Center, and these preferences are enforced by the backend before sending push notifications.
+
 ## Architecture
 
 ### Backend Components
-- **Database Tables**: `notifications` and `push_tokens` tables (see migration: `services/api/migrations/20251103_add_notifications_tables.sql`)
+- **Database Tables**: 
+  - `notifications` - stores notification history (see migration: `services/api/migrations/20251103_add_notifications_tables.sql`)
+  - `push_tokens` - stores Expo push tokens
+  - `notification_preferences` - stores user preferences for each notification type (see migration: `services/api/migrations/20251105_add_notification_preferences.sql`)
 - **Notification Service**: `services/api/src/services/notification-service.ts`
 - **API Routes**: `services/api/src/routes/notifications.ts`
 
@@ -14,6 +19,7 @@ The notifications system is now implemented in BOUNTYExpo with support for both 
 - **Notification Service**: `lib/services/notification-service.ts`
 - **Notification Context**: `lib/context/notification-context.tsx`
 - **NotificationsBell Component**: `components/notifications-bell.tsx`
+- **NotificationsCenterScreen**: `components/settings/notifications-center-screen.tsx` (syncs with backend)
 - **Types**: `lib/types.ts` (Notification and NotificationType)
 
 ## Notification Types
@@ -107,6 +113,72 @@ await notificationService.createNotification({
   },
 }, true); // second parameter controls whether to send push notification
 ```
+
+**Note:** The `createNotification` method will automatically check user preferences and only send the notification if the user has enabled that notification type.
+
+## User Preferences
+
+### How Preferences Work
+
+The notification system respects user preferences set in Settings → Notification Center:
+
+1. User toggles a notification type on/off
+2. Frontend syncs the preference to the backend
+3. Backend stores preference in `notification_preferences` table
+4. When a notification event occurs, backend checks preferences before sending
+5. If disabled, the notification is skipped (not created in database or sent as push)
+
+### Preference Mapping
+
+| User Setting | Backend Field | Notification Type | Description |
+|-------------|---------------|-------------------|-------------|
+| New Applicants | `applications_enabled` | `application` | Bounty applications |
+| Accepted Requests | `acceptances_enabled` | `acceptance` | Bounty acceptances |
+| Bounty Completions | `completions_enabled` | `completion` | Completed bounties |
+| Payments | `payments_enabled` | `payment` | Payment received |
+| Chat Messages | `messages_enabled` | `message` | New messages |
+| New Followers | `follows_enabled` | `follow` | New followers |
+| Reminders | `reminders_enabled` | - | Due date reminders |
+| System | `system_enabled` | - | System announcements |
+
+### Managing Preferences Programmatically
+
+```typescript
+// Backend - Get user preferences
+const prefs = await notificationService.getPreferences(userId);
+
+// Backend - Update preferences
+await notificationService.updatePreferences(userId, {
+  applications_enabled: false,
+  messages_enabled: true,
+  // ... other fields
+});
+
+// Frontend API - Get preferences (authenticated)
+const response = await fetch('/notifications/preferences', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const { preferences } = await response.json();
+
+// Frontend API - Update preferences (authenticated)
+await fetch('/notifications/preferences', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    applications_enabled: false,
+    messages_enabled: true,
+  })
+});
+```
+
+### Default Behavior
+
+- All notification types are **enabled by default**
+- Preferences are created automatically on first access
+- If preferences table doesn't exist or query fails, notifications default to enabled (fail-open for better UX)
 
 ## Frontend Usage
 
