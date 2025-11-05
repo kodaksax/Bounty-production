@@ -1,3 +1,5 @@
+import { API_BASE_URL } from 'lib/config/api';
+import { supabase } from 'lib/supabase';
 import { Platform } from 'react-native';
 
 export interface ApplePayPaymentRequest {
@@ -42,14 +44,17 @@ class ApplePayService {
   /**
    * Process payment with Apple Pay
    */
-  async processPayment(request: ApplePayPaymentRequest): Promise<ApplePayResult> {
+  async processPayment(request: ApplePayPaymentRequest, authToken?: string): Promise<ApplePayResult> {
     try {
       // Step 1: Create PaymentIntent on backend
-      const response = await fetch(`${API_BASE_URL}/apple-pay/payment-intent`, {
+      const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
+      console.log('[ApplePay] creating payment intent at', endpoint)
+      const token = authToken || await getAuthToken()
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getAuthToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           amountCents: Math.round(request.amount * 100),
@@ -126,11 +131,13 @@ class ApplePayService {
       }
 
       // Step 4: Verify payment on backend
-      const confirmResponse = await fetch(`${API_BASE_URL}/apple-pay/confirm`, {
+      const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
+      console.log('[ApplePay] confirming payment at', confirmEndpoint)
+      const confirmResponse = await fetch(confirmEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getAuthToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           paymentIntentId,
@@ -165,10 +172,17 @@ class ApplePayService {
 // Export singleton
 export const applePayService = new ApplePayService();
 
-// Helper function to get auth token (implement based on your auth system)
+// Helper function to get auth token from Supabase session storage
 async function getAuthToken(): Promise<string> {
-  // Get token from secure storage or auth provider
-  return 'your-auth-token';
+  try {
+    // supabase.auth.getSession() returns { data: { session } }
+    const { data } = await supabase.auth.getSession();
+    const session = (data as any)?.session ?? (data as any);
+    return session?.access_token ?? '';
+  } catch (err) {
+    console.warn('[ApplePay] failed to read auth token from supabase storage', err);
+    return '';
+  }
 }
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+// Note: API_BASE_URL is provided by lib/config/api

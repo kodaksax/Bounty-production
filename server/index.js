@@ -1,4 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+// Always load the server/.env file relative to this script so env vars are
+// available even when starting the process from the project root.
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -102,6 +105,27 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Unauthenticated debug endpoint for device reachability
+// Returns server listen address, remote request info and a small echo for quick device tests
+app.get('/debug', (req, res) => {
+  try {
+    const addr = server && typeof server.address === 'function' ? server.address() : null;
+    const host = (addr && addr.address) || null;
+    const port = (addr && addr.port) || PORT;
+    res.json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      serverListening: !!addr,
+      host: host,
+      port: port,
+      requesterIp: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || req.ip,
+      headersSnippet: Object.keys(req.headers).slice(0,10)
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /payments/create-payment-intent
 // Creates a PaymentIntent for the specified amount
 app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, async (req, res) => {
@@ -166,6 +190,60 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
     res.status(500).json({ 
       error: error.message || 'Failed to create payment intent' 
     });
+  }
+});
+
+// Apple Pay endpoints (proxying functionality from Fastify service)
+// These endpoints mirror the Fastify implementation under services/api so mobile
+// clients can call /apple-pay/* on the same host.
+app.post('/apple-pay/payment-intent', paymentLimiter, authenticateUser, async (req, res) => {
+  try {
+    const { amountCents, bountyId, description } = req.body || {};
+
+    if (!req.user || !req.user.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!amountCents || typeof amountCents !== 'number' || amountCents < 50) {
+      return res.status(400).json({ error: 'Amount must be at least $0.50' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: 'usd',
+      payment_method_types: ['card'],
+      metadata: {
+        user_id: req.user.id,
+        bounty_id: bountyId || '',
+        payment_method: 'apple_pay'
+      },
+      description: description || 'BountyExpo Payment',
+    });
+
+    return res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
+  } catch (error) {
+    console.error('Error creating Apple Pay payment intent:', error);
+    return res.status(500).json({ error: 'Failed to create payment intent' });
+  }
+});
+
+app.post('/apple-pay/confirm', paymentLimiter, authenticateUser, async (req, res) => {
+  try {
+    const { paymentIntentId, bountyId } = req.body || {};
+
+    if (!req.user || !req.user.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+      // Here you could record wallet txs or trigger webhooks — keep simple for parity
+      return res.json({ success: true, status: paymentIntent.status, amount: paymentIntent.amount });
+    }
+
+    return res.json({ success: false, status: paymentIntent?.status, error: 'Payment not completed' });
+  } catch (error) {
+    console.error('Error confirming Apple Pay payment:', error);
+    return res.status(500).json({ error: 'Failed to confirm payment' });
   }
 });
 
@@ -523,7 +601,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 BountyExpo Stripe Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY ? 'Yes' : 'No'}`);

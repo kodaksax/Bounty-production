@@ -20,6 +20,8 @@ const path = require('path');
 // Initialize Express BEFORE any app.use(...)
 const app = express();
 
+// (diagnostic logger removed)
+
 // Core middlewares
 app.use(cors());
 app.use(express.json());

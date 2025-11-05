@@ -246,6 +246,41 @@ PORT=3001
 
 📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./STRIPE_INTEGRATION_BACKEND.md)
 
+### Testing payments from a physical device (Expo Go)
+
+When testing payments from a phone using Expo Go, the client must call your development machine's LAN IP (not `localhost`). Follow these steps:
+
+1. Start the payments server (in project root):
+
+```powershell
+# start payments server
+npm run payments:server
+```
+
+2. Set the client to use your machine LAN IP. In the project root `.env` set:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://<YOUR_LAN_IP>:3001
+# e.g. EXPO_PUBLIC_API_BASE_URL=http://192.168.0.59:3001
+```
+
+3. Restart Expo (clear cache) so the client picks up the env:
+
+```powershell
+npx expo start --clear
+```
+
+4. Open the app on your phone with Expo Go and trigger the Add Money flow. You can verify reachability in a browser on your phone:
+
+```
+http://<YOUR_LAN_IP>:3001/health
+```
+
+Alternatives:
+- Use `expo start --tunnel` to avoid firewall/LAN issues.
+- Or run `ngrok http 3001` and set `EXPO_PUBLIC_API_BASE_URL` to the ngrok https URL.
+
+
 ### Useful Commands
 
 ```bash

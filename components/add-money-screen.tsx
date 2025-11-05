@@ -4,15 +4,13 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
+import { useAuthContext } from '../hooks/use-auth-context'
 import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
-import { useAuthContext } from '../hooks/use-auth-context'
-import { supabase } from '../lib/supabase'
 import { PaymentMethodsModal } from './payment-methods-modal'
 
-// API base URL from environment or default to localhost
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'
+import { API_BASE_URL } from 'lib/config/api'
 
 interface AddMoneyScreenProps {
   onBack?: () => void
@@ -86,10 +84,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           throw new Error('Not authenticated. Please sign in again.')
         }
 
-        // Call backend to create PaymentIntent
-        const amountCents = Math.round(numAmount * 100)
+          // Call backend to create PaymentIntent
+          const amountCents = Math.round(numAmount * 100)
         
-        const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+          const endpoint = `${API_BASE_URL}/payments/create-payment-intent`
+          console.log('Creating PaymentIntent at', endpoint, { amountCents })
+          const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -194,7 +194,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       const result = await applePayService.processPayment({
         amount: numAmount,
         description: 'Add Money to Wallet',
-      })
+      }, session?.access_token)
 
       if (result.success) {
         await deposit(numAmount, {
