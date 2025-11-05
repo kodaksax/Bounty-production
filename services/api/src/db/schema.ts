@@ -73,12 +73,29 @@ export const pushTokens = pgTable('push_tokens', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Notification preferences table for controlling which notifications users receive
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull().unique(),
+  applications_enabled: boolean('applications_enabled').default(true).notNull(), // Bounty applications
+  acceptances_enabled: boolean('acceptances_enabled').default(true).notNull(), // Bounty acceptances
+  completions_enabled: boolean('completions_enabled').default(true).notNull(), // Bounty completions
+  payments_enabled: boolean('payments_enabled').default(true).notNull(), // Payment notifications
+  messages_enabled: boolean('messages_enabled').default(true).notNull(), // Chat messages
+  follows_enabled: boolean('follows_enabled').default(true).notNull(), // New followers
+  reminders_enabled: boolean('reminders_enabled').default(true).notNull(), // Reminders
+  system_enabled: boolean('system_enabled').default(true).notNull(), // System notifications
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Define relations
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many, one }) => ({
   bounties: many(bounties),
   walletTransactions: many(walletTransactions),
   notifications: many(notifications),
   pushTokens: many(pushTokens),
+  notificationPreferences: one(notificationPreferences),
 }));
 
 export const bountiesRelations = relations(bounties, ({ one, many }) => ({
@@ -110,6 +127,13 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 export const pushTokensRelations = relations(pushTokens, ({ one }) => ({
   user: one(users, {
     fields: [pushTokens.user_id],
+    references: [users.id],
+  }),
+}));
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationPreferences.user_id],
     references: [users.id],
   }),
 }));

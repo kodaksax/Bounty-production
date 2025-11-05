@@ -129,5 +129,58 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Get notification preferences
+  fastify.get('/notifications/preferences', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const preferences = await notificationService.getPreferences(request.userId);
+
+      return { preferences };
+    } catch (error) {
+      console.error('Error fetching notification preferences:', error);
+      return reply.code(500).send({ 
+        error: 'Failed to fetch notification preferences',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Update notification preferences
+  fastify.post('/notifications/preferences', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const preferences = request.body as {
+        applications_enabled?: boolean;
+        acceptances_enabled?: boolean;
+        completions_enabled?: boolean;
+        payments_enabled?: boolean;
+        messages_enabled?: boolean;
+        follows_enabled?: boolean;
+        reminders_enabled?: boolean;
+        system_enabled?: boolean;
+      };
+
+      const updated = await notificationService.updatePreferences(request.userId, preferences);
+
+      return { preferences: updated };
+    } catch (error) {
+      console.error('Error updating notification preferences:', error);
+      return reply.code(500).send({ 
+        error: 'Failed to update notification preferences',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   console.log('✅ Notification routes registered');
 }

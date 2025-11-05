@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { notifications, pushTokens } from '../db/schema';
+import { notifications, pushTokens, notificationPreferences } from '../db/schema';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 
 // Initialize Expo SDK
@@ -29,10 +29,70 @@ export interface NotificationData {
 
 export class NotificationService {
   /**
+   * Check if user has enabled notifications for a specific type
+   */
+  private async isNotificationEnabled(userId: string, type: NotificationType): Promise<boolean> {
+    try {
+      const prefs = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.user_id, userId))
+        .limit(1);
+
+      if (prefs.length === 0) {
+        // No preferences set, default to enabled
+        return true;
+      }
+
+      const pref = prefs[0];
+      
+      // Map notification type to preference field
+      switch (type) {
+        case 'application':
+          return pref.applications_enabled;
+        case 'acceptance':
+          return pref.acceptances_enabled;
+        case 'completion':
+          return pref.completions_enabled;
+        case 'payment':
+          return pref.payments_enabled;
+        case 'message':
+          return pref.messages_enabled;
+        case 'follow':
+          return pref.follows_enabled;
+        default:
+          return true;
+      }
+    } catch (error) {
+      console.error('Error checking notification preferences:', error);
+      // Default to enabled on error
+      return true;
+    }
+  }
+
+  /**
    * Create a notification and optionally send push notification
    */
   async createNotification(params: CreateNotificationParams, sendPush: boolean = true): Promise<NotificationData> {
     const { userId, type, title, body, data } = params;
+
+    // Check if user has enabled this notification type
+    const isEnabled = await this.isNotificationEnabled(userId, type);
+    
+    if (!isEnabled) {
+      console.log(`Notification type ${type} is disabled for user ${userId}`);
+      // Return a mock notification object without creating it
+      return {
+        id: 'disabled',
+        user_id: userId,
+        type,
+        title,
+        body,
+        data,
+        read: true,
+        created_at: new Date(),
+      };
+    }
 
     // Insert notification into database
     const [notification] = await db.insert(notifications).values({
@@ -43,8 +103,8 @@ export class NotificationService {
       data: data ? data : null,
     }).returning();
 
-    // Send push notification if enabled
-    if (sendPush) {
+    // Send push notification if enabled and user preferences allow it
+    if (sendPush && isEnabled) {
       await this.sendPushNotification(userId, title, body, data);
     }
 
@@ -288,6 +348,74 @@ export class NotificationService {
       body: `${followerName} started following you`,
       data: { followerId },
     });
+  }
+
+  // Notification Preferences Management
+
+  /**
+   * Get notification preferences for a user
+   */
+  async getPreferences(userId: string) {
+    try {
+      const prefs = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.user_id, userId))
+        .limit(1);
+
+      if (prefs.length === 0) {
+        // Create default preferences if they don't exist
+        const [newPrefs] = await db
+          .insert(notificationPreferences)
+          .values({
+            user_id: userId,
+          })
+          .returning();
+        return newPrefs;
+      }
+
+      return prefs[0];
+    } catch (error) {
+      console.error('Error getting notification preferences:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update notification preferences for a user
+   */
+  async updatePreferences(
+    userId: string,
+    preferences: {
+      applications_enabled?: boolean;
+      acceptances_enabled?: boolean;
+      completions_enabled?: boolean;
+      payments_enabled?: boolean;
+      messages_enabled?: boolean;
+      follows_enabled?: boolean;
+      reminders_enabled?: boolean;
+      system_enabled?: boolean;
+    }
+  ) {
+    try {
+      // Ensure preferences exist first
+      await this.getPreferences(userId);
+
+      // Update preferences
+      const [updated] = await db
+        .update(notificationPreferences)
+        .set({
+          ...preferences,
+          updated_at: new Date(),
+        })
+        .where(eq(notificationPreferences.user_id, userId))
+        .returning();
+
+      return updated;
+    } catch (error) {
+      console.error('Error updating notification preferences:', error);
+      throw error;
+    }
   }
 }
 
