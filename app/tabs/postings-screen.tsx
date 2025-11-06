@@ -737,6 +737,32 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         console.error('Error calling onBountyAccepted callback:', notifyErr)
       }
 
+      // Send notification to hunter about acceptance
+      try {
+        const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+        await fetch(`${API_BASE}/api/notifications`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: hunterIdForConv,
+            type: 'acceptance',
+            title: 'Bounty Application Accepted!',
+            body: `Your application for "${bountyForEscrow?.title || 'the bounty'}" has been accepted!`,
+            data: {
+              bountyId: bountyId,
+              posterId: currentUserId,
+              amount: bountyForEscrow?.amount,
+            }
+          })
+        })
+        console.log('✅ Acceptance notification sent to hunter')
+      } catch (notifError) {
+        console.error('Failed to send acceptance notification:', notifError)
+        // Don't block the flow if notification fails
+      }
+
       // Show escrow instructions if it's a paid bounty
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
