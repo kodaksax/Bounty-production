@@ -350,6 +350,16 @@ export class NotificationService {
     });
   }
 
+  async notifyRevisionRequest(hunterId: string, bountyId: string, bountyTitle: string, feedback: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'completion',
+      title: 'Revision Requested',
+      body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
+      data: { bountyId, feedback, isRevision: true },
+    });
+  }
+
   // Notification Preferences Management
 
   /**
