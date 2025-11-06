@@ -1,10 +1,56 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { API_BASE_URL } from 'lib/config/api';
 import { supabase } from '../supabase';
-import type { Notification, NotificationType } from '../types';
+import type { Notification } from '../types';
 
 const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
+
+// Helper to safely read response text without throwing further errors
+async function safeReadResponseText(response: Response): Promise<string> {
+  try {
+    // clone the response so reading here doesn't consume it for callers
+    const text = await response.clone().text()
+    return text
+  } catch (e) {
+    try {
+      return JSON.stringify(e)
+    } catch {
+      return String(e)
+    }
+  }
+}
+
+// Try fetching the given path, but if the server responds with a 404 HTML page
+// (common when the wrong server is bound to the port), attempt a fallback
+// by prefixing the path with `/api` and retrying once.
+async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<Response> {
+  const primary = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  try {
+    const res = await fetch(primary, init)
+    // If primary returned 404 with an HTML body like "Cannot GET /..." it's likely
+    // the wrong server. In that case, try the /api prefixed path as a fallback.
+    if (res.status === 404) {
+      const text = await safeReadResponseText(res)
+      if (typeof text === 'string' && /<html|Cannot GET|Cannot POST/i.test(text)) {
+        const fallback = `${API_BASE_URL}/api${path.startsWith('/') ? path : `/${path}`}`
+        try {
+          const res2 = await fetch(fallback, init)
+          // Return the fallback response regardless of status so callers can handle it
+          return res2
+        } catch (e) {
+          // If fallback failed, return original response so original error is preserved
+          return res
+        }
+      }
+    }
+    return res
+  } catch (e) {
+    // network-level failure; rethrow so callers can handle
+    throw e
+  }
+}
 
 // Configure how notifications should be handled when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -71,23 +117,23 @@ export class NotificationService {
         return;
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/register-token`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ token, deviceId }),
-        }
-      );
+      const url = `${API_BASE_URL}/notifications/register-token`
+      const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ token, deviceId }),
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to register push token');
+        const text = await safeReadResponseText(response)
+        console.error(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
+        throw new Error('Failed to register push token')
       }
 
-      console.log('Push token registered successfully');
+      console.log('Push token registered successfully')
     } catch (error) {
       console.error('Error registering push token:', error);
     }
@@ -104,18 +150,18 @@ export class NotificationService {
         return [];
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications?limit=${limit}&offset=${offset}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const url = `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`
+      const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch notifications');
+        const text = await safeReadResponseText(response)
+        console.error(`Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`)
+        throw new Error('Failed to fetch notifications')
       }
 
       const data = await response.json();
@@ -160,18 +206,18 @@ export class NotificationService {
         return 0;
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/unread-count`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const url = `${API_BASE_URL}/notifications/unread-count`
+      const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch unread count');
+        const text = await safeReadResponseText(response)
+        console.error(`Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`)
+        throw new Error('Failed to fetch unread count')
       }
 
       const data = await response.json();
@@ -193,20 +239,20 @@ export class NotificationService {
         return;
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/mark-read`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ notificationIds }),
-        }
-      );
+      const url = `${API_BASE_URL}/notifications/mark-read`
+      const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ notificationIds }),
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to mark notifications as read');
+        const text = await safeReadResponseText(response)
+        console.error(`Failed to mark notifications as read. URL=${url} status=${response.status} body=${text}`)
+        throw new Error('Failed to mark notifications as read')
       }
 
       // Update local cache
@@ -229,18 +275,18 @@ export class NotificationService {
         return;
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/mark-all-read`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const url = `${API_BASE_URL}/notifications/mark-all-read`
+      const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to mark all notifications as read');
+        const text = await safeReadResponseText(response)
+        console.error(`Failed to mark all notifications as read. URL=${url} status=${response.status} body=${text}`)
+        throw new Error('Failed to mark all notifications as read')
       }
 
       // Update local cache

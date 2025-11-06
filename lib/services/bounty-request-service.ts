@@ -1,5 +1,6 @@
 import type { Bounty, BountyRequest, Profile } from "lib/services/database.types"
 import { isSupabaseConfigured, supabase } from 'lib/supabase'
+import { getApiBase } from 'lib/utils/dev-host'
 import { logger } from "lib/utils/error-logger"
 
 export type BountyRequestWithDetails = BountyRequest & {
@@ -8,7 +9,10 @@ export type BountyRequestWithDetails = BountyRequest & {
 }
 
 // API Configuration
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+// Prefer explicit API base from env. In development, prefer a runtime-derived
+// base (Expo debugger host, emulator fallback, etc.) to avoid "localhost"
+// mismatches when running on device/emulator.
+const API_BASE_URL = process.env.API_BASE_URL || (typeof __DEV__ !== 'undefined' && __DEV__ ? getApiBase() : 'http://localhost:3001');
 
 export const bountyRequestService = {
   /**

@@ -34,7 +34,7 @@ export interface Rating {
   created_at?: string;
 }
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+import { API_BASE_URL } from 'lib/config/api';
 
 export const completionService = {
   /**

@@ -2,13 +2,10 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useAuthContext } from '../hooks/use-auth-context';
+import { API_BASE_URL } from '../lib/config/api';
 import { useStripe } from '../lib/stripe-context';
 import { useWallet } from '../lib/wallet-context';
-import { useAuthContext } from '../hooks/use-auth-context';
-import { supabase } from '../lib/supabase';
-
-// API base URL from environment or default to localhost
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface WithdrawScreenProps {
   onBack?: () => void;

@@ -600,8 +600,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
-const server = app.listen(PORT, () => {
+// Start server (bind to 0.0.0.0 so LAN devices can reach it)
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 BountyExpo Stripe Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY ? 'Yes' : 'No'}`);

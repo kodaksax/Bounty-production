@@ -14,8 +14,9 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const limit = Number(request.query?.limit) || 50;
-      const offset = Number(request.query?.offset) || 0;
+  const q = request.query as any;
+  const limit = Number(q?.limit) || 50;
+  const offset = Number(q?.offset) || 0;
 
       const notifications = await notificationService.getNotifications(
         request.userId,

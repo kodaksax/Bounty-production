@@ -1,21 +1,52 @@
 import dotenv from 'dotenv';
-import { eq } from 'drizzle-orm';
-import Fastify from 'fastify';
-import { db } from './db/connection';
-import { users } from './db/schema';
-import { AuthenticatedRequest, authMiddleware } from './middleware/auth';
-import { registerAdminRoutes } from './routes/admin';
-import { registerApplePayRoutes } from './routes/apple-pay';
-import { registerNotificationRoutes } from './routes/notifications';
-import { bountyService } from './services/bounty-service';
-import { outboxWorker } from './services/outbox-worker';
-import { realtimeService } from './services/realtime-service';
-import { refundService } from './services/refund-service';
-import { stripeConnectService } from './services/stripe-connect-service';
+import fs from 'fs';
+import path from 'path';
+// Defer importing modules that may read environment variables until after
+// we've loaded the .env file below. The actual imports happen just after
+// the dotenv loading block.
 
 // After other route registrations
-// Load environment variables
-dotenv.config();
+// Load environment variables. Prefer a local .env in the service folder,
+// but fall back to the repository root .env (common in monorepos) so dev
+// tooling that places the .env at repo root still works when running
+// `npm run dev` from services/api.
+const local = dotenv.config();
+if (!process.env.STRIPE_SECRET_KEY) {
+  // __dirname points to services/api/src when running tsx on source files.
+  // The repository root is three levels up from here: services/api/src -> services/api -> services -> <repo-root>
+  const rootEnv = path.resolve(__dirname, '../../../.env');
+  if (fs.existsSync(rootEnv)) {
+    dotenv.config({ path: rootEnv });
+    console.log(`[env] Loaded environment from ${rootEnv}`);
+  } else {
+    // If no root .env found, re-use local result (may populate other vars)
+    if (local.error) {
+      console.warn('[env] No .env found in service folder and repo root; continuing with existing environment');
+    }
+  }
+} else {
+  // local already provided STRIPE_SECRET_KEY (or env inherited)
+}
+
+// Now that environment variables are loaded, require modules at runtime
+// so we avoid ES import hoisting (which would initialize modules before
+// dotenv runs). Keep type-only imports for TypeScript typings.
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { AuthenticatedRequest } from './middleware/auth';
+
+const { eq } = require('drizzle-orm');
+const Fastify = require('fastify');
+const { db } = require('./db/connection');
+const { users } = require('./db/schema');
+const { authMiddleware } = require('./middleware/auth');
+const { registerAdminRoutes } = require('./routes/admin');
+const { registerNotificationRoutes } = require('./routes/notifications');
+const { bountyService } = require('./services/bounty-service');
+const { outboxWorker } = require('./services/outbox-worker');
+const { realtimeService } = require('./services/realtime-service');
+const { refundService } = require('./services/refund-service');
+const { stripeConnectService } = require('./services/stripe-connect-service');
+const { registerApplePayRoutes } = require('./routes/apple-pay');
 
 // Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({
@@ -51,7 +82,7 @@ const startServer = async () => {
 };
 
 // Health check endpoint (no auth required)
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     // Test database connection with simple query
     const { Pool } = require('pg');
@@ -81,7 +112,7 @@ fastify.get('/health', async (request, reply) => {
 // Get user profile endpoint - creates user if not exists on first request
 fastify.get('/me', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
@@ -132,7 +163,7 @@ fastify.get('/me', {
 // Accept bounty endpoint
 fastify.post('/bounties/:bountyId/accept', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { bountyId } = request.params as { bountyId: string };
     
@@ -158,7 +189,7 @@ fastify.post('/bounties/:bountyId/accept', {
 // Complete bounty endpoint
 fastify.post('/bounties/:bountyId/complete', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { bountyId } = request.params as { bountyId: string };
     
@@ -184,7 +215,7 @@ fastify.post('/bounties/:bountyId/complete', {
 // Cancel/refund bounty endpoint
 fastify.post('/bounties/:bountyId/cancel', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { bountyId } = request.params as { bountyId: string };
     const { reason } = request.body as { reason?: string };
@@ -220,7 +251,7 @@ fastify.post('/bounties/:bountyId/cancel', {
 // Validate payment capability endpoint
 fastify.post('/stripe/validate-payment', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { amountCents } = request.body as { amountCents: number };
     
@@ -250,7 +281,7 @@ fastify.post('/stripe/validate-payment', {
 // Stripe Connect onboarding link endpoint
 fastify.post('/stripe/connect/onboarding-link', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
@@ -280,7 +311,7 @@ fastify.post('/stripe/connect/onboarding-link', {
 // Stripe Connect status endpoint
 fastify.get('/stripe/connect/status', {
   preHandler: authMiddleware
-}, async (request: AuthenticatedRequest, reply) => {
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
@@ -298,7 +329,7 @@ fastify.get('/stripe/connect/status', {
 });
 
 // Events subscription endpoint documentation
-fastify.get('/events/subscribe-info', async (request, reply) => {
+fastify.get('/events/subscribe-info', async (request: FastifyRequest, reply: FastifyReply) => {
   return {
     message: 'WebSocket endpoint for real-time events',
     instructions: {
@@ -320,7 +351,7 @@ fastify.get('/events/subscribe-info', async (request, reply) => {
 });
 
 // Realtime service stats endpoint
-fastify.get('/events/stats', async (request, reply) => {
+fastify.get('/events/stats', async (request: FastifyRequest, reply: FastifyReply) => {
   const stats = realtimeService.getStats();
   return {
     ...stats,
@@ -328,7 +359,7 @@ fastify.get('/events/stats', async (request, reply) => {
   };
 });
 // Root endpoint
-fastify.get('/', async (request, reply) => {
+fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
   return {
     message: 'BountyExpo API - Complete Escrow Payment Flow',
     version: '1.0.0',

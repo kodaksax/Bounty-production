@@ -1,8 +1,6 @@
+import { API_BASE_URL } from 'lib/config/api';
 import type { Profile } from "lib/services/database.types";
 import { logger } from "lib/utils/error-logger";
-
-// API Configuration
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
 export const profileService = {
   /**

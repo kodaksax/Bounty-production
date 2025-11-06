@@ -1,12 +1,33 @@
 import { FastifyInstance } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-});
+import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 
 export async function registerApplePayRoutes(fastify: FastifyInstance) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
+
+  if (!stripeKey) {
+    console.warn('[apple-pay] STRIPE_SECRET_KEY not provided — Apple Pay routes will be disabled');
+    // Register no-op routes that return 501 so callers get a clear response instead of startup crash
+    fastify.post('/apple-pay/payment-intent', async (request, reply) => {
+      return reply.code(501).send({ error: 'Apple Pay not configured on this server' });
+    });
+
+    fastify.post('/apple-pay/confirm', async (request, reply) => {
+      return reply.code(501).send({ error: 'Apple Pay not configured on this server' });
+    });
+
+    return;
+  }
+
+  const stripe = new Stripe(stripeKey, {
+    apiVersion: '2025-08-27.basil',
+  });
+
+  // Proceed to register real routes below
+
+  /**
+   * Create PaymentIntent for Apple Pay
+   */
   /**
    * Create PaymentIntent for Apple Pay
    */

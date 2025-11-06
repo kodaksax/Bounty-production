@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { API_BASE_URL } from '../../lib/config/api';
 import { supabase } from '../../lib/supabase';
 
 interface NotificationsCenterScreenProps { onBack: () => void }
@@ -47,7 +48,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
       if (session?.access_token) {
         try {
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/preferences`,
+            `${API_BASE_URL}/notifications/preferences`,
             {
               method: 'GET',
               headers: {
@@ -145,7 +146,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
       };
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/notifications/preferences`,
+        `${API_BASE_URL}/notifications/preferences`,
         {
           method: 'POST',
           headers: {

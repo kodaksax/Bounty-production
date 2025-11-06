@@ -1,10 +1,8 @@
+import { API_BASE_URL } from 'lib/config/api';
 import { authProfileService } from "lib/services/auth-profile-service";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { profileService } from "lib/services/profile-service";
-
-// API Configuration
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
 // Define Profile type here for now
 export type Profile = {
