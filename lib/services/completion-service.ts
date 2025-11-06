@@ -376,7 +376,13 @@ export const completionService = {
         // Get submission details first to find bounty and hunter
         const { data: submission, error: fetchError } = await supabase
           .from('completion_submissions')
-          .select('bounty_id, hunter_id')
+          .select(`
+            bounty_id, 
+            hunter_id,
+            bounties:bounty_id (
+              title
+            )
+          `)
           .eq('id', submissionId)
           .single();
 
@@ -392,6 +398,9 @@ export const completionService = {
           .eq('id', submissionId);
 
         if (error) throw error;
+
+        // Get bounty title for notifications
+        const bountyTitle = (submission as any)?.bounties?.title || 'Bounty';
 
         // Send system message to bounty conversation if it exists
         if (submission?.bounty_id) {
@@ -415,6 +424,28 @@ export const completionService = {
           } catch (msgErr) {
             // Don't fail the revision request if message sending fails
             logger.warning('Failed to send revision message to conversation', { error: msgErr });
+          }
+        }
+
+        // Send notification to hunter (works even without backend API)
+        if (submission?.hunter_id && submission?.bounty_id) {
+          try {
+            // For frontend-only setup, we can still create a notification record in Supabase
+            await supabase.from('notifications').insert({
+              user_id: submission.hunter_id,
+              type: 'completion',
+              title: 'Revision Requested',
+              body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
+              data: { 
+                bountyId: submission.bounty_id, 
+                feedback, 
+                isRevision: true 
+              },
+              read: false,
+            });
+          } catch (notifErr) {
+            // Don't fail the revision request if notification fails
+            logger.warning('Failed to send revision notification', { error: notifErr });
           }
         }
 

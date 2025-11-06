@@ -17,7 +17,7 @@ export function SystemMessage({ message, type = 'info', timestamp }: SystemMessa
   const getIconName = () => {
     switch (type) {
       case 'warning':
-        return 'warning';
+        return 'error'; // Using 'error' as it's a standard Material icon for warnings
       case 'revision':
         return 'feedback';
       default:
