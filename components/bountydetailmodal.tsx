@@ -65,6 +65,15 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
 
+  // Type for detail rows in Additional Details section
+  interface DetailRow {
+    icon: 'schedule' | 'build' | 'place' | 'access-time';
+    color: string;
+    label: string;
+    value: string;
+    urgent?: boolean;
+  }
+
   // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
@@ -298,8 +307,8 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
         
         // Send notification to poster about the application
         try {
-          const { notificationService } = await import('../lib/services/notification-service')
-          await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'}/api/notifications`, {
+          const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+          await fetch(`${API_BASE}/api/notifications`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -450,35 +459,35 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 <View style={styles.additionalDetailsContainer}>
                   <Text style={styles.sectionHeader}>Additional Details</Text>
                   
-                  {[
+                  {([
                     bounty.timeline && {
-                      icon: 'schedule',
+                      icon: 'schedule' as const,
                       color: '#a7f3d0',
                       label: 'Timeline',
                       value: bounty.timeline,
                     },
                     bounty.skills_required && {
-                      icon: 'build',
+                      icon: 'build' as const,
                       color: '#a7f3d0',
                       label: 'Skills Required',
                       value: bounty.skills_required,
                     },
                     bounty.location && bounty.work_type !== 'online' && {
-                      icon: 'place',
+                      icon: 'place' as const,
                       color: '#a7f3d0',
                       label: 'Location',
                       value: bounty.location,
                     },
                     bounty.is_time_sensitive && bounty.deadline && {
-                      icon: 'access-time',
+                      icon: 'access-time' as const,
                       color: '#fbbf24',
                       label: '⚡ Deadline',
                       value: bounty.deadline,
                       urgent: true,
                     },
-                  ].filter(Boolean).map((detail: any, index, array) => (
+                  ].filter(Boolean) as DetailRow[]).map((detail, index, array) => (
                     <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
-                      <MaterialIcons name={detail.icon as any} size={16} color={detail.color} />
+                      <MaterialIcons name={detail.icon} size={16} color={detail.color} />
                       <View style={styles.detailContent}>
                         <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
                           {detail.label}
