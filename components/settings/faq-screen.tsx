@@ -8,7 +8,7 @@ const FAQS = [
   { q: 'How does escrow work?', a: 'Funds are reserved when a bounty is accepted and released on completion.' },
   { q: 'Can I cancel a bounty?', a: 'Open bounties may be archived. Funded disputes will have a formal flow later.' },
   { q: 'What fees apply?', a: 'Currently no platform fees in this prototype. Future versions may apply a small service fee.' },
-  { q: 'How do I report abuse?', a: 'Use Contact Support with detailed information. Safety tooling is coming soon.' },
+  { q: 'How do I report abuse?', a: 'Use Contact Support with detailed information. Our moderation team reviews all reports promptly.' },
 ];
 
 export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {

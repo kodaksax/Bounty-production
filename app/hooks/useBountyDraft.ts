@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
+import type { Attachment } from '../../lib/types';
 
 const DRAFT_KEY = 'bounty-draft-v1';
 
@@ -13,6 +14,7 @@ export interface BountyDraft {
   workType: 'online' | 'in_person';
   timeline?: string;
   skills?: string;
+  attachments?: Attachment[];
 }
 
 const defaultDraft: BountyDraft = {
@@ -25,6 +27,7 @@ const defaultDraft: BountyDraft = {
   workType: 'in_person',
   timeline: '',
   skills: '',
+  attachments: [],
 };
 
 export function useBountyDraft() {

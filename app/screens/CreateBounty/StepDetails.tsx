@@ -2,8 +2,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
+import type { Attachment } from '../../../lib/types';
 
 interface StepDetailsProps {
   draft: BountyDraft;
@@ -17,6 +19,32 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
+
+  const {
+    isUploading,
+    isPicking,
+    progress,
+    pickAttachment,
+    error: uploadError,
+    clearError,
+  } = useAttachmentUpload({
+    bucket: 'bounty-attachments',
+    folder: 'bounties',
+    maxSizeMB: 10,
+    onUploaded: (attachment) => {
+      const currentAttachments = draft.attachments || [];
+      onUpdate({ attachments: [...currentAttachments, attachment] });
+    },
+    onError: (error) => {
+      Alert.alert('Upload Error', error.message);
+    },
+  });
+
+  const handleRemoveAttachment = (attachmentId: string) => {
+    const currentAttachments = draft.attachments || [];
+    const updated = currentAttachments.filter((a) => a.id !== attachmentId);
+    onUpdate({ attachments: updated });
+  };
 
   const validateDescription = (value: string): string | null => {
     if (!value || value.trim().length === 0) {
@@ -128,21 +156,99 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           />
         </View>
 
-        {/* Attachments Placeholder */}
+        {/* Attachments */}
         <View className="mb-6">
           <Text className="text-emerald-100 text-base font-semibold mb-2">
-            Attachments
+            Attachments (optional)
           </Text>
+          
+          {/* Upload Button */}
           <TouchableOpacity
-            className="bg-emerald-700/50 border-2 border-dashed border-emerald-500/50 rounded-lg py-6 flex items-center justify-center"
+            className="bg-emerald-700/50 border-2 border-dashed border-emerald-500/50 rounded-lg py-6 flex items-center justify-center mb-3"
+            onPress={() => pickAttachment()}
+            disabled={isUploading || isPicking}
             accessibilityLabel="Add attachments"
             accessibilityRole="button"
           >
-            <MaterialIcons name="cloud-upload" size={32} color="rgba(110, 231, 183, 0.6)" />
-            <Text className="text-emerald-300/60 mt-2 text-sm">
-              Add photos or documents (coming soon)
-            </Text>
+            {isUploading ? (
+              <>
+                <ActivityIndicator size="large" color="rgba(110, 231, 183, 0.6)" />
+                <Text className="text-emerald-300/60 mt-2 text-sm">
+                  Uploading... {Math.round(progress * 100)}%
+                </Text>
+              </>
+            ) : isPicking ? (
+              <>
+                <ActivityIndicator size="large" color="rgba(110, 231, 183, 0.6)" />
+                <Text className="text-emerald-300/60 mt-2 text-sm">
+                  Selecting...
+                </Text>
+              </>
+            ) : (
+              <>
+                <MaterialIcons name="cloud-upload" size={32} color="rgba(110, 231, 183, 0.6)" />
+                <Text className="text-emerald-300/60 mt-2 text-sm">
+                  Add photos, documents, or take a photo
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
+
+          {/* Error Message */}
+          {uploadError && (
+            <View className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-3 flex-row items-center justify-between">
+              <Text className="text-red-200 flex-1 text-sm">{uploadError}</Text>
+              <TouchableOpacity onPress={clearError}>
+                <MaterialIcons name="close" size={20} color="#fca5a5" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Attachment List */}
+          {draft.attachments && draft.attachments.length > 0 && (
+            <View className="space-y-2">
+              {draft.attachments.map((attachment) => (
+                <View
+                  key={attachment.id}
+                  className="bg-emerald-700/30 rounded-lg p-3 flex-row items-center"
+                >
+                  <View className="flex-1 flex-row items-center">
+                    <MaterialIcons
+                      name={
+                        attachment.mimeType?.startsWith('image/')
+                          ? 'image'
+                          : attachment.mimeType?.startsWith('video/')
+                          ? 'videocam'
+                          : attachment.mimeType?.includes('pdf')
+                          ? 'picture-as-pdf'
+                          : 'insert-drive-file'
+                      }
+                      size={24}
+                      color="#6ee7b7"
+                    />
+                    <View className="ml-3 flex-1">
+                      <Text className="text-white text-sm" numberOfLines={1}>
+                        {attachment.name}
+                      </Text>
+                      {attachment.size && (
+                        <Text className="text-emerald-300/60 text-xs">
+                          {(attachment.size / 1024).toFixed(1)} KB
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveAttachment(attachment.id)}
+                    className="p-2"
+                    accessibilityLabel="Remove attachment"
+                    accessibilityRole="button"
+                  >
+                    <MaterialIcons name="close" size={20} color="#fca5a5" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
