@@ -749,11 +749,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             user_id: hunterIdForConv,
             type: 'acceptance',
             title: 'Bounty Application Accepted!',
-            body: `Your application for "${bountyForEscrow?.title || 'the bounty'}" has been accepted!`,
+            body: `Your application for "${bountyForEscrow?.title || bountyObj?.title || 'the bounty'}" has been accepted!`,
             data: {
               bountyId: bountyId,
               posterId: currentUserId,
-              amount: bountyForEscrow?.amount,
+              ...(bountyForEscrow?.amount && { amount: bountyForEscrow.amount }),
             }
           })
         })

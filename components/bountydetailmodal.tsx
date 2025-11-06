@@ -26,6 +26,15 @@ import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
+// Type for detail rows in Additional Details section
+interface DetailRow {
+  icon: 'schedule' | 'build' | 'place' | 'access-time';
+  color: string;
+  label: string;
+  value: string;
+  urgent?: boolean;
+}
+
 interface BountyDetailModalProps {
   bounty: {
     id: number
@@ -64,15 +73,6 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
-
-  // Type for detail rows in Additional Details section
-  interface DetailRow {
-    icon: 'schedule' | 'build' | 'place' | 'access-time';
-    color: string;
-    label: string;
-    value: string;
-    urgent?: boolean;
-  }
 
   // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
