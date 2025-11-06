@@ -135,8 +135,9 @@ export const storageService = {
       fileData = decode(base64Data)
     } else {
       // File URI - read as base64 then convert to ArrayBuffer
+      // Use string literal 'base64' as type for better compatibility across expo-file-system versions
       const base64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: (FileSystem as any).EncodingType?.Base64 || 'base64' as any,
+        encoding: 'base64' as any, // expo-file-system types vary across versions
       })
       fileData = decode(base64)
       
@@ -207,8 +208,9 @@ export const storageService = {
       }
 
       // For file URIs, read as base64 and store as data URI
+      // Use string literal 'base64' as type for better compatibility across expo-file-system versions
       const base64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: (FileSystem as any).EncodingType?.Base64 || 'base64' as any,
+        encoding: 'base64' as any, // expo-file-system types vary across versions
       })
 
       // Detect content type from file extension

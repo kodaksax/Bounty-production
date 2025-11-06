@@ -70,14 +70,18 @@ export const attachmentService = {
    */
   async delete(remoteUri: string): Promise<boolean> {
     try {
-      // Extract path from remote URI if it's a Supabase URL
-      if (remoteUri.includes('supabase')) {
+      // Check if it's a Supabase URL by checking URL structure
+      if (storageService.isSupabaseAvailable() && remoteUri.includes('/storage/v1/object/')) {
+        // Extract bucket and path from Supabase storage URL
         const url = new URL(remoteUri)
         const pathParts = url.pathname.split('/')
-        const bucket = pathParts[pathParts.length - 2]
-        const path = pathParts[pathParts.length - 1]
-        
-        return await storageService.deleteFile(bucket, path)
+        const objectIndex = pathParts.indexOf('object')
+        if (objectIndex !== -1 && objectIndex < pathParts.length - 2) {
+          const bucket = pathParts[objectIndex + 2]
+          const path = pathParts.slice(objectIndex + 3).join('/')
+          
+          return await storageService.deleteFile(bucket, path)
+        }
       }
       
       // Otherwise assume it's an AsyncStorage key

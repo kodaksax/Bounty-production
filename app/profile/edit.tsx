@@ -118,11 +118,16 @@ export default function EditProfileScreen() {
         .filter((s) => s.length > 0);
 
       // Update auth profile (primary source of truth)
-      const authUpdated = await updateAuthProfile({
+      // Note: avatar_url may not be in the type definition, but is accepted by the API
+      const authUpdateData: any = {
         username: formData.username,
         about: formData.bio,
-        ...(avatarUrl && { avatar_url: avatarUrl }),
-      } as any);
+      };
+      if (avatarUrl) {
+        authUpdateData.avatar_url = avatarUrl;
+      }
+      
+      const authUpdated = await updateAuthProfile(authUpdateData);
       
       if (!authUpdated) {
         throw new Error("Failed to update profile");

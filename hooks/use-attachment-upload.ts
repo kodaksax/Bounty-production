@@ -350,7 +350,8 @@ async function pickFromPhotos(): Promise<{
     console.warn('Failed to get file size:', e)
   }
 
-  const fileName = (asset as any).fileName || `media-${Date.now()}`
+  // Type-safe extraction of fileName with fallback
+  const fileName = ('fileName' in asset ? (asset as any).fileName : undefined) || `media-${Date.now()}`
   const mimeType = asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg')
 
   return {
