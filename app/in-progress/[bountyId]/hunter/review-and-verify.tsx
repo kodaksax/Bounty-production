@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
+import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
@@ -56,6 +57,35 @@ export default function HunterReviewAndVerifyScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
   const [startTime] = useState(Date.now());
+
+  // Attachment upload hook
+  const {
+    isUploading,
+    isPicking,
+    progress,
+    pickAttachment,
+    error: uploadError,
+    clearError,
+  } = useAttachmentUpload({
+    bucket: 'bounty-attachments',
+    folder: 'proofs',
+    maxSizeMB: 10,
+    onUploaded: (attachment) => {
+      const proofItem: ProofItem = {
+        id: attachment.id,
+        type: attachment.mimeType?.startsWith('image/') ? 'image' : 'file',
+        name: attachment.name,
+        url: attachment.remoteUri,
+        uri: attachment.uri,
+        size: attachment.size,
+        mimeType: attachment.mimeType,
+      };
+      setProofItems((prev) => [...prev, proofItem]);
+    },
+    onError: (error) => {
+      Alert.alert('Upload Error', error.message);
+    },
+  });
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -137,12 +167,9 @@ export default function HunterReviewAndVerifyScreen() {
 
   const loadProofItems = async () => {
     try {
-      // Mock proof items for now - in real implementation, fetch from backend
-      const mockProof: ProofItem[] = [
-        { id: '1', type: 'image', name: 'work_photo_1.jpg', size: 2048 },
-        { id: '2', type: 'image', name: 'work_photo_2.jpg', size: 1856 },
-      ];
-      setProofItems(mockProof);
+      // Load previously submitted proof items if any
+      // For now, start with empty array - user will add new ones
+      setProofItems([]);
     } catch (err) {
       console.error('Error loading proof items:', err);
     }
@@ -169,13 +196,8 @@ export default function HunterReviewAndVerifyScreen() {
     }
   };
 
-  const handleAddProof = () => {
-    // In real implementation, use expo-document-picker or expo-image-picker
-    Alert.alert(
-      'Add Proof',
-      'This feature will allow you to upload images or files as proof of completion.',
-      [{ text: 'OK' }]
-    );
+  const handleAddProof = async () => {
+    await pickAttachment();
   };
 
   const handleRemoveProof = (id: string) => {

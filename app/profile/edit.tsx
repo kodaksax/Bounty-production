@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -19,6 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthContext } from "../../hooks/use-auth-context";
+import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -47,6 +49,36 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
+  
+  // Avatar upload state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+
+  const avatarUpload = useAttachmentUpload({
+    bucket: 'profiles',
+    folder: 'avatars',
+    allowedTypes: 'images',
+    maxSizeMB: 5,
+    onUploaded: (attachment) => {
+      setAvatarUrl(attachment.remoteUri || attachment.uri);
+    },
+    onError: (error) => {
+      Alert.alert('Avatar Upload Error', error.message);
+    },
+  });
+
+  const bannerUpload = useAttachmentUpload({
+    bucket: 'profiles',
+    folder: 'banners',
+    allowedTypes: 'images',
+    maxSizeMB: 5,
+    onUploaded: (attachment) => {
+      setBannerUrl(attachment.remoteUri || attachment.uri);
+    },
+    onError: (error) => {
+      Alert.alert('Banner Upload Error', error.message);
+    },
+  });
 
   // Clear form data when user changes to prevent data leaks
   React.useEffect(() => {
@@ -61,13 +93,17 @@ export default function EditProfileScreen() {
       };
       setFormData(data);
       setInitialData(data);
+      setAvatarUrl(profile.avatar || null);
     }
   }, [profile, currentUserId]); // Include currentUserId to reset form when user changes
 
   // Check if form is dirty (has changes)
   const isDirty = React.useMemo(() => {
-    return JSON.stringify(formData) !== JSON.stringify(initialData);
-  }, [formData, initialData]);
+    const formChanged = JSON.stringify(formData) !== JSON.stringify(initialData);
+    const avatarChanged = avatarUrl !== (profile?.avatar || null);
+    const bannerChanged = bannerUrl !== null;
+    return formChanged || avatarChanged || bannerChanged;
+  }, [formData, initialData, avatarUrl, bannerUrl, profile]);
 
   const handleSave = async () => {
     try {
@@ -82,10 +118,16 @@ export default function EditProfileScreen() {
         .filter((s) => s.length > 0);
 
       // Update auth profile (primary source of truth)
-      const authUpdated = await updateAuthProfile({
+      // Note: avatar_url may not be in the type definition, but is accepted by the API
+      const authUpdateData: any = {
         username: formData.username,
         about: formData.bio,
-      });
+      };
+      if (avatarUrl) {
+        authUpdateData.avatar_url = avatarUrl;
+      }
+      
+      const authUpdated = await updateAuthProfile(authUpdateData);
       
       if (!authUpdated) {
         throw new Error("Failed to update profile");
@@ -99,6 +141,7 @@ export default function EditProfileScreen() {
         location: formData.location,
         portfolio: formData.portfolio,
         skills: skillsets,
+        avatar: avatarUrl || undefined,
       }).catch(e => {
         console.warn('[EditProfile] local profile update failed (non-critical):', e);
       });
@@ -180,23 +223,68 @@ export default function EditProfileScreen() {
       >
         {/* Banner + Avatar Overlap (Twitter-style) */}
         <View style={styles.bannerSection}>
-          <View style={styles.bannerPlaceholder}>
-            <MaterialIcons name="image" size={32} color="#6b7280" />
-            <Text style={styles.bannerHelpText}>Banner upload coming soon</Text>
-          </View>
+          <TouchableOpacity 
+            style={styles.bannerPlaceholder}
+            onPress={() => bannerUpload.pickAttachment()}
+            disabled={bannerUpload.isUploading || bannerUpload.isPicking}
+            accessibilityLabel="Change banner image"
+            accessibilityRole="button"
+          >
+            {bannerUrl ? (
+              <Image 
+                source={{ uri: bannerUrl }} 
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+            ) : bannerUpload.isUploading ? (
+              <>
+                <ActivityIndicator size="large" color="#6b7280" />
+                <Text style={styles.bannerHelpText}>
+                  Uploading... {Math.round(bannerUpload.progress * 100)}%
+                </Text>
+              </>
+            ) : (
+              <>
+                <MaterialIcons name="image" size={32} color="#6b7280" />
+                <Text style={styles.bannerHelpText}>Tap to upload banner</Text>
+              </>
+            )}
+          </TouchableOpacity>
           <View style={styles.avatarOverlap}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
-              </Text>
-            </View>
+            <TouchableOpacity 
+              style={styles.avatar}
+              onPress={() => avatarUpload.pickAttachment()}
+              disabled={avatarUpload.isUploading || avatarUpload.isPicking}
+              accessibilityLabel="Change profile picture"
+              accessibilityRole="button"
+            >
+              {avatarUrl ? (
+                <Image 
+                  source={{ uri: avatarUrl }} 
+                  style={{ width: '100%', height: '100%', borderRadius: 50 }}
+                  resizeMode="cover"
+                />
+              ) : avatarUpload.isUploading ? (
+                <ActivityIndicator size="large" color="#ffffff" />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
+                </Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity 
               style={styles.avatarChangeButton}
+              onPress={() => avatarUpload.pickAttachment()}
+              disabled={avatarUpload.isUploading || avatarUpload.isPicking}
               accessibilityLabel="Change profile picture"
               accessibilityRole="button"
               accessibilityHint="Upload a new profile picture"
             >
-              <MaterialIcons name="camera-alt" size={18} color="#fff" />
+              {avatarUpload.isUploading || avatarUpload.isPicking ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <MaterialIcons name="camera-alt" size={18} color="#fff" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
