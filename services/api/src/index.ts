@@ -28,6 +28,26 @@ if (!process.env.STRIPE_SECRET_KEY) {
   // local already provided STRIPE_SECRET_KEY (or env inherited)
 }
 
+// Sanitize a handful of DB-related env vars so legacy quoted values do not
+// leak into connection strings. This preserves the values in .env but makes
+// the running process use cleaned versions.
+function _sanitizeEnv(value?: string | null): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  let v = String(value).trim();
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1).trim();
+  }
+  return v === '' ? undefined : v;
+}
+
+const dbEnvKeys = ['DATABASE_URL', 'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
+for (const k of dbEnvKeys) {
+  if (process.env[k]) {
+    const cleaned = _sanitizeEnv(process.env[k]);
+    if (cleaned !== undefined) process.env[k] = cleaned;
+  }
+}
+
 // Now that environment variables are loaded, require modules at runtime
 // so we avoid ES import hoisting (which would initialize modules before
 // dotenv runs). Keep type-only imports for TypeScript typings.
@@ -36,7 +56,11 @@ import type { AuthenticatedRequest } from './middleware/auth';
 
 const { eq } = require('drizzle-orm');
 const Fastify = require('fastify');
-const { db } = require('./db/connection');
+const { db, pool } = require('./db/connection');
+// Detect Supabase mode (used to skip direct Postgres ping at startup)
+const STARTUP_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const STARTUP_SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const STARTUP_USE_SUPABASE = !!(STARTUP_SUPABASE_URL && STARTUP_SUPABASE_SERVICE_ROLE_KEY);
 const { users } = require('./db/schema');
 const { authMiddleware } = require('./middleware/auth');
 const { registerAdminRoutes } = require('./routes/admin');
@@ -402,9 +426,35 @@ const start = async () => {
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
     console.log(`📡 WebSocket server available at ws://${host}:${port}/events/subscribe`);
     
-    // Skip outbox worker for now due to Drizzle connection issues
-    console.log(`⚠️  Outbox worker disabled due to database connection issues`);
-    // await outboxWorker.start(5000); // Process events every 5 seconds
+    // If Supabase mode is enabled, avoid pinging the Postgres pool (this
+    // prevents ECONNRESET/ECONNREFUSED logs when legacy DB envs point at
+    // a different DB type or closed port). Start the outbox worker and let
+    // it use Supabase via the OutboxService when configured.
+    if (STARTUP_USE_SUPABASE) {
+      console.log('📦 Supabase mode detected - skipping direct Postgres ping and starting outbox worker');
+      await outboxWorker.start(5000);
+    } else {
+      // Try a quick DB ping and start the outbox worker only if the DB is reachable.
+      try {
+        await pool.query('SELECT 1');
+        console.log('📦 Database reachable - starting outbox worker');
+        await outboxWorker.start(5000); // Process events every 5 seconds
+      } catch (err) {
+        // Provide actionable hints for common connection failures (ECONNREFUSED/ECONNRESET)
+        const maybeErr = err as any;
+        if (maybeErr && typeof maybeErr === 'object' && maybeErr.code === 'ECONNRESET') {
+          console.warn('⚠️  Outbox worker disabled due to database connection issues: ECONNRESET (connection reset by peer)');
+          console.warn('   Possible causes: connecting to the wrong database type/port (e.g., MySQL on port 3306), network/firewall terminating the connection, or TLS/SSL mismatch.');
+          console.warn('   Check that your env vars point to a PostgreSQL instance (DATABASE_URL or DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME).');
+        } else if (maybeErr && typeof maybeErr === 'object' && maybeErr.code === 'ECONNREFUSED') {
+          console.warn('⚠️  Outbox worker disabled due to database connection issues: ECONNREFUSED (connection refused)');
+          console.warn('   Possible causes: database is not running, wrong host/port, or firewall blocking it. Verify DATABASE_URL and DB_* env vars.');
+        } else {
+          console.warn(`⚠️  Outbox worker disabled due to database connection issues: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        console.warn('   To fix: set a valid PostgreSQL DATABASE_URL in your .env (e.g., postgres://user:pass@host:5432/dbname) or correct DB_* env vars.');
+      }
+    }
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

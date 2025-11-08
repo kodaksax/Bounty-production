@@ -2,19 +2,19 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
+import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
@@ -167,11 +167,29 @@ export default function HunterReviewAndVerifyScreen() {
 
   const loadProofItems = async () => {
     try {
-      // Load previously submitted proof items if any
-      // For now, start with empty array - user will add new ones
-      setProofItems([]);
+      // If bounty includes attachments_json, parse and populate
+      const attachmentsJson = (bounty as any)?.attachments_json
+      if (attachmentsJson) {
+        let parsed: any[] = []
+        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        const items: ProofItem[] = parsed.map((a: any) => ({
+          id: a.id || String(Date.now()),
+          type: a.mimeType?.startsWith('image/') ? 'image' : 'file',
+          name: a.name || (a.remoteUri ? a.remoteUri.split('/').pop() : 'attachment'),
+          url: a.remoteUri,
+          uri: a.uri,
+          size: a.size,
+          mimeType: a.mimeType,
+        }))
+        setProofItems(items)
+        return
+      }
+
+      // Default to empty
+      setProofItems([])
     } catch (err) {
       console.error('Error loading proof items:', err);
+      setProofItems([])
     }
   };
 

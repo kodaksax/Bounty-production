@@ -1,21 +1,23 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
-    ScrollView,
+    FlatList, Linking, ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { ROUTES } from '../../../lib/routes';
+import { attachmentService } from '../../../lib/services/attachment-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
@@ -24,7 +26,8 @@ interface ProofItem {
   id: string;
   type: 'image' | 'file';
   name: string;
-  url?: string;
+  uri?: string; // local uri
+  remoteUri?: string; // uploaded remote url
   size?: number;
 }
 
@@ -44,8 +47,11 @@ export default function ReviewAndVerifyScreen() {
 
   useEffect(() => {
     loadBounty();
-    loadProofItems();
   }, [bountyId]);
+
+  useEffect(() => {
+    if (bounty) loadProofItems();
+  }, [bounty]);
 
   const loadBounty = async () => {
     try {
@@ -79,19 +85,95 @@ export default function ReviewAndVerifyScreen() {
   };
 
   const loadProofItems = async () => {
-    // Mock proof items - in real implementation, fetch from backend
-    // based on the bounty's attachments or submissions from the hunter
     try {
-      const mockProof: ProofItem[] = [
-        { id: '1', type: 'image', name: 'completed_work_photo_1.jpg', size: 2048 },
-        { id: '2', type: 'image', name: 'completed_work_photo_2.jpg', size: 1856 },
-        { id: '3', type: 'file', name: 'final_deliverable.pdf', size: 512 },
-      ];
-      setProofItems(mockProof);
+      // If bounty carries attachments_json (serialized AttachmentMeta[]), parse it
+      const attachmentsJson = (bounty as any)?.attachments_json
+      if (attachmentsJson) {
+        let parsed: any[] = []
+        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        const items: ProofItem[] = parsed.map((a: any) => ({
+          id: a.id || String(Date.now()),
+          type: (a.mimeType || a.name || '').includes('image') ? 'image' : (a.type === 'image' ? 'image' : 'file'),
+          name: a.name || (a.remoteUri ? a.remoteUri.split('/').pop() : 'attachment'),
+          uri: a.uri,
+          remoteUri: a.remoteUri,
+          size: a.size,
+        }))
+        setProofItems(items)
+        return
+      }
+
+      // Fallback: no attachments present
+      setProofItems([])
     } catch (err) {
       console.error('Error loading proof items:', err);
+      setProofItems([])
     }
   };
+
+  const openAttachment = async (item: ProofItem) => {
+    const url = item.remoteUri || item.uri
+    if (!url) {
+      Alert.alert('No URL', 'No remote URL available for this attachment')
+      return
+    }
+    try {
+      await Linking.openURL(url)
+    } catch (err) {
+      console.error('Failed to open attachment URL', err)
+      Alert.alert('Failed to open', 'Could not open attachment')
+    }
+  }
+
+  const handleUpload = async () => {
+    try {
+      Alert.alert('Add Proof', 'Choose upload type', [
+        { text: 'Photo from library', onPress: async () => {
+          const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
+          // new ImagePicker uses `canceled` (US spelling); older versions used `cancelled`.
+          if ((res as any).canceled || (res as any).cancelled) return
+          const uri = (res as any).assets?.[0]?.uri || (res as any).uri
+          const name = (uri || '').split('/').pop() || `image-${Date.now()}.jpg`
+          const attachment = { id: `att-${Date.now()}`, name, uri, mimeType: 'image/jpeg', size: undefined, status: 'uploading' }
+          // Optimistically add to UI
+          setProofItems(p => [...p, { id: attachment.id, type: 'image', name: attachment.name, uri: attachment.uri }])
+
+          const uploaded = await attachmentService.upload(attachment as any, {
+            onProgress: (p) => {
+              // no-op for now; could update progress indicator
+            }
+          })
+
+          // Persist to bounty
+          const success = await bountyService.addAttachmentToBounty((bounty as any).id, uploaded)
+          if (!success) {
+            Alert.alert('Upload saved locally', 'File uploaded but failed to persist to bounty')
+          }
+          // Refresh list to include remoteUri
+          await loadProofItems()
+        }},
+        { text: 'Choose file', onPress: async () => {
+          const res = await DocumentPicker.getDocumentAsync({ type: '*/*' }) as any
+          if (res.type !== 'success') return
+          const uri = res.uri
+          const name = res.name || `file-${Date.now()}`
+          const attachment = { id: `att-${Date.now()}`, name, uri, mimeType: res.mimeType || res.mimeType || undefined, size: res.size, status: 'uploading' }
+          setProofItems(p => [...p, { id: attachment.id, type: 'file', name: attachment.name, uri: attachment.uri }])
+
+          const uploaded = await attachmentService.upload(attachment as any)
+          const success = await bountyService.addAttachmentToBounty((bounty as any).id, uploaded)
+          if (!success) {
+            Alert.alert('Upload saved locally', 'File uploaded but failed to persist to bounty')
+          }
+          await loadProofItems()
+        }},
+        { text: 'Cancel', style: 'cancel' }
+      ])
+    } catch (err) {
+      console.error('Error uploading attachment', err)
+      Alert.alert('Upload failed', 'An error occurred while uploading the file')
+    }
+  }
 
   const handleRatingPress = (value: number) => {
     setRating(value);
@@ -133,7 +215,7 @@ export default function ReviewAndVerifyScreen() {
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <TouchableOpacity style={styles.viewButton}>
+      <TouchableOpacity style={styles.viewButton} onPress={() => openAttachment(item)}>
         <MaterialIcons name="visibility" size={20} color="#6ee7b7" />
       </TouchableOpacity>
     </View>
@@ -260,7 +342,7 @@ export default function ReviewAndVerifyScreen() {
         {/* Additional Files Section (Optional) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Add Additional Files (Optional)</Text>
-          <TouchableOpacity style={styles.uploadButton}>
+          <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
             <MaterialIcons name="cloud-upload" size={24} color="#6ee7b7" />
             <Text style={styles.uploadButtonText}>Upload Files</Text>
           </TouchableOpacity>

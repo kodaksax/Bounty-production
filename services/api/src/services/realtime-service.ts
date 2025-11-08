@@ -13,11 +13,15 @@ export class RealtimeService {
   private wsClients: Set<any> = new Set();
 
   constructor() {
+    // Support both server-style env names and Expo public env names (fallback)
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL
+    const supabaseAnon = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+
     // Initialize Supabase client if credentials are available
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+    if (supabaseUrl && supabaseAnon) {
       this.supabaseClient = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY
+        supabaseUrl,
+        supabaseAnon
       );
       console.log('📡 Supabase Realtime client initialized');
     } else {

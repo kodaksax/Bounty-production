@@ -1,17 +1,18 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { createClient } from '@supabase/supabase-js';
+import { FastifyReply, FastifyRequest } from 'fastify';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
 let supabase: any = null;
 
-if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-  supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-  );
-  console.log('✅ Supabase auth client initialized');
+// Support both server-style env names and Expo public env names (fallback)
+const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL
+const supabaseAnon = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+if (supabaseUrl && supabaseAnon) {
+  supabase = createClient(supabaseUrl, supabaseAnon)
+  console.log('✅ Supabase auth client initialized')
 } else {
-  console.log('⚠️  Supabase credentials not found - auth middleware will be disabled');
+  console.log('⚠️  Supabase credentials not found - auth middleware will be disabled')
 }
 
 export interface AuthenticatedRequest extends FastifyRequest {

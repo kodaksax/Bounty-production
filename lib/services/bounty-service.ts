@@ -140,6 +140,57 @@ export const bountyService = {
     }
   },
 
+      /**
+       * Add an attachment to a bounty's attachments_json (persist via Supabase or API fallback)
+       */
+      async addAttachmentToBounty(bountyId: number | string, attachment: any): Promise<boolean> {
+        try {
+          // Fetch existing bounty so we can merge attachments
+          const existing = await this.getById(bountyId)
+          const currentJson = (existing as any)?.attachments_json || '[]'
+          let current: any[] = []
+          try { current = JSON.parse(currentJson) } catch (e) { current = [] }
+          current.push(attachment)
+
+          // Persist
+          if (isSupabaseConfigured) {
+            const { data, error } = await supabase
+              .from('bounties')
+              .update({ attachments_json: JSON.stringify(current) })
+              .eq('id', bountyId)
+              .select()
+
+            if (error) {
+              logger.error('Failed to update bounty attachments via Supabase', { error })
+              return false
+            }
+            return true
+          }
+
+          // API fallback: try PATCH to /api/bounties/:id
+          try {
+            const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(bountyId))}`
+            const res = await fetch(API_URL, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ attachments_json: JSON.stringify(current) })
+            })
+            if (!res.ok) {
+              const text = await res.text()
+              logger.error('Failed to update bounty attachments via API', { status: res.status, body: text })
+              return false
+            }
+            return true
+          } catch (apiErr) {
+            logger.error('Error calling API to update bounty attachments', { error: (apiErr as any)?.message })
+            return false
+          }
+        } catch (err) {
+          logger.error('addAttachmentToBounty error', { error: (err as any)?.message })
+          return false
+        }
+      },
+
   /**
    * Search open bounties by text (title / description). Returns an empty list on failure instead of throwing.
    * Server-side filtered to reduce bandwidth; falls back progressively.
@@ -489,6 +540,10 @@ export const bountyService = {
         if (error) throw error
         return (data as unknown as Bounty) ?? null
       }
+
+      // If the code reaches here, we're in API mode and didn't use Supabase
+      // Fall through to API creation path handled above
+
 
       const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(id))}`
       const response = await fetch(API_URL, {

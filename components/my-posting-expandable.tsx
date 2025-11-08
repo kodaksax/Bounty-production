@@ -1,20 +1,23 @@
 import { MaterialIcons } from '@expo/vector-icons'
+import { bountyService } from 'lib/services/bounty-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
 import { messageService } from 'lib/services/message-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  ActivityIndicator,
-  LayoutAnimation,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
+    ActivityIndicator,
+    Alert,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
+import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
 import { AnimatedSection } from './ui/animated-section'
@@ -273,15 +276,40 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     }
   }
   
-  const handleAddProof = () => {
-    // Mock adding proof - in real implementation would use file picker
-    const newProof = {
-      id: Date.now().toString(),
-      type: 'file' as const,
-      name: `proof_${proofItems.length + 1}.jpg`,
-      size: 1024 * 500, // 500KB
+  // Attachment upload hook for real attachments
+  const { pickAttachment, isUploading: isAttUploading, progress: attProgress } = useAttachmentUpload({
+    bucket: 'bounty-attachments',
+    folder: `bounties/${bounty.id}/proofs`,
+    maxSizeMB: 20,
+  })
+
+  const handleAddProof = async () => {
+    try {
+      const uploaded = await pickAttachment()
+      if (!uploaded) return
+
+      const newProof = {
+        id: uploaded.id,
+        type: uploaded.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
+        name: uploaded.name,
+        size: uploaded.size,
+        remoteUri: uploaded.remoteUri,
+        uri: uploaded.uri,
+      } as any
+
+      setProofItems((prev) => [...prev, newProof])
+
+      // Persist to bounty attachments_json
+      const success = await bountyService.addAttachmentToBounty(bounty.id, uploaded)
+      if (!success) {
+        Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
+      }
+      // Trigger parent refresh if provided
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      console.error('Error adding proof:', err)
+      Alert.alert('Upload failed', 'Could not add proof. Please try again.')
     }
-    setProofItems([...proofItems, newProof])
   }
   
   const handleRemoveProof = (id: string) => {
