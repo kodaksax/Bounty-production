@@ -24,6 +24,7 @@ import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
+import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
 import { Stepper } from './ui/stepper'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -63,6 +64,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [reviewExpanded, setReviewExpanded] = useState(false)
   const [payoutExpanded, setPayoutExpanded] = useState(false)
   const [readyRecord, setReadyRecord] = useState<{ bounty_id: string; hunter_id: string; ready_at: string } | null>(null)
+  const [revisionFeedback, setRevisionFeedback] = useState<string | null>(null)
+  const [showRevisionBanner, setShowRevisionBanner] = useState(false)
   
   // Hunter completion submission state
   const [timeElapsed, setTimeElapsed] = useState(0)
@@ -148,6 +151,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       unsub = completionService.subscribeSubmission(String(bounty.id), (submission) => {
         if (!submission) {
           setHasSubmission(false)
+          setRevisionFeedback(null)
+          setShowRevisionBanner(false)
           return
         }
         const isPending = submission.status === 'pending'
@@ -161,11 +166,14 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
         if (!isOwner && submission.status === 'revision_requested') {
-          // Show feedback to hunter and move flow back
-          alert('Poster requested revisions: ' + (submission.poster_feedback || 'See poster feedback in Review.'))
+          // Store feedback and show banner instead of alert
+          setRevisionFeedback(submission.poster_feedback || 'The poster has requested changes to your work.')
+          setShowRevisionBanner(true)
           setLocalStageOverride('working_progress')
           setWipExpanded(true)
           setReviewExpanded(false)
+          setSubmissionPending(false)
+          setHasSubmission(false)
         }
       })
     } catch (e) {
@@ -436,6 +444,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               ) : (
                 <View style={{ gap: 16 }}>
                   {/* Hunter view: Instructions, attachments, next button */}
+                  
+                  {/* Show revision feedback banner if present */}
+                  {showRevisionBanner && revisionFeedback && (
+                    <RevisionFeedbackBanner
+                      feedback={revisionFeedback}
+                      onDismiss={() => setShowRevisionBanner(false)}
+                      showDismiss={true}
+                    />
+                  )}
+                  
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
