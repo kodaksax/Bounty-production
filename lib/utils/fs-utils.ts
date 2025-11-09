@@ -3,7 +3,7 @@
  * File/Directory API when available but gracefully fall back to the
  * legacy expo-file-system implementation.
  */
-import * as FS from 'expo-file-system'
+import * as FS from 'expo-file-system';
 
 type Info = { exists: boolean; size?: number }
 
