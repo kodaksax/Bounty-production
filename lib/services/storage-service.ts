@@ -1,23 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { decode } from 'base64-arraybuffer'
-import * as FileSystem from 'expo-file-system'
-import { createClient } from '@supabase/supabase-js'
+import { supabase as supabaseClient } from '../supabase'
+import { cacheDirectory, copyTo, readAsBase64, writeBase64ToFile } from '../utils/fs-utils'
 
 const STORAGE_PREFIX = 'attachment-cache-'
 
-// Initialize Supabase client for storage
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''
-
-let supabaseClient: ReturnType<typeof createClient> | null = null
-
-if (supabaseUrl && supabaseKey) {
-  try {
-    supabaseClient = createClient(supabaseUrl, supabaseKey)
-  } catch (e) {
-    console.warn('[StorageService] Failed to initialize Supabase client:', e)
-  }
-}
+// Use shared supabase client exported from lib/supabase.ts. That client is
+// configured to persist auth and will include the user's access token when
+// signed in. This ensures uploads are performed as the authenticated user and
+// conform to RLS policies that allow authenticated uploads.
 
 export interface UploadOptions {
   bucket: string
@@ -121,27 +112,52 @@ export const storageService = {
 
     onProgress?.(0.1)
 
-    let fileData: ArrayBuffer | string
     let contentType = 'application/octet-stream'
 
-    // Handle different URI schemes
-    if (fileUri.startsWith('data:')) {
-      // Data URI (base64)
-      const matches = fileUri.match(/^data:([^;]+);base64,(.+)$/)
-      if (!matches) throw new Error('Invalid data URI')
-      
-      contentType = matches[1]
-      const base64Data = matches[2]
-      fileData = decode(base64Data)
-    } else {
-      // File URI - read as base64 then convert to ArrayBuffer
-      // Use string literal 'base64' as type for better compatibility across expo-file-system versions
-      const base64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: 'base64' as any, // expo-file-system types vary across versions
-      })
-      fileData = decode(base64)
-      
-      // Try to detect content type from file extension
+    // Helper: convert a URI to an ArrayBuffer for upload. Prefer fetch->arrayBuffer,
+    // fall back to fetch->blob->arrayBuffer, then to readAsBase64 decode as last resort.
+    async function uriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
+      // Data URI case
+      if (uri.startsWith('data:')) {
+        const matches = uri.match(/^data:([^;]+);base64,(.+)$/)
+        if (!matches) throw new Error('Invalid data URI')
+        // Set contentType from data URI
+        contentType = matches[1]
+        const base64Data = matches[2]
+        return decode(base64Data)
+      }
+
+      // Try fetch -> arrayBuffer
+      try {
+        const res = await fetch(uri)
+        if (typeof (res as any).arrayBuffer === 'function') {
+          const ab = await (res as any).arrayBuffer()
+          if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
+        }
+
+        // Try blob -> arrayBuffer
+        if (typeof (res as any).blob === 'function') {
+          try {
+            const blob = await (res as any).blob()
+            if (blob && typeof (blob as any).arrayBuffer === 'function') {
+              const ab = await (blob as any).arrayBuffer()
+              if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
+            }
+          } catch (e) {
+            console.warn('[StorageService] fetch->blob->arrayBuffer failed:', e)
+          }
+        }
+      } catch (e) {
+        console.warn('[StorageService] fetch->arrayBuffer failed, falling back to base64:', e)
+      }
+
+      // Fallback: read as base64 and construct ArrayBuffer
+      const base64 = await readAsBase64(uri)
+      return decode(base64)
+    }
+
+    // Detect content type from file extension for non-data URIs
+    if (!fileUri.startsWith('data:')) {
       const ext = fileUri.split('.').pop()?.toLowerCase()
       if (ext) {
         const mimeTypes: Record<string, string> = {
@@ -162,10 +178,12 @@ export const storageService = {
 
     onProgress?.(0.3)
 
-    // Upload to Supabase Storage
+    const arrayBuffer = await uriToArrayBuffer(fileUri)
+
+    // Upload to Supabase Storage (ArrayBuffer upload)
     const { data, error } = await supabaseClient.storage
       .from(bucket)
-      .upload(path, fileData, {
+      .upload(path, arrayBuffer as any, {
         contentType,
         upsert: true,
       })
@@ -197,9 +215,19 @@ export const storageService = {
     try {
       const cacheKey = STORAGE_PREFIX + path
 
-      // For data URIs, store directly
+      // Ensure a cache directory base
+      const cacheDir = cacheDirectory || ''
+      const filename = path.split('/').pop() || `cached-${Date.now()}`
+      const dest = `${cacheDir}${filename}`
+
+      // If input is a data URI, write its decoded base64 to a file in cache
       if (fileUri.startsWith('data:')) {
-        await AsyncStorage.setItem(cacheKey, fileUri)
+        const matches = fileUri.match(/^data:([^;]+);base64,(.+)$/)
+        if (!matches) throw new Error('Invalid data URI')
+        const base64 = matches[2]
+        // write base64 to dest
+        await writeBase64ToFile(dest, base64)
+        await AsyncStorage.setItem(cacheKey, dest)
         return {
           success: true,
           url: cacheKey,
@@ -207,31 +235,30 @@ export const storageService = {
         }
       }
 
-      // For file URIs, read as base64 and store as data URI
-      // Use string literal 'base64' as type for better compatibility across expo-file-system versions
-      const base64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: 'base64' as any, // expo-file-system types vary across versions
-      })
-
-      // Detect content type from file extension
-      const ext = fileUri.split('.').pop()?.toLowerCase()
-      const mimeTypes: Record<string, string> = {
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        png: 'image/png',
-        gif: 'image/gif',
-        webp: 'image/webp',
-        pdf: 'application/pdf',
-      }
-      const contentType = (ext && mimeTypes[ext]) || 'application/octet-stream'
-
-      const dataUri = `data:${contentType};base64,${base64}`
-      await AsyncStorage.setItem(cacheKey, dataUri)
-
-      return {
-        success: true,
-        url: cacheKey,
-        fallbackToLocal: true,
+      // For file:// or content:// URIs, copy into cache directory
+      try {
+        await copyTo(dest, fileUri)
+        await AsyncStorage.setItem(cacheKey, dest)
+        return {
+          success: true,
+          url: cacheKey,
+          fallbackToLocal: true,
+        }
+      } catch (copyErr) {
+        // If copy fails, try to read as base64 and write
+        try {
+          const base64 = await readAsBase64(fileUri)
+          await writeBase64ToFile(dest, base64)
+          await AsyncStorage.setItem(cacheKey, dest)
+          return {
+            success: true,
+            url: cacheKey,
+            fallbackToLocal: true,
+          }
+        } catch (e) {
+          // Let error propagate to outer catch
+          throw e
+        }
       }
     } catch (error) {
       console.error('[StorageService] AsyncStorage save failed:', error)

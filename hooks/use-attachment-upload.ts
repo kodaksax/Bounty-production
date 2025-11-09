@@ -1,10 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker'
-import * as FileSystem from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { ActionSheetIOS, Alert, Platform } from 'react-native'
 import { storageService } from '../lib/services/storage-service'
 import type { Attachment } from '../lib/types'
+import { getFileInfo } from '../lib/utils/fs-utils'
 
 export interface AttachmentUploadOptions {
   bucket?: string // Supabase storage bucket name
@@ -276,7 +276,7 @@ async function pickFromCamera(): Promise<{
   }
 
   const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ['images'],
     allowsEditing: true,
     quality: 0.8,
   })
@@ -293,8 +293,8 @@ async function pickFromCamera(): Promise<{
   // Get file size if possible
   let size: number | undefined
   try {
-    const info = await FileSystem.getInfoAsync(asset.uri)
-    if (info.exists && 'size' in info) {
+    const info = await getFileInfo(asset.uri)
+    if (info && info.exists && typeof info.size === 'number') {
       size = info.size
     }
   } catch (e) {
@@ -342,8 +342,8 @@ async function pickFromPhotos(): Promise<{
   // Get file size if possible
   let size: number | undefined
   try {
-    const info = await FileSystem.getInfoAsync(asset.uri)
-    if (info.exists && 'size' in info) {
+    const info = await getFileInfo(asset.uri)
+    if (info && info.exists && typeof info.size === 'number') {
       size = info.size
     }
   } catch (e) {

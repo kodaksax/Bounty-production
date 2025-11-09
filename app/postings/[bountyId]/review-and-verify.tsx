@@ -129,7 +129,7 @@ export default function ReviewAndVerifyScreen() {
     try {
       Alert.alert('Add Proof', 'Choose upload type', [
         { text: 'Photo from library', onPress: async () => {
-          const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
+          const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 })
           // new ImagePicker uses `canceled` (US spelling); older versions used `cancelled`.
           if ((res as any).canceled || (res as any).cancelled) return
           const uri = (res as any).assets?.[0]?.uri || (res as any).uri

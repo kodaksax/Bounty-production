@@ -1,10 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker'
-import * as FileSystem from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { ActionSheetIOS, Platform } from 'react-native'
 import { attachmentService } from '../lib/services/attachment-service'
 import type { PortfolioItem } from '../lib/types'
+import { cacheDirectory, copyTo, readAsBase64 } from '../lib/utils/fs-utils'
 
 export interface PortfolioUploadState {
   isPicking: boolean
@@ -100,9 +100,9 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
                 // don't accept. Copy to the app cache and use file:// URI for upload preview.
                 if (assetUri.startsWith('content://')) {
                   try {
-                    const cacheDir = (FileSystem as any).cacheDirectory as string || ''
+                    const cacheDir = cacheDirectory || ''
                     const dest = `${cacheDir}portfolio-${Date.now()}-${name || 'asset'}`
-                    await FileSystem.copyAsync({ from: assetUri, to: dest })
+                    await copyTo(dest, assetUri)
                     assetUri = dest
                   } catch (e) {
                     console.warn('[usePortfolioUpload] failed to copy content uri:', e)
@@ -113,7 +113,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
                 let previewUri = assetUri
                 try {
                   if ((assetKind && assetKind === 'image') || (mimeType && mimeType.startsWith('image/'))) {
-                    const b64 = await FileSystem.readAsStringAsync(assetUri, { encoding: (FileSystem as any).EncodingType?.Base64 || 'base64' as any })
+                    const b64 = await readAsBase64(assetUri)
                     const mime = mimeType || 'image/jpeg'
                     previewUri = `data:${mime};base64,${b64}`
                   }
@@ -148,9 +148,9 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
           // DocumentPicker can return content URIs; ensure a cache copy for consistent preview
           if (assetUri.startsWith('content://')) {
             try {
-              const cacheDir = (FileSystem as any).cacheDirectory as string || ''
+              const cacheDir = cacheDirectory || ''
               const dest = `${cacheDir}portfolio-${Date.now()}-${name || 'asset'}`
-              await FileSystem.copyAsync({ from: assetUri, to: dest })
+              await copyTo(dest, assetUri)
               assetUri = dest
             } catch (e) {
               console.warn('[usePortfolioUpload] failed to copy document uri:', e)
