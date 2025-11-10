@@ -194,6 +194,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 }
 
+export default WalletScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

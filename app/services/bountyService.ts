@@ -81,3 +81,5 @@ export const bountyService = {
     }
   },
 };
+
+export default bountyService;

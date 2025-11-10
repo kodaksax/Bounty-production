@@ -78,3 +78,5 @@ export function useBountyDraft() {
     isLoading,
   };
 }
+
+export default useBountyDraft;

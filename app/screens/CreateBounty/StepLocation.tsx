@@ -329,3 +329,5 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
     </View>
   );
 }
+
+export default StepLocation;

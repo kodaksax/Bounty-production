@@ -57,3 +57,5 @@ export function StepperHeader({ currentStep, totalSteps, stepTitle }: StepperHea
     </View>
   );
 }
+
+export default StepperHeader;

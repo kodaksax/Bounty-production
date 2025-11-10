@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { locationService } from '../../lib/services/location-service';
 import type { LocationCoordinates, LocationPermissionState } from '../../lib/types';
 
@@ -108,3 +108,5 @@ export function useLocation(): UseLocationResult {
     calculateDistance,
   };
 }
+
+export default useLocation;

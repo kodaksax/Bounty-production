@@ -355,3 +355,5 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
     </View>
   );
 }
+
+export default StepReview;

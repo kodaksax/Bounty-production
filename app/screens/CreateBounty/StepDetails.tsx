@@ -5,7 +5,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
-import type { Attachment } from '../../../lib/types';
 
 interface StepDetailsProps {
   draft: BountyDraft;
@@ -295,3 +294,5 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
     </View>
   );
 }
+
+export default StepDetails;

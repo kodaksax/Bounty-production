@@ -21,3 +21,5 @@ export function ValidationMessage({ message, type = 'error' }: ValidationMessage
     </View>
   );
 }
+
+export default ValidationMessage;

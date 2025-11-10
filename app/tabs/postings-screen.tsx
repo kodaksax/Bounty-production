@@ -1471,3 +1471,5 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     </TouchableWithoutFeedback>
   )
 }
+
+export default PostingsScreen;

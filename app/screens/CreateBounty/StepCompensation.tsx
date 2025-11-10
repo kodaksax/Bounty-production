@@ -281,3 +281,5 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     </View>
   );
 }
+
+export default StepCompensation;

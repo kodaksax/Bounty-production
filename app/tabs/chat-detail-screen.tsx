@@ -341,6 +341,8 @@ export function ChatDetailScreen({
   )
 }
 
+export default ChatDetailScreen;
+
 const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 12,

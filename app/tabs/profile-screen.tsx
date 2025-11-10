@@ -365,6 +365,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   )
 }
 
+export default ProfileScreen;
+
 // formatTimeAgo removed with Activity section
 
 const styles = StyleSheet.create({

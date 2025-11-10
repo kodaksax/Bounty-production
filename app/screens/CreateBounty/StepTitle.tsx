@@ -195,3 +195,5 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
     </View>
   );
 }
+
+export default StepTitle;
