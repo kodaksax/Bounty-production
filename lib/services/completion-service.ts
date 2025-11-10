@@ -402,18 +402,23 @@ export const completionService = {
         // Get bounty title for notifications
         const bountyTitle = (submission as any)?.bounties?.title || 'Bounty';
 
-        // Send system message to bounty conversation if it exists
+        // Send (or create + send) system message to bounty conversation
         if (submission?.bounty_id) {
           try {
-            // Import messageService dynamically to avoid circular dependencies
             const { messageService } = await import('./message-service');
-            const conversations = await messageService.getConversations();
-            const bountyConversation = conversations.find(
-              c => String(c.bountyId) === String(submission.bounty_id)
-            );
-
+            const all = await messageService.getConversations();
+            let bountyConversation = all.find(c => String(c.bountyId) === String(submission.bounty_id));
+            // Fallback: attempt to create a conversation if none exists yet
+            if (!bountyConversation) {
+              try {
+                const posterId = getCurrentUserId();
+                const hunterId = String(submission.hunter_id);
+                bountyConversation = await messageService.getOrCreateConversation([hunterId, posterId], `Bounty ${submission.bounty_id}`, submission.bounty_id);
+              } catch (convErr) {
+                logger.warning('Failed to auto-create bounty conversation for revision', { error: convErr });
+              }
+            }
             if (bountyConversation) {
-              // Send a system-like message from the poster about the revision
               const currentUserId = getCurrentUserId();
               await messageService.sendMessage(
                 bountyConversation.id,
@@ -422,29 +427,22 @@ export const completionService = {
               );
             }
           } catch (msgErr) {
-            // Don't fail the revision request if message sending fails
-            logger.warning('Failed to send revision message to conversation', { error: msgErr });
+            logger.warning('Failed to send revision system message', { error: msgErr });
           }
         }
 
-        // Send notification to hunter (works even without backend API)
+        // Send notification to hunter and force realtime visibility (insert triggers subscription)
         if (submission?.hunter_id && submission?.bounty_id) {
           try {
-            // For frontend-only setup, we can still create a notification record in Supabase
             await supabase.from('notifications').insert({
               user_id: submission.hunter_id,
               type: 'completion',
               title: 'Revision Requested',
               body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
-              data: { 
-                bountyId: submission.bounty_id, 
-                feedback, 
-                isRevision: true 
-              },
+              data: { bountyId: submission.bounty_id, feedback, isRevision: true },
               read: false,
             });
           } catch (notifErr) {
-            // Don't fail the revision request if notification fails
             logger.warning('Failed to send revision notification', { error: notifErr });
           }
         }

@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import * as Notifications from 'expo-notifications';
-import { notificationService } from '../services/notification-service';
-import type { Notification } from '../types';
 import { useRouter } from 'expo-router';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { notificationService } from '../services/notification-service';
+import { supabase } from '../supabase';
+import type { Notification } from '../types';
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -116,6 +117,46 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       listeners.remove();
     };
   }, [fetchNotifications, refreshUnreadCount, handleNotificationTap]);
+
+  // Realtime subscription to notifications table so unread count and list
+  // update immediately when a new notification is inserted for this user.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (!userId) return;
+
+        // Prefer channel API when available (supabase-js v2+)
+        // @ts-ignore
+        if (typeof (supabase as any).channel === 'function') {
+          // @ts-ignore
+          const channel = (supabase as any).channel(`notifications:${userId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload: any) => {
+              // Refresh notifications immediately
+              try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.warn('notif realtime fetch failed', e) }
+            })
+            .subscribe();
+
+          return () => { try { (supabase as any).removeChannel(channel) } catch {} }
+        }
+
+        // Fallback: classic .from().on() subscription
+        // @ts-ignore
+        const sub = supabase.from(`notifications:user_id=eq.${userId}`).on('INSERT', (payload: any) => {
+          try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.warn('notif realtime fetch failed', e) }
+        }).subscribe();
+
+        return () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} }
+      } catch (e) {
+        // Non-fatal: we'll still poll every 30s as a fallback
+        console.warn('Failed to setup realtime notifications subscription', e);
+      }
+    })();
+
+    return () => { mounted = false }
+  }, [fetchNotifications, refreshUnreadCount]);
 
   // Poll for new notifications every 30 seconds when app is active
   useEffect(() => {

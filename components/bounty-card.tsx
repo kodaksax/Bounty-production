@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, Share } from "react-native";
 import type { Bounty } from "lib/services/database.types";
+import React from "react";
+import { Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -9,6 +9,9 @@ interface BountyCardProps {
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  // If a revision has been requested for the current user, show an indicator
+  revisionRequested?: boolean;
+  revisionFeedback?: string | null;
 }
 
 export function BountyCard({
@@ -17,6 +20,8 @@ export function BountyCard({
   onPress,
   onEdit,
   onDelete,
+  revisionRequested,
+  revisionFeedback,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
 
@@ -72,6 +77,13 @@ export function BountyCard({
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
           <Text style={styles.statusText}>{getStatusLabel()}</Text>
         </View>
+        {/* Revision requested indicator (hunter-facing) */}
+        {revisionRequested && (
+          <View style={styles.revisionBadge}>
+            <MaterialIcons name="feedback" size={12} color="#92400e" />
+            <Text style={styles.revisionText}>REVISION REQUESTED</Text>
+          </View>
+        )}
         {bounty.is_time_sensitive && (
           <View style={styles.urgentBadge}>
             <MaterialIcons name="access-time" size={12} color="#dc2626" />
@@ -305,6 +317,22 @@ const styles = StyleSheet.create({
     color: "#052e1b",
     fontWeight: "800",
     fontSize: 13,
+  },
+  revisionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+    marginLeft: 8,
+  },
+  revisionText: {
+    color: '#92400e',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   ownerActions: {
     marginTop: 12,

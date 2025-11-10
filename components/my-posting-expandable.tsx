@@ -6,16 +6,16 @@ import { messageService } from 'lib/services/message-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { BountyCard } from './bounty-card'
@@ -66,6 +66,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [readyRecord, setReadyRecord] = useState<{ bounty_id: string; hunter_id: string; ready_at: string } | null>(null)
   const [revisionFeedback, setRevisionFeedback] = useState<string | null>(null)
   const [showRevisionBanner, setShowRevisionBanner] = useState(false)
+  // Persisted flag so the card-level badge remains even if the banner is dismissed
+  const [hasRevisionRequested, setHasRevisionRequested] = useState(false)
   
   // Hunter completion submission state
   const [timeElapsed, setTimeElapsed] = useState(0)
@@ -95,6 +97,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               setWipExpanded(false)
             }
           }
+        }
+        // For hunters, initialize revision indicator state from latest submission
+        if (bounty.status === 'in_progress' && variant === 'hunter') {
+          try {
+            const submission = await completionService.getSubmission(String(bounty.id))
+            if (mounted && submission) {
+              if (submission.status === 'revision_requested') {
+                setHasRevisionRequested(true)
+                setRevisionFeedback(submission.poster_feedback || null)
+                setShowRevisionBanner(true)
+                setLocalStageOverride('working_progress')
+                setWipExpanded(true)
+                setReviewExpanded(false)
+                setSubmissionPending(false)
+                setHasSubmission(false)
+              }
+            }
+          } catch {}
         }
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
@@ -153,6 +173,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           setHasSubmission(false)
           setRevisionFeedback(null)
           setShowRevisionBanner(false)
+          setHasRevisionRequested(false)
           return
         }
         const isPending = submission.status === 'pending'
@@ -169,6 +190,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           // Store feedback and show banner instead of alert
           setRevisionFeedback(submission.poster_feedback || 'The poster has requested changes to your work.')
           setShowRevisionBanner(true)
+          setHasRevisionRequested(true)
           setLocalStageOverride('working_progress')
           setWipExpanded(true)
           setReviewExpanded(false)
@@ -271,6 +293,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Lock review UI and show waiting state
         setSubmissionPending(true)
         setHasSubmission(true)
+        // Clear the revision badge on resubmission
+        setHasRevisionRequested(false)
         setReviewExpanded(false)
         setPayoutExpanded(true)
         // Trigger parent refresh to update list
@@ -344,6 +368,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         onPress={() => { if (!isListScrolling) { animate(); onToggle(); } }}
         onEdit={onEdit}
         onDelete={onDelete}
+        revisionRequested={hasRevisionRequested && !isOwner}
+        revisionFeedback={revisionFeedback}
       />
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
