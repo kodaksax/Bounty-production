@@ -26,6 +26,15 @@ import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
+// Type for detail rows in Additional Details section
+interface DetailRow {
+  icon: 'schedule' | 'build' | 'place' | 'access-time';
+  color: string;
+  label: string;
+  value: string;
+  urgent?: boolean;
+}
+
 interface BountyDetailModalProps {
   bounty: {
     id: number
@@ -40,6 +49,12 @@ interface BountyDetailModalProps {
     attachments?: AttachmentMeta[]
     attachments_json?: string
     poster_avatar?: string
+    timeline?: string
+    skills_required?: string
+    location?: string
+    is_time_sensitive?: boolean
+    deadline?: string
+    status?: string
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -272,16 +287,48 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
       return
     }
 
+    // Check if bounty is already taken
+    if (bounty.status === 'in_progress' || bounty.status === 'completed') {
+      Alert.alert('Bounty Already Taken', 'This bounty has already been accepted by another hunter.')
+      return
+    }
+
     setIsApplying(true)
     try {
       const request = await bountyRequestService.create({
         bounty_id: bounty.id,
         hunter_id: currentUserId,
         status: 'pending',
+        poster_id: posterId,
       })
 
       if (request) {
         setHasApplied(true)
+        
+        // Send notification to poster about the application
+        try {
+          const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+          await fetch(`${API_BASE}/api/notifications`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: posterId,
+              type: 'application',
+              title: 'New Bounty Application',
+              body: `Someone applied for your bounty: ${bounty.title}`,
+              data: {
+                bountyId: bounty.id,
+                hunterId: currentUserId,
+              }
+            })
+          })
+        } catch (notifError) {
+          console.error('Failed to send application notification:', notifError)
+          // Don't block the flow if notification fails
+        }
+        
         Alert.alert(
           'Application Submitted',
           'Your application has been submitted. The bounty poster will review it soon.',
@@ -407,9 +454,56 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
                 <Text style={styles.descriptionText}>{description}</Text>
               </View>
 
+              {/* Additional Details - Timeline, Skills, Location, Deadline */}
+              {(bounty.timeline || bounty.skills_required || bounty.location || bounty.deadline) && (
+                <View style={styles.additionalDetailsContainer}>
+                  <Text style={styles.sectionHeader}>Additional Details</Text>
+                  
+                  {([
+                    bounty.timeline && {
+                      icon: 'schedule' as const,
+                      color: '#a7f3d0',
+                      label: 'Timeline',
+                      value: bounty.timeline,
+                    },
+                    bounty.skills_required && {
+                      icon: 'build' as const,
+                      color: '#a7f3d0',
+                      label: 'Skills Required',
+                      value: bounty.skills_required,
+                    },
+                    bounty.location && bounty.work_type !== 'online' && {
+                      icon: 'place' as const,
+                      color: '#a7f3d0',
+                      label: 'Location',
+                      value: bounty.location,
+                    },
+                    bounty.is_time_sensitive && bounty.deadline && {
+                      icon: 'access-time' as const,
+                      color: '#fbbf24',
+                      label: '⚡ Deadline',
+                      value: bounty.deadline,
+                      urgent: true,
+                    },
+                  ].filter(Boolean) as DetailRow[]).map((detail, index, array) => (
+                    <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
+                      <MaterialIcons name={detail.icon} size={16} color={detail.color} />
+                      <View style={styles.detailContent}>
+                        <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
+                          {detail.label}
+                        </Text>
+                        <Text style={[styles.detailValue, detail.urgent && { color: '#fbbf24', fontWeight: '600' }]}>
+                          {detail.value}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* Attachments */}
               {actualAttachments.length > 0 && (
-                <View>
+                <View style={styles.attachmentsSection}>
                   <Text style={styles.sectionHeader}>Attachments</Text>
                   <View style={styles.attachmentsContainer}>
                     {actualAttachments.map((attachment) => {
@@ -652,15 +746,45 @@ const styles = StyleSheet.create({
   descriptionContainer: {
     marginBottom: 16,
   },
+  additionalDetailsContainer: {
+    marginBottom: 16,
+    backgroundColor: '#05543280', // emerald-800/50
+    padding: 12,
+    borderRadius: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 10,
+  },
+  detailContent: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#a7f3d0', // emerald-300
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#d1fae5', // emerald-100
+    lineHeight: 18,
+  },
+  attachmentsSection: {
+    marginBottom: 16,
+  },
   sectionHeader: {
     fontSize: 14,
     fontWeight: '500',
     color: '#a7f3d0', // emerald-200
-    marginBottom: 4,
+    marginBottom: 8,
   },
   descriptionText: {
     color: 'white',
     fontSize: 14,
+    lineHeight: 20,
   },
   attachmentsContainer: {
     gap: 8,
@@ -714,17 +838,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionContainer: {
-    padding: 12,
-    paddingTop: 0,
+    padding: 16,
+    paddingTop: 16,
     backgroundColor: '#047857', // emerald-700
+    borderTopWidth: 1,
+    borderTopColor: '#05966920', // emerald-600/20
   },
   acceptButton: {
     width: '100%',
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: '#10b981', // emerald-500
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   acceptButtonDisabled: {
     backgroundColor: '#059669', // emerald-600 (darker)
