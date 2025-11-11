@@ -11,6 +11,8 @@ interface BountyCardProps {
   onDelete?: () => void;
   // If a revision has been requested for the current user, show an indicator
   revisionRequested?: boolean;
+  // When the poster has a pending submission to review, show review-needed state
+  reviewNeeded?: boolean;
   revisionFeedback?: string | null;
 }
 
@@ -21,6 +23,7 @@ export function BountyCard({
   onEdit,
   onDelete,
   revisionRequested,
+  reviewNeeded,
   revisionFeedback,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
@@ -37,6 +40,7 @@ export function BountyCard({
   };
 
   const getStatusColor = () => {
+    if (reviewNeeded) return '#fbbf24'
     switch (bounty.status) {
       case "open":
         return "#10b981"; // emerald-500
@@ -52,6 +56,7 @@ export function BountyCard({
   };
 
   const getStatusLabel = () => {
+    if (reviewNeeded) return 'REVIEW NEEDED'
     switch (bounty.status) {
       case "open":
         return "OPEN";

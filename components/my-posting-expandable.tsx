@@ -95,6 +95,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             if (foundSubmission) {
               setReviewExpanded(true)
               setWipExpanded(false)
+              // Move the visual stepper to Review & Verify so owner sees where action is needed
+              setLocalStageOverride('review_verify')
             }
           }
         }
@@ -123,8 +125,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         } catch {}
       } catch {}
     }
-    // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view
-    if (expanded || variant === 'owner') load()
+  // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view.
+  // Also load for hunters even when the card is not expanded so revision-requested state
+  // is available in the compact card (shows badge) without needing to open the card first.
+  if (expanded || variant === 'owner' || variant === 'hunter') load()
     return () => { mounted = false }
   }, [expanded, bounty.id, bounty.status, variant])
   
@@ -183,6 +187,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         if (isOwner && isPending) {
           setReviewExpanded(true)
           setWipExpanded(false)
+          // Show the stepper on the Review & Verify bubble for owner
+          setLocalStageOverride('review_verify')
         }
         
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
@@ -369,6 +375,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         onEdit={onEdit}
         onDelete={onDelete}
         revisionRequested={hasRevisionRequested && !isOwner}
+        reviewNeeded={hasSubmission && isOwner}
         revisionFeedback={revisionFeedback}
       />
       {expanded && (

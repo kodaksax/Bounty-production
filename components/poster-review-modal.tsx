@@ -2,16 +2,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
@@ -228,10 +228,14 @@ export function PosterReviewModal({
       <View style={[styles.container, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <MaterialIcons name="close" size={24} color="#fff" />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={showRevisionForm ? () => setShowRevisionForm(false) : onClose}
+            accessibilityLabel={showRevisionForm ? 'Back to review' : 'Close review modal'}
+          >
+            <MaterialIcons name={showRevisionForm ? 'arrow-back' : 'close'} size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Review Submission</Text>
+          <Text style={styles.headerTitle}>{showRevisionForm ? 'Request Changes' : 'Review Submission'}</Text>
           <View style={{ width: 24 }} />
         </View>
 
