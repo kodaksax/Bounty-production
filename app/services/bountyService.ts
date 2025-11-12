@@ -37,7 +37,7 @@ export const bountyService = {
         )
       }
 
-      const payload: Omit<Bounty, 'id' | 'created_at'> = {
+      const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[] } = {
         title: draft.title,
         description: draft.description,
         amount: draft.isForHonor ? 0 : draft.amount,
@@ -49,6 +49,8 @@ export const bountyService = {
         poster_id: getCurrentUserId(),
         user_id: getCurrentUserId(),
         status: 'open',
+        // Include attachments from draft so they get persisted to attachments_json
+        attachments: draft.attachments || [],
       };
 
       // Call the base bounty service to create
