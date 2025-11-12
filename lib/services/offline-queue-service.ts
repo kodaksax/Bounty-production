@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { logger } from 'lib/utils/error-logger';
 import type { Bounty } from './database.types';
 
 // Queue item types
@@ -77,7 +78,22 @@ class OfflineQueueService {
       const stored = await AsyncStorage.getItem(QUEUE_KEY);
       if (stored) {
         this.queue = JSON.parse(stored);
-        console.log(`📥 Loaded ${this.queue.length} items from offline queue`);
+  logger.info(`Loaded ${this.queue.length} items from offline queue`);
+        // Debug: inspect queued bounty items for attachments_json presence
+        try {
+          this.queue.forEach(q => {
+            if (q.type === 'bounty') {
+              const b = (q.data as BountyQueueData).bounty as any
+              const hasAttachmentsJson = !!b?.attachments_json
+              const attachmentsLen = Array.isArray(b?.attachments) ? b.attachments.length : 0
+              if (!hasAttachmentsJson && attachmentsLen > 0) {
+                console.log(`[offlineQueue] loaded queued bounty ${q.id} MISSING attachments_json but has attachments array length=${attachmentsLen}`)
+              }
+            }
+          })
+        } catch (e) {
+          logger.warning('[offlineQueue] error inspecting loaded queue for debug', { error: (e as any)?.message })
+        }
         
         // Process if online
         if (this.isOnline) {
@@ -117,7 +133,19 @@ class OfflineQueueService {
     this.queue.push(item);
     await this.saveQueue();
 
-    console.log(`📤 Enqueued ${type} item:`, item.id);
+    logger.info(`Enqueued ${type} item: ${item.id}`)
+
+    // Extra debug: if this is a bounty, print whether attachments are present on the queued payload
+    try {
+      if (type === 'bounty') {
+        const payload = (data as BountyQueueData).bounty as any
+        const hasAttachmentsJson = !!payload?.attachments_json
+        const attachmentsArrayLength = Array.isArray(payload?.attachments) ? payload.attachments.length : 0
+        logger.info(`[offlineQueue] queued bounty payload attachments_json: ${hasAttachmentsJson}, attachments.length: ${attachmentsArrayLength}`)
+      }
+    } catch (e) {
+      logger.warning('[offlineQueue] failed to inspect queued payload for debug', { error: (e as any)?.message })
+    }
 
     // If online, try to process immediately
     if (this.isOnline) {
@@ -202,8 +230,17 @@ class OfflineQueueService {
   private async processBountyItem(item: QueueItem) {
     const data = item.data as BountyQueueData;
     // Import bounty service dynamically to avoid circular dependency
-    const { bountyService } = await import('./bounty-service');
-    await bountyService.processQueuedBounty(data.bounty);
+      try {
+        // Debug: show attachments_json presence before processing
+        const b = data.bounty as any
+        const hasAttachmentsJson = !!b?.attachments_json
+        const attachmentsLen = Array.isArray(b?.attachments) ? b.attachments.length : 0
+        logger.info(`[offlineQueue] processing queued bounty item ${item.id} - attachments_json: ${hasAttachmentsJson}, attachments.length: ${attachmentsLen}`)
+      } catch (e) {
+        logger.warning('[offlineQueue] failed to inspect bounty payload before processing', { error: (e as any)?.message })
+      }
+      const { bountyService } = await import('./bounty-service');
+      await bountyService.processQueuedBounty(data.bounty);
   }
 
   /**

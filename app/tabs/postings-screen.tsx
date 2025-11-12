@@ -10,6 +10,7 @@ import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
+import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, findNodeHandle, FlatList, InteractionManager, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View } from "react-native"
@@ -397,11 +398,22 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   work_type: formData.workType,
   is_time_sensitive: formData.isTimeSensitive,
   deadline: formData.isTimeSensitive ? formData.deadline : undefined,
-  attachments_json: formData.attachments.filter(a => a.status === 'uploaded').length ? JSON.stringify(formData.attachments.filter(a => a.status === 'uploaded')) : undefined,
+    // Persist attachments_json if any attachments have finished uploading or have a remoteUri
+    attachments_json: (() => {
+      const uploaded = formData.attachments.filter(a => (a as any).remoteUri || a.status === 'uploaded')
+      return uploaded.length ? JSON.stringify(uploaded) : undefined
+    })(),
 
       }
 
 
+
+      // Debug: log exact payload being sent to create
+      try {
+        logger.info('[PostingsScreen] Creating bounty with payload:', { payload: bountyData })
+      } catch (e) {
+        logger.warning('[PostingsScreen] Creating bounty - could not stringify payload', { error: (e as any)?.message })
+      }
 
       // Create the bounty using our service
       const bounty = await bountyService.create(bountyData)

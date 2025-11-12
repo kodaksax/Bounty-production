@@ -145,46 +145,106 @@ export const bountyService = {
        */
       async addAttachmentToBounty(bountyId: number | string, attachment: any): Promise<boolean> {
         try {
-          // Fetch existing bounty so we can merge attachments
-          const existing = await this.getById(bountyId)
-          const currentJson = (existing as any)?.attachments_json || '[]'
-          let current: any[] = []
-          try { current = JSON.parse(currentJson) } catch (e) { current = [] }
-          current.push(attachment)
+              // Fetch existing bounty so we can merge attachments
+              const existing = await this.getById(bountyId)
+              const rawExisting = (existing as any)?.attachments_json
+              let current: any[] = []
+              try {
+                if (!rawExisting) {
+                  current = []
+                } else if (typeof rawExisting === 'string') {
+                  current = JSON.parse(rawExisting)
+                } else if (Array.isArray(rawExisting)) {
+                  current = rawExisting
+                } else if (rawExisting && typeof rawExisting === 'object') {
+                  // Defensive: if DB returned an object, attempt to coerce to array
+                  current = Array.isArray((rawExisting as any)) ? (rawExisting as any) : []
+                } else {
+                  current = []
+                }
+              } catch (e) {
+                // On parse errors, fall back to empty array to avoid blocking upload
+                current = []
+              }
 
-          // Persist
-          if (isSupabaseConfigured) {
-            const { data, error } = await supabase
-              .from('bounties')
-              .update({ attachments_json: JSON.stringify(current) })
-              .eq('id', bountyId)
-              .select()
+              current.push(attachment)
 
-            if (error) {
-              logger.error('Failed to update bounty attachments via Supabase', { error })
-              return false
-            }
-            return true
-          }
+              const payload = { attachments_json: JSON.stringify(current) }
 
-          // API fallback: try PATCH to /api/bounties/:id
-          try {
-            const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(bountyId))}`
-            const res = await fetch(API_URL, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ attachments_json: JSON.stringify(current) })
-            })
-            if (!res.ok) {
-              const text = await res.text()
-              logger.error('Failed to update bounty attachments via API', { status: res.status, body: text })
-              return false
-            }
-            return true
-          } catch (apiErr) {
-            logger.error('Error calling API to update bounty attachments', { error: (apiErr as any)?.message })
-            return false
-          }
+              // Persist
+              if (isSupabaseConfigured) {
+                try {
+                  const { data, error } = await supabase
+                    .from('bounties')
+                    .update(payload)
+                    .eq('id', bountyId)
+                    .select()
+
+                  if (error) {
+                    // Log and attempt API relay fallback (service role) for environments
+                    // where client cannot update rows due to RLS or missing permissions.
+                    logger.error('Failed to update bounty attachments via Supabase', { error })
+                    // Attempt relay to backend API to persist using service credentials
+                    try {
+                      const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(bountyId))}`
+                      const res = await fetch(API_URL, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                      })
+                      if (!res.ok) {
+                        const text = await res.text()
+                        logger.error('Failed to update bounty attachments via API fallback after Supabase error', { status: res.status, body: text })
+                        return false
+                      }
+                      return true
+                    } catch (apiErr) {
+                      logger.error('Error calling API to update bounty attachments after Supabase error', { error: (apiErr as any)?.message })
+                      return false
+                    }
+                  }
+                  return true
+                } catch (e) {
+                  logger.error('Unexpected error updating bounty attachments via Supabase', { error: (e as any)?.message })
+                  // Try API fallback once more
+                  try {
+                    const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(bountyId))}`
+                    const res = await fetch(API_URL, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload),
+                    })
+                    if (!res.ok) {
+                      const text = await res.text()
+                      logger.error('Failed to update bounty attachments via API fallback after unexpected Supabase error', { status: res.status, body: text })
+                      return false
+                    }
+                    return true
+                  } catch (apiErr) {
+                    logger.error('Error calling API to update bounty attachments after unexpected Supabase error', { error: (apiErr as any)?.message })
+                    return false
+                  }
+                }
+              }
+
+              // API fallback when not using Supabase client
+              try {
+                const API_URL = `${getApiBaseUrl()}/api/bounties/${encodeURIComponent(String(bountyId))}`
+                const res = await fetch(API_URL, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload),
+                })
+                if (!res.ok) {
+                  const text = await res.text()
+                  logger.error('Failed to update bounty attachments via API', { status: res.status, body: text })
+                  return false
+                }
+                return true
+              } catch (apiErr) {
+                logger.error('Error calling API to update bounty attachments', { error: (apiErr as any)?.message })
+                return false
+              }
         } catch (err) {
           logger.error('addAttachmentToBounty error', { error: (err as any)?.message })
           return false
@@ -395,6 +455,19 @@ export const bountyService = {
       // If offline, queue the bounty for later
       if (!isOnline) {
         console.log('📴 Offline: queueing bounty for later submission');
+        // Ensure attachments_json is included on the queued payload if attachments are present
+        try {
+          const attachmentsFromPayload = (bounty as any).attachments || (bounty as any).attachments_list || []
+          const toInclude = Array.isArray(attachmentsFromPayload)
+            ? attachmentsFromPayload.filter((a: any) => !!a && (a.remoteUri || a.status === 'uploaded' || a.uri))
+            : []
+          if ((!((bounty as any).attachments_json) || (bounty as any).attachments_json === null) && toInclude.length > 0) {
+            ;(bounty as any).attachments_json = JSON.stringify(toInclude)
+          }
+        } catch (e) {
+          // ignore
+        }
+
         await offlineQueueService.enqueue('bounty', { bounty });
         
         // Return a temporary bounty object with a temp ID
@@ -409,6 +482,20 @@ export const bountyService = {
       if (isSupabaseConfigured) {
         // Normalize record to prefer poster_id and avoid sending legacy user_id column
         const normalized = Object.assign({}, bounty) as any
+
+        // Ensure attachments_json is populated if attachments were provided as an array
+        try {
+          const attachmentsFromPayload = (bounty as any).attachments || (bounty as any).attachments_list || []
+          // Also accept attachments that have a remoteUri even if status is not strictly 'uploaded'
+          const toInclude = Array.isArray(attachmentsFromPayload)
+            ? attachmentsFromPayload.filter((a: any) => !!a && (a.remoteUri || a.status === 'uploaded' || a.uri))
+            : []
+          if ((!normalized.attachments_json || normalized.attachments_json === null) && toInclude.length > 0) {
+            normalized.attachments_json = JSON.stringify(toInclude)
+          }
+        } catch (e) {
+          // ignore and continue
+        }
         normalized.poster_id = normalized.poster_id || normalized.user_id || undefined
         // Remove legacy user_id to avoid inserting into a column that may not exist
         if (Object.prototype.hasOwnProperty.call(normalized, 'user_id')) delete normalized.user_id

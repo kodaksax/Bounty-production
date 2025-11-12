@@ -4,24 +4,27 @@ import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Modal,
-    Platform,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { ROUTES } from '../lib/routes'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
+import { bountyService } from '../lib/services/bounty-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
+import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
@@ -60,7 +63,7 @@ interface BountyDetailModalProps {
   onNavigateToChat?: (conversationId: string) => void
 }
 
-export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
+export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
   const router = useRouter()
   const { isEmailVerified } = useAuthContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -73,12 +76,19 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   const currentUserId = getCurrentUserId()
+  // Local state to hold a fuller bounty object if we need to fetch details
+  const [detailBounty, setDetailBounty] = useState<typeof initialBounty | null>(initialBounty as any)
+
+  // Effective bounty used through the component (prefer fetched detail)
+  const bounty = detailBounty || initialBounty
 
   // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
   const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
+  
 
   useEffect(() => {
     // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Unknown Poster'
@@ -105,34 +115,80 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
     }
   }, [bounty.username, normalizedPoster?.username, profileLoading, bounty.user_id, normalizedPoster])
 
-  // Parse and load attachments
+  // Separate effects: 1) fetch/merge full bounty when initial payload is lightweight
+  // 2) parse attachments from the currently-active bounty (detailBounty || initialBounty)
+
+  // Effect A: fetch full bounty details when initial payload lacks optional fields
   useEffect(() => {
     let mounted = true
-    const loadAttachments = () => {
-      try {
-        // Priority: explicit attachments prop, then parse from attachments_json
-        if (bounty.attachments && bounty.attachments.length > 0) {
-          if (mounted) setActualAttachments(bounty.attachments)
-          return
-        }
 
-        if (bounty.attachments_json) {
-          const parsed = JSON.parse(bounty.attachments_json) as AttachmentMeta[]
+    const shouldFetchDetail = !!initialBounty?.id && (
+      !initialBounty?.timeline || !initialBounty?.skills_required || !initialBounty?.location || (!initialBounty?.attachments && !initialBounty?.attachments_json)
+    )
+
+    if (!shouldFetchDetail) return () => { mounted = false }
+
+    ;(async () => {
+      if (!mounted) return
+      setIsLoadingAttachments(true)
+      try {
+        const full = await bountyService.getById(initialBounty.id)
+        if (mounted && full) {
+          // Merge - prefer fields already present in initialBounty when available
+          setDetailBounty({ ...initialBounty, ...full } as any)
+        }
+      } catch (e) {
+        console.error('Failed to fetch bounty details for modal:', e)
+      } finally {
+        if (mounted) setIsLoadingAttachments(false)
+      }
+    })()
+
+    return () => { mounted = false }
+  }, [initialBounty])
+
+  // Effect B: parse attachments anytime the active bounty changes (detailBounty preferred)
+  useEffect(() => {
+    let mounted = true
+
+    const active = detailBounty || initialBounty
+    try {
+      if (active?.attachments && (active as any).attachments.length > 0) {
+        if (mounted) setActualAttachments((active as any).attachments)
+        return
+      }
+
+      if (active?.attachments_json) {
+        try {
+          // Supabase may return jsonb columns already parsed as arrays/objects.
+          // Handle string, array, and object cases defensively.
+          let parsed: AttachmentMeta[] = []
+          const raw = (active as any).attachments_json
+          if (typeof raw === 'string') {
+            parsed = JSON.parse(raw) as AttachmentMeta[]
+          } else if (Array.isArray(raw)) {
+            parsed = raw as AttachmentMeta[]
+          } else if (raw && typeof raw === 'object') {
+            // Could be an object that represents an array-like structure
+            // but in practice Supabase will return an array for jsonb; treat as any
+            parsed = raw as AttachmentMeta[]
+          }
+
           if (mounted) setActualAttachments(parsed || [])
           return
+        } catch (err) {
+          console.error('Error parsing attachments_json from active bounty:', err)
         }
-
-        // No attachments
-        if (mounted) setActualAttachments([])
-      } catch (error) {
-        console.error('Error parsing attachments:', error)
-        if (mounted) setActualAttachments([])
       }
+
+      if (mounted) setActualAttachments([])
+    } catch (error) {
+      console.error('Error loading attachments for active bounty:', error)
+      if (mounted) setActualAttachments([])
     }
 
-    loadAttachments()
     return () => { mounted = false }
-  }, [bounty.attachments, bounty.attachments_json])
+  }, [detailBounty, initialBounty])
 
   // Sample description if not provided
   const description =
@@ -175,10 +231,21 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
   // Handle attachment open
   const handleAttachmentOpen = async (attachment: AttachmentMeta) => {
     try {
-      const uri = attachment.remoteUri || attachment.uri;
+      let uri = attachment.remoteUri || attachment.uri;
       if (!uri) {
         Alert.alert('Error', 'Attachment not available');
         return;
+      }
+
+      // If storageService saved a cache key (fallback to AsyncStorage), resolve it
+      try {
+        if (typeof uri === 'string' && uri.startsWith('attachment-cache-')) {
+          const resolved = await storageService.getFromAsyncStorage(uri)
+          if (resolved) uri = resolved
+        }
+      } catch (e) {
+        // ignore resolution errors and continue with original uri
+        console.warn('Failed to resolve cached attachment uri', e)
       }
 
       const canOpen = await Linking.canOpenURL(uri);
@@ -300,7 +367,7 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
         hunter_id: currentUserId,
         status: 'pending',
         poster_id: posterId,
-      })
+      } as any)
 
       if (request) {
         setHasApplied(true)
@@ -502,40 +569,49 @@ export function BountyDetailModal({ bounty, onClose, onNavigateToChat }: BountyD
               )}
 
               {/* Attachments */}
-              {actualAttachments.length > 0 && (
+              {(isLoadingAttachments || actualAttachments.length > 0) && (
                 <View style={styles.attachmentsSection}>
                   <Text style={styles.sectionHeader}>Attachments</Text>
-                  <View style={styles.attachmentsContainer}>
-                    {actualAttachments.map((attachment) => {
-                      const isImage = attachment.mimeType?.startsWith('image/') || attachment.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                      const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown';
-                      
-                      return (
-                        <TouchableOpacity
-                          key={attachment.id}
-                          style={styles.attachmentItem}
-                          onPress={() => handleAttachmentOpen(attachment)}
-                        >
-                          <View style={styles.attachmentIcon}>
-                            {isImage ? (
-                              <MaterialIcons name="image" size={20} color="#a7f3d0" />
-                            ) : (
-                              <MaterialIcons name="description" size={20} color="#a7f3d0" />
-                            )}
-                          </View>
-                          <View style={styles.attachmentInfo}>
-                            <Text style={styles.attachmentName}>{attachment.name}</Text>
-                            <Text style={styles.attachmentSize}>
-                              {attachment.size ? `${sizeInMB} MB` : 'Unknown size'}
-                            </Text>
-                          </View>
-                          <View style={styles.downloadButton}>
-                            <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                  {isLoadingAttachments ? (
+                    <ActivityIndicator size="small" color="#a7f3d0" />
+                  ) : (
+                    <View style={styles.attachmentsContainer}>
+                      {actualAttachments.map((attachment) => {
+                        const isImage = !!(attachment.mimeType && attachment.mimeType.startsWith('image/')) || (!!attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name))
+                        const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
+
+                        return (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            style={styles.attachmentItem}
+                            onPress={() => handleAttachmentOpen(attachment)}
+                          >
+                            <View style={styles.attachmentIcon}>
+                              {isImage ? (
+                                // Show thumbnail when available (prefer remoteUri, fallback to local uri)
+                                <Image
+                                  source={{ uri: attachment.remoteUri || attachment.uri }}
+                                  style={{ width: 40, height: 40, borderRadius: 6 }}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <MaterialIcons name="description" size={20} color="#a7f3d0" />
+                              )}
+                            </View>
+                            <View style={styles.attachmentInfo}>
+                              <Text style={styles.attachmentName}>{attachment.name}</Text>
+                              <Text style={styles.attachmentSize}>
+                                {attachment.size ? `${sizeInMB} MB` : 'Unknown size'}
+                              </Text>
+                            </View>
+                            <View style={styles.downloadButton}>
+                              <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
             </View>

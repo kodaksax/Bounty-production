@@ -6,16 +6,16 @@ import { messageService } from 'lib/services/message-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  LayoutAnimation,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
+    ActivityIndicator,
+    Alert,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { BountyCard } from './bounty-card'
@@ -227,8 +227,14 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const attachments: Attachment[] = useMemo(() => {
     if (!bounty.attachments_json) return []
     try {
-      const parsed = JSON.parse(bounty.attachments_json)
-      return Array.isArray(parsed) ? parsed : []
+      const raw: any = (bounty as any).attachments_json
+      if (typeof raw === 'string') {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed : []
+      }
+      if (Array.isArray(raw)) return raw as Attachment[]
+      // If it's an object (unexpected shape), attempt to coerce to array
+      return Array.isArray(raw) ? raw : []
     } catch {
       return []
     }

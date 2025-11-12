@@ -17,16 +17,36 @@ class ErrorLogger {
   private isOnline = true
 
   constructor() {
-    // Set up NetInfo event listener for online/offline
-    NetInfo.addEventListener(state => {
-      if (state.isConnected) {
-        this.handleOnline()
-      } else {
-        this.handleOffline()
+    // Set up NetInfo listener and load AsyncStorage queue if available.
+    // Wrap in try/catch because this module may be imported in non-RN envs
+    // (e.g., node scripts) where these native modules aren't present.
+    try {
+      if (NetInfo && typeof NetInfo.addEventListener === 'function') {
+        NetInfo.addEventListener(state => {
+          try {
+            if (state && state.isConnected) {
+              this.handleOnline()
+            } else {
+              this.handleOffline()
+            }
+          } catch (inner) {
+            // avoid throwing during event handling
+            console.warn('[ErrorLogger] NetInfo handler error', inner)
+          }
+        })
       }
-    })
+    } catch (e) {
+      // NetInfo isn't available in this runtime; continue without online/offline tracking
+      console.warn('[ErrorLogger] NetInfo not available, skipping network listener')
+      this.isOnline = true
+    }
+
     // Try to load offline queue from AsyncStorage (if available)
-    this.loadOfflineQueue()
+    try {
+      this.loadOfflineQueue()
+    } catch (e) {
+      console.warn('[ErrorLogger] AsyncStorage not available, skipping offline queue load')
+    }
   }
 
   private handleOnline() {
@@ -60,6 +80,8 @@ class ErrorLogger {
   private processOfflineQueue() {
     if (this.offlineQueue.length > 0 && this.isOnline) {
       // In a real app, you would send these logs to your logging service
+      // Use console.log for processing messages to ensure output appears in
+      // Metro/terminal logs (console.info can be filtered in some setups).
       console.log("Processing offline error logs:", this.offlineQueue)
 
       // Clear the queue after processing
@@ -116,7 +138,9 @@ class ErrorLogger {
     // Log to console with normalized context so it's useful in RN overlay and logs
     switch (level) {
       case "info":
-        console.info(`[INFO] ${message}`, normalizedContext)
+        // console.info is not always visible in some Metro/Terminal setups,
+        // so also use console.log which is more reliable across environments.
+        console.log(`[INFO] ${message}`, normalizedContext)
         break
       case "warning":
         console.warn(`[WARNING] ${message}`, normalizedContext)
