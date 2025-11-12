@@ -3,11 +3,13 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { WithdrawScreen } from "../../components/withdraw-screen";
+import { EmptyState } from "../../components/ui/empty-state";
+import { PaymentMethodSkeleton, TransactionsListSkeleton } from "../../components/ui/skeleton-loaders";
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
@@ -23,8 +25,21 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const { balance, deposit, transactions } = useWallet();
-  const { paymentMethods, isLoading: stripeLoading } = useStripe();
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const { balance, deposit, transactions, refresh: refreshWallet } = useWallet();
+  const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        refreshWallet?.(),
+        loadPaymentMethods?.()
+      ].filter(Boolean))
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
@@ -50,7 +65,17 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#ffffff"
+          colors={['#10b981']}
+        />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
@@ -123,8 +148,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             showsVerticalScrollIndicator={false}
           >
             {stripeLoading ? (
-              <View style={[styles.accountCard, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={styles.accountName}>Loading payment methods...</Text>
+              <View style={{ paddingVertical: 8 }}>
+                <PaymentMethodSkeleton />
+                <PaymentMethodSkeleton />
               </View>
             ) : paymentMethods.length === 0 ? (
               <TouchableOpacity 
@@ -171,25 +197,34 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
-            {bountyTransactions.length === 0 ? (
-              <View style={styles.emptyState}> 
-                <Text style={styles.emptyStateText}>No bounty transactions yet</Text>
-              </View>
-            ) : bountyTransactions.map(tx => (
-              <View key={tx.id} style={styles.bountyCard}>
-                <Text style={styles.bountyName}>{
-                  tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
-                } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
-                <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
-              </View>
-            ))}
-          </ScrollView>
+          <View style={{ minHeight: 200 }}>
+            {transactions.length === 0 && !isRefreshing ? (
+              <EmptyState
+                icon="receipt-long"
+                title="No Transactions Yet"
+                description="Your bounty transactions will appear here once you post or complete a bounty."
+                actionLabel="Browse Bounties"
+                onAction={() => {}}
+                style={{ paddingVertical: 40 }}
+              />
+            ) : (
+              <>
+                {bountyTransactions.map(tx => (
+                  <View key={tx.id} style={styles.bountyCard}>
+                    <Text style={styles.bountyName}>{
+                      tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
+                    } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
+                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
         </View>
         
       {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
       <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
-    </View>
+    </ScrollView>
   );
 
 }

@@ -2,11 +2,13 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { EmptyState } from "components/ui/empty-state"
+import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useCallback, useState } from "react"
-import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
@@ -57,7 +59,17 @@ export function MessengerScreen({
   const currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const { balance } = useWallet()
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await refresh()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const handleConversationClick = async (id: string) => {
     await markConversationReadSafe(id)
@@ -186,15 +198,25 @@ export function MessengerScreen({
   ), []);
 
   // Empty list component
-  const ListEmptyComponent = useCallback(() => (
-    <View className="flex-1 items-center justify-center px-4 py-20">
-      <MaterialIcons name="chat-bubble-outline" size={64} color="rgba(255,255,255,0.3)" />
-      <Text className="text-lg mt-4 text-center text-emerald-200">No conversations yet</Text>
-      <Text className="text-sm mt-2 text-center text-emerald-300">
-        Start a conversation from a bounty posting
-      </Text>
-    </View>
-  ), []);
+  const ListEmptyComponent = useCallback(() => {
+    if (loading) {
+      return (
+        <View className="px-4 py-6">
+          <ConversationsListSkeleton count={5} />
+        </View>
+      );
+    }
+    
+    return (
+      <EmptyState
+        icon="chat-bubble-outline"
+        title="No Conversations Yet"
+        description="Start a conversation by applying to a bounty or posting one yourself."
+        actionLabel="Browse Bounties"
+        onAction={() => onNavigate?.('bounty')}
+      />
+    );
+  }, [loading]);
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
@@ -262,25 +284,27 @@ export function MessengerScreen({
         </View>
       )}
     
-      {loading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#ffffff" />
-        </View>
-      ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={keyExtractor}
-          renderItem={renderConversationItem}
-          contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 96 }}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={ListEmptyComponent}
-          // Performance optimizations
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          initialNumToRender={10}
-        />
-      )}
+      <FlatList
+        data={conversations}
+        keyExtractor={keyExtractor}
+        renderItem={renderConversationItem}
+        contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 96 }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={ListEmptyComponent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#ffffff"
+            colors={['#10b981']}
+          />
+        }
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        initialNumToRender={10}
+      />
 
       {/* Bottom navigation is provided by the app container (BountyApp) */}
     </View>
