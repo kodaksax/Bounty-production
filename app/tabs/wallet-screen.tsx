@@ -26,15 +26,15 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { balance, deposit, transactions, refreshTransactions } = useWallet();
-  const { paymentMethods, isLoading: stripeLoading, refreshPaymentMethods } = useStripe();
+  const { balance, deposit, transactions, refresh: refreshWallet } = useWallet();
+  const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
       await Promise.all([
-        refreshTransactions?.(),
-        refreshPaymentMethods?.()
+        refreshWallet?.(),
+        loadPaymentMethods?.()
       ].filter(Boolean))
     } finally {
       setIsRefreshing(false)
