@@ -333,6 +333,196 @@ export const bountyService = {
   },
 
   /**
+   * Advanced search with filtering and sorting
+   */
+  async searchWithFilters(filters: {
+    keywords?: string;
+    location?: string;
+    minAmount?: number;
+    maxAmount?: number;
+    status?: string[];
+    workType?: 'online' | 'in_person';
+    isForHonor?: boolean;
+    skills?: string[];
+    sortBy?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'distance_asc';
+    limit?: number;
+    offset?: number;
+  }): Promise<Bounty[]> {
+    try {
+      if (isSupabaseConfigured) {
+        const limit = filters.limit ?? 20
+        const offset = filters.offset ?? 0
+        
+        let query = supabase
+          .from('bounties')
+          .select(`
+            *,
+            profiles!bounties_profiles_fkey (
+              username,
+              avatar
+            )
+          `)
+
+        // Apply filters
+        if (filters.status && filters.status.length > 0) {
+          query = query.in('status', filters.status)
+        } else {
+          query = query.neq('status', 'archived')
+        }
+
+        if (filters.keywords) {
+          query = query.or(`title.ilike.%${filters.keywords}%,description.ilike.%${filters.keywords}%`)
+        }
+
+        if (filters.location) {
+          query = query.ilike('location', `%${filters.location}%`)
+        }
+
+        if (filters.minAmount !== undefined) {
+          query = query.gte('amount', filters.minAmount)
+        }
+
+        if (filters.maxAmount !== undefined) {
+          query = query.lte('amount', filters.maxAmount)
+        }
+
+        if (filters.workType) {
+          query = query.eq('work_type', filters.workType)
+        }
+
+        if (filters.isForHonor !== undefined) {
+          query = query.eq('is_for_honor', filters.isForHonor)
+        }
+
+        if (filters.skills && filters.skills.length > 0) {
+          // Search in skills_required field
+          const skillsPattern = filters.skills.join('|')
+          query = query.or(filters.skills.map(s => `skills_required.ilike.%${s}%`).join(','))
+        }
+
+        // Apply sorting
+        switch (filters.sortBy) {
+          case 'date_desc':
+            query = query.order('created_at', { ascending: false })
+            break
+          case 'date_asc':
+            query = query.order('created_at', { ascending: true })
+            break
+          case 'amount_desc':
+            query = query.order('amount', { ascending: false })
+            break
+          case 'amount_asc':
+            query = query.order('amount', { ascending: true })
+            break
+          default:
+            query = query.order('created_at', { ascending: false })
+        }
+
+        query = query.range(offset, offset + limit - 1)
+
+        const { data, error } = await query
+
+        if (error) {
+          const msg = (error as any)?.message ?? JSON.stringify(error)
+          logger.error('Supabase searchWithFilters error', { error, filters })
+          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
+            // Try without join
+            let queryNoJoin = supabase.from('bounties').select('*')
+            
+            if (filters.status && filters.status.length > 0) {
+              queryNoJoin = queryNoJoin.in('status', filters.status)
+            } else {
+              queryNoJoin = queryNoJoin.neq('status', 'archived')
+            }
+
+            if (filters.keywords) {
+              queryNoJoin = queryNoJoin.or(`title.ilike.%${filters.keywords}%,description.ilike.%${filters.keywords}%`)
+            }
+
+            // Apply other filters...
+            if (filters.location) {
+              queryNoJoin = queryNoJoin.ilike('location', `%${filters.location}%`)
+            }
+
+            if (filters.minAmount !== undefined) {
+              queryNoJoin = queryNoJoin.gte('amount', filters.minAmount)
+            }
+
+            if (filters.maxAmount !== undefined) {
+              queryNoJoin = queryNoJoin.lte('amount', filters.maxAmount)
+            }
+
+            if (filters.workType) {
+              queryNoJoin = queryNoJoin.eq('work_type', filters.workType)
+            }
+
+            if (filters.isForHonor !== undefined) {
+              queryNoJoin = queryNoJoin.eq('is_for_honor', filters.isForHonor)
+            }
+
+            // Apply sorting
+            switch (filters.sortBy) {
+              case 'date_desc':
+                queryNoJoin = queryNoJoin.order('created_at', { ascending: false })
+                break
+              case 'date_asc':
+                queryNoJoin = queryNoJoin.order('created_at', { ascending: true })
+                break
+              case 'amount_desc':
+                queryNoJoin = queryNoJoin.order('amount', { ascending: false })
+                break
+              case 'amount_asc':
+                queryNoJoin = queryNoJoin.order('amount', { ascending: true })
+                break
+              default:
+                queryNoJoin = queryNoJoin.order('created_at', { ascending: false })
+            }
+
+            queryNoJoin = queryNoJoin.range(offset, offset + limit - 1)
+
+            const { data: dataNoJoin, error: rawErr } = await queryNoJoin
+            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr))
+            const merged = await attachProfilesToBounties(dataNoJoin || [])
+            return merged as Bounty[]
+          }
+          throw new Error(msg)
+        }
+
+        const bounties = (data || []).map((item: any) => ({
+          ...item,
+          poster_id: item.user_id ?? item.poster_id,
+          user_id: item.user_id ?? item.poster_id,
+          username: item.profiles?.username,
+          poster_avatar: item.profiles?.avatar,
+          profiles: undefined,
+        }))
+
+        return bounties as Bounty[]
+      }
+
+      // API fallback - construct query parameters
+      const params = new URLSearchParams()
+      if (filters.keywords) params.append('search', filters.keywords)
+      if (filters.location) params.append('location', filters.location)
+      if (filters.minAmount !== undefined) params.append('minAmount', String(filters.minAmount))
+      if (filters.maxAmount !== undefined) params.append('maxAmount', String(filters.maxAmount))
+      if (filters.workType) params.append('workType', filters.workType)
+      if (filters.isForHonor !== undefined) params.append('isForHonor', String(filters.isForHonor))
+      if (filters.sortBy) params.append('sortBy', filters.sortBy)
+      if (filters.limit) params.append('limit', String(filters.limit))
+      if (filters.offset) params.append('offset', String(filters.offset))
+
+      const response = await fetch(`${getApiBaseUrl()}/api/bounties/search?${params.toString()}`)
+      if (!response.ok) throw new Error(`Search API failed: ${response.status}`)
+      const json = await response.json()
+      return Array.isArray(json) ? (json as Bounty[]) : []
+    } catch (err) {
+      logger.error('searchWithFilters failed', { filters, error: (err as any)?.message })
+      return []
+    }
+  },
+
+  /**
    * Get all bounties
    */
   async getAll(options?: {

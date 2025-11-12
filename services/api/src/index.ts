@@ -65,6 +65,7 @@ const { users } = require('./db/schema');
 const { authMiddleware } = require('./middleware/auth');
 const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
+const { registerSearchRoutes } = require('./routes/search');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
@@ -86,6 +87,9 @@ const startServer = async () => {
   
   // Register notification routes
   await registerNotificationRoutes(fastify);
+  
+  // Register search routes
+  await registerSearchRoutes(fastify);
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {

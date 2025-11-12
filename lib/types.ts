@@ -202,3 +202,47 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+// Search & Filter Types
+export type BountySortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'distance_asc';
+export type UserSortOption = 'relevance' | 'followers_desc' | 'date_desc';
+
+export interface BountySearchFilters {
+  keywords?: string;
+  location?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  status?: string[];
+  workType?: 'online' | 'in_person';
+  isForHonor?: boolean;
+  skills?: string[];
+  sortBy?: BountySortOption;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UserSearchFilters {
+  keywords?: string;
+  skills?: string[];
+  location?: string;
+  verificationStatus?: 'unverified' | 'pending' | 'verified';
+  sortBy?: UserSortOption;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SearchResult<T> {
+  results: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export interface RecentSearch {
+  id: string;
+  type: 'bounty' | 'user';
+  query: string;
+  filters?: BountySearchFilters | UserSearchFilters;
+  timestamp: string;
+}
