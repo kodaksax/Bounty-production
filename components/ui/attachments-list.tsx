@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Attachment } from 'lib/types';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AttachmentViewerModal } from '../attachment-viewer-modal';
 
 interface AttachmentsListProps {
   attachments: Attachment[];
@@ -11,8 +12,27 @@ interface AttachmentsListProps {
 /**
  * List component to display bounty attachments with file info.
  * Shows thumbnails for images or file icons for other types.
+ * Includes integrated viewer modal for viewing and downloading attachments.
  */
 export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsListProps) {
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+
+  const handleAttachmentPress = (attachment: Attachment) => {
+    if (onAttachmentPress) {
+      // If custom handler provided, use it
+      onAttachmentPress(attachment);
+    } else {
+      // Otherwise, open in viewer modal
+      setSelectedAttachment(attachment);
+      setViewerVisible(true);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setViewerVisible(false);
+    setSelectedAttachment(null);
+  };
   if (!attachments || attachments.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -46,8 +66,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
     return (
       <TouchableOpacity
         style={styles.attachmentItem}
-        onPress={() => onAttachmentPress?.(item)}
-        disabled={!onAttachmentPress}
+        onPress={() => handleAttachmentPress(item)}
         accessibilityRole="button"
         accessibilityLabel={`Attachment: ${item.name}, ${sizeText}`}
       >
@@ -73,14 +92,23 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Attachments</Text>
-      <View style={styles.listContent}>
-        {attachments.map((att) => (
-          <View key={att.id}>{renderAttachment({ item: att })}</View>
-        ))}
+    <>
+      <View style={styles.container}>
+        <Text style={styles.label}>Attachments</Text>
+        <View style={styles.listContent}>
+          {attachments.map((att) => (
+            <View key={att.id}>{renderAttachment({ item: att })}</View>
+          ))}
+        </View>
       </View>
-    </View>
+
+      {/* Attachment Viewer Modal */}
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={selectedAttachment}
+        onClose={handleCloseViewer}
+      />
+    </>
   );
 }
 
