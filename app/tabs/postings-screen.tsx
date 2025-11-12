@@ -13,7 +13,7 @@ import { getCurrentUserId } from "lib/utils/data-utils"
 import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, findNodeHandle, FlatList, InteractionManager, Keyboard, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, findNodeHandle, FlatList, InteractionManager, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -24,6 +24,8 @@ import { EditPostingModal } from "../../components/edit-posting-modal"
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { EmptyState } from '../../components/ui/empty-state'
+import { PostingsListSkeleton, ApplicantCardSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
@@ -114,6 +116,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     inProgress: true,
     requests: true,
   })
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [postSuccess, setPostSuccess] = useState(false)
@@ -305,7 +308,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Combined refresh for both hunter and poster views
   const refreshAll = React.useCallback(async () => {
-    await Promise.all([loadMyBounties(), loadInProgress()])
+    setIsRefreshing(true)
+    try {
+      await Promise.all([loadMyBounties(), loadInProgress()])
+    } finally {
+      setIsRefreshing(false)
+    }
   }, [loadMyBounties, loadInProgress])
 
   const handleChooseAmount = (val: number) => {
@@ -1197,10 +1205,26 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   )}
                   ListEmptyComponent={
                     isLoading.inProgress ? (
-                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
+                      <View className="px-4 py-6">
+                        <PostingsListSkeleton count={3} />
+                      </View>
                     ) : (
-                      <View className="text-center py-10 text-emerald-200"><Text>No applied bounties yet</Text></View>
+                      <EmptyState
+                        icon="work-outline"
+                        title="No Active Work"
+                        description="You haven't applied to any bounties yet. Browse the main feed to find opportunities!"
+                        actionLabel="Browse Bounties"
+                        onAction={() => setActiveScreen('bounty')}
+                      />
                     )
+                  }
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={isRefreshing}
+                      onRefresh={refreshAll}
+                      tintColor="#ffffff"
+                      colors={['#10b981']}
+                    />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
                   showsVerticalScrollIndicator={false}
@@ -1232,10 +1256,28 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   )}
                   ListEmptyComponent={
                     isLoading.requests ? (
-                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
+                      <View className="px-4 py-6">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <ApplicantCardSkeleton key={i} />
+                        ))}
+                      </View>
                     ) : (
-                      <View className="text-center py-10 text-emerald-2 00"><Text>No bounty requests</Text></View>
+                      <EmptyState
+                        icon="inbox"
+                        title="No Requests Yet"
+                        description="When hunters apply to your bounties, you'll see their applications here."
+                        actionLabel="Post a Bounty"
+                        onAction={() => setActiveTab('new')}
+                      />
                     )
+                  }
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={isRefreshing}
+                      onRefresh={refreshAll}
+                      tintColor="#ffffff"
+                      colors={['#10b981']}
+                    />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
                   showsVerticalScrollIndicator={false}
@@ -1295,15 +1337,26 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   )}
                   ListEmptyComponent={
                     isLoading.myBounties ? (
-                      <View className="flex justify-center items-center py-10"><ActivityIndicator size="large" color="white" /></View>
-                    ) : (
-                      <View className="text-center py-10 text-emerald-200">
-                        <Text>You haven't posted any bounties yet</Text>
-                        <TouchableOpacity onPress={() => setActiveTab('new')} className="mt-4 px-6 py-3 bg-emerald-500 rounded-lg text-white text-base touch-target-min">
-                          <Text className="text-white text-base">Create Your First Bounty</Text>
-                        </TouchableOpacity>
+                      <View className="px-4 py-6">
+                        <PostingsListSkeleton count={3} />
                       </View>
+                    ) : (
+                      <EmptyState
+                        icon="add-box"
+                        title="No Postings Yet"
+                        description="You haven't posted any bounties yet. Create your first bounty to get started!"
+                        actionLabel="Create Your First Bounty"
+                        onAction={() => setActiveTab('new')}
+                      />
                     )
+                  }
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={isRefreshing}
+                      onRefresh={refreshAll}
+                      tintColor="#ffffff"
+                      colors={['#10b981']}
+                    />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
                   showsVerticalScrollIndicator={false}

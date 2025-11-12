@@ -5,6 +5,8 @@ import { AchievementsGrid } from "components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
+import { EmptyState } from "components/ui/empty-state";
+import { ProfileSkeleton } from "components/ui/skeleton-loaders";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -12,7 +14,7 @@ import { bountyService } from "lib/services/bounty-service";
 import { useFocusEffect } from "expo-router";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -25,6 +27,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const [showSettings, setShowSettings] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [updateMessage, setUpdateMessage] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [profileData, setProfileData] = useState({
     name: "",
     about: "",
@@ -187,6 +190,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     setShowSettings(false)
     // Refresh profile data when returning from settings
     try {
+      setIsRefreshing(true)
       await Promise.all([refreshAuthProfile(), refreshUserProfile()])
       // Show brief success message
       setUpdateMessage('Profile refreshed')
@@ -195,6 +199,17 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       console.error('Error refreshing profile:', error)
       setUpdateMessage('Failed to refresh profile')
       setTimeout(() => setUpdateMessage(null), 3000)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([refreshAuthProfile(), refreshUserProfile()])
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -291,7 +306,18 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         </View>
       </View>
 
-      <ScrollView className="flex-1 pb-40" contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView 
+        className="flex-1 pb-40" 
+        contentContainerStyle={{ paddingBottom: 140 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#ffffff"
+            colors={['#10b981']}
+          />
+        }
+      >
         {/* Profile + Stats merged card */}
         {isProfileReady ? (
           // If this is the signed-in user's profile, pass undefined so the hook resolves the "current-user" profile
@@ -308,9 +334,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           />
         ) : (
           <View className="px-4 py-4">
-            <View className="bg-black/20 rounded-md p-3">
-              <Text className="text-sm text-emerald-200">Loading profile…</Text>
-            </View>
+            <ProfileSkeleton />
           </View>
         )}
 
