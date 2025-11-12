@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import "../global.css";
 import { useAuthContext } from '../hooks/use-auth-context';
+import { useSessionMonitor } from '../hooks/useSessionMonitor';
 import { AdminProvider } from '../lib/admin-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
@@ -166,6 +167,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
+    // Monitor session expiration (only when authenticated)
+    useSessionMonitor();
+    
     return (
       <RootFrame bgColor={color}>
         {showBranded ? (

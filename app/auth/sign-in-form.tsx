@@ -9,9 +9,12 @@ import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { Checkbox } from '../../components/ui/checkbox'
+import { ErrorBanner } from '../../components/error-banner'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { ROUTES } from '../../lib/routes'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { getUserFriendlyError, getValidationError } from '../../lib/utils/error-messages'
+import { useFormSubmission } from '../../hooks/useFormSubmission'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -26,12 +29,97 @@ export function SignInForm() {
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({})
-  const [authError, setAuthError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const [rememberMe, setRememberMe] = useState(false)
+  const [socialAuthLoading, setSocialAuthLoading] = useState(false)
+  const [socialAuthError, setSocialAuthError] = useState<any>(null)
+  
+  // Use form submission hook with rate limiting
+  const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
+    async () => {
+      // Check for lockout
+      if (lockoutUntil && Date.now() < lockoutUntil) {
+        const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
+        throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
+      }
+
+      if (!validateForm()) {
+        throw new Error('Please fix the form errors')
+      }
+      
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+      }
+
+      // If identifier may be username, your backend should resolve username -> email.
+      // Here we assume email sign-in:
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: identifier.trim().toLowerCase(), // Normalize email
+        password,
+      })
+      
+      if (error) {
+        // Track failed login attempts
+        const newAttempts = loginAttempts + 1
+        setLoginAttempts(newAttempts)
+        
+        // Lock out after 5 failed attempts for 5 minutes
+        if (newAttempts >= 5) {
+          const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
+          setLockoutUntil(lockout)
+          throw new Error('Too many failed attempts. Please try again in 5 minutes.')
+        }
+        
+        // Handle specific error cases with user-friendly messages
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. Please try again.')
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Please confirm your email address before signing in.')
+        } else {
+          throw error
+        }
+      }
+      
+      // Reset login attempts on success
+      setLoginAttempts(0)
+      setLockoutUntil(null)
+      
+      // Handle remember me preference
+      try {
+        if (rememberMe) {
+          await AsyncStorage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
+        } else {
+          await AsyncStorage.removeItem('rememberMeEmail')
+        }
+      } catch (error) {
+        console.error('[sign-in] Failed to save remember me preference:', error)
+      }
+      
+      if (data.session) {
+        // Check if user has completed onboarding (has profile in Supabase)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', data.session.user.id)
+          .single()
+        
+        if (!profile || !profile.username) {
+          // User needs to complete onboarding
+          router.replace('/onboarding/username')
+        } else {
+          // User has completed onboarding, go to app
+          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+        }
+      } else {
+        throw new Error('Authentication failed. Please try again.')
+      }
+    },
+    {
+      debounceMs: 500, // Prevent double-submissions
+    }
+  );
 
   // Google config (safe placeholders keep the app from crashing)
   const iosGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'placeholder-ios-client-id'
@@ -82,106 +170,22 @@ export function SignInForm() {
     
     if (!identifier || identifier.trim().length === 0) {
       errors.identifier = 'Email is required'
+    } else {
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(identifier.trim())) {
+        errors.identifier = 'Please enter a valid email address'
+      }
     }
     
     if (!password) {
       errors.password = 'Password is required'
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters'
     }
     
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
-  }
-
-  const handleSubmit = async () => {
-    setFieldErrors({})
-    setAuthError(null)
-
-    // Check for lockout
-    if (lockoutUntil && Date.now() < lockoutUntil) {
-      const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
-      setAuthError(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
-      return
-    }
-
-    if (!validateForm()) return
-    
-    if (!isSupabaseConfigured) {
-      setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      // If identifier may be username, your backend should resolve username -> email.
-      // Here we assume email sign-in:
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: identifier.trim().toLowerCase(), // Normalize email
-        password,
-      })
-      
-      if (error) {
-        // Track failed login attempts
-        const newAttempts = loginAttempts + 1
-        setLoginAttempts(newAttempts)
-        
-        // Lock out after 5 failed attempts for 5 minutes
-        if (newAttempts >= 5) {
-          const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
-          setLockoutUntil(lockout)
-          setAuthError('Too many failed attempts. Please try again in 5 minutes.')
-          return
-        }
-        
-        // Handle specific error cases
-        if (error.message.includes('Invalid login credentials')) {
-          setAuthError('Invalid email or password. Please try again.')
-        } else if (error.message.includes('Email not confirmed')) {
-          setAuthError('Please confirm your email address before signing in.')
-        } else {
-          setAuthError(error.message)
-        }
-        return
-      }
-      
-      // Reset login attempts on success
-      setLoginAttempts(0)
-      setLockoutUntil(null)
-      
-      // Handle remember me preference
-      try {
-        if (rememberMe) {
-          await AsyncStorage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
-        } else {
-          await AsyncStorage.removeItem('rememberMeEmail')
-        }
-      } catch (error) {
-        console.error('[sign-in] Failed to save remember me preference:', error)
-      }
-      
-      if (data.session) {
-        // Check if user has completed onboarding (has profile in Supabase)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', data.session.user.id)
-          .single()
-        
-        if (!profile || !profile.username) {
-          // User needs to complete onboarding
-          router.replace('/onboarding/username')
-        } else {
-          // User has completed onboarding, go to app
-          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
-        }
-      } else {
-        setAuthError('Authentication failed. Please try again.')
-      }
-    } catch (err: any) {
-      setAuthError(err?.message || 'An unexpected error occurred. Please try again.')
-      console.error('[sign-in] Error:', err)
-    } finally {
-      setIsLoading(false)
-    }
   }
 
   // Handle Google auth completion -> exchange id_token with Supabase
@@ -191,15 +195,15 @@ export function SignInForm() {
       if (response?.type !== 'success') return
       const idToken = response.params.id_token
       if (!idToken) {
-        setAuthError('Google did not return id_token')
+        setSocialAuthError('Google did not return id_token')
         return
       }
       if (!isSupabaseConfigured) {
-        setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+        setSocialAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
         return
       }
       try {
-        setIsLoading(true)
+        setSocialAuthLoading(true)
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
@@ -221,13 +225,13 @@ export function SignInForm() {
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
-          setAuthError('No session returned after Google sign-in.')
+          setSocialAuthError('No session returned after Google sign-in.')
         }
       } catch (e: any) {
-        setAuthError(e?.message || 'Google sign-in failed')
+        setSocialAuthError(e?.message || 'Google sign-in failed')
         console.error('[google] Error:', e)
       } finally {
-        setIsLoading(false)
+        setSocialAuthLoading(false)
       }
     }
     run()
@@ -244,11 +248,13 @@ export function SignInForm() {
             <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
           </View>
           <View className="gap-5">
-            {authError ? (
-              <View className="bg-red-500/20 border border-red-400 rounded p-3">
-                <Text className="text-red-200 text-sm">{authError}</Text>
-              </View>
-            ) : null}
+            {authError && (
+              <ErrorBanner
+                error={getUserFriendlyError(authError)}
+                onDismiss={resetError}
+                onAction={authError.retryable ? () => handleSubmit() : undefined}
+              />
+            )}
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Email</Text>
@@ -265,7 +271,7 @@ export function SignInForm() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
-                editable={!isLoading}
+                editable={!isSubmitting}
                 className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
               />
@@ -292,7 +298,7 @@ export function SignInForm() {
                   placeholder="Password"
                   secureTextEntry={!showPassword}
                   autoComplete="password"
-                  editable={!isLoading}
+                  editable={!isSubmitting}
                   className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                 />
@@ -311,18 +317,18 @@ export function SignInForm() {
               <Checkbox 
                 checked={rememberMe} 
                 onCheckedChange={setRememberMe}
-                disabled={isLoading}
+                disabled={isSubmitting}
               />
               <TouchableOpacity 
-                onPress={() => !isLoading && setRememberMe(!rememberMe)}
-                disabled={isLoading}
+                onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
+                disabled={isSubmitting}
               >
                 <Text className="text-white/80 text-sm ml-2">Remember me</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
-              {isLoading ? (
+            <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+              {isSubmitting ? (
                 <>
                   <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
                 </>
@@ -385,7 +391,7 @@ export function SignInForm() {
             )}
 
             <TouchableOpacity
-              disabled={!isGoogleConfigured || isLoading || !request}
+              disabled={!isGoogleConfigured || isSubmitting || !request}
               onPress={() => promptAsync()}
               className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
             >

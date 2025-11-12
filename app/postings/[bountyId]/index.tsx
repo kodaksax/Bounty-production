@@ -1,4 +1,3 @@
-// app/postings/[bountyId]/index.tsx - Bounty Dashboard
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -19,6 +18,7 @@ import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { NotFoundScreen } from '../../../components/not-found-screen';
 
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
@@ -214,10 +214,26 @@ export default function BountyDashboard() {
   }
 
   if (error || !bounty) {
+    // Check if it's a "not found" error
+    const isNotFound = error?.includes('not found') || error?.includes('Not found') || !bounty;
+    
+    if (isNotFound) {
+      return (
+        <NotFoundScreen
+          title="Bounty Not Found"
+          message="The bounty you're looking for doesn't exist or has been removed."
+          icon="search-off"
+          actionText="Go Back"
+          onAction={() => router.back()}
+        />
+      );
+    }
+    
+    // Other errors - show error screen with retry
     return (
       <View style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
-        <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
+        <Text style={styles.errorText}>{error || 'Failed to load bounty'}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>

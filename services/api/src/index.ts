@@ -63,6 +63,7 @@ const STARTUP_SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const STARTUP_USE_SUPABASE = !!(STARTUP_SUPABASE_URL && STARTUP_SUPABASE_SERVICE_ROLE_KEY);
 const { users } = require('./db/schema');
 const { authMiddleware } = require('./middleware/auth');
+const { rateLimitMiddleware } = require('./middleware/rate-limit');
 const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
@@ -81,6 +82,15 @@ const fastify = Fastify({
 // Register WebSocket plugin
 const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
+  
+  // Register global rate limiting middleware for all routes except health
+  fastify.addHook('onRequest', async (request, reply) => {
+    // Skip rate limiting for health check
+    if (request.url === '/health') {
+      return;
+    }
+    await rateLimitMiddleware(request, reply);
+  });
   
   // Register admin routes with security middleware
   await registerAdminRoutes(fastify);

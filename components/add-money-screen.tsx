@@ -9,6 +9,8 @@ import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
 import { useWallet } from '../lib/wallet-context'
 import { PaymentMethodsModal } from './payment-methods-modal'
+import { ErrorBanner } from './error-banner'
+import { getUserFriendlyError, getPaymentErrorMessage } from '../lib/utils/error-messages'
 
 import { API_BASE_URL } from 'lib/config/api'
 
@@ -22,6 +24,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
+  const [error, setError] = useState<any>(null)
   const { deposit } = useWallet()
   const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
   const { session } = useAuthContext()
@@ -77,6 +80,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       }
 
       setIsProcessing(true)
+      setError(null)
       
       try {
         // Get auth token
@@ -137,19 +141,13 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             }]
           )
         } else {
-          Alert.alert(
-            'Payment Failed', 
-            result.error || 'Unable to process payment. Please try again.',
-            [{ text: 'OK' }]
-          )
+          // Get user-friendly payment error message
+          const errorMsg = getPaymentErrorMessage(result.error)
+          setError({ message: errorMsg, type: 'payment' })
         }
-      } catch (error: any) {
-        console.error('Payment error:', error)
-        Alert.alert(
-          'Error', 
-          error.message || 'Something went wrong. Please try again.',
-          [{ text: 'OK' }]
-        )
+      } catch (err: any) {
+        console.error('Payment error:', err)
+        setError(err)
       } finally {
         setIsProcessing(false)
       }
@@ -189,6 +187,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
     }
 
     setIsProcessing(true)
+    setError(null)
 
     try {
       const result = await applePayService.processPayment({
@@ -220,11 +219,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         // user cancelled - no alert
         console.log('Apple Pay cancelled by user')
       } else {
-        Alert.alert('Payment Failed', result.error || 'Unable to process Apple Pay payment.', [{ text: 'OK' }])
+        // Show error banner instead of alert
+        setError({ message: result.error || 'Unable to process Apple Pay payment.', type: 'payment' })
       }
-    } catch (error) {
-      console.error('Apple Pay error:', error)
-      Alert.alert('Error', 'Something went wrong with Apple Pay. Please try again.', [{ text: 'OK' }])
+    } catch (err) {
+      console.error('Apple Pay error:', err)
+      setError(err)
     } finally {
       setIsProcessing(false)
     }
@@ -256,6 +256,17 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       <View className="items-center justify-center py-6">
         <Text className="text-white" style={{ fontSize: 56, fontWeight: '800' }}>${amount}</Text>
       </View>
+
+      {/* Error Display */}
+      {error && (
+        <View className="px-4 mb-4">
+          <ErrorBanner
+            error={getUserFriendlyError(error)}
+            onDismiss={() => setError(null)}
+            onAction={error.type === 'payment' ? () => handleAddMoney() : undefined}
+          />
+        </View>
+      )}
 
       {/* Keypad */}
       <View className="flex-1 px-8 pb-40">
