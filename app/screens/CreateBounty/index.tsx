@@ -9,6 +9,9 @@ import { bountyService } from 'app/services/bountyService';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ErrorBanner } from 'components/error-banner';
+import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { useFormSubmission } from 'hooks/useFormSubmission';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -27,10 +30,56 @@ const STEP_TITLES = [
 
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft();
   const insets = useSafeAreaInsets();
+  
+  // Use form submission hook with debouncing
+  const { submit, isSubmitting, error: submitError, reset } = useFormSubmission(
+    async () => {
+      // Create the bounty (offline support built-in)
+      const result = await bountyService.createBounty(draft);
+
+      if (!result) {
+        throw new Error('Failed to create bounty');
+      }
+
+      // Clear draft on success
+      await clearDraft();
+
+      // Check if we're online to show appropriate message
+      const { offlineQueueService } = await import('lib/services/offline-queue-service');
+      const isOnline = offlineQueueService.getOnlineStatus();
+
+      // Show success message
+      Alert.alert(
+        isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📤',
+        isOnline 
+          ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
+          : 'You\'re offline. Your bounty will be posted automatically when you reconnect.',
+        [
+          {
+            text: isOnline ? 'View Bounty' : 'OK',
+            onPress: () => {
+              if (onComplete) {
+                onComplete(result.id.toString());
+              }
+            },
+          },
+        ]
+      );
+    },
+    {
+      debounceMs: 1000,
+      onError: (error) => {
+        const userError = getUserFriendlyError(error);
+        Alert.alert(
+          userError.title,
+          userError.message + '\n\nYour draft has been saved. Please try again.',
+          [{ text: 'OK' }]
+        );
+      },
+    }
+  );
 
   // Auto-save draft whenever it changes
   useEffect(() => {
@@ -68,57 +117,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         },
       ]
     );
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      // Create the bounty (offline support built-in)
-      const result = await bountyService.createBounty(draft);
-
-      if (!result) {
-        throw new Error('Failed to create bounty');
-      }
-
-      // Clear draft on success
-      await clearDraft();
-
-      // Check if we're online to show appropriate message
-      const { offlineQueueService } = await import('lib/services/offline-queue-service');
-      const isOnline = offlineQueueService.getOnlineStatus();
-
-      // Show success message
-      Alert.alert(
-        isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📤',
-        isOnline 
-          ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
-          : 'You\'re offline. Your bounty will be posted automatically when you reconnect.',
-        [
-          {
-            text: isOnline ? 'View Bounty' : 'OK',
-            onPress: () => {
-              if (onComplete) {
-                onComplete(result.id.toString());
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Error submitting bounty:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      setSubmitError(errorMessage);
-
-      Alert.alert(
-        'Failed to Post Bounty',
-        errorMessage + '\n\nYour draft has been saved. Please try again.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   // Notify consumer on initial mount and whenever currentStep changes.
@@ -188,7 +186,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           {currentStep === 5 && (
             <StepReview
               draft={draft}
-              onSubmit={handleSubmit}
+              onSubmit={submit}
               onBack={handleBack}
               isSubmitting={isSubmitting}
             />
@@ -197,8 +195,12 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
 
         {/* Error Display */}
         {submitError && (
-          <View className="bg-red-500/90 px-4 py-3">
-            <Text className="text-white text-center">{submitError}</Text>
+          <View className="px-4 pb-4">
+            <ErrorBanner
+              error={getUserFriendlyError(submitError)}
+              onDismiss={reset}
+              onAction={submitError ? () => submit(draft) : undefined}
+            />
           </View>
         )}
       </View>
