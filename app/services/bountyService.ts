@@ -3,6 +3,8 @@ import { bountyService as baseBountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { getCurrentUserId } from 'lib/utils/data-utils';
+import { analyticsService } from 'lib/services/analytics-service';
+import { performanceService } from 'lib/services/performance-service';
 
 export interface CreateBountyPayload {
   title: string;
@@ -22,6 +24,13 @@ export const bountyService = {
    * Create a bounty from draft data
    */
   async createBounty(draft: BountyDraft): Promise<Bounty | null> {
+    // Start performance measurement
+    performanceService.startMeasurement('bounty_create', 'bounty_create', {
+      workType: draft.workType,
+      isForHonor: draft.isForHonor,
+      hasAttachments: (draft.attachments?.length || 0) > 0,
+    });
+
     try {
       // Enforce posting to Supabase only for this guided flow
       if (!isSupabaseConfigured) {
@@ -60,9 +69,38 @@ export const bountyService = {
         throw new Error('Failed to create bounty');
       }
 
+      // Track bounty creation event
+      await analyticsService.trackEvent('bounty_created', {
+        bountyId: result.id,
+        workType: draft.workType,
+        isForHonor: draft.isForHonor,
+        amount: draft.isForHonor ? 0 : draft.amount,
+        hasLocation: !!draft.location,
+        hasTimeline: !!draft.timeline,
+        hasSkills: !!draft.skills,
+        hasAttachments: (draft.attachments?.length || 0) > 0,
+        attachmentCount: draft.attachments?.length || 0,
+      });
+
+      // Increment user property for bounties created
+      await analyticsService.incrementUserProperty('bounties_created');
+
+      // End performance measurement
+      await performanceService.endMeasurement('bounty_create', {
+        success: true,
+        bountyId: result.id,
+      });
+
       return result;
     } catch (error) {
       console.error('Error creating bounty:', error);
+
+      // End performance measurement with error
+      await performanceService.endMeasurement('bounty_create', {
+        success: false,
+        error: String(error),
+      });
+
       throw error;
     }
   },
