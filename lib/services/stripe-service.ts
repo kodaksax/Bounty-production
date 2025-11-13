@@ -33,6 +33,9 @@ export interface StripeError {
   message: string;
 }
 
+import { analyticsService } from './analytics-service';
+import { performanceService } from './performance-service';
+
 class StripeService {
   private publishableKey: string = '';
   private isInitialized: boolean = false;
@@ -89,6 +92,11 @@ class StripeService {
   }
 
   async createPaymentIntent(amount: number, currency: string = 'usd'): Promise<StripePaymentIntent> {
+    performanceService.startMeasurement('payment_initiate', 'payment_process', {
+      amount,
+      currency,
+    });
+
     try {
       await this.initialize();
       
@@ -104,14 +112,43 @@ class StripeService {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 800));
       
+      // Track payment initiated
+      await analyticsService.trackEvent('payment_initiated', {
+        amount: amount,
+        currency,
+        paymentIntentId: paymentIntent.id,
+      });
+
+      await performanceService.endMeasurement('payment_initiate', {
+        success: true,
+        amount,
+      });
+
       return paymentIntent;
     } catch (error) {
       console.error('Error creating payment intent:', error);
+
+      await analyticsService.trackEvent('payment_failed', {
+        amount,
+        currency,
+        error: String(error),
+        stage: 'initiate',
+      });
+
+      await performanceService.endMeasurement('payment_initiate', {
+        success: false,
+        error: String(error),
+      });
+
       throw this.handleStripeError(error);
     }
   }
 
   async confirmPayment(paymentIntentClientSecret: string, paymentMethodId: string): Promise<StripePaymentIntent> {
+    performanceService.startMeasurement('payment_confirm', 'payment_process', {
+      paymentMethodId,
+    });
+
     try {
       await this.initialize();
       
@@ -127,9 +164,37 @@ class StripeService {
       // Simulate processing time
       await new Promise(resolve => setTimeout(resolve, 2000));
       
+      // Track payment completed
+      await analyticsService.trackEvent('payment_completed', {
+        paymentIntentId: paymentIntent.id,
+        paymentMethodId,
+        amount: paymentIntent.amount / 100,
+        currency: paymentIntent.currency,
+      });
+
+      // Increment user property for payments
+      await analyticsService.incrementUserProperty('payments_completed');
+
+      await performanceService.endMeasurement('payment_confirm', {
+        success: true,
+        paymentIntentId: paymentIntent.id,
+      });
+
       return paymentIntent;
     } catch (error) {
       console.error('Error confirming payment:', error);
+
+      await analyticsService.trackEvent('payment_failed', {
+        paymentMethodId,
+        error: String(error),
+        stage: 'confirm',
+      });
+
+      await performanceService.endMeasurement('payment_confirm', {
+        success: false,
+        error: String(error),
+      });
+
       throw this.handleStripeError(error);
     }
   }

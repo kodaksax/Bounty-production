@@ -6,6 +6,7 @@ import * as messagingService from './messaging';
 import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
 import * as supabaseMessaging from './supabase-messaging';
+import { analyticsService } from './analytics-service';
 
 export const messageService = {
   /**
@@ -64,6 +65,17 @@ export const messageService = {
 
     // Send message using persistent storage
     const message = await messagingService.sendMessage(conversationId, text, senderId);
+
+    // Track message sent event
+    await analyticsService.trackEvent('message_sent', {
+      conversationId,
+      messageLength: text.length,
+      isOnline,
+    });
+
+    // Increment user property for messages sent
+    await analyticsService.incrementUserProperty('messages_sent');
+
     return { message };
   },
 
@@ -108,6 +120,8 @@ export const messageService = {
       ? participantIds 
       : [...participantIds, userId];
     
+    let isNewConversation = false;
+
     // Try to create via Supabase RPC if available (preferred) so the canonical
     // backend stores the conversation and other clients can see it.
     try {
@@ -120,12 +134,25 @@ export const messageService = {
 
       const convId = (data as any) ?? null
       if (convId) {
+        isNewConversation = true;
+
         // Refresh conversations from Supabase and return the created one
         try {
           const list = await supabaseMessaging.fetchConversations(userId)
           const found = list.find(c => String(c.id) === String(convId))
           if (found) {
             logClientInfo('Created conversation via RPC', { convId, participantIds: pids })
+
+            // Track conversation started event
+            if (isNewConversation) {
+              await analyticsService.trackEvent('conversation_started', {
+                conversationId: found.id,
+                participantCount: allParticipants.length,
+                isGroup: allParticipants.length > 2,
+                hasBounty: !!bountyId,
+              });
+            }
+
             return found
           }
           } catch (fetchErr) {
@@ -139,7 +166,17 @@ export const messageService = {
     }
 
     // Fallback: create in local persistent layer
-    return messagingService.getOrCreateConversation(allParticipants, name, bountyId);
+    const conversation = await messagingService.getOrCreateConversation(allParticipants, name, bountyId);
+
+    // Track conversation started event (may be a new or existing conversation)
+    await analyticsService.trackEvent('conversation_started', {
+      conversationId: conversation.id,
+      participantCount: allParticipants.length,
+      isGroup: allParticipants.length > 2,
+      hasBounty: !!bountyId,
+    });
+
+    return conversation;
   },
 
   /**

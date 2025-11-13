@@ -67,6 +67,7 @@ const { rateLimitMiddleware } = require('./middleware/rate-limit');
 const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
+const { registerAnalyticsRoutes } = require('./routes/analytics');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
@@ -74,9 +75,16 @@ const { refundService } = require('./services/refund-service');
 const { stripeConnectService } = require('./services/stripe-connect-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
 
+// Import logger and analytics
+const { logger } = require('./services/logger');
+const { backendAnalytics } = require('./services/analytics');
+
+// Initialize analytics on startup
+backendAnalytics.initialize();
+
 // Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({
-  logger: true
+  logger: logger
 });
 
 // Register WebSocket plugin
@@ -94,6 +102,9 @@ const startServer = async () => {
   
   // Register admin routes with security middleware
   await registerAdminRoutes(fastify);
+  
+  // Register analytics routes with security middleware
+  await registerAnalyticsRoutes(fastify);
   
   // Register notification routes
   await registerNotificationRoutes(fastify);
@@ -481,6 +492,9 @@ process.on('SIGINT', async () => {
   
   // Stop the outbox worker
   outboxWorker.stop();
+  
+  // Flush analytics events
+  await backendAnalytics.flush();
   
   await fastify.close();
   process.exit(0);

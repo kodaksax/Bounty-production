@@ -1,0 +1,275 @@
+// lib/services/analytics-service.ts - Analytics tracking service with Mixpanel
+import { Mixpanel } from 'mixpanel-react-native';
+import * as Sentry from '@sentry/react-native';
+import { Platform } from 'react-native';
+
+// Track key user events according to requirements
+export type AnalyticsEvent = 
+  // Auth events
+  | 'user_signed_up'
+  | 'user_logged_in'
+  | 'user_logged_out'
+  | 'email_verified'
+  // Bounty events
+  | 'bounty_created'
+  | 'bounty_viewed'
+  | 'bounty_accepted'
+  | 'bounty_completed'
+  | 'bounty_cancelled'
+  // Payment events
+  | 'payment_initiated'
+  | 'payment_completed'
+  | 'payment_failed'
+  | 'escrow_funded'
+  | 'escrow_released'
+  // Messaging events
+  | 'message_sent'
+  | 'conversation_started'
+  | 'conversation_viewed'
+  // Profile events
+  | 'profile_viewed'
+  | 'profile_updated'
+  // Search events
+  | 'search_performed'
+  | 'filter_applied';
+
+export interface AnalyticsProperties {
+  [key: string]: string | number | boolean | undefined;
+}
+
+class AnalyticsService {
+  private mixpanel: Mixpanel | null = null;
+  private initialized = false;
+  private userId: string | null = null;
+
+  /**
+   * Initialize analytics services
+   * @param mixpanelToken - Mixpanel project token
+   * @param sentryDsn - Sentry DSN (optional, handled by Sentry.init)
+   */
+  async initialize(mixpanelToken: string): Promise<void> {
+    if (this.initialized) {
+      console.log('[Analytics] Already initialized');
+      return;
+    }
+
+    try {
+      // Initialize Mixpanel
+      if (mixpanelToken && mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
+        const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
+        this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
+        console.log('[Analytics] Mixpanel initialized successfully');
+      } else {
+        console.log('[Analytics] Mixpanel token not configured, analytics disabled');
+      }
+
+      this.initialized = true;
+    } catch (error) {
+      console.error('[Analytics] Failed to initialize:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Identify a user for analytics
+   * @param userId - Unique user identifier
+   * @param properties - Additional user properties
+   */
+  async identifyUser(userId: string, properties?: AnalyticsProperties): Promise<void> {
+    this.userId = userId;
+
+    try {
+      // Set user in Mixpanel
+      if (this.mixpanel) {
+        await this.mixpanel.identify(userId);
+        if (properties) {
+          await this.mixpanel.getPeople().set(properties);
+        }
+      }
+
+      // Set user in Sentry
+      Sentry.setUser({ id: userId, ...properties });
+
+      console.log('[Analytics] User identified:', userId);
+    } catch (error) {
+      console.error('[Analytics] Failed to identify user:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Track an analytics event
+   * @param event - Event name
+   * @param properties - Event properties
+   */
+  async trackEvent(event: AnalyticsEvent, properties?: AnalyticsProperties): Promise<void> {
+    try {
+      const enrichedProperties = {
+        ...properties,
+        platform: Platform.OS,
+        timestamp: new Date().toISOString(),
+        userId: this.userId,
+      };
+
+      // Track in Mixpanel
+      if (this.mixpanel) {
+        await this.mixpanel.track(event, enrichedProperties);
+      }
+
+      // Add breadcrumb to Sentry for context
+      Sentry.addBreadcrumb({
+        category: 'analytics',
+        message: event,
+        level: 'info',
+        data: enrichedProperties,
+      });
+
+      console.log('[Analytics] Event tracked:', event, enrichedProperties);
+    } catch (error) {
+      console.error('[Analytics] Failed to track event:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Update user properties
+   * @param properties - User properties to update
+   */
+  async updateUserProperties(properties: AnalyticsProperties): Promise<void> {
+    try {
+      if (this.mixpanel) {
+        await this.mixpanel.getPeople().set(properties);
+      }
+
+      // Update Sentry user context
+      Sentry.setUser({ id: this.userId || undefined, ...properties });
+
+      console.log('[Analytics] User properties updated:', properties);
+    } catch (error) {
+      console.error('[Analytics] Failed to update user properties:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Increment a user property
+   * @param property - Property name
+   * @param value - Value to increment by (default: 1)
+   */
+  async incrementUserProperty(property: string, value: number = 1): Promise<void> {
+    try {
+      if (this.mixpanel) {
+        await this.mixpanel.getPeople().increment(property, value);
+      }
+      console.log('[Analytics] User property incremented:', property, value);
+    } catch (error) {
+      console.error('[Analytics] Failed to increment user property:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Track screen view
+   * @param screenName - Name of the screen
+   * @param properties - Additional properties
+   */
+  async trackScreenView(screenName: string, properties?: AnalyticsProperties): Promise<void> {
+    try {
+      const screenProperties = {
+        screen_name: screenName,
+        ...properties,
+      };
+
+      if (this.mixpanel) {
+        await this.mixpanel.track('screen_view', screenProperties);
+      }
+
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: `Screen: ${screenName}`,
+        level: 'info',
+        data: screenProperties,
+      });
+
+      console.log('[Analytics] Screen view tracked:', screenName);
+    } catch (error) {
+      console.error('[Analytics] Failed to track screen view:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Track timing (performance monitoring)
+   * @param eventName - Event name
+   * @param duration - Duration in milliseconds
+   * @param properties - Additional properties
+   */
+  async trackTiming(eventName: string, duration: number, properties?: AnalyticsProperties): Promise<void> {
+    try {
+      const timingProperties = {
+        ...properties,
+        duration_ms: duration,
+      };
+
+      if (this.mixpanel) {
+        await this.mixpanel.track(eventName, timingProperties);
+      }
+
+      console.log('[Analytics] Timing tracked:', eventName, duration);
+    } catch (error) {
+      console.error('[Analytics] Failed to track timing:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Reset analytics (on logout)
+   */
+  async reset(): Promise<void> {
+    try {
+      this.userId = null;
+
+      if (this.mixpanel) {
+        await this.mixpanel.reset();
+      }
+
+      Sentry.setUser(null);
+
+      console.log('[Analytics] Analytics reset');
+    } catch (error) {
+      console.error('[Analytics] Failed to reset analytics:', error);
+      Sentry.captureException(error);
+    }
+  }
+
+  /**
+   * Flush pending events (useful before app exit)
+   */
+  async flush(): Promise<void> {
+    try {
+      if (this.mixpanel) {
+        await this.mixpanel.flush();
+      }
+      console.log('[Analytics] Events flushed');
+    } catch (error) {
+      console.error('[Analytics] Failed to flush events:', error);
+    }
+  }
+
+  /**
+   * Get the current user ID
+   */
+  getUserId(): string | null {
+    return this.userId;
+  }
+
+  /**
+   * Check if analytics is initialized
+   */
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+}
+
+// Export singleton instance
+export const analyticsService = new AnalyticsService();

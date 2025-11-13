@@ -2,7 +2,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Carousel from 'react-native-reanimated-carousel';
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatRow } from '../../components/admin/AdminStatRow';
@@ -12,14 +13,26 @@ import { ROUTES } from '../../lib/routes';
 export default function AdminDashboard() {
   const router = useRouter();
   const { metrics, isLoading, error, refetch } = useAdminMetrics();
+  const width = Dimensions.get('window').width;
 
   const quickLinks = [
+    { id: 'analytics', title: 'Analytics', icon: 'analytics', route: '/(admin)/analytics' },
     { id: 'bounties', title: 'Bounties', icon: 'work', route: ROUTES.ADMIN.BOUNTIES },
     { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
     { id: 'reports', title: 'Reports', icon: 'report', route: '/(admin)/reports' },
     { id: 'blocked', title: 'Blocked Users', icon: 'block', route: '/(admin)/blocked-users' },
   ];
+
+  const renderQuickLinkItem = ({ item }: { item: typeof quickLinks[0] }) => (
+    <TouchableOpacity
+      style={styles.quickLinkCard}
+      onPress={() => router.push(item.route as any)}
+    >
+      <MaterialIcons name={item.icon as any} size={40} color="#00dc50" />
+      <Text style={styles.quickLinkText}>{item.title}</Text>
+    </TouchableOpacity>
+  );
 
   if (error && !metrics) {
     return (
@@ -44,20 +57,23 @@ export default function AdminDashboard() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#00dc50" />}
       >
-        {/* Quick Links */}
+        {/* Quick Links Carousel */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Access</Text>
-          <View style={styles.quickLinksGrid}>
-            {quickLinks.map((link) => (
-              <TouchableOpacity
-                key={link.id}
-                style={styles.quickLinkCard}
-                onPress={() => router.push(link.route as any)}
-              >
-                <MaterialIcons name={link.icon as any} size={32} color="#00dc50" />
-                <Text style={styles.quickLinkText}>{link.title}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.carouselContainer}>
+            <Carousel
+              loop={false}
+              width={width - 64}
+              height={140}
+              data={quickLinks}
+              scrollAnimationDuration={300}
+              mode="parallax"
+              modeConfig={{
+                parallaxScrollingScale: 0.9,
+                parallaxScrollingOffset: 50,
+              }}
+              renderItem={renderQuickLinkItem}
+            />
           </View>
         </View>
 
@@ -129,24 +145,26 @@ const styles = StyleSheet.create({
     color: '#fffef5',
     marginBottom: 12,
   },
-  quickLinksGrid: {
-    flexDirection: 'row',
-    gap: 12,
+  carouselContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   quickLinkCard: {
-    flex: 1,
     backgroundColor: '#2d5240',
     borderRadius: 12,
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
+    height: 140,
   },
   quickLinkText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#fffef5',
+    textAlign: 'center',
   },
   loadingContainer: {
     padding: 40,

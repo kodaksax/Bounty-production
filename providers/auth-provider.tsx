@@ -3,6 +3,8 @@ import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
 import { PropsWithChildren, useContext, useEffect, useState } from 'react'
 import { authProfileService } from '../lib/services/auth-profile-service'
+import { analyticsService } from '../lib/services/analytics-service'
+import * as Sentry from '@sentry/react-native'
 
 type AuthData = {
   session: Session | null | undefined
@@ -64,6 +66,28 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         session?.user?.confirmed_at
       )
       setIsEmailVerified(verified)
+      
+      // Track authentication events
+      if (_event === 'SIGNED_IN' && session?.user) {
+        await analyticsService.identifyUser(session.user.id, {
+          email: session.user.email,
+        })
+        await analyticsService.trackEvent('user_logged_in', {
+          method: session.user.app_metadata?.provider || 'email',
+        })
+        Sentry.setUser({
+          id: session.user.id,
+          email: session.user.email,
+        })
+      } else if (_event === 'SIGNED_OUT') {
+        await analyticsService.trackEvent('user_logged_out')
+        await analyticsService.reset()
+        Sentry.setUser(null)
+      } else if (_event === 'USER_UPDATED' && verified && session?.user) {
+        await analyticsService.trackEvent('email_verified', {
+          userId: session.user.id,
+        })
+      }
     })
     console.log('AuthProvider mounted')
     // Cleanup subscription on unmount

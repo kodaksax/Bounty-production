@@ -2,6 +2,22 @@
 // Previously this file rendered a standalone component (Todo list) which broke useRouter() calls
 // with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
 // ensures compatibility with the "main": "expo-router/entry" in package.json.
+
+// Initialize Sentry and Analytics before anything else
+import { initializeSentry } from './lib/services/sentry-init';
+import { analyticsService } from './lib/services/analytics-service';
+
+// Initialize Sentry for error tracking
+initializeSentry();
+
+// Initialize Analytics (Mixpanel)
+const MIXPANEL_TOKEN = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN;
+if (MIXPANEL_TOKEN) {
+	analyticsService.initialize(MIXPANEL_TOKEN).catch((error) => {
+		console.error('[Analytics] Initialization failed:', error);
+	});
+}
+
 import 'expo-router/entry';
 
 // If you need to run global side-effects before the router mounts, you can add them here, e.g.:
