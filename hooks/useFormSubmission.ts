@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react';
  * Debounces submission and tracks loading state
  */
 export function useFormSubmission<T = any>(
-  onSubmit: (data: T) => Promise<void>,
+  onSubmit: (data?: T) => Promise<void>,
   options: {
     debounceMs?: number;
     onSuccess?: () => void;
@@ -19,7 +19,7 @@ export function useFormSubmission<T = any>(
   const submitInProgressRef = useRef<boolean>(false);
 
   const submit = useCallback(
-    async (data: T) => {
+    async (data?: T) => {
       const now = Date.now();
 
       // Prevent duplicate submissions within debounce window

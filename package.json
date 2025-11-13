@@ -83,6 +83,7 @@
     "express": "^5.1.0",
     "express-session": "^1.18.2",
     "lucide-react-native": "^0.544.0",
+  "@mixpanel/react-native": "^4.0.0",
     "mysql2": "^3.15.1",
     "nativewind": "^4.2.1",
     "node-fetch": "^2.7.0",

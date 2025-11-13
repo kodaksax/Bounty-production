@@ -14,6 +14,7 @@ import { AdminProvider } from '../lib/admin-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
+import { initMixpanel, track } from "../lib/mixpanel";
 import { StripeProvider } from '../lib/stripe-context';
 import AuthProvider from '../providers/auth-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
@@ -111,9 +112,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   });
 
   useEffect(() => {
+    // Initialize Mixpanel and send an initial page view once at app start.
+    // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
     const start = Date.now();
+
     (async () => {
+      try {
+        await initMixpanel();
+        try {
+          track('Page View', { screen: 'root' });
+        } catch (e) {
+          // ignore analytics failures
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Mixpanel] init failed', e);
+      }
+
       try {
         await showNativeSplash();
         await Asset.loadAsync([ require('../assets/images/icon.png') ]);
@@ -136,6 +152,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }
       }
     })();
+
     return () => { cancelled = true; };
   }, []);
 

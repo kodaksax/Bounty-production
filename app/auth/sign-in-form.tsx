@@ -8,13 +8,14 @@ import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { Checkbox } from '../../components/ui/checkbox'
 import { ErrorBanner } from '../../components/error-banner'
+import { Checkbox } from '../../components/ui/checkbox'
+import { useFormSubmission } from '../../hooks/useFormSubmission'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
+import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { getUserFriendlyError, getValidationError } from '../../lib/utils/error-messages'
-import { useFormSubmission } from '../../hooks/useFormSubmission'
+import { getUserFriendlyError } from '../../lib/utils/error-messages'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -98,6 +99,18 @@ export function SignInForm() {
       }
       
       if (data.session) {
+        // Ensure Mixpanel initialized and identify user (safe no-op if SDK not initialized)
+        try {
+          await initMixpanel();
+          identify(data.session.user.id, {
+            $email: data.session.user.email,
+            $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
+          })
+          try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) {}
+        } catch (e) {
+          // swallow analytics errors
+        }
+
         // Check if user has completed onboarding (has profile in Supabase)
         const { data: profile } = await supabase
           .from('profiles')
@@ -248,13 +261,16 @@ export function SignInForm() {
             <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
           </View>
           <View className="gap-5">
-            {authError && (
-              <ErrorBanner
-                error={getUserFriendlyError(authError)}
-                onDismiss={resetError}
-                onAction={authError.retryable ? () => handleSubmit() : undefined}
-              />
-            )}
+            {authError && (() => {
+              const friendlyError = getUserFriendlyError(authError);
+              return (
+                <ErrorBanner
+                  error={friendlyError}
+                  onDismiss={resetError}
+                  onAction={friendlyError.retryable ? () => handleSubmit() : undefined}
+                />
+              );
+            })()}
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Email</Text>
@@ -353,11 +369,11 @@ export function SignInForm() {
                         ],
                       })
                       if (!credential.identityToken) {
-                        setAuthError('No Apple identity token')
+                        setSocialAuthError('No Apple identity token')
                         return
                       }
                       if (!isSupabaseConfigured) {
-                        setAuthError('Supabase is not configured.')
+                        setSocialAuthError('Supabase is not configured.')
                         return
                       }
                       const { data, error } = await supabase.auth.signInWithIdToken({
@@ -381,7 +397,7 @@ export function SignInForm() {
                       }
                     } catch (e: any) {
                       if (e?.code !== 'ERR_REQUEST_CANCELED') {
-                        setAuthError('Apple sign-in failed')
+                        setSocialAuthError('Apple sign-in failed')
                         console.error(e)
                       }
                     }

@@ -3,8 +3,8 @@
  * Detects when auth session expires and prompts user to re-login
  */
 
-import { supabase } from '../supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../supabase';
 import { logger } from './error-logger';
 
 const SESSION_CHECK_KEY = 'last_session_check';
@@ -114,7 +114,7 @@ export async function handleSessionExpiration(): Promise<void> {
  * Start periodic session checking
  */
 export function startSessionMonitoring(): () => void {
-  let intervalId: NodeJS.Timeout;
+  let intervalId: ReturnType<typeof setInterval>;
   
   const checkAndRefresh = async () => {
     const state = await checkSessionExpiration();
