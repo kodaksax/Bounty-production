@@ -16,63 +16,22 @@ export default function AnalyticsDashboard() {
       setError(null);
       setIsLoading(true);
 
-      // TODO: Replace with actual API call to fetch analytics
-      // For now, using mock data
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Fetch analytics from API
+      const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/metrics`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          // TODO: Add authentication header
+        },
+      });
 
-      const mockMetrics: AnalyticsMetrics = {
-        // User metrics
-        totalUsers: 1250,
-        activeUsersToday: 45,
-        activeUsersWeek: 320,
-        newUsersToday: 8,
-        newUsersWeek: 52,
+      if (!response.ok) {
+        throw new Error(`Failed to fetch analytics: ${response.statusText}`);
+      }
 
-        // Event metrics
-        totalEvents: 15420,
-        eventsToday: 340,
-        eventsWeek: 2450,
-
-        // Top events
-        topEvents: [
-          { name: 'bounty_viewed', count: 520 },
-          { name: 'message_sent', count: 410 },
-          { name: 'bounty_created', count: 85 },
-          { name: 'bounty_accepted', count: 62 },
-          { name: 'payment_completed', count: 48 },
-        ],
-
-        // Bounty metrics
-        bountiesCreatedToday: 12,
-        bountiesCreatedWeek: 85,
-        bountiesAcceptedToday: 8,
-        bountiesAcceptedWeek: 62,
-        bountiesCompletedToday: 5,
-        bountiesCompletedWeek: 48,
-
-        // Payment metrics
-        paymentsToday: 5,
-        paymentsWeek: 48,
-        revenueToday: 450.0,
-        revenueWeek: 3820.5,
-
-        // Messaging metrics
-        messagesToday: 120,
-        messagesWeek: 890,
-        conversationsToday: 18,
-        conversationsWeek: 125,
-
-        // Error tracking
-        errorsToday: 3,
-        errorsWeek: 24,
-        topErrors: [
-          { message: 'Network request failed', count: 8 },
-          { message: 'Invalid bounty ID', count: 5 },
-          { message: 'Payment processing error', count: 3 },
-        ],
-      };
-
-      setMetrics(mockMetrics);
+      const data: AnalyticsMetrics = await response.json();
+      setMetrics(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics');
       console.error('Error fetching analytics:', err);

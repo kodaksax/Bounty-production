@@ -67,6 +67,7 @@ const { rateLimitMiddleware } = require('./middleware/rate-limit');
 const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
+const { registerAnalyticsRoutes } = require('./routes/analytics');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
@@ -101,6 +102,9 @@ const startServer = async () => {
   
   // Register admin routes with security middleware
   await registerAdminRoutes(fastify);
+  
+  // Register analytics routes with security middleware
+  await registerAnalyticsRoutes(fastify);
   
   // Register notification routes
   await registerNotificationRoutes(fastify);
