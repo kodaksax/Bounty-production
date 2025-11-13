@@ -1,6 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import * as Sentry from '@sentry/react-native'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from "../hooks/useAuthProfile"
@@ -155,6 +156,24 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               <Text className="text-white/60 text-xs leading-5">
                 Enable admin access to view and manage bounties, users, and transactions.
               </Text>
+              
+              {/* Sentry quick test button (dev only) */}
+              <View className="mt-3">
+                <Text className="text-white/70 text-xs mb-2">Sentry Test</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    try {
+                      Sentry.captureException(new Error('First error'))
+                      Alert.alert('Sentry', 'Test event sent')
+                    } catch (e) {
+                      Alert.alert('Sentry', `Failed to send test event: ${String(e)}`)
+                    }
+                  }}
+                  className="px-3 py-2 rounded-md bg-amber-500"
+                >
+                  <Text className="text-black text-sm font-medium">Try!</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}

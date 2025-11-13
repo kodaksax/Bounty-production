@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -14,6 +15,7 @@ import { AdminProvider } from '../lib/admin-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
+import { initMixpanel, track } from "../lib/mixpanel";
 import { StripeProvider } from '../lib/stripe-context';
 import AuthProvider from '../providers/auth-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
@@ -96,7 +98,7 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
   }
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+function RootLayout({ children }: { children: React.ReactNode }) {
   const [appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
@@ -111,9 +113,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   });
 
   useEffect(() => {
+    // Initialize Mixpanel and send an initial page view once at app start.
+    // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
     const start = Date.now();
+
     (async () => {
+      try {
+        await initMixpanel();
+        try {
+          track('Page View', { screen: 'root' });
+        } catch (e) {
+          // ignore analytics failures
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Mixpanel] init failed', e);
+      }
+
       try {
         await showNativeSplash();
         await Asset.loadAsync([ require('../assets/images/icon.png') ]);
@@ -136,6 +153,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }
       }
     })();
+
     return () => { cancelled = true; };
   }, []);
 
@@ -217,3 +235,5 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
 });
+
+export default Sentry.wrap(RootLayout);
