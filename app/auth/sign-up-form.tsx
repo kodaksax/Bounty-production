@@ -91,8 +91,8 @@ export function SignUpForm() {
 
       // If email confirmations are enabled, session may be null until user verifies email
       if (data.session) {
-        // New users always need to complete onboarding
-        router.replace('/onboarding/username')
+        // New users always need to complete onboarding - start from the index to check carousel status
+        router.replace('/onboarding/index')
       } else {
         // Show a friendly note and route to sign-in
         setAuthError('Check your email to confirm your account, then sign in.')
