@@ -1,7 +1,7 @@
 # 🚀 BOUNTYExpo MVP Roadmap - App Store Release
 
-**Document Version:** 1.0  
-**Date:** October 2025  
+**Document Version:** 2.0  
+**Last Updated:** November 13, 2025  
 **Status:** In Development → Production Ready
 
 ---
@@ -9,94 +9,157 @@
 ## 📊 Executive Summary
 
 ### Current State Assessment
-BOUNTYExpo is **~75% complete** for MVP App Store release. The application has a solid foundation with:
-- ✅ **Core Architecture**: Expo 54, React Native 0.81, Fastify API, PostgreSQL
-- ✅ **Authentication**: Supabase integration with JWT
-- ✅ **UI/UX Foundation**: Emerald theme, bottom navigation, responsive design
-- ✅ **Database Schema**: Bounties, users, wallet transactions, escrow tables
-- ✅ **Key Features**: Profile system, messaging foundation, bounty posting, wallet structure
+BOUNTYExpo is **~88% complete** for MVP App Store release. Significant progress has been made since October with:
+- ✅ **Core Architecture**: Expo 54, React Native 0.81, Node/Express API, PostgreSQL + Supabase
+- ✅ **Authentication**: Supabase integration with JWT + Email verification
+- ✅ **UI/UX Complete**: Emerald theme, bottom navigation, loading states, empty states, error handling
+- ✅ **Database Schema**: Complete - bounties, users, wallet transactions, escrow, notifications
+- ✅ **Advanced Features**: Notifications, analytics (Mixpanel + Sentry), onboarding, search/filtering, attachments
+
+### Recent Progress (Oct 16 - Nov 13)
+**13 Major PRs Merged:**
+- ✅ PR #107: Onboarding carousel and profile setup wizard
+- ✅ PR #106: Analytics & error tracking (Mixpanel + Sentry)
+- ✅ PR #105: Comprehensive error handling
+- ✅ PR #104, #102: Attachments with Supabase Storage
+- ✅ PR #101: Loading & empty states across all screens
+- ✅ PR #98: Search & filtering for bounties and users
+- ✅ PR #96: Revision notification system
+- ✅ PR #94: Complete notifications system (in-app + push)
+- ✅ PR #93: Node/Express backend with Stripe integration
 
 ### What's Missing for MVP
-To achieve App Store readiness, we need to complete **4-6 weeks** of focused development across:
-1. **Critical Path Items** (App Store Requirements) - 2 weeks
-2. **Core Functionality Gaps** (MVP User Flows) - 2-3 weeks  
-3. **Quality Assurance** (Testing & Polish) - 1-2 weeks
-4. **Submission Preparation** (Store Assets & Review) - 1 week
+To achieve App Store readiness, we need to complete **2-3 weeks** of focused development across:
+1. **Critical Path Items** (App Store Requirements) - 1 week
+2. **Core Functionality Gaps** (Payment flows) - 1 week  
+3. **Submission Preparation** (Store Assets & Review) - 1 week
 
-**Target Timeline**: 6 weeks to App Store submission
+**Target Timeline**: 3 weeks to App Store submission (reduced from 6 weeks)
 
 ---
 
 ## 🎯 Development Progress Matrix
 
-### ✅ Completed Features (75%)
+### ✅ Completed Features (88%)
 
-#### Infrastructure & Foundation
+#### Infrastructure & Foundation (100%)
 - [x] Expo 54 + React Native 0.81 setup
 - [x] TypeScript configuration across monorepo
-- [x] Fastify API server with Drizzle ORM
-- [x] PostgreSQL database with migrations
-- [x] Supabase authentication integration
-- [x] Stripe Connect foundation
+- [x] Node/Express API server with PostgreSQL
+- [x] Supabase authentication + database integration
+- [x] Stripe Connect complete implementation
 - [x] Docker Compose development environment
 - [x] Monorepo structure (pnpm workspaces)
+- [x] Analytics infrastructure (Mixpanel + Sentry)
 
-#### User Interface & Navigation
+#### User Interface & Navigation (100%)
 - [x] Bottom navigation architecture (non-duplicating)
 - [x] Emerald theme implementation
 - [x] Safe area handling (iOS/Android)
 - [x] Responsive mobile-first design
 - [x] Splash screen and branding
 - [x] Theme provider and theming system
+- [x] Loading states with skeleton loaders
+- [x] Empty states with CTAs
+- [x] Error handling UI components
+- [x] Pull-to-refresh on list screens
 
-#### Authentication & User Management
+#### Authentication & User Management (95%)
 - [x] Sign-up / Sign-in flow
-- [x] Email verification structure
+- [x] Email verification gate
 - [x] JWT token handling
 - [x] Auth context and providers
 - [x] Profile creation flow
 - [x] Avatar upload functionality
+- [x] Onboarding carousel (4 screens)
+- [x] Profile setup wizard (bio, skills)
 
-#### Profile Features
+#### Profile Features (100%)
 - [x] User profile screen with bio, skills, languages
 - [x] Follow/Unfollow functionality
-- [x] Portfolio items (image/video)
+- [x] Portfolio items (image/video) with Supabase Storage
 - [x] Identity verification status badges
-- [x] Profile editing with avatar upload
+- [x] Profile editing with avatar/banner upload
 - [x] Public/private profile views
+- [x] Attachment upload (camera, photos, files)
 
-#### Bounty System (Partial)
+#### Bounty System (80%)
 - [x] Create bounty multi-step form (Title, Details, Compensation, Location, Review)
-- [x] Bounty data model and types
-- [x] Postings feed screen structure
-- [x] Bounty detail view basic layout
-- [x] Database schema for bounties
+- [x] Bounty data model and types with attachments
+- [x] Postings feed screen with search/filtering
+- [x] Bounty detail modal with enhanced UI
+- [x] Database schema for bounties with attachments
+- [x] Search and filtering (keywords, location, amount, skills)
+- [x] Bounty application flow structure
+- [x] Revision request and notification system
+- ⚠️ Complete acceptance workflow (needs finishing)
+- ⚠️ In-progress bounty screens (partially complete)
 
-#### Messaging System (Foundation)
+#### Messaging System (75%)
 - [x] Conversation list screen
 - [x] 1:1 chat interface
 - [x] Message service with optimistic updates
 - [x] Real-time message structure (WebSocket adapter ready)
+- [x] Messenger QOL improvements
+- ⚠️ Backend WebSocket server connection (needs integration)
+- ⚠️ Push notifications for messages (structure ready)
 
-#### Wallet & Payments (Structure)
+#### Notifications System (95%)
+- [x] In-app notification bell with dropdown
+- [x] Notification types (applications, acceptance, completion, messages, follows)
+- [x] Mark as read functionality
+- [x] Expo Push Notifications infrastructure
+- [x] Backend notification creation on events
+- [x] User notification preferences in settings
+- [x] Revision request notifications
+- ⚠️ Final push notification testing needed
+
+#### Wallet & Payments (70%)
 - [x] Wallet screen UI
 - [x] Transaction history display
-- [x] Stripe integration setup
-- [x] Escrow table schema
-- [x] Wallet service foundations
+- [x] Stripe integration with Node/Express backend
+- [x] Add money screen with payment methods
+- [x] Apple Pay integration
+- [x] Stripe Connect onboarding
+- [x] Payment method management
+- ⚠️ Escrow creation on acceptance (needs completion)
+- ⚠️ Fund release on completion (needs completion)
+- ⚠️ Refund flow (needs completion)
 
-#### Admin Panel
+#### Search & Filtering (100%)
+- [x] Bounty search by keywords
+- [x] Filter by location (nearby, specific city)
+- [x] Filter by compensation range
+- [x] Filter by skills required
+- [x] User search by username/skills
+- [x] Sort options (date, amount, distance)
+- [x] Recent searches tracking
+
+#### Error Handling & Quality (95%)
+- [x] Network error handling with user-friendly messages
+- [x] Form validation error messages
+- [x] Offline mode graceful degradation
+- [x] 404 handling for missing resources
+- [x] Payment failure error handling
+- [x] Retry mechanisms with exponential backoff
+- [x] Error tracking with Sentry
+- [x] Loading indicators for all async operations
+
+#### Admin Panel (90%)
 - [x] Admin authentication
 - [x] User management interface
 - [x] Bounty management interface
 - [x] Transaction viewing
+- ⚠️ Report/moderation panel (needs completion)
 
 ---
 
-## 🚧 Critical Gaps for MVP (25%)
+## 🚧 Critical Gaps for MVP (12%)
 
 ### 🔴 Priority 1: App Store Requirements (MUST HAVE)
-**Timeline: 2 weeks**
+**Timeline: 1 week** (reduced from 2 weeks)
+
+**Status Update:** Several items partially complete or have workarounds
 
 #### 1.1 Privacy Policy & Terms of Service
 **Status:** ❌ Missing  
@@ -214,44 +277,29 @@ Requirements:
 ---
 
 ### 🟡 Priority 2: Core User Flow Completion (HIGH)
-**Timeline: 2-3 weeks**
+**Timeline: 1 week** (reduced from 2-3 weeks due to progress)
 
 #### 2.1 Complete Bounty Acceptance Flow
-**Status:** ⚠️ Partial (UI exists but not connected)  
-**Effort:** 5-7 days  
+**Status:** ⚠️ 70% Complete (UI enhanced, notifications working, needs final API integration)  
+**Effort:** 2-3 days (reduced from 5-7)  
 **Description:** End-to-end flow from posting to acceptance
 
 **Current State:**
-- ✅ Create bounty form exists and works
-- ✅ Postings feed displays bounties
-- ⚠️ Bounty detail view is basic
-- ❌ "Apply" or "Accept" button functionality incomplete
-- ❌ Notification to poster when someone applies
-- ❌ Poster approval flow missing
+- ✅ Create bounty form exists and works with attachments
+- ✅ Postings feed displays bounties with search/filtering
+- ✅ Bounty detail modal enhanced with improved UI
+- ✅ Notification system for applications working
+- ✅ Revision request notifications implemented
+- ⚠️ "Apply" button needs backend connection
+- ⚠️ Poster approval flow needs completion
 
-**Tasks:**
-- [ ] Complete bounty detail screen UI
-  - Show full description, compensation, location, timeline
-  - Add hunter profile section
-  - Display applicant count
-- [ ] Implement "Apply" button for hunters
-  - Create application record in database
-  - Send notification to poster
-  - Show "Applied" state to hunter
-- [ ] Create applicant management for posters
-  - View list of applicants with profiles
-  - Accept/Reject buttons
-  - Counter-offer functionality (optional for v1)
-- [ ] Implement acceptance flow
-  - Update bounty status to "in_progress"
-  - Set `hunter_id` field
-  - Trigger escrow hold (if paid bounty)
-  - Create conversation between poster and hunter
-- [ ] Add bounty status transitions
-  - open → in_progress (on acceptance)
-  - in_progress → completed (on completion)
-  - in_progress → disputed (on dispute)
-  - * → archived (on cancellation)
+**Remaining Tasks:**
+- [ ] Connect "Apply" button to backend API
+- [ ] Create bounty_applications table if not exists
+- [ ] Implement applicant list view for posters
+- [ ] Wire up accept/reject buttons
+- [ ] Ensure escrow triggers on acceptance
+- [ ] Create conversation auto-creation on acceptance
 
 **Database Changes:**
 ```sql
@@ -291,43 +339,27 @@ Requirements:
 ```
 
 #### 2.2 Implement Escrow Payment Flow
-**Status:** ⚠️ Structure exists but not functional  
-**Effort:** 7-10 days  
+**Status:** ⚠️ 60% Complete (Backend ready, Stripe Connect working, needs escrow logic)  
+**Effort:** 3-5 days (reduced from 7-10)  
 **Description:** Stripe integration for holding and releasing funds
 
 **Current State:**
-- ✅ Stripe Connect service skeleton exists
-- ✅ Database schema has escrow fields
-- ❌ Escrow creation on acceptance not implemented
-- ❌ Fund release on completion not implemented
-- ❌ Refund flow not implemented
+- ✅ Stripe Connect service fully implemented
+- ✅ Node/Express backend with Supabase integration
+- ✅ Database schema has payment_methods and stripe_events tables
+- ✅ Stripe Connect onboarding flow complete
+- ✅ Add money screen with payment method management
+- ✅ Apple Pay integration
+- ⚠️ Escrow creation on acceptance needs implementation
+- ⚠️ Fund release on completion needs implementation
+- ⚠️ Refund flow needs implementation
 
-**Tasks:**
-- [ ] **Escrow Creation (on bounty acceptance)**
-  - Create Stripe PaymentIntent when hunter accepts
-  - Store `payment_intent_id` in bounty record
-  - Hold funds (authorized but not captured)
-  - Create wallet transaction record (type: 'escrow')
-  - Handle Stripe errors gracefully
-  
-- [ ] **Fund Release (on bounty completion)**
-  - Poster confirms work completion
-  - Transfer funds to hunter's connected account
-  - Deduct platform fee (e.g., 10%)
-  - Create wallet transaction (type: 'release')
-  - Send receipt to both parties
-  
-- [ ] **Refund Flow (on disputes or cancellations)**
-  - Allow poster to request refund before work starts
-  - Refund escrow funds to poster
-  - Create wallet transaction (type: 'refund')
-  - Update bounty status
-  
-- [ ] **Stripe Connect Onboarding**
-  - Create Stripe Express account for new users
-  - Onboarding flow for hunters to receive payments
-  - Store `stripe_account_id` in users table
-  - Verify account status before allowing acceptances
+**Remaining Tasks:**
+- [ ] Implement escrow creation trigger on bounty acceptance
+- [ ] Implement fund release on completion approval
+- [ ] Implement refund flow for cancellations
+- [ ] Test end-to-end payment flow with test cards
+- [ ] Add transaction receipts via email
 
 **Stripe Integration Points:**
 ```typescript
@@ -509,113 +541,60 @@ Requirements:
 ```
 
 #### 2.5 Notifications System
-**Status:** ❌ Not implemented  
-**Effort:** 4-5 days  
+**Status:** ✅ 95% Complete (Implemented via PR #94)  
+**Effort:** 1 day for final testing  
 **Description:** In-app and push notifications for key events
 
-**Tasks:**
-- [ ] **In-App Notifications**
-  - Notification bell icon in top bar
-  - Dropdown list of recent notifications
-  - Mark as read functionality
-  - Notification types:
-    - New bounty application
-    - Application accepted/rejected
-    - Bounty completed (poster)
-    - Payment released (hunter)
-    - New message
-    - Profile follow
-  
-- [ ] **Push Notifications (Expo Push)**
-  - Register device token on login
-  - Send push for critical events:
-    - Bounty application received
-    - Application accepted
-    - Payment released
-    - New message (when app closed)
-  - Handle notification tap to navigate to relevant screen
-  
-- [ ] **Backend Notification Service**
-  - Database table for notifications
-  - API endpoints:
-    - `GET /api/notifications` - Fetch user's notifications
-    - `PUT /api/notifications/:id/read` - Mark as read
-    - `PUT /api/notifications/read-all` - Mark all as read
-  - Notification creation on events (bounty actions, messages, payments)
+**Completed:**
+- ✅ In-app notification bell with dropdown
+- ✅ Notification types (applications, acceptance, completion, messages, follows)
+- ✅ Mark as read functionality
+- ✅ Expo Push Notifications infrastructure
+- ✅ Backend notification creation on events
+- ✅ User notification preferences in settings
+- ✅ Revision request notifications
+- ✅ Unread count badge
 
-**Database Schema:**
-```sql
-CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) NOT NULL,
-  type TEXT NOT NULL, -- bounty_application, acceptance, completion, payment, message, follow
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  data JSONB, -- Additional data (e.g., bounty_id, sender_id)
-  is_read BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-
-**PR Prompt:**
-```
-Implement notifications system with in-app and push notifications
-
-Requirements:
-- In-app notifications: bell icon with dropdown list
-- Notification types: applications, acceptances, completions, payments, messages, follows
-- Mark as read functionality
-- Push notifications via Expo Push for critical events
-- Handle notification tap to navigate to relevant screen
-- Backend: notifications table, API endpoints for fetching and marking read
-- Trigger notifications on key events in backend
-- Unread count badge on bell icon
-```
+**Remaining Tasks:**
+- [ ] Final push notification testing on physical devices
+- [ ] Ensure all notification types trigger correctly
 
 ---
 
-### 🟢 Priority 3: Quality & Polish (MEDIUM)
-**Timeline: 1-2 weeks**
+### 🟢 Priority 3: Quality & Polish (MOSTLY COMPLETE)
+**Timeline: 3-5 days**
 
 #### 3.1 Error Handling & Edge Cases
-**Status:** ⚠️ Basic error handling exists  
-**Effort:** 3-4 days
+**Status:** ✅ 95% Complete (Implemented via PR #105)  
+**Effort:** 1 day for final review
 
-**Tasks:**
-- [ ] Network error handling (offline mode graceful degradation)
-- [ ] Form validation error messages (user-friendly)
-- [ ] Payment failure handling (insufficient funds, card declined)
-- [ ] 404 handling for missing bounties/users
-- [ ] Rate limiting on API endpoints
-- [ ] Duplicate submission prevention (bounty creation, applications)
-- [ ] Session expiration handling (auto-logout, token refresh)
+**Completed:**
+- ✅ Network error handling with graceful degradation
+- ✅ Form validation error messages (user-friendly)
+- ✅ Payment failure handling  
+- ✅ 404 handling for missing resources
+- ✅ Rate limiting on API endpoints
+- ✅ Duplicate submission prevention
+- ✅ Session expiration handling
+- ✅ Error tracking with Sentry
 
-**PR Prompt:**
-```
-Improve error handling and edge case management
-
-Requirements:
-- Graceful offline mode: show cached data, queue actions
-- User-friendly error messages for all forms
-- Payment error handling: display reason, offer retry
-- 404 screens for missing resources
-- Rate limiting on API (e.g., 100 requests/min per user)
-- Prevent duplicate submissions with loading states
-- Auto-logout on session expiration, prompt to re-login
-```
+**Remaining:**
+- [ ] Final review of edge cases
+- [ ] Test offline queue functionality
 
 #### 3.2 Loading States & Empty States
-**Status:** ⚠️ Inconsistent across screens  
-**Effort:** 2-3 days
+**Status:** ✅ 100% Complete (Implemented via PR #101)  
+**Effort:** Done
 
-**Tasks:**
-- [ ] Add skeleton loaders for list screens (postings, messages, profile)
-- [ ] Empty state designs for:
+**Completed:**
+- ✅ Skeleton loaders for all list screens
+- ✅ Empty state designs with CTAs for:
   - No bounties posted yet
   - No messages yet
   - No wallet transactions yet
   - No followers/following yet
-- [ ] Loading spinners for async actions (submit bounty, send message)
+- ✅ Loading spinners for async actions
+- ✅ Pull-to-refresh on all list screens
 - [ ] Pull-to-refresh on list screens
 
 **PR Prompt:**
@@ -631,99 +610,39 @@ Requirements:
 ```
 
 #### 3.3 Search & Filtering
-**Status:** ⚠️ Search screen exists but minimal functionality  
-**Effort:** 4-5 days
+**Status:** ✅ 100% Complete (Implemented via PR #98)  
+**Effort:** Done
 
-**Tasks:**
-- [ ] **Bounty Search**
-  - Search by title, description, skills
-  - Filter by location (nearby, specific city)
-  - Filter by compensation range
-  - Filter by status (open, in_progress, completed)
-  - Sort by date, amount, distance
-  
-- [ ] **User Search**
-  - Search by username, name, skills
-  - Filter by location
-  - Filter by verification status
-  
-- [ ] **Backend Search API**
-  - `GET /api/bounties/search?q=keyword&location=city&minAmount=100`
-  - Full-text search on title and description
-  - Geographic search for location-based filtering
-
-**PR Prompt:**
-```
-Implement search and filtering for bounties and users
-
-Requirements:
-- Bounty search: search by keywords, filter by location/amount/status
-- User search: search by username/name/skills
-- Backend: full-text search API with filtering parameters
-- Sort options: date (newest first), amount (highest first), distance (closest first)
-- Search results screen with cards/list view
-- Save recent searches (local storage)
-```
+**Completed:**
+- ✅ Bounty search by keywords, location, amount
+- ✅ User search by name, skills
+- ✅ Sort options (date, amount, distance)
+- ✅ Backend full-text search API with filtering
+- ✅ Recent searches tracking
+- ✅ Filter UI with multiple criteria
 
 #### 3.4 Onboarding Flow
-**Status:** ⚠️ Onboarding directory exists but incomplete  
-**Effort:** 3-4 days
+**Status:** ✅ 100% Complete (Implemented via PR #107)  
+**Effort:** Done
 
-**Tasks:**
-- [ ] Create onboarding carousel screens
-  - Screen 1: Welcome, explain app purpose
-  - Screen 2: How to post a bounty
-  - Screen 3: How to accept and complete bounties
-  - Screen 4: Wallet and escrow explanation
-- [ ] Profile setup wizard after sign-up
-  - Upload avatar
-  - Fill in bio, skills, location
-  - Optional: connect Stripe for payments
-- [ ] Show onboarding only on first launch
-- [ ] Skip button for returning users
-
-**PR Prompt:**
-```
-Create user onboarding flow and profile setup wizard
-
-Requirements:
-- Onboarding carousel: 4 screens explaining app features
-- Profile setup wizard after sign-up (avatar, bio, skills, location)
-- Skip button to bypass onboarding
-- Show only on first app launch (use AsyncStorage to track)
-- Smooth animations between screens
-- Call-to-action buttons with emerald theme
-```
+**Completed:**
+- ✅ Onboarding carousel with 4 feature screens
+- ✅ Profile setup wizard (avatar, bio, skills)
+- ✅ Skip functionality
+- ✅ First-launch detection with AsyncStorage
+- ✅ Smooth animations with emerald theme
 
 #### 3.5 Analytics & Monitoring
-**Status:** ❌ Not implemented  
-**Effort:** 2-3 days
+**Status:** ✅ 100% Complete (Implemented via PR #106)  
+**Effort:** Done
 
-**Tasks:**
-- [ ] Integrate analytics (Expo Analytics or Mixpanel)
-- [ ] Track key events:
-  - Sign-up / Sign-in
-  - Bounty created
-  - Bounty accepted
-  - Bounty completed
-  - Payment released
-  - Message sent
-- [ ] Error tracking (Sentry integration)
-- [ ] Performance monitoring (Expo Performance)
-- [ ] Backend logging (Winston or Pino)
-
-**PR Prompt:**
-```
-Integrate analytics and error tracking
-
-Requirements:
-- Set up Expo Analytics or Mixpanel
-- Track key user events (sign-up, bounty actions, payments, messages)
-- Integrate Sentry for error tracking
-- Add performance monitoring with Expo Performance API
-- Backend logging with structured logs (Winston/Pino)
-- Dashboard for viewing metrics (or use analytics platform)
-```
+**Completed:**
+- ✅ Mixpanel integration for analytics
+- ✅ Track key events (sign-up, bounty actions, payments, messages)
+- ✅ Sentry integration for error tracking
+- ✅ Performance monitoring
+- ✅ Backend logging with structured logs
+- ✅ Analytics tracking on all major user actions
 
 ---
 
@@ -915,41 +834,51 @@ Requirements:
 
 ---
 
-## 💰 Estimated Effort Summary
+## 💰 Estimated Effort Summary (UPDATED)
 
-| Category | Tasks | Effort (Days) | Priority |
-|----------|-------|---------------|----------|
-| App Store Requirements | 4 items | 13-19 | 🔴 Critical |
-| Core Functionality | 5 items | 25-33 | 🟡 High |
-| Quality & Polish | 5 items | 14-19 | 🟢 Medium |
-| Testing & QA | 3 items | 10-15 | 🔵 High |
-| **TOTAL** | **17 items** | **62-86 days** | **~3 months** |
+| Category | Tasks | Effort (Days) | Priority | Status |
+|----------|-------|---------------|----------|--------|
+| App Store Requirements | 4 items | 5-7 (was 13-19) | 🔴 Critical | 40% Done |
+| Core Functionality | 2 items | 5-8 (was 25-33) | 🟡 High | 70% Done |
+| Quality & Polish | 5 items | 1-2 (was 14-19) | 🟢 Medium | 98% Done |
+| Testing & QA | 2 items | 5-8 | 🔵 High | 20% Done |
+| **TOTAL** | **13 items** | **16-25 days** | **~3 weeks** | **88% Overall** |
 
-**With parallel workstreams (2-3 developers):** 6-8 weeks
+**With 2-3 developers in parallel:** 2-3 weeks (reduced from 6-8 weeks)
+
+**Key Achievements Since October:**
+- ✅ Completed 13 major PRs
+- ✅ Analytics & error tracking fully integrated
+- ✅ Onboarding flow complete
+- ✅ Search & filtering implemented
+- ✅ Loading & empty states across all screens
+- ✅ Notifications system operational
+- ✅ Comprehensive error handling
+- ✅ Attachment functionality with Supabase Storage
 
 ---
 
 ## 👥 Recommended Team Structure
 
-### For 6-Week Timeline (Parallel Development)
+### For 3-Week Timeline (Parallel Development)
 
 **Frontend Developer (Mobile)**
-- Focus: UI screens, user flows, React Native components
-- Week 1-2: App Store requirements, onboarding, moderation UI
-- Week 3-4: Bounty flow UI, in-progress screens, messaging UI
-- Week 5-6: Polish, testing, bug fixes
+- Focus: Finish bounty acceptance UI, payment flows
+- Week 1: App Store assets, content moderation UI, age verification
+- Week 2: Complete bounty acceptance flow, test escrow integration
+- Week 3: Final testing, bug fixes, submission prep
 
 **Backend Developer (API)**
-- Focus: API endpoints, database, Stripe integration
-- Week 1-2: Report APIs, age verification, payment setup
-- Week 3-4: Bounty APIs, escrow logic, WebSocket server
-- Week 5-6: Notifications, performance optimization, testing
+- Focus: Escrow logic, payment flows, WebSocket integration
+- Week 1: Bounty acceptance API, escrow creation/release
+- Week 2: WebSocket server for real-time messaging, refund flow
+- Week 3: Performance testing, rate limiting verification
 
-**Full-Stack Developer (Generalist)**
-- Focus: Cross-cutting concerns, testing, submission
-- Week 1-2: Privacy policy, terms, app store assets
-- Week 3-4: Assist with payment flow, messaging backend
-- Week 5-6: Automated tests, manual QA, App Store submission
+**Full-Stack Developer / QA**
+- Focus: Testing, submission, documentation
+- Week 1: Privacy policy, terms, manual testing
+- Week 2: Automated tests, device testing matrix
+- Week 3: App Store submission, TestFlight distribution
 
 ---
 
@@ -957,25 +886,25 @@ Requirements:
 
 ### Immediate Next Steps (This Week)
 
-1. **Create Privacy Policy & Terms of Service**
+1. **Create Privacy Policy & Terms of Service** (1-2 days)
    - Use templates: [TermsFeed](https://www.termsfeed.com/), [PrivacyPolicies.com](https://www.privacypolicies.com/)
    - Host on GitHub Pages or Vercel
-   - Link from app
+   - Link from app settings
 
-2. **Implement Content Moderation**
+2. **Implement Content Moderation** (2-3 days)
    - Add "Report" buttons to bounties, profiles, messages
    - Create reports table and API endpoint
-   - Admin panel section for reports
+   - Admin panel section for reports (extend existing admin panel)
 
-3. **Complete Bounty Acceptance Flow**
-   - Finish bounty detail screen
-   - Implement "Apply" button
-   - Poster review and acceptance flow
+3. **Complete Bounty Acceptance Flow** (2-3 days)
+   - Wire up "Apply" button to backend
+   - Create applicant list view
+   - Connect accept/reject buttons to API
 
-4. **Set Up Testing Framework**
-   - Install Jest for unit tests
-   - Install Supertest for API tests
-   - Write first test suites
+4. **Finish Escrow Integration** (3-5 days)
+   - Implement escrow creation on acceptance
+   - Implement fund release on completion
+   - Test end-to-end with Stripe test cards
 
 ---
 
