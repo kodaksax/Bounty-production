@@ -10,9 +10,11 @@ import { useAuthContext } from './use-auth-context';
 interface ProfileData {
   username: string;
   displayName?: string;
+  bio?: string;
   avatar?: string;
   location?: string;
   phone?: string;
+  skills?: string[];
 }
 
 interface UseUserProfileResult {
