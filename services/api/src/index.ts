@@ -92,7 +92,7 @@ const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
   
   // Register global rate limiting middleware for all routes except health
-  fastify.addHook('onRequest', async (request, reply) => {
+  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     // Skip rate limiting for health check
     if (request.url === '/health') {
       return;

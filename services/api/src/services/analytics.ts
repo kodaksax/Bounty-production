@@ -34,10 +34,6 @@ class BackendAnalyticsService {
           dsn: SENTRY_DSN,
           environment: process.env.NODE_ENV || 'development',
           tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-          integrations: [
-            // Enable HTTP instrumentation
-            new Sentry.Integrations.Http({ tracing: true }),
-          ],
           beforeSend(event) {
             // Don't send in development unless explicitly enabled
             if (process.env.NODE_ENV === 'development' && !process.env.SENTRY_DEBUG) {
@@ -53,7 +49,7 @@ class BackendAnalyticsService {
 
       this.initialized = true;
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to initialize:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to initialize');
     }
   }
 
@@ -85,7 +81,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.debug({ userId, event, properties: enrichedProperties }, 'Event tracked');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to track event:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to track event');
     }
   }
 
@@ -102,7 +98,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.debug({ userId, properties }, 'User properties set');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to set user properties:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to set user properties');
     }
   }
 
@@ -117,7 +113,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.debug({ userId, property, value }, 'User property incremented');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to increment user property:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to increment user property');
     }
   }
 
@@ -137,7 +133,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.info({ userId, amount, properties }, 'Revenue tracked');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to track revenue:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to track revenue');
     }
   }
 
@@ -152,7 +148,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.error({ err: error, context }, 'Error tracked');
     } catch (err) {
-      analyticsLogger.error('[Analytics] Failed to track error:', err);
+      analyticsLogger.error({ error: err }, '[Analytics] Failed to track error');
     }
   }
 
@@ -163,7 +159,7 @@ class BackendAnalyticsService {
     try {
       Sentry.setContext(key, context);
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to set context:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to set context');
     }
   }
 
@@ -180,7 +176,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.debug({ name, duration, metadata }, 'Performance tracked');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to track performance:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to track performance');
     }
   }
 
@@ -201,7 +197,7 @@ class BackendAnalyticsService {
 
       analyticsLogger.info('[Analytics] Events flushed');
     } catch (error) {
-      analyticsLogger.error('[Analytics] Failed to flush events:', error);
+      analyticsLogger.error({ error }, '[Analytics] Failed to flush events');
     }
   }
 }
