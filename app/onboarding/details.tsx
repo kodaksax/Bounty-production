@@ -25,6 +25,11 @@ import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { attachmentService } from '../../lib/services/attachment-service';
 
+const COMMON_SKILLS = [
+  'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
+  'Gardening', 'Photography', 'Tutoring', 'Tech Support', 'Design',
+];
+
 export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -33,7 +38,10 @@ export default function DetailsScreen() {
   const { profile: normalized } = useNormalizedProfile();
 
   const [displayName, setDisplayName] = useState(normalized?.name || localProfile?.displayName || '');
+  const [bio, setBio] = useState((normalized?._raw && (normalized as any)._raw.bio) || localProfile?.bio || '');
   const [location, setLocation] = useState((normalized?._raw && (normalized as any)._raw.location) || localProfile?.location || '');
+  const [skills, setSkills] = useState<string[]>((normalized?._raw && (normalized as any)._raw.skills) || localProfile?.skills || []);
+  const [customSkill, setCustomSkill] = useState('');
   const [saving, setSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
   const [uploading, setUploading] = useState(false);
@@ -79,13 +87,35 @@ export default function DetailsScreen() {
     }
   };
 
+  const toggleSkill = (skill: string) => {
+    if (skills.includes(skill)) {
+      setSkills(skills.filter(s => s !== skill));
+    } else {
+      setSkills([...skills, skill]);
+    }
+  };
+
+  const addCustomSkill = () => {
+    const trimmedSkill = customSkill.trim();
+    if (trimmedSkill && !skills.includes(trimmedSkill)) {
+      setSkills([...skills, trimmedSkill]);
+      setCustomSkill('');
+    }
+  };
+
+  const removeSkill = (skill: string) => {
+    setSkills(skills.filter(s => s !== skill));
+  };
+
   const handleNext = async () => {
     setSaving(true);
     
     // Save to local storage
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
+      bio: bio.trim() || undefined,
       location: location.trim() || undefined,
+      skills: skills.length > 0 ? skills : undefined,
       avatar: avatarUri || undefined,
     });
 
@@ -97,7 +127,7 @@ export default function DetailsScreen() {
 
     // Also sync to Supabase via AuthProfileService
     await updateAuthProfile({
-      about: location.trim() || undefined,
+      about: bio.trim() || undefined,
       avatar: avatarUri || undefined,
     });
 
@@ -151,6 +181,22 @@ export default function DetailsScreen() {
             <Text style={styles.hint}>How you'd like to be called</Text>
           </View>
 
+          {/* Bio */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Bio (Optional)</Text>
+            <TextInput
+              style={[styles.input, styles.bioInput]}
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Tell others about yourself..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              multiline
+              numberOfLines={3}
+              maxLength={200}
+            />
+            <Text style={styles.hint}>{bio.length}/200 characters</Text>
+          </View>
+
           {/* Location */}
           <View style={styles.field}>
             <Text style={styles.label}>Location (Optional)</Text>
@@ -163,6 +209,72 @@ export default function DetailsScreen() {
               autoCapitalize="words"
             />
             <Text style={styles.hint}>City and state/country</Text>
+          </View>
+
+          {/* Skills */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Skills (Optional)</Text>
+            <Text style={styles.hint} style={{ marginBottom: 8 }}>
+              What can you help with?
+            </Text>
+            
+            {/* Common skills as chips */}
+            <View style={styles.skillsContainer}>
+              {COMMON_SKILLS.map((skill) => (
+                <TouchableOpacity
+                  key={skill}
+                  style={[
+                    styles.skillChip,
+                    skills.includes(skill) && styles.skillChipSelected,
+                  ]}
+                  onPress={() => toggleSkill(skill)}
+                >
+                  <Text
+                    style={[
+                      styles.skillChipText,
+                      skills.includes(skill) && styles.skillChipTextSelected,
+                    ]}
+                  >
+                    {skill}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Custom skills */}
+            {skills.filter(s => !COMMON_SKILLS.includes(s)).length > 0 && (
+              <View style={styles.customSkillsContainer}>
+                {skills.filter(s => !COMMON_SKILLS.includes(s)).map((skill) => (
+                  <View key={skill} style={styles.customSkillChip}>
+                    <Text style={styles.customSkillText}>{skill}</Text>
+                    <TouchableOpacity onPress={() => removeSkill(skill)}>
+                      <MaterialIcons name="close" size={16} color="#a7f3d0" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Add custom skill */}
+            <View style={styles.customSkillInput}>
+              <TextInput
+                style={styles.input}
+                value={customSkill}
+                onChangeText={setCustomSkill}
+                placeholder="Add another skill..."
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                onSubmitEditing={addCustomSkill}
+                returnKeyType="done"
+              />
+              {customSkill.trim() && (
+                <TouchableOpacity
+                  style={styles.addSkillButton}
+                  onPress={addCustomSkill}
+                >
+                  <MaterialIcons name="add" size={20} color="#052e1b" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
             {/* Avatar picker */}
@@ -270,11 +382,79 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(167,243,208,0.3)',
   },
+  bioInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: 14,
+  },
   hint: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 12,
     marginTop: 6,
     paddingHorizontal: 4,
+  },
+  skillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  skillChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(5,46,27,0.5)',
+    borderWidth: 2,
+    borderColor: 'rgba(167,243,208,0.3)',
+  },
+  skillChipSelected: {
+    backgroundColor: '#a7f3d0',
+    borderColor: '#a7f3d0',
+  },
+  skillChipText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  skillChipTextSelected: {
+    color: '#052e1b',
+    fontWeight: '600',
+  },
+  customSkillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  customSkillChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#097959',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  customSkillText: {
+    color: '#a7f3d0',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  customSkillInput: {
+    position: 'relative',
+  },
+  addSkillButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    backgroundColor: '#a7f3d0',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarPlaceholder: {
     backgroundColor: 'rgba(5,46,27,0.5)',

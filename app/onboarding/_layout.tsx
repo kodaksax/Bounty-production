@@ -15,6 +15,8 @@ export default function OnboardingLayout() {
         animation: 'slide_from_right',
       }}
     >
+      <Stack.Screen name="index" />
+      <Stack.Screen name="carousel" />
       <Stack.Screen name="username" />
       <Stack.Screen name="details" />
       <Stack.Screen name="phone" />
