@@ -6,6 +6,26 @@ import 'expo-router/entry';
 
 // If you need to run global side-effects before the router mounts, you can add them here, e.g.:
 // import './polyfills';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://6aaf694964261a5e219b858da9c1b1e5@o4510355895025664.ingest.us.sentry.io/4510355897319424',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 // But do not export a React component – expo-router handles root mounting.
 
 if (__DEV__) {

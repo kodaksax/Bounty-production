@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -97,7 +98,7 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
   }
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+function RootLayout({ children }: { children: React.ReactNode }) {
   const [appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
@@ -234,3 +235,5 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
 });
+
+export default Sentry.wrap(RootLayout);

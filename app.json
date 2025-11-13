@@ -11,11 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty0.BOUNTYExpo",
-        "infoPlist": {
-          "ITSAppUsesNonExemptEncryption": false,
-          "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture and add portfolio media.",
-          "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed."
-        }
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture and add portfolio media.",
+        "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,7 +37,9 @@
           "merchantIdentifier": "merchant.com.bountyexpo-workspace"
         }
       ],
-      ["@react-native-google-signin/google-signin"],
+      [
+        "@react-native-google-signin/google-signin"
+      ],
       [
         "expo-splash-screen",
         {
@@ -52,11 +54,21 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#10b981",
-          "sounds": ["./assets/sounds/notification.wav"]
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "bounty-4e"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
