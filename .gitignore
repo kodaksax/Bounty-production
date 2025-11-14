@@ -48,6 +48,11 @@ postgres-data/
 *.swp
 *.swo
 
+# Testing
+coverage/
+*.test.results.json
+.nyc_output/
+
 # Logs
 *.log
 logs/
