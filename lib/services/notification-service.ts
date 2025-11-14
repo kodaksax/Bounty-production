@@ -52,6 +52,18 @@ async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<R
   }
 }
 
+// Small helper to add an explicit timeout to fetches so we fail fast on unreachable
+// dev machines or when a physical device isn’t on the same LAN. React Native’s
+// default fetch can take a long time before surfacing a network timeout.
+function withTimeout(signal: AbortSignal | undefined, ms = 8000) {
+  if (signal) return signal
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), ms)
+  // @ts-ignore attach for cleanup by callers if needed
+  controller.__timeoutId = id
+  return controller.signal
+}
+
 // Configure how notifications should be handled when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -93,11 +105,14 @@ export class NotificationService {
         return null;
       }
 
-      // Get the Expo push token
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+  // Get the Expo push token
+  const token = (await Notifications.getExpoPushTokenAsync()).data;
       
       // Register token with backend
-      await this.registerPushToken(token);
+  await this.registerPushToken(token);
+
+  // Also try to flush any tokens we cached from previous failed attempts
+  try { await this.flushPendingPushTokens(); } catch {}
 
       return token;
     } catch (error) {
@@ -118,6 +133,7 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications/register-token`
+      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
@@ -125,6 +141,8 @@ export class NotificationService {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ token, deviceId }),
+        // add an 8s timeout so we don’t hang forever on mobile when the dev API isn’t reachable
+        signal: withTimeout(controller.signal, 8000),
       });
 
       if (!response.ok) {
@@ -136,6 +154,25 @@ export class NotificationService {
       console.log('Push token registered successfully')
     } catch (error) {
       console.error('Error registering push token:', error);
+      // Fallback: try saving directly to Supabase if available (RLS should allow inserting own token)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id
+        if (userId) {
+          const { error: sbErr } = await supabase.from('push_tokens').upsert({ user_id: userId, token, device_id: deviceId }).select('id').single()
+          if (!sbErr) {
+            console.log('Push token saved via Supabase fallback')
+            return
+          }
+        }
+      } catch {}
+      // As a last resort, cache and retry later so the user isn’t blocked
+      try {
+        const pendingStr = await AsyncStorage.getItem('notifications:pending_tokens')
+        const pending = pendingStr ? JSON.parse(pendingStr) as Array<{token:string, deviceId?:string}> : []
+        pending.push({ token, deviceId })
+        await AsyncStorage.setItem('notifications:pending_tokens', JSON.stringify(pending))
+      } catch {}
     }
   }
 
@@ -151,11 +188,13 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`
+      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
+        signal: withTimeout(controller.signal, 8000),
       });
 
       if (!response.ok) {
@@ -174,6 +213,26 @@ export class NotificationService {
       return this.cachedNotifications;
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      // Fallback: try reading directly from Supabase if our API is unreachable
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id
+        if (userId) {
+          const { data, error: sbErr } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1)
+          if (!sbErr && data) {
+            // Map data to our Notification type (Supabase returns snake_case already matching fields)
+            this.cachedNotifications = data as any
+            await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+            await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
+            return this.cachedNotifications
+          }
+        }
+      } catch {}
       // Return cached notifications on error
       return this.getCachedNotifications();
     }
@@ -207,11 +266,13 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications/unread-count`
+      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
+        signal: withTimeout(controller.signal, 8000),
       });
 
       if (!response.ok) {
@@ -225,6 +286,22 @@ export class NotificationService {
       return this.unreadCount;
     } catch (error) {
       console.error('Error fetching unread count:', error);
+      // Supabase fallback: count unread directly
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id
+        if (userId) {
+          const { count, error: sbErr } = await supabase
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('read', false)
+          if (!sbErr && typeof count === 'number') {
+            this.unreadCount = count
+            return this.unreadCount
+          }
+        }
+      } catch {}
       return 0;
     }
   }
@@ -276,11 +353,13 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications/mark-all-read`
+      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
+        signal: withTimeout(controller.signal, 8000),
       });
 
       if (!response.ok) {
@@ -295,6 +374,17 @@ export class NotificationService {
       this.unreadCount = 0;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+      // Best-effort Supabase fallback
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id
+        if (userId) {
+          await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false)
+          this.cachedNotifications = this.cachedNotifications.map(n => ({ ...n, read: true }))
+          await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+          this.unreadCount = 0
+        }
+      } catch {}
     }
   }
 
@@ -345,6 +435,21 @@ export class NotificationService {
     } catch (error) {
       console.error('Error clearing notification cache:', error);
     }
+  }
+
+  /**
+   * Flush any push tokens cached due to earlier network failures.
+   */
+  private async flushPendingPushTokens() {
+    try {
+      const str = await AsyncStorage.getItem('notifications:pending_tokens')
+      if (!str) return
+      const pending = JSON.parse(str) as Array<{token:string, deviceId?:string}>
+      await AsyncStorage.removeItem('notifications:pending_tokens')
+      for (const p of pending) {
+        try { await this.registerPushToken(p.token, p.deviceId) } catch {}
+      }
+    } catch {}
   }
 }
 

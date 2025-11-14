@@ -3,13 +3,13 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
-import { WithdrawScreen } from "../../components/withdraw-screen";
 import { EmptyState } from "../../components/ui/empty-state";
-import { PaymentMethodSkeleton, TransactionsListSkeleton } from "../../components/ui/skeleton-loaders";
+import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
+import { WithdrawScreen } from "../../components/withdraw-screen";
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
@@ -25,21 +25,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const { balance, deposit, transactions, refresh: refreshWallet } = useWallet();
+  const { balance, transactions } = useWallet();
   const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    try {
-      await Promise.all([
-        refreshWallet?.(),
-        loadPaymentMethods?.()
-      ].filter(Boolean))
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
+  
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
@@ -67,14 +56,6 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   return (
     <ScrollView 
       style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          tintColor="#ffffff"
-          colors={['#10b981']}
-        />
-      }
     >
       {/* Header */}
       <View style={styles.header}>
@@ -198,7 +179,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </View>
           
           <View style={{ minHeight: 200 }}>
-            {transactions.length === 0 && !isRefreshing ? (
+            {transactions.length === 0 ? (
               <EmptyState
                 icon="receipt-long"
                 title="No Transactions Yet"
