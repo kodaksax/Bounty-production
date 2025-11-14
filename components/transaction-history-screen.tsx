@@ -404,9 +404,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       </View>
 
       {/* Transaction Detail Modal */}
-      {selectedTransaction && (
-        <TransactionDetailModal transaction={selectedTransaction} onClose={() => setSelectedTransaction(null)} />
-      )}
+      <TransactionDetailModal 
+        visible={!!selectedTransaction} 
+        transaction={selectedTransaction || {} as Transaction} 
+        onClose={() => setSelectedTransaction(null)} 
+      />
     </View>
   )
 }
