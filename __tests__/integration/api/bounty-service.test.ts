@@ -250,14 +250,11 @@ describe('Bounty Service Integration Tests', () => {
     it('should handle database errors gracefully', async () => {
       mockDb.transaction.mockRejectedValue(new Error('Database error'));
 
-      try {
-        await mockDb.transaction(async () => {
+      await expect(
+        mockDb.transaction(async () => {
           throw new Error('Database error');
-        });
-        fail('Should have thrown error');
-      } catch (error: any) {
-        expect(error.message).toBe('Database error');
-      }
+        })
+      ).rejects.toThrow('Database error');
     });
 
     it('should continue if notification fails', async () => {
