@@ -4,25 +4,12 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { cn } from "lib/utils"
 import type React from "react"
 import { useState } from "react"
-import { 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  View, 
-  Alert, 
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform
-} from "react-native"
+import { Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
 import { useStripe } from "../lib/stripe-context"
 import { stripeService } from "../lib/services/stripe-service"
 
 interface AddCardModalProps {
-  visible: boolean
-  onClose: () => void
+  onBack: () => void
   onSave?: (cardData: CardData) => void
 }
 
@@ -33,7 +20,7 @@ interface CardData {
   securityCode: string
 }
 
-export function AddCardModal({ visible, onClose, onSave }: AddCardModalProps) {
+export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
   const [cardNumber, setCardNumber] = useState("")
   const [cardholderName, setCardholderName] = useState("")
   const [expiryDate, setExpiryDate] = useState("")
@@ -42,12 +29,6 @@ export function AddCardModal({ visible, onClose, onSave }: AddCardModalProps) {
   const [cardErrors, setCardErrors] = useState<{[key: string]: string}>({})
   
   const { createPaymentMethod, error: stripeError } = useStripe()
-
-  const handleClose = () => {
-    if (!isLoading) {
-      onClose()
-    }
-  }
 
   const formatCardNumber = (value: string) => {
     const digits = value.replace(/\D/g, "")
@@ -158,7 +139,7 @@ export function AddCardModal({ visible, onClose, onSave }: AddCardModalProps) {
       
       // Show success and close modal
       Alert.alert('Success', 'Payment method added successfully!', [
-        { text: 'OK', onPress: onClose }
+        { text: 'OK', onPress: onBack }
       ])
       
     } catch (error) {
@@ -176,371 +157,169 @@ export function AddCardModal({ visible, onClose, onSave }: AddCardModalProps) {
     Object.keys(cardErrors).length === 0
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <KeyboardAvoidingView 
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            {/* Header */}
-            <View style={styles.header}>
-              <TouchableOpacity onPress={handleClose} disabled={isLoading} style={styles.backButton}>
-                <MaterialIcons name="arrow-back" size={24} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>Add Card</Text>
-              <View style={styles.headerSpacer} />
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+      {/* Header */}
+      <View className="flex items-center justify-between p-4 pt-8">
+        <TouchableOpacity onPress={onBack} className="p-1">
+          <MaterialIcons name="arrow-back" size={24} color="#000000" />
+        </TouchableOpacity>
+        <Text className="text-lg font-medium">Add Card</Text>
+        <View className="w-5"></View> {/* Empty div for spacing */}
+      </View>
+
+      {/* Instructions */}
+      <View className="px-4 py-2">
+        <Text className="text-sm text-emerald-200">{`Start typing to add your credit card details.\nEverything will update according to your data.`}</Text>
+      </View>
+
+      {/* Card Preview */}
+      <View className="px-4 py-4">
+        <View className="bg-emerald-700 rounded-xl p-4">
+          <View className="flex justify-between items-center mb-4">
+            <View className="flex items-center">
+              <View className="flex h-8">
+                <View className="h-8 w-8 rounded-full bg-red-500"></View>
+                <View className="h-8 w-8 rounded-full bg-yellow-500 -ml-4"></View>
+              </View>
             </View>
+          </View>
 
-            <ScrollView 
-              style={styles.content}
-              contentContainerStyle={styles.contentContainer}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Instructions */}
-              <View style={styles.instructions}>
-                <Text style={styles.instructionsText}>
-                  Start typing to add your credit card details.{'\n'}Everything will update according to your data.
-                </Text>
-              </View>
+          <View className="text-lg font-medium mb-6 tracking-wider">{cardNumber || "1244 1234 1345 3255"}</View>
 
-              {/* Card Preview */}
-              <View style={styles.cardPreviewContainer}>
-                <View style={styles.cardPreview}>
-                  <View style={styles.cardChipContainer}>
-                    <View style={styles.cardChipCircle1} />
-                    <View style={styles.cardChipCircle2} />
-                  </View>
-
-                  <Text style={styles.cardNumber}>
-                    {cardNumber || "1244 1234 1345 3255"}
-                  </Text>
-
-                  <View style={styles.cardDetailsRow}>
-                    <View>
-                      <Text style={styles.cardLabel}>Name</Text>
-                      <Text style={styles.cardValue}>{cardholderName || "Yessie"}</Text>
-                    </View>
-                    <View style={styles.cardExpiryContainer}>
-                      <Text style={styles.cardLabel}>Expires</Text>
-                      <Text style={styles.cardValue}>{expiryDate || "MM/YY"}</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Form Fields */}
-              <View style={styles.formContainer}>
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>Card Number</Text>
-                  <TextInput
-                    value={cardNumber}
-                    onChangeText={handleCardNumberChange}
-                    placeholder="1244 1234 1345 3255"
-                    placeholderTextColor="rgba(167, 243, 208, 0.5)"
-                    maxLength={19}
-                    keyboardType="numeric"
-                    style={[
-                      styles.input,
-                      cardErrors.cardNumber && styles.inputError
-                    ]}
-                  />
-                  {cardErrors.cardNumber && (
-                    <Text style={styles.errorText}>{cardErrors.cardNumber}</Text>
-                  )}
-                </View>
-
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>Cardholder Name</Text>
-                  <TextInput
-                    value={cardholderName}
-                    onChangeText={(text) => {
-                      setCardholderName(text)
-                      if (cardErrors.cardholderName) {
-                        setCardErrors(prev => ({ ...prev, cardholderName: '' }))
-                      }
-                    }}
-                    placeholder="Yessie"
-                    placeholderTextColor="rgba(167, 243, 208, 0.5)"
-                    style={[
-                      styles.input,
-                      cardErrors.cardholderName && styles.inputError
-                    ]}
-                  />
-                  {cardErrors.cardholderName && (
-                    <Text style={styles.errorText}>{cardErrors.cardholderName}</Text>
-                  )}
-                </View>
-
-                <View style={styles.rowContainer}>
-                  <View style={styles.halfFieldContainer}>
-                    <Text style={styles.fieldLabel}>Expiry Date</Text>
-                    <TextInput
-                      value={expiryDate}
-                      onChangeText={handleExpiryDateChange}
-                      placeholder="MM/YY"
-                      placeholderTextColor="rgba(167, 243, 208, 0.5)"
-                      maxLength={5}
-                      keyboardType="numeric"
-                      style={[
-                        styles.input,
-                        cardErrors.expiryDate && styles.inputError
-                      ]}
-                    />
-                    {cardErrors.expiryDate && (
-                      <Text style={styles.errorText}>{cardErrors.expiryDate}</Text>
-                    )}
-                  </View>
-
-                  <View style={styles.halfFieldContainer}>
-                    <Text style={styles.fieldLabel}>Security Code</Text>
-                    <TextInput
-                      value={securityCode}
-                      onChangeText={(text) => {
-                        const cleaned = text.replace(/\D/g, "").slice(0, 4)
-                        setSecurityCode(cleaned)
-                        if (cardErrors.securityCode) {
-                          setCardErrors(prev => ({ ...prev, securityCode: '' }))
-                        }
-                      }}
-                      placeholder="•••"
-                      placeholderTextColor="rgba(167, 243, 208, 0.5)"
-                      maxLength={4}
-                      secureTextEntry
-                      keyboardType="numeric"
-                      style={[
-                        styles.input,
-                        cardErrors.securityCode && styles.inputError
-                      ]}
-                    />
-                    {cardErrors.securityCode && (
-                      <Text style={styles.errorText}>{cardErrors.securityCode}</Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-
-              {/* Error message from Stripe */}
-              {stripeError && (
-                <View style={styles.stripeErrorContainer}>
-                  <Text style={styles.stripeErrorText}>{stripeError}</Text>
-                </View>
-              )}
-
-              {/* Save Button */}
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  onPress={handleSave}
-                  disabled={!isFormValid || isLoading}
-                  style={[
-                    styles.saveButton,
-                    (!isFormValid || isLoading) && styles.saveButtonDisabled
-                  ]}
-                >
-                  {isLoading ? (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color="#ffffff" />
-                      <Text style={styles.saveButtonText}>Adding Card...</Text>
-                    </View>
-                  ) : (
-                    <Text style={[
-                      styles.saveButtonText,
-                      !isFormValid && styles.saveButtonTextDisabled
-                    ]}>Save Card</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+          <View className="flex justify-between items-end">
+            <View>
+              <Text className="text-xs text-emerald-300 mb-1">Name</Text>
+              <Text className="font-medium">{cardholderName || "Yessie"}</Text>
+            </View>
+            <View className="text-right">
+              <Text className="text-xs text-emerald-300 mb-1">Expires</Text>
+              <Text className="font-medium">{expiryDate || "MM/YY"}</Text>
+            </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </View>
+
+      {/* Form Fields */}
+      <View className="px-4 py-2 flex-1">
+        <View className="space-y-4">
+          <View className="space-y-1">
+            <Text className="text-sm text-emerald-200">Card Number</Text>
+            <TextInput
+              value={cardNumber}
+              onChangeText={handleCardNumberChange}
+              placeholder="1244 1234 1345 3255"
+              maxLength={19}
+              keyboardType="numeric"
+              className={cn(
+                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                cardErrors.cardNumber && "border border-red-400"
+              )}
+            />
+            {cardErrors.cardNumber && (
+              <Text className="text-xs text-red-300">{cardErrors.cardNumber}</Text>
+            )}
+          </View>
+
+          <View className="space-y-1">
+            <Text className="text-sm text-emerald-200">Cardholder Name</Text>
+            <TextInput
+              value={cardholderName}
+              onChangeText={(text) => {
+                setCardholderName(text)
+                if (cardErrors.cardholderName) {
+                  setCardErrors(prev => ({ ...prev, cardholderName: '' }))
+                }
+              }}
+              placeholder="Yessie"
+              className={cn(
+                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                cardErrors.cardholderName && "border border-red-400"
+              )}
+            />
+            {cardErrors.cardholderName && (
+              <Text className="text-xs text-red-300">{cardErrors.cardholderName}</Text>
+            )}
+          </View>
+
+          <View className="grid grid-cols-2 gap-4">
+            <View className="space-y-1">
+              <Text className="text-sm text-emerald-200">Expiry Date</Text>
+              <TextInput
+                value={expiryDate}
+                onChangeText={handleExpiryDateChange}
+                placeholder="MM/YY"
+                maxLength={5}
+                keyboardType="numeric"
+                className={cn(
+                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                  cardErrors.expiryDate && "border border-red-400"
+                )}
+              />
+              {cardErrors.expiryDate && (
+                <Text className="text-xs text-red-300">{cardErrors.expiryDate}</Text>
+              )}
+            </View>
+
+            <View className="space-y-1">
+              <Text className="text-sm text-emerald-200">Security Code</Text>
+              <TextInput
+                value={securityCode}
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/\D/g, "").slice(0, 4)
+                  setSecurityCode(cleaned)
+                  if (cardErrors.securityCode) {
+                    setCardErrors(prev => ({ ...prev, securityCode: '' }))
+                  }
+                }}
+                placeholder="•••"
+                maxLength={4}
+                secureTextEntry
+                keyboardType="numeric"
+                className={cn(
+                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
+                  cardErrors.securityCode && "border border-red-400"
+                )}
+              />
+              {cardErrors.securityCode && (
+                <Text className="text-xs text-red-300">{cardErrors.securityCode}</Text>
+              )}
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Save Button */}
+      <View className="p-4 pb-8">
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={!isFormValid || isLoading}
+          className={cn(
+            "w-full py-3 rounded-full text-center font-medium flex-row items-center justify-center",
+            isFormValid && !isLoading
+              ? "bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+              : "bg-gray-700/50 text-gray-300 cursor-not-allowed"
+          )}
+        >
+          {isLoading ? (
+            <>
+              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+              <Text className="text-center font-medium text-white">Adding Card...</Text>
+            </>
+          ) : (
+            <Text className={cn(
+              "text-center font-medium",
+              isFormValid ? "text-white" : "text-gray-300"
+            )}>Save Card</Text>
+          )}
+        </TouchableOpacity>
+        
+        {/* Error message from Stripe */}
+        {stripeError && (
+          <View className="mt-2 p-2 bg-red-100 rounded-md">
+            <Text className="text-red-800 text-sm text-center">{stripeError}</Text>
+          </View>
+        )}
+      </View>
+    </View>
   )
 }
-
-const styles = StyleSheet.create({
-  keyboardAvoid: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modal: {
-    backgroundColor: "#059669", // emerald-600
-    borderRadius: 16,
-    width: "100%",
-    maxWidth: 500,
-    maxHeight: "90%",
-    overflow: "hidden",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    paddingTop: 24,
-    backgroundColor: "#047857", // emerald-700
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  headerSpacer: {
-    width: 32,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  instructions: {
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  instructionsText: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-    lineHeight: 20,
-  },
-  cardPreviewContainer: {
-    paddingVertical: 16,
-  },
-  cardPreview: {
-    backgroundColor: "#047857", // emerald-700
-    borderRadius: 12,
-    padding: 16,
-  },
-  cardChipContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-    height: 32,
-  },
-  cardChipCircle1: {
-    height: 32,
-    width: 32,
-    borderRadius: 16,
-    backgroundColor: "#ef4444", // red-500
-  },
-  cardChipCircle2: {
-    height: 32,
-    width: 32,
-    borderRadius: 16,
-    backgroundColor: "#eab308", // yellow-500
-    marginLeft: -16,
-  },
-  cardNumber: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-    letterSpacing: 2,
-    marginBottom: 24,
-  },
-  cardDetailsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-  },
-  cardExpiryContainer: {
-    alignItems: "flex-end",
-  },
-  cardLabel: {
-    fontSize: 12,
-    color: "#6ee7b7", // emerald-300
-    marginBottom: 4,
-  },
-  cardValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  formContainer: {
-    paddingVertical: 8,
-  },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-    marginBottom: 8,
-  },
-  input: {
-    width: "100%",
-    backgroundColor: "rgba(4, 120, 87, 0.5)", // emerald-700/50
-    borderRadius: 8,
-    padding: 12,
-    color: "#fff",
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  inputError: {
-    borderColor: "#f87171", // red-400
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#fca5a5", // red-300
-    marginTop: 4,
-  },
-  rowContainer: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  halfFieldContainer: {
-    flex: 1,
-  },
-  stripeErrorContainer: {
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: "#fee2e2", // red-100
-    borderRadius: 8,
-  },
-  stripeErrorText: {
-    fontSize: 14,
-    color: "#991b1b", // red-800
-    textAlign: "center",
-  },
-  buttonContainer: {
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  saveButton: {
-    width: "100%",
-    paddingVertical: 12,
-    borderRadius: 9999, // full rounded
-    backgroundColor: "#374151", // gray-700
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  saveButtonDisabled: {
-    backgroundColor: "rgba(55, 65, 81, 0.5)", // gray-700/50
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  saveButtonTextDisabled: {
-    color: "#d1d5db", // gray-300
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-})

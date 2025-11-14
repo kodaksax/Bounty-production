@@ -148,8 +148,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
         {/* Content */}
         {showAddCard ? (
           <AddCardModal
-            visible={showAddCard}
-            onClose={() => setShowAddCard(false)}
+            onBack={() => setShowAddCard(false)}
             onSave={(cardData) => {
               // Card already added through Stripe service in AddCardModal
               setShowAddCard(false)

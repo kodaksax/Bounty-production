@@ -2,33 +2,28 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
+import { cn } from "lib/utils"
 import { receiptService } from "lib/services/receipt-service"
-import { useState } from "react"
-import { 
-  Alert, 
-  Text, 
-  TouchableOpacity, 
-  View, 
-  Modal,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator
-} from "react-native"
+import { useEffect, useRef, useState } from "react"
+import { Alert, Text, TouchableOpacity, View } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
 
 interface TransactionDetailModalProps {
-  visible: boolean
   transaction: Transaction
   onClose: () => void
 }
 
-export function TransactionDetailModal({ visible, transaction, onClose }: TransactionDetailModalProps) {
+export function TransactionDetailModal({ transaction, onClose }: TransactionDetailModalProps) {
+  const [isClosing, setIsClosing] = useState(false)
   const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false)
+  const modalRef = useRef<HTMLDivElement>(null)
 
+  // Handle close animation
   const handleClose = () => {
-    if (!isGeneratingReceipt) {
+    setIsClosing(true)
+    setTimeout(() => {
       onClose()
-    }
+    }, 300)
   }
 
   // Handle receipt generation
@@ -46,15 +41,26 @@ export function TransactionDetailModal({ visible, transaction, onClose }: Transa
     }
   }
 
+  // Handle click outside to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        handleClose()
+      }
+    }
+
+    // In React Native, use TouchableWithoutFeedback for click outside modal.
+  }, [])
+
   // Get transaction icon based on type
   const getTransactionIcon = () => {
     switch (transaction.type) {
       case "deposit":
-        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#10b981" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
       case "withdrawal":
-        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#10b981" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
       case "bounty_posted":
-        return <MaterialIcons name="gps-fixed" size={24} color="#10b981" />
+        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
       case "bounty_completed":
         return <MaterialIcons name="check-circle" size={24} color="#60a5fa" />
       case "bounty_received":
@@ -95,390 +101,161 @@ export function TransactionDetailModal({ visible, transaction, onClose }: Transa
   }
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <MaterialIcons name="receipt-long" size={24} color="#10b981" />
-              <Text style={styles.headerTitle}>Transaction Details</Text>
+    <View className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <View
+        ref={modalRef as any}
+        className={cn(
+          "relative w-full max-w-md mx-auto bg-emerald-600 rounded-xl overflow-hidden transition-all duration-300 transform",
+          isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100",
+        )}
+      >
+        {/* Header */}
+        <View className="flex flex-row items-center justify-between p-4 bg-emerald-700">
+          <View className="flex flex-row items-center">
+            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+            <Text className="text-lg font-bold text-white ml-2">Transaction Details</Text>
+          </View>
+          <TouchableOpacity onPress={handleClose} className="p-2 touch-target-min">
+            <MaterialIcons name="close" size={24} color="#000000" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Transaction Summary */}
+        <View className="p-5 border-b border-emerald-700/50">
+          <View className="flex items-center mb-4">
+            <View className="h-12 w-12 rounded-full bg-emerald-800/80 flex items-center justify-center mr-4">
+              {getTransactionIcon()}
             </View>
-            <TouchableOpacity 
-              onPress={handleClose} 
-              disabled={isGeneratingReceipt}
-              style={styles.closeButton}
-            >
-              <MaterialIcons name="close" size={24} color="#d1fae5" />
-            </TouchableOpacity>
+            <View>
+              <Text className="text-lg font-bold text-white">{getTransactionTitle()}</Text>
+              <Text className="text-sm text-emerald-200">
+                {format(transaction.date, "MMMM d, yyyy")} at {format(transaction.date, "h:mm a")}
+              </Text>
+            </View>
           </View>
 
-          <ScrollView 
-            style={styles.content}
-            contentContainerStyle={styles.contentContainer}
-          >
-            {/* Transaction Summary */}
-            <View style={styles.summaryContainer}>
-              <View style={styles.summaryHeader}>
-                <View style={styles.iconContainer}>
-                  {getTransactionIcon()}
-                </View>
-                <View style={styles.summaryTextContainer}>
-                  <Text style={styles.summaryTitle}>{getTransactionTitle()}</Text>
-                  <Text style={styles.summaryDate}>
-                    {format(transaction.date, "MMMM d, yyyy")} at {format(transaction.date, "h:mm a")}
-                  </Text>
-                </View>
+          <View className="bg-emerald-700/50 rounded-lg p-4 mb-4">
+            <Text
+              className={cn(
+                "text-2xl font-bold text-center",
+                transaction.amount > 0 ? "text-emerald-400" : "text-red-300",
+              )}
+            >
+              {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
+            </Text>
+          </View>
+
+          <Text className="text-sm text-emerald-100">{getTransactionDescription()}</Text>
+        </View>
+
+        {/* Transaction Details */}
+        <View className="p-5">
+          <Text className="text-sm font-medium text-emerald-300 mb-3">Details</Text>
+
+          <View className="space-y-4">
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                <MaterialIcons name="info" size={16} color="#86efac" />
               </View>
-
-              <View style={styles.amountContainer}>
-                <Text
-                  style={[
-                    styles.amount,
-                    transaction.amount > 0 ? styles.amountPositive : styles.amountNegative,
-                  ]}
-                >
-                  {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-                </Text>
-              </View>
-
-              <Text style={styles.description}>{getTransactionDescription()}</Text>
-            </View>
-
-            {/* Transaction Details */}
-            <View style={styles.detailsContainer}>
-              <Text style={styles.detailsTitle}>Details</Text>
-
-              <View style={styles.detailsList}>
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIconContainer}>
-                    <MaterialIcons name="info" size={16} color="#6ee7b7" />
-                  </View>
-                  <View style={styles.detailTextContainer}>
-                    <Text style={styles.detailLabel}>Transaction ID</Text>
-                    <Text style={styles.detailValue}>{transaction.id}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIconContainer}>
-                    <MaterialIcons name="calendar-today" size={16} color="#6ee7b7" />
-                  </View>
-                  <View style={styles.detailTextContainer}>
-                    <Text style={styles.detailLabel}>Date</Text>
-                    <Text style={styles.detailValue}>{format(transaction.date, "MMMM d, yyyy")}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIconContainer}>
-                    <MaterialIcons name="schedule" size={16} color="#6ee7b7" />
-                  </View>
-                  <View style={styles.detailTextContainer}>
-                    <Text style={styles.detailLabel}>Time</Text>
-                    <Text style={styles.detailValue}>{format(transaction.date, "h:mm:ss a")}</Text>
-                  </View>
-                </View>
-
-                {transaction.details.status && (
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailIconContainer}>
-                      <MaterialIcons name="check-circle" size={16} color="#6ee7b7" />
-                    </View>
-                    <View style={styles.detailTextContainer}>
-                      <Text style={styles.detailLabel}>Status</Text>
-                      <Text style={styles.detailValue}>{transaction.details.status}</Text>
-                    </View>
-                  </View>
-                )}
-
-                {transaction.details.method && (
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailIconContainer}>
-                      <MaterialIcons name="credit-card" size={16} color="#6ee7b7" />
-                    </View>
-                    <View style={styles.detailTextContainer}>
-                      <Text style={styles.detailLabel}>Method</Text>
-                      <Text style={styles.detailValue}>{transaction.details.method}</Text>
-                    </View>
-                  </View>
-                )}
-
-                {transaction.details.counterparty && (
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailIconContainer}>
-                      <MaterialIcons name="person" size={16} color="#6ee7b7" />
-                    </View>
-                    <View style={styles.detailTextContainer}>
-                      <Text style={styles.detailLabel}>
-                        {transaction.type === "bounty_completed" ? "Paid to" : "From"}
-                      </Text>
-                      <Text style={styles.detailValue}>{transaction.details.counterparty}</Text>
-                    </View>
-                  </View>
-                )}
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Transaction ID</Text>
+                <Text className="text-sm text-white">{transaction.id}</Text>
               </View>
             </View>
 
-            {/* Escrow Status if applicable */}
-            {(transaction as any).escrowStatus && (
-              <View style={styles.escrowContainer}>
-                <View style={styles.escrowHeader}>
-                  <MaterialIcons name="lock" size={20} color="#10b981" />
-                  <Text style={styles.escrowTitle}>Escrow Information</Text>
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                <MaterialIcons name="calendar-today" size={24} color="#000000" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Date</Text>
+                <Text className="text-sm text-white">{format(transaction.date, "MMMM d, yyyy")}</Text>
+              </View>
+            </View>
+
+            <View className="flex items-center">
+              <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                <MaterialIcons name="schedule" size={16} color="#86efac" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-emerald-300">Time</Text>
+                <Text className="text-sm text-white">{format(transaction.date, "h:mm:ss a")}</Text>
+              </View>
+            </View>
+
+            {transaction.details.status && (
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                  <MaterialIcons name="check-circle" size={16} color="#86efac" />
                 </View>
-                <Text style={styles.escrowText}>
-                  {(transaction as any).escrowStatus === 'funded' && 'Funds are held in escrow until bounty completion.'}
-                  {(transaction as any).escrowStatus === 'released' && 'Funds have been released to the hunter.'}
-                  {(transaction as any).escrowStatus === 'pending' && 'Escrow is pending verification.'}
-                </Text>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">Status</Text>
+                  <Text className="text-sm text-white">{transaction.details.status}</Text>
+                </View>
               </View>
             )}
 
-            {/* Action Buttons */}
-            <View style={styles.actionsContainer}>
-              <TouchableOpacity 
-                onPress={handleGenerateReceipt} 
-                disabled={isGeneratingReceipt}
-                style={[
-                  styles.primaryButton,
-                  isGeneratingReceipt && styles.primaryButtonDisabled
-                ]}
-              >
-                {isGeneratingReceipt ? (
-                  <View style={styles.buttonContent}>
-                    <ActivityIndicator size="small" color="#ffffff" />
-                    <Text style={styles.primaryButtonText}>Generating...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.buttonContent}>
-                    <MaterialIcons name="receipt" size={20} color="#ffffff" />
-                    <Text style={styles.primaryButtonText}>Generate Receipt</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                onPress={handleClose}
-                disabled={isGeneratingReceipt}
-                style={[
-                  styles.secondaryButton,
-                  isGeneratingReceipt && styles.secondaryButtonDisabled
-                ]}
-              >
-                <Text style={styles.secondaryButtonText}>Close</Text>
-              </TouchableOpacity>
+            {transaction.details.method && (
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                  <MaterialIcons name="credit-card" size={16} color="#86efac" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">Method</Text>
+                  <Text className="text-sm text-white">{transaction.details.method}</Text>
+                </View>
+              </View>
+            )}
+
+            {transaction.details.counterparty && (
+              <View className="flex items-center">
+                <View className="h-8 w-8 rounded-full bg-emerald-800/50 flex items-center justify-center mr-3">
+                  <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-emerald-300">
+                    {transaction.type === "bounty_completed" ? "Paid to" : "From"}
+                  </Text>
+                  <Text className="text-sm text-white">{transaction.details.counterparty}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Escrow Status if applicable */}
+        {(transaction as any).escrowStatus && (
+          <View className="mx-5 mb-4 p-4 bg-emerald-700/50 rounded-lg border border-emerald-600">
+            <View className="flex flex-row items-center mb-2">
+              <MaterialIcons name="lock" size={20} color="#10b981" />
+              <Text className="text-sm font-bold text-white ml-2">Escrow Information</Text>
             </View>
-          </ScrollView>
+            <Text className="text-sm text-emerald-200">
+              {(transaction as any).escrowStatus === 'funded' && 'Funds are held in escrow until bounty completion.'}
+              {(transaction as any).escrowStatus === 'released' && 'Funds have been released to the hunter.'}
+              {(transaction as any).escrowStatus === 'pending' && 'Escrow is pending verification.'}
+            </Text>
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        <View className="p-5 pt-0 space-y-3">
+          <TouchableOpacity 
+            onPress={handleGenerateReceipt} 
+            disabled={isGeneratingReceipt}
+            className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 transition-colors rounded-lg text-white font-medium flex-row items-center justify-center"
+          >
+            <MaterialIcons name="receipt" size={20} color="#ffffff" />
+            <Text className="text-center text-white ml-2 font-medium">
+              {isGeneratingReceipt ? 'Generating...' : 'Generate Receipt'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={handleClose} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium">
+            <Text className="text-center text-white font-medium">Close</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </View>
   )
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modal: {
-    backgroundColor: "#059669", // emerald-600
-    borderRadius: 16,
-    width: "100%",
-    maxWidth: 500,
-    maxHeight: "90%",
-    overflow: "hidden",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#047857", // emerald-700
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(4, 120, 87, 0.5)",
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  closeButton: {
-    padding: 4,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 20,
-  },
-  summaryContainer: {
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(4, 120, 87, 0.5)",
-  },
-  summaryHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  iconContainer: {
-    height: 48,
-    width: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(4, 120, 87, 0.8)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-  },
-  summaryTextContainer: {
-    flex: 1,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  summaryDate: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-  },
-  amountContainer: {
-    backgroundColor: "rgba(4, 120, 87, 0.5)",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-  },
-  amount: {
-    fontSize: 28,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  amountPositive: {
-    color: "#6ee7b7", // emerald-400
-  },
-  amountNegative: {
-    color: "#fca5a5", // red-300
-  },
-  description: {
-    fontSize: 14,
-    color: "#d1fae5", // emerald-100
-    lineHeight: 20,
-  },
-  detailsContainer: {
-    paddingTop: 20,
-  },
-  detailsTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6ee7b7", // emerald-300
-    marginBottom: 12,
-  },
-  detailsList: {
-    gap: 16,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  detailIconContainer: {
-    height: 32,
-    width: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(4, 120, 87, 0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  detailTextContainer: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: "#6ee7b7", // emerald-300
-    marginBottom: 2,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: "#fff",
-  },
-  escrowContainer: {
-    marginTop: 20,
-    padding: 16,
-    backgroundColor: "rgba(4, 120, 87, 0.5)",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#059669",
-  },
-  escrowHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    gap: 8,
-  },
-  escrowTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  escrowText: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-    lineHeight: 20,
-  },
-  actionsContainer: {
-    paddingTop: 20,
-    gap: 12,
-  },
-  primaryButton: {
-    width: "100%",
-    paddingVertical: 12,
-    backgroundColor: "#047857", // emerald-700
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  secondaryButton: {
-    width: "100%",
-    paddingVertical: 12,
-    backgroundColor: "#059669", // emerald-600
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-})
