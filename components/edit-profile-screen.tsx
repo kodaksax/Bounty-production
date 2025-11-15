@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { AvatarFallback } from "components/ui/avatar"
 import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from "react"
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -15,6 +15,7 @@ import { useUserProfile } from '../hooks/useUserProfile'
 import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
+import { COLORS, SPACING, RADIUS, SIZING, TYPOGRAPHY } from '../lib/constants/accessibility'
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -391,7 +392,7 @@ export function EditProfileScreen({
               )}
             </View>
             <TouchableOpacity
-              style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
+              style={styles.avatarEditButton}
               onPress={handleAvatarClick}
               disabled={isUploadingAvatar}
             >
@@ -479,3 +480,19 @@ export function EditProfileScreen({
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  avatarEditButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    height: SIZING.AVATAR_SMALL - 12,
+    width: SIZING.AVATAR_SMALL - 12,
+    borderRadius: (SIZING.AVATAR_SMALL - 12) / 2,
+    backgroundColor: COLORS.INTERACTIVE_DEFAULT, // emerald-500
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.BG_PRIMARY, // emerald-600 border to match bg
+  },
+});

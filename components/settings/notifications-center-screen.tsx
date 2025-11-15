@@ -174,13 +174,13 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     <View className="flex-1 bg-emerald-600">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000" />
+          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
           <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
         <View className="flex-row items-center">
           {syncing && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
           <TouchableOpacity onPress={onBack} className="p-2">
-            <MaterialIcons name="arrow-back" size={24} color="#000" />
+            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
