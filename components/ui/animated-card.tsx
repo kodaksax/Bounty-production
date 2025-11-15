@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View, ViewStyle } from 'react-native';
-import { theme } from '../../lib/theme';
+import { COLORS, RADIUS, SPACING, SHADOWS } from '../../lib/constants/accessibility';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -140,21 +140,21 @@ export function AnimatedCard({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
+    borderRadius: RADIUS.XL,
+    padding: SPACING.CARD_PADDING,
     borderWidth: 1,
   },
   default: {
-    backgroundColor: theme.colors.background.surface,
-    borderColor: theme.colors.border.muted,
-    ...theme.shadows.md,
+    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
+    borderColor: COLORS.BORDER_SUBTLE, // emerald-300 with opacity
+    ...SHADOWS.MD,
   },
   elevated: {
-    backgroundColor: theme.colors.background.elevated,
-    borderColor: theme.colors.border.primary,
-    ...theme.shadows.xl,
+    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
+    borderColor: COLORS.BORDER_DEFAULT, // emerald-700
+    ...SHADOWS.XL,
     // Add emerald glow
-    shadowColor: theme.colors.primary[500],
+    shadowColor: COLORS.INTERACTIVE_DEFAULT, // emerald-500
     shadowOpacity: 0.2,
   },
 });

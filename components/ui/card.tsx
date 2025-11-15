@@ -116,54 +116,53 @@ interface CardStyles {
   footer: ViewStyle
 }
 
+// Import design tokens
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from "../../lib/constants/accessibility";
+
 const cardStyles = StyleSheet.create<CardStyles>({
   base: {
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderRadius: RADIUS.LG,
+    backgroundColor: COLORS.BG_SECONDARY, // emerald-700 for cards
+    ...SHADOWS.SM, // Subtle shadow for depth
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_SUBTLE, // emerald-300 with opacity
   },
   elevated: {
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    ...SHADOWS.MD, // More prominent shadow for elevation
+    borderColor: COLORS.BORDER_DEFAULT, // emerald-700
   },
   header: {
-    paddingTop: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 6,
+    paddingTop: SPACING.SECTION_GAP,
+    paddingHorizontal: SPACING.SECTION_GAP,
+    paddingBottom: SPACING.COMPACT_GAP,
   },
   title: {
-    fontSize: 24,
+    fontSize: TYPOGRAPHY.SIZE_XLARGE,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.TEXT_PRIMARY,
     marginBottom: 4,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_XLARGE * TYPOGRAPHY.LINE_HEIGHT_NORMAL),
   },
   description: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    color: COLORS.TEXT_SECONDARY,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_SMALL * TYPOGRAPHY.LINE_HEIGHT_RELAXED),
   },
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.SECTION_GAP,
     paddingTop: 0,
-    paddingBottom: 24,
+    paddingBottom: SPACING.SECTION_GAP,
   },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.SECTION_GAP,
     paddingTop: 0,
-    paddingBottom: 24,
+    paddingBottom: SPACING.SECTION_GAP,
     flexDirection: 'row',
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER_SUBTLE,
+    marginTop: SPACING.ELEMENT_GAP,
+    paddingTop: SPACING.ELEMENT_GAP,
   },
 })
 
