@@ -2,10 +2,10 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import React, { useRef, useState } from "react"
-import { Dimensions, PanResponder, Text, TouchableOpacity, View, FlatList, Alert } from "react-native"
-import { AddCardModal } from "./add-card-modal"
-import { useStripe } from '../lib/stripe-context'
+import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
+import { useStripe } from '../lib/stripe-context'
+import { AddCardModal } from "./add-card-modal"
 
 
 interface PaymentMethodsModalProps {
@@ -133,8 +133,10 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               justifyContent: 'center',
               alignItems: 'center'
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Close payment methods"
           >
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+            <MaterialIcons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={{ 
             marginLeft: 8, 
@@ -148,6 +150,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
         {/* Content */}
         {showAddCard ? (
           <AddCardModal
+            embedded={true}
             onBack={() => setShowAddCard(false)}
             onSave={(cardData) => {
               // Card already added through Stripe service in AddCardModal

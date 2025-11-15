@@ -1,16 +1,21 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { cn } from "lib/utils"
 import type React from "react"
 import { useState } from "react"
-import { Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native"
-import { useStripe } from "../lib/stripe-context"
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { stripeService } from "../lib/services/stripe-service"
+import { useStripe } from "../lib/stripe-context"
 
 interface AddCardModalProps {
   onBack: () => void
   onSave?: (cardData: CardData) => void
+  /**
+   * When embedded is true the component renders inline (no backdrop/sheet)
+   * This is used when the AddCardModal is shown inside another modal
+   * (e.g. PaymentMethodsModal). Default: false
+   */
+  embedded?: boolean
 }
 
 interface CardData {
@@ -20,7 +25,7 @@ interface CardData {
   securityCode: string
 }
 
-export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
+export function AddCardModal({ onBack, onSave, embedded = false }: AddCardModalProps) {
   const [cardNumber, setCardNumber] = useState("")
   const [cardholderName, setCardholderName] = useState("")
   const [expiryDate, setExpiryDate] = useState("")
@@ -156,170 +161,353 @@ export function AddCardModal({ onBack, onSave }: AddCardModalProps) {
     securityCode.length >= 3 &&
     Object.keys(cardErrors).length === 0
 
-  return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
-      {/* Header */}
-      <View className="flex items-center justify-between p-4 pt-8">
-        <TouchableOpacity onPress={onBack} className="p-1">
-          <MaterialIcons name="arrow-back" size={24} color="#000000" />
-        </TouchableOpacity>
-        <Text className="text-lg font-medium">Add Card</Text>
-        <View className="w-5"></View> {/* Empty div for spacing */}
-      </View>
+  if (embedded) {
+    // Render inline when embedded inside another modal
+    return (
+      <View style={embeddedStyles.container}>
+        <View style={embeddedStyles.navBar}>
+          <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={embeddedStyles.title}>Add Card</Text>
+          <View style={{ width: 44 }} />
+        </View>
 
-      {/* Instructions */}
-      <View className="px-4 py-2">
-        <Text className="text-sm text-emerald-200">{`Start typing to add your credit card details.\nEverything will update according to your data.`}</Text>
-      </View>
+        <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+          <Text style={styles.instructions}>Enter your card details. Data updates as you type.</Text>
 
-      {/* Card Preview */}
-      <View className="px-4 py-4">
-        <View className="bg-emerald-700 rounded-xl p-4">
-          <View className="flex justify-between items-center mb-4">
-            <View className="flex items-center">
-              <View className="flex h-8">
-                <View className="h-8 w-8 rounded-full bg-red-500"></View>
-                <View className="h-8 w-8 rounded-full bg-yellow-500 -ml-4"></View>
+          <View style={styles.previewCard}>
+            <View style={styles.previewLogosRow}>
+              <View style={styles.brandLogoPrimary} />
+              <View style={styles.brandLogoSecondary} />
+            </View>
+            <Text style={styles.previewNumber}>{cardNumber || '1244 1234 1345 3255'}</Text>
+            <View style={styles.previewFooterRow}>
+              <View style={styles.previewMetaBlock}>
+                <Text style={styles.previewMetaLabel}>Name</Text>
+                <Text style={styles.previewMetaValue}>{cardholderName || 'Yessie'}</Text>
+              </View>
+              <View style={styles.previewMetaBlock}>
+                <Text style={styles.previewMetaLabel}>Expires</Text>
+                <Text style={styles.previewMetaValue}>{expiryDate || 'MM/YY'}</Text>
               </View>
             </View>
           </View>
 
-          <View className="text-lg font-medium mb-6 tracking-wider">{cardNumber || "1244 1234 1345 3255"}</View>
-
-          <View className="flex justify-between items-end">
-            <View>
-              <Text className="text-xs text-emerald-300 mb-1">Name</Text>
-              <Text className="font-medium">{cardholderName || "Yessie"}</Text>
-            </View>
-            <View className="text-right">
-              <Text className="text-xs text-emerald-300 mb-1">Expires</Text>
-              <Text className="font-medium">{expiryDate || "MM/YY"}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Form Fields */}
-      <View className="px-4 py-2 flex-1">
-        <View className="space-y-4">
-          <View className="space-y-1">
-            <Text className="text-sm text-emerald-200">Card Number</Text>
+          <View style={styles.formFieldBlock}>
+            <Text style={styles.fieldLabel}>Card Number</Text>
             <TextInput
               value={cardNumber}
               onChangeText={handleCardNumberChange}
               placeholder="1244 1234 1345 3255"
               maxLength={19}
               keyboardType="numeric"
-              className={cn(
-                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
-                cardErrors.cardNumber && "border border-red-400"
-              )}
+              style={[styles.textInput, cardErrors.cardNumber && styles.textInputError]}
+              placeholderTextColor="rgba(255,255,255,0.35)"
             />
-            {cardErrors.cardNumber && (
-              <Text className="text-xs text-red-300">{cardErrors.cardNumber}</Text>
-            )}
+            {cardErrors.cardNumber && <Text style={styles.errorText}>{cardErrors.cardNumber}</Text>}
           </View>
 
-          <View className="space-y-1">
-            <Text className="text-sm text-emerald-200">Cardholder Name</Text>
+          <View style={styles.formFieldBlock}>
+            <Text style={styles.fieldLabel}>Cardholder Name</Text>
             <TextInput
               value={cardholderName}
               onChangeText={(text) => {
                 setCardholderName(text)
-                if (cardErrors.cardholderName) {
-                  setCardErrors(prev => ({ ...prev, cardholderName: '' }))
-                }
+                if (cardErrors.cardholderName) setCardErrors(prev => ({ ...prev, cardholderName: '' }))
               }}
               placeholder="Yessie"
-              className={cn(
-                "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
-                cardErrors.cardholderName && "border border-red-400"
-              )}
+              style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
+              placeholderTextColor="rgba(255,255,255,0.35)"
             />
-            {cardErrors.cardholderName && (
-              <Text className="text-xs text-red-300">{cardErrors.cardholderName}</Text>
-            )}
+            {cardErrors.cardholderName && <Text style={styles.errorText}>{cardErrors.cardholderName}</Text>}
           </View>
 
-          <View className="grid grid-cols-2 gap-4">
-            <View className="space-y-1">
-              <Text className="text-sm text-emerald-200">Expiry Date</Text>
+          <View style={styles.inlineRow}>
+            <View style={[styles.formFieldBlock, styles.inlineHalf]}>
+              <Text style={styles.fieldLabel}>Expiry Date</Text>
               <TextInput
                 value={expiryDate}
                 onChangeText={handleExpiryDateChange}
                 placeholder="MM/YY"
                 maxLength={5}
                 keyboardType="numeric"
-                className={cn(
-                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
-                  cardErrors.expiryDate && "border border-red-400"
-                )}
+                style={[styles.textInput, cardErrors.expiryDate && styles.textInputError]}
+                placeholderTextColor="rgba(255,255,255,0.35)"
               />
-              {cardErrors.expiryDate && (
-                <Text className="text-xs text-red-300">{cardErrors.expiryDate}</Text>
-              )}
+              {cardErrors.expiryDate && <Text style={styles.errorText}>{cardErrors.expiryDate}</Text>}
             </View>
-
-            <View className="space-y-1">
-              <Text className="text-sm text-emerald-200">Security Code</Text>
+            <View style={[styles.formFieldBlock, styles.inlineHalf]}>
+              <Text style={styles.fieldLabel}>Security Code</Text>
               <TextInput
                 value={securityCode}
                 onChangeText={(text) => {
-                  const cleaned = text.replace(/\D/g, "").slice(0, 4)
+                  const cleaned = text.replace(/\D/g, '').slice(0, 4)
                   setSecurityCode(cleaned)
-                  if (cardErrors.securityCode) {
-                    setCardErrors(prev => ({ ...prev, securityCode: '' }))
-                  }
+                  if (cardErrors.securityCode) setCardErrors(prev => ({ ...prev, securityCode: '' }))
                 }}
                 placeholder="•••"
                 maxLength={4}
                 secureTextEntry
                 keyboardType="numeric"
-                className={cn(
-                  "w-full bg-emerald-700/50 border-none rounded-lg p-3 text-white placeholder:text-emerald-400/50 focus:ring-1 focus:ring-white",
-                  cardErrors.securityCode && "border border-red-400"
-                )}
+                style={[styles.textInput, cardErrors.securityCode && styles.textInputError]}
+                placeholderTextColor="rgba(255,255,255,0.35)"
               />
-              {cardErrors.securityCode && (
-                <Text className="text-xs text-red-300">{cardErrors.securityCode}</Text>
-              )}
+              {cardErrors.securityCode && <Text style={styles.errorText}>{cardErrors.securityCode}</Text>}
             </View>
           </View>
-        </View>
-      </View>
 
-      {/* Save Button */}
-      <View className="p-4 pb-8">
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={!isFormValid || isLoading}
-          className={cn(
-            "w-full py-3 rounded-full text-center font-medium flex-row items-center justify-center",
-            isFormValid && !isLoading
-              ? "bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              : "bg-gray-700/50 text-gray-300 cursor-not-allowed"
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={!isFormValid || isLoading}
+            style={[styles.primaryButton, (!isFormValid || isLoading) && styles.primaryButtonDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel="Save card"
+          >
+            {isLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.primaryButtonText}>Adding Card...</Text>
+              </>
+            ) : (
+              <Text style={styles.primaryButtonText}>Save Card</Text>
+            )}
+          </TouchableOpacity>
+          {stripeError && (
+            <View style={styles.inlineErrorBanner}>
+              <Text style={styles.inlineErrorText}>{stripeError}</Text>
+            </View>
           )}
-        >
-          {isLoading ? (
-            <>
-              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-              <Text className="text-center font-medium text-white">Adding Card...</Text>
-            </>
-          ) : (
-            <Text className={cn(
-              "text-center font-medium",
-              isFormValid ? "text-white" : "text-gray-300"
-            )}>Save Card</Text>
-          )}
-        </TouchableOpacity>
-        
-        {/* Error message from Stripe */}
-        {stripeError && (
-          <View className="mt-2 p-2 bg-red-100 rounded-md">
-            <Text className="text-red-800 text-sm text-center">{stripeError}</Text>
-          </View>
-        )}
+        </ScrollView>
       </View>
-    </View>
+    )
+  }
+
+  // Non-embedded: render as overlay bottom sheet
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.overlayContainer}
+    >
+      <View style={styles.sheet}>
+        {/* iOS-style nav bar */}
+        <View style={styles.navBar}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Close add card"
+            onPress={onBack}
+            style={styles.navButton}
+          >
+            <MaterialIcons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.navTitle}>Add Card</Text>
+          <View style={styles.navButtonPlaceholder} />
+        </View>
+
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.instructions}>Enter your card details. Data updates as you type.</Text>
+
+          <View style={styles.previewCard}>
+            <View style={styles.previewLogosRow}>
+              <View style={styles.brandLogoPrimary} />
+              <View style={styles.brandLogoSecondary} />
+            </View>
+            <Text style={styles.previewNumber}>{cardNumber || '1244 1234 1345 3255'}</Text>
+            <View style={styles.previewFooterRow}>
+              <View style={styles.previewMetaBlock}>
+                <Text style={styles.previewMetaLabel}>Name</Text>
+                <Text style={styles.previewMetaValue}>{cardholderName || 'Yessie'}</Text>
+              </View>
+              <View style={styles.previewMetaBlock}>
+                <Text style={styles.previewMetaLabel}>Expires</Text>
+                <Text style={styles.previewMetaValue}>{expiryDate || 'MM/YY'}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.formFieldBlock}>
+            <Text style={styles.fieldLabel}>Card Number</Text>
+            <TextInput
+              value={cardNumber}
+              onChangeText={handleCardNumberChange}
+              placeholder="1244 1234 1345 3255"
+              maxLength={19}
+              keyboardType="numeric"
+              style={[styles.textInput, cardErrors.cardNumber && styles.textInputError]}
+              placeholderTextColor="rgba(255,255,255,0.35)"
+            />
+            {cardErrors.cardNumber && <Text style={styles.errorText}>{cardErrors.cardNumber}</Text>}
+          </View>
+
+          <View style={styles.formFieldBlock}>
+            <Text style={styles.fieldLabel}>Cardholder Name</Text>
+            <TextInput
+              value={cardholderName}
+              onChangeText={(text) => {
+                setCardholderName(text)
+                if (cardErrors.cardholderName) setCardErrors(prev => ({ ...prev, cardholderName: '' }))
+              }}
+              placeholder="Yessie"
+              style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
+              placeholderTextColor="rgba(255,255,255,0.35)"
+            />
+            {cardErrors.cardholderName && <Text style={styles.errorText}>{cardErrors.cardholderName}</Text>}
+          </View>
+
+          <View style={styles.inlineRow}>
+            <View style={[styles.formFieldBlock, styles.inlineHalf]}>
+              <Text style={styles.fieldLabel}>Expiry Date</Text>
+              <TextInput
+                value={expiryDate}
+                onChangeText={handleExpiryDateChange}
+                placeholder="MM/YY"
+                maxLength={5}
+                keyboardType="numeric"
+                style={[styles.textInput, cardErrors.expiryDate && styles.textInputError]}
+                placeholderTextColor="rgba(255,255,255,0.35)"
+              />
+              {cardErrors.expiryDate && <Text style={styles.errorText}>{cardErrors.expiryDate}</Text>}
+            </View>
+            <View style={[styles.formFieldBlock, styles.inlineHalf]}>
+              <Text style={styles.fieldLabel}>Security Code</Text>
+              <TextInput
+                value={securityCode}
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/\D/g, '').slice(0, 4)
+                  setSecurityCode(cleaned)
+                  if (cardErrors.securityCode) setCardErrors(prev => ({ ...prev, securityCode: '' }))
+                }}
+                placeholder="•••"
+                maxLength={4}
+                secureTextEntry
+                keyboardType="numeric"
+                style={[styles.textInput, cardErrors.securityCode && styles.textInputError]}
+                placeholderTextColor="rgba(255,255,255,0.35)"
+              />
+              {cardErrors.securityCode && <Text style={styles.errorText}>{cardErrors.securityCode}</Text>}
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={!isFormValid || isLoading}
+            style={[styles.primaryButton, (!isFormValid || isLoading) && styles.primaryButtonDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel="Save card"
+          >
+            {isLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.primaryButtonText}>Adding Card...</Text>
+              </>
+            ) : (
+              <Text style={styles.primaryButtonText}>Save Card</Text>
+            )}
+          </TouchableOpacity>
+          {stripeError && (
+            <View style={styles.inlineErrorBanner}>
+              <Text style={styles.inlineErrorText}>{stripeError}</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   )
 }
+
+const embeddedStyles = StyleSheet.create({
+  container: { paddingBottom: 24 },
+  navBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
+  backButton: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  title: { color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center', flex: 1 },
+})
+
+const styles = StyleSheet.create({
+  overlayContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#059669',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingBottom: 12,
+    maxHeight: '92%',
+  },
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 20 : 12,
+    paddingBottom: 12,
+  },
+  navButton: {
+    padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navButtonPlaceholder: { width: 44, height: 44 },
+  navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+  contentScroll: { flex: 1 },
+  contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
+  instructions: { color: '#d1fae5', fontSize: 13, marginBottom: 16 },
+  previewCard: {
+    backgroundColor: '#047857',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
+  brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#ef4444' },
+  brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#f59e0b', marginLeft: -10 },
+  previewNumber: { color: '#fff', fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
+  previewFooterRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  previewMetaBlock: {},
+  previewMetaLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 4 },
+  previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  formFieldBlock: { marginBottom: 18 },
+  fieldLabel: { color: '#d1fae5', fontSize: 13, marginBottom: 6, fontWeight: '500' },
+  textInput: {
+    backgroundColor: 'rgba(4,120,87,0.55)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 15,
+  },
+  textInputError: { borderWidth: 1, borderColor: '#f87171' },
+  errorText: { color: '#fca5a5', fontSize: 11, marginTop: 6 },
+  inlineRow: { flexDirection: 'row', gap: 16 },
+  inlineHalf: { flex: 1 },
+  primaryButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#065f46',
+    borderRadius: 28,
+    paddingVertical: 14,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  primaryButtonDisabled: { opacity: 0.55 },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: '#fee2e2', borderRadius: 10 },
+  inlineErrorText: { color: '#b91c1c', textAlign: 'center', fontSize: 13 },
+});

@@ -7,10 +7,10 @@ import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from
 import { useAuthContext } from '../hooks/use-auth-context'
 import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
+import { getPaymentErrorMessage, getUserFriendlyError } from '../lib/utils/error-messages'
 import { useWallet } from '../lib/wallet-context'
-import { PaymentMethodsModal } from './payment-methods-modal'
 import { ErrorBanner } from './error-banner'
-import { getUserFriendlyError, getPaymentErrorMessage } from '../lib/utils/error-messages'
+import { PaymentMethodsModal } from './payment-methods-modal'
 
 import { API_BASE_URL } from 'lib/config/api'
 
@@ -339,31 +339,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
               </TouchableOpacity>
             )}
 
-            {/* Pay with Card (uses existing Stripe flow) */}
-            <TouchableOpacity
-              className={cn(
-                "w-full py-4 rounded-full flex-row items-center justify-center mb-3",
-                Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
-              )}
-              onPress={handleCardPayment}
-              disabled={Number.parseFloat(amount) <= 0 || isProcessing}
-              activeOpacity={0.8}
-            >
-              {isProcessing ? (
-                <>
-                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                  <Text className="text-center text-base font-medium text-white">Processing...</Text>
-                </>
-              ) : (
-                <>
-                  <MaterialIcons name="credit-card" size={20} color="#ffffff" />
-                  <Text className={cn(
-                    "text-center text-base font-medium ml-2",
-                    Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-                  )}>Pay with Card</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Pay with Card removed per request */}
 
             {/* Original Add Money button (keeps compatibility) */}
             <TouchableOpacity

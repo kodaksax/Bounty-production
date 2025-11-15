@@ -54,6 +54,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   
 
   return (
+    <>
     <ScrollView 
       style={styles.container}
     >
@@ -204,8 +205,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         </View>
         
       {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
-      <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
     </ScrollView>
+
+    {/* Modals should be rendered outside the main ScrollView to avoid nesting VirtualizedLists */}
+    <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
+    </>
   );
 
 }

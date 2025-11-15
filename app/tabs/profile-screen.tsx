@@ -5,7 +5,6 @@ import { AchievementsGrid } from "components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
-import { EmptyState } from "components/ui/empty-state";
 import { ProfileSkeleton } from "components/ui/skeleton-loaders";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
@@ -308,7 +307,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
       <ScrollView 
         className="flex-1 pb-40" 
-        contentContainerStyle={{ paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 220 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
