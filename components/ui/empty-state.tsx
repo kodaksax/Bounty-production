@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { SPACING, SIZING, TYPOGRAPHY, A11Y } from '../../lib/constants/accessibility';
+import { SPACING, SIZING, TYPOGRAPHY, A11Y, COLORS, RADIUS, SHADOWS } from '../../lib/constants/accessibility';
 import { Button } from './button';
 
 interface EmptyStateProps {
@@ -98,41 +98,37 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL * 2,
     paddingVertical: SIZING.AVATAR_MEDIUM,
   },
   iconContainer: {
     width: SIZING.AVATAR_XLARGE,
     height: SIZING.AVATAR_XLARGE,
     borderRadius: SIZING.AVATAR_XLARGE / 2,
-    backgroundColor: 'rgba(0, 145, 44, 0.1)', // emerald-500 background
+    backgroundColor: 'rgba(16, 185, 129, 0.1)', // emerald-500 background
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.SECTION_GAP,
     borderWidth: 2,
-    borderColor: 'rgba(0, 145, 44, 0.3)', // emerald-600 border
-    // Enhanced emerald glow
-    shadowColor: '#00912C', // emerald-600
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 6,
+    borderColor: 'rgba(16, 185, 129, 0.3)', // emerald-500 border
+    // Enhanced emerald glow using SHADOWS tokens
+    ...SHADOWS.GLOW,
   },
   title: {
     fontSize: TYPOGRAPHY.SIZE_LARGE,
     fontWeight: '700',
-    color: '#fffef5',
+    color: COLORS.TEXT_PRIMARY,
     textAlign: 'center',
     marginBottom: SPACING.ELEMENT_GAP,
     lineHeight: Math.round(TYPOGRAPHY.SIZE_LARGE * TYPOGRAPHY.LINE_HEIGHT_NORMAL),
     // Emerald text shadow
-    textShadowColor: 'rgba(0, 145, 44, 0.3)',
+    textShadowColor: 'rgba(16, 185, 129, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   description: {
     fontSize: TYPOGRAPHY.SIZE_DEFAULT,
-    color: 'rgba(255, 254, 245, 0.8)',
+    color: COLORS.TEXT_SECONDARY,
     textAlign: 'center',
     lineHeight: Math.round(TYPOGRAPHY.SIZE_DEFAULT * TYPOGRAPHY.LINE_HEIGHT_RELAXED),
     marginBottom: SPACING.SECTION_GAP,
