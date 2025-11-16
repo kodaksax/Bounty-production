@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { SPACING, SIZING, TYPOGRAPHY, A11Y, COLORS, RADIUS, SHADOWS } from '../../lib/constants/accessibility';
+import { SPACING, SIZING, TYPOGRAPHY, A11Y, COLORS, SHADOWS } from '../../lib/constants/accessibility';
 import { Button } from './button';
 
 interface EmptyStateProps {

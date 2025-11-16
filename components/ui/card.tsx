@@ -155,7 +155,6 @@ const cardStyles = StyleSheet.create<CardStyles>({
   },
   footer: {
     paddingHorizontal: SPACING.SECTION_GAP,
-    paddingTop: 0,
     paddingBottom: SPACING.SECTION_GAP,
     flexDirection: 'row',
     alignItems: 'center',

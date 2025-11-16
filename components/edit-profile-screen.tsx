@@ -15,7 +15,7 @@ import { useUserProfile } from '../hooks/useUserProfile'
 import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
 import { useWallet } from '../lib/wallet-context'
-import { COLORS, SPACING, RADIUS, SIZING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { COLORS, SIZING } from '../lib/constants/accessibility'
 
 interface EditProfileScreenProps {
   onBack: () => void

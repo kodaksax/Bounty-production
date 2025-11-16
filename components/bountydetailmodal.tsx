@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
   attachmentIcon: {
     width: SIZING.AVATAR_MEDIUM - 8,
     height: SIZING.AVATAR_MEDIUM - 8,
-    borderRadius: RADIUS.COMPACT_GAP - 2,
+    borderRadius: RADIUS.SM - 2,
     backgroundColor: COLORS.EMERALD_900,
     justifyContent: 'center',
     alignItems: 'center',
@@ -945,16 +945,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: SIZING.BUTTON_HEIGHT_DEFAULT + 8,
     ...SHADOWS.SM,
-    shadowRadius: 4,
-    elevation: 2,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: COLORS.INTERACTIVE_HOVER, // emerald-600
     opacity: 0.6,
   },
   acceptButtonText: {
-    color: 'white',
+    color: COLORS.TEXT_PRIMARY,
     fontWeight: '500',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
   },
 });
