@@ -202,50 +202,96 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           }}
           icon="logout"
         />
-
-        {/* Dev Tools Section (only visible in __DEV__ mode) */}
-        {__DEV__ && (
-          <View className="mt-6 mb-4">
-            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">Developer Tools</Text>
-            <View className="bg-emerald-700/50 rounded-lg p-4 border border-emerald-500/30">
-              <View className="flex-row justify-between items-center mb-2">
-                <View className="flex-row items-center gap-2">
-                  <MaterialIcons name="admin-panel-settings" size={20} color="#00dc50" />
-                  <Text className="text-white font-semibold">Admin Mode</Text>
-                </View>
-                <Switch
-                  value={isAdmin}
-                  onValueChange={handleAdminToggle}
-                  trackColor={{ false: '#374151', true: '#00912C' }}
-                  thumbColor={isAdmin ? '#00dc50' : '#9ca3af'}
-                />
-              </View>
-              <Text className="text-white/60 text-xs leading-5">
-                Enable admin access to view and manage bounties, users, and transactions.
-              </Text>
-              
-              {/* Sentry quick test button (dev only) */}
-              <View className="mt-3">
-                <Text className="text-white/70 text-xs mb-2">Sentry Test</Text>
-                <TouchableOpacity
-                  onPress={() => {
+        <SettingsCard
+          title="Delete Account"
+          description="Permanently delete your account and all associated data. This action cannot be undone."
+          primaryLabel="Delete Account"
+          onPrimary={async () => {
+            // Show confirmation dialog
+            Alert.alert(
+              'Delete Account',
+              'Are you sure you want to delete your account? This will permanently delete:\n\n• Your profile and personal information\n• All your bounties (posted and accepted)\n• Your wallet transactions and balance\n• All messages and conversations\n• All notifications and settings\n\nThis action cannot be undone.',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
                     try {
-                      Sentry.captureException(new Error('First error'))
-                      Alert.alert('Sentry', 'Test event sent')
+                      // Lazy imports
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { supabase } = require('../lib/supabase');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const SecureStore = require('expo-secure-store');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { authProfileService } = require('../lib/services/auth-profile-service');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { deleteUserAccount } = require('../lib/services/account-deletion-service');
+
+                      // Get current user ID before deleting
+                      const currentUserId = authProfile?.id;
+
+                      if (!currentUserId) {
+                        Alert.alert('Error', 'Unable to identify user account.');
+                        return;
+                      }
+
+                      // Delete user account and associated data
+                      const result = await deleteUserAccount();
+                      
+                      if (!result.success) {
+                        Alert.alert('Error', result.message);
+                        return;
+                      }
+
+                      // Clear user-specific draft data
+                      try {
+                        await authProfileService.clearUserDraftData(currentUserId);
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Draft cleanup failed', e);
+                      }
+
+                      // Clear any stored tokens
+                      try {
+                        await SecureStore.deleteItemAsync('sb-access-token');
+                        await SecureStore.deleteItemAsync('sb-refresh-token');
+                      } catch (e) {
+                        console.warn('[DeleteAccount] SecureStore cleanup failed', e);
+                      }
+
+                      // Sign out
+                      try {
+                        await supabase.auth.signOut();
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Sign out failed', e);
+                      }
+
+                      // Route to sign-in screen
+                      try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { router } = require('expo-router');
+                        if (router && typeof router.replace === 'function') {
+                          router.replace('/auth/sign-in-form');
+                        }
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Router navigation failed', e);
+                      }
+
+                      Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
                     } catch (e) {
-                      Alert.alert('Sentry', `Failed to send test event: ${String(e)}`)
+                      console.error('[DeleteAccount] Error:', e);
+                      Alert.alert('Error', 'Failed to delete account. Please contact support.');
                     }
-                  }}
-                  className="px-3 py-2 rounded-md bg-amber-500"
-                >
-                  <Text className="text-black text-sm font-medium">Try!</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-        
-        
+                  },
+                },
+              ]
+            );
+          }}
+          icon="delete-forever"
+        />
         <View className="mt-6 mb-10">
           <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
             <Text className="text-white text-sm font-medium">Back to Home</Text>
