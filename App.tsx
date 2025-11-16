@@ -3,9 +3,14 @@
 // with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
 // ensures compatibility with the "main": "expo-router/entry" in package.json.
 
+// Gesture Handler must be imported before any other code that registers views/handlers.
+// Importing it at the very top prevents runtime errors where gesture-handler or
+// reanimated gesture hooks are undefined.
+import 'react-native-gesture-handler';
+
 // Initialize Sentry and Analytics before anything else
-import { initializeSentry } from './lib/services/sentry-init';
 import { analyticsService } from './lib/services/analytics-service';
+import { initializeSentry } from './lib/services/sentry-init';
 
 // Initialize Sentry for error tracking
 initializeSentry();

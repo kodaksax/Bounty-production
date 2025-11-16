@@ -276,6 +276,16 @@ function BountyAppInner() {
 
   // Removed early return of SearchScreen; will render as overlay so nav & state persist.
 
+  // If the admin tab is selected, navigate to the admin route from an effect
+  // to avoid triggering navigation/state updates during render (which causes
+  // the "Cannot update a component while rendering a different component" error).
+  useEffect(() => {
+    if (activeScreen === 'admin' && isAdmin) {
+      // Perform navigation once when admin tab becomes active
+      router.push('/(admin)')
+    }
+  }, [activeScreen, isAdmin, router])
+
   // FlatList optimization: memoized functions
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
 
@@ -568,11 +578,8 @@ function BountyAppInner() {
           onConversationModeChange={(inConv) => setShowBottomNav(!inConv)}
         />
       ) : activeScreen === "admin" && isAdmin ? (
-        // Navigate to admin route when admin tab is selected
-        (() => {
-          router.push('/(admin)')
-          return null
-        })()
+        // admin navigation is handled by effect to avoid updating navigation during render
+        null
       ) : null}
 
       {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={isAdmin} />}

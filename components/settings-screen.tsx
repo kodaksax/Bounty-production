@@ -136,53 +136,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           icon="gavel"
         />
         
-        {/* Dev Tools Section (only visible in __DEV__ mode) */}
-        {__DEV__ && (
-          <View className="mt-6 mb-4">
-            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">Developer Tools</Text>
-            <View className="bg-emerald-700/50 rounded-lg p-4 border border-emerald-500/30">
-              <View className="flex-row justify-between items-center mb-2">
-                <View className="flex-row items-center gap-2">
-                  <MaterialIcons name="admin-panel-settings" size={20} color="#00dc50" />
-                  <Text className="text-white font-semibold">Admin Mode</Text>
-                </View>
-                <Switch
-                  value={isAdmin}
-                  onValueChange={handleAdminToggle}
-                  trackColor={{ false: '#374151', true: '#00912C' }}
-                  thumbColor={isAdmin ? '#00dc50' : '#9ca3af'}
-                />
-              </View>
-              <Text className="text-white/60 text-xs leading-5">
-                Enable admin access to view and manage bounties, users, and transactions.
-              </Text>
-              
-              {/* Sentry quick test button (dev only) */}
-              <View className="mt-3">
-                <Text className="text-white/70 text-xs mb-2">Sentry Test</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    try {
-                      Sentry.captureException(new Error('First error'))
-                      Alert.alert('Sentry', 'Test event sent')
-                    } catch (e) {
-                      Alert.alert('Sentry', `Failed to send test event: ${String(e)}`)
-                    }
-                  }}
-                  className="px-3 py-2 rounded-md bg-amber-500"
-                >
-                  <Text className="text-black text-sm font-medium">Try!</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-        
+        {/* Log Out - placed directly after Legal */}
         <SettingsCard
           title="Log Out"
           description="Sign out of the application securely and end your current session."
           primaryLabel="Confirm Log Out"
-          secondaryLabel="devSignOut"
           onPrimary={async () => {
             try {
               // Lazy imports to avoid bundling server-only code
@@ -242,25 +200,52 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               Alert.alert('Error', 'Failed to log out properly.');
             }
           }}
-          onSecondary={() => {
-            // Developer shortcut to go directly to SignUp screen
-            try {
-              if (navigation && typeof navigation.navigate === 'function') {
-                navigation.navigate('SignUp');
-              } else {
-                // Lazy import to avoid bundling if not needed
-                try {
-                  // eslint-disable-next-line @typescript-eslint/no-var-requires
-                  const router = require('expo-router').router;
-                  if (router) router.push('/auth/sign-up-form');
-                } catch {}
-              }
-            } catch (e) {
-              console.warn('[devSignOut] navigation failed', e);
-            }
-          }}
           icon="logout"
         />
+
+        {/* Dev Tools Section (only visible in __DEV__ mode) */}
+        {__DEV__ && (
+          <View className="mt-6 mb-4">
+            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">Developer Tools</Text>
+            <View className="bg-emerald-700/50 rounded-lg p-4 border border-emerald-500/30">
+              <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons name="admin-panel-settings" size={20} color="#00dc50" />
+                  <Text className="text-white font-semibold">Admin Mode</Text>
+                </View>
+                <Switch
+                  value={isAdmin}
+                  onValueChange={handleAdminToggle}
+                  trackColor={{ false: '#374151', true: '#00912C' }}
+                  thumbColor={isAdmin ? '#00dc50' : '#9ca3af'}
+                />
+              </View>
+              <Text className="text-white/60 text-xs leading-5">
+                Enable admin access to view and manage bounties, users, and transactions.
+              </Text>
+              
+              {/* Sentry quick test button (dev only) */}
+              <View className="mt-3">
+                <Text className="text-white/70 text-xs mb-2">Sentry Test</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    try {
+                      Sentry.captureException(new Error('First error'))
+                      Alert.alert('Sentry', 'Test event sent')
+                    } catch (e) {
+                      Alert.alert('Sentry', `Failed to send test event: ${String(e)}`)
+                    }
+                  }}
+                  className="px-3 py-2 rounded-md bg-amber-500"
+                >
+                  <Text className="text-black text-sm font-medium">Try!</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+        
+        
         <View className="mt-6 mb-10">
           <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
             <Text className="text-white text-sm font-medium">Back to Home</Text>
