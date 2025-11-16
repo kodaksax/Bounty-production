@@ -261,6 +261,96 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           }}
           icon="logout"
         />
+        <SettingsCard
+          title="Delete Account"
+          description="Permanently delete your account and all associated data. This action cannot be undone."
+          primaryLabel="Delete Account"
+          onPrimary={async () => {
+            // Show confirmation dialog
+            Alert.alert(
+              'Delete Account',
+              'Are you sure you want to delete your account? This will permanently delete:\n\n• Your profile and personal information\n• All your bounties (posted and accepted)\n• Your wallet transactions and balance\n• All messages and conversations\n• All notifications and settings\n\nThis action cannot be undone.',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      // Lazy imports
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { supabase } = require('../lib/supabase');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const SecureStore = require('expo-secure-store');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { authProfileService } = require('../lib/services/auth-profile-service');
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const { deleteUserAccount } = require('../lib/services/account-deletion-service');
+
+                      // Get current user ID before deleting
+                      const currentUserId = authProfile?.id;
+
+                      if (!currentUserId) {
+                        Alert.alert('Error', 'Unable to identify user account.');
+                        return;
+                      }
+
+                      // Delete user account and associated data
+                      const result = await deleteUserAccount();
+                      
+                      if (!result.success) {
+                        Alert.alert('Error', result.message);
+                        return;
+                      }
+
+                      // Clear user-specific draft data
+                      try {
+                        await authProfileService.clearUserDraftData(currentUserId);
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Draft cleanup failed', e);
+                      }
+
+                      // Clear any stored tokens
+                      try {
+                        await SecureStore.deleteItemAsync('sb-access-token');
+                        await SecureStore.deleteItemAsync('sb-refresh-token');
+                      } catch (e) {
+                        console.warn('[DeleteAccount] SecureStore cleanup failed', e);
+                      }
+
+                      // Sign out
+                      try {
+                        await supabase.auth.signOut();
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Sign out failed', e);
+                      }
+
+                      // Route to sign-in screen
+                      try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { router } = require('expo-router');
+                        if (router && typeof router.replace === 'function') {
+                          router.replace('/auth/sign-in-form');
+                        }
+                      } catch (e) {
+                        console.warn('[DeleteAccount] Router navigation failed', e);
+                      }
+
+                      Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+                    } catch (e) {
+                      console.error('[DeleteAccount] Error:', e);
+                      Alert.alert('Error', 'Failed to delete account. Please contact support.');
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+          icon="delete-forever"
+        />
         <View className="mt-6 mb-10">
           <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
             <Text className="text-white text-sm font-medium">Back to Home</Text>
