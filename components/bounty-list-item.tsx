@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { SPACING, SIZING, TYPOGRAPHY, COLORS, RADIUS, getLineHeight } from '../lib/constants/accessibility'
+import { SPACING, SIZING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 import { BountyDetailModal } from "./bountydetailmodal"
@@ -138,8 +138,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_OVERLAY, // Using semantic color token
-    borderRadius: RADIUS.MD,
+    backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
+    borderRadius: SPACING.ELEMENT_GAP,
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
     marginBottom: 10,
@@ -148,95 +148,6 @@ const styles = StyleSheet.create({
   leadingAvatarWrap: {
     marginRight: SPACING.ELEMENT_GAP,
   },
-  avatar: {
-    width: SIZING.AVATAR_SMALL + 4,
-    height: SIZING.AVATAR_SMALL + 4,
-    borderRadius: (SIZING.AVATAR_SMALL + 4) / 2,
-  },
-  avatarFallback: {
-    backgroundColor: COLORS.EMERALD_700,
-    width: SIZING.AVATAR_SMALL + 4,
-    height: SIZING.AVATAR_SMALL + 4,
-    borderRadius: (SIZING.AVATAR_SMALL + 4) / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: COLORS.TEXT_PRIMARY,
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '600',
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  title: {
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: 4,
-    lineHeight: getLineHeight(TYPOGRAPHY.SIZE_BODY),
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  username: {
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: RADIUS.FULL,
-    backgroundColor: COLORS.TEXT_MUTED,
-  },
-  distance: {
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: COLORS.TEXT_MUTED,
-  },
-  onlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: 2,
-    borderRadius: RADIUS.SM,
-  },
-  onlineText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: COLORS.EMERALD_300,
-    fontWeight: '500',
-  },
-  trailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
-    paddingLeft: SPACING.ELEMENT_GAP,
-  },
-  price: {
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '700',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  honorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.EMERALD_300,
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: 4,
-    borderRadius: RADIUS.SM,
-  },
-  honorText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: COLORS.EMERALD_900,
-    fontWeight: '600',
-  },
-})
   avatar: {
     width: 36,
     height: 36,

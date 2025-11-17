@@ -4,7 +4,6 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "lib/utils"
 import { StyleSheet, ViewStyle, TextStyle } from "react-native"
 import { useHapticFeedback } from "lib/haptic-feedback";
-import { COLORS, TYPOGRAPHY } from "lib/constants/accessibility";
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -192,30 +191,29 @@ const buttonStyles = StyleSheet.create({
     paddingVertical: 0,
   },
   disabled: {
-    opacity: 0.4,
-    shadowOpacity: 0, // Remove shadow when disabled
+    opacity: 0.5,
   },
   text: {
-    fontSize: TYPOGRAPHY.SIZE_DEFAULT,
+    fontSize: 15,
     fontWeight: '600',
   },
   defaultText: {
-    color: COLORS.TEXT_PRIMARY, // off-white
+    color: '#fffef5', // off-white
   },
   destructiveText: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fffef5',
   },
   outlineText: {
-    color: COLORS.INTERACTIVE_DEFAULT, // emerald text
+    color: '#00912C', // emerald text
   },
   secondaryText: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fffef5',
   },
   ghostText: {
-    color: COLORS.INTERACTIVE_DEFAULT, // emerald text
+    color: '#00912C', // emerald text
   },
   linkText: {
-    color: COLORS.INTERACTIVE_DEFAULT,
+    color: '#00912C',
     textDecorationLine: 'underline',
   },
   disabledText: {
