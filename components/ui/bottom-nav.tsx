@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
-import { A11Y, SIZING, COLORS, SHADOWS, RADIUS } from "../../lib/constants/accessibility";
+import { A11Y, SIZING } from "../../lib/constants/accessibility";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
@@ -218,13 +218,7 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: RADIUS.FULL,
-  },
-  navIconContainer: {
-    width: SIZING.MIN_TOUCH_TARGET,
-    height: SIZING.MIN_TOUCH_TARGET,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 32,
   },
   navIconContainer: {
     // Slightly larger touch target matching other nav buttons but without a visible border

@@ -15,7 +15,7 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
-import { HEADER_LAYOUT, TYPOGRAPHY, COLORS } from '../../lib/constants/accessibility'
+import { HEADER_LAYOUT, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { messageService } from '../../lib/services/message-service'
 import { logClientError as _logClientError } from '../../lib/services/monitoring'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -241,7 +241,7 @@ export function MessengerScreen({
                 fontSize: HEADER_LAYOUT.titleFontSize,
                 fontWeight: 'bold',
                 letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
-                color: COLORS.TEXT_PRIMARY,
+                color: '#ffffff',
               }}
             >
               BOUNTY

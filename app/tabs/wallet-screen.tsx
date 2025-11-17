@@ -10,7 +10,7 @@ import { TransactionHistoryScreen } from "../../components/transaction-history-s
 import { EmptyState } from "../../components/ui/empty-state";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawScreen } from "../../components/withdraw-screen";
-import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY, COLORS, RADIUS, SHADOWS } from '../../lib/constants/accessibility';
+import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { useWallet } from '../../lib/wallet-context';
@@ -64,7 +64,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           <MaterialIcons 
             name="gps-fixed" 
             size={24} 
-            color={COLORS.TEXT_PRIMARY}
+            color="#fff" 
             accessibilityElementsHidden={true}
           />
           <Text 
@@ -91,7 +91,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 accessibilityLabel="Add money to wallet"
                 accessibilityHint="Add funds to your wallet using a payment method"
               >
-                <MaterialIcons name="add" size={20} color={COLORS.TEXT_PRIMARY} accessibilityElementsHidden={true} />
+                <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.actionButtonText}>Add Money</Text>
               </TouchableOpacity>
               <TouchableOpacity 
@@ -101,7 +101,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 accessibilityLabel="Withdraw money from wallet"
                 accessibilityHint="Transfer funds from your wallet to your bank account"
               >
-                <MaterialIcons name="keyboard-arrow-down" size={20} color={COLORS.TEXT_PRIMARY} accessibilityElementsHidden={true} />
+                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.actionButtonText}>Withdraw</Text>
               </TouchableOpacity>
             </View>
@@ -140,7 +140,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 onPress={() => setShowPaymentMethods(true)}
               >
                 <View style={styles.accountIcon}>
-                  <MaterialIcons name="add" size={24} color={COLORS.TEXT_PRIMARY} />
+                  <MaterialIcons name="add" size={24} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.accountName}>Add Payment Method</Text>
@@ -151,7 +151,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               paymentMethods.map((method, index) => (
                 <View key={method.id} style={styles.accountCard}>
                   <View style={styles.accountIcon}>
-                    <MaterialIcons name="credit-card" size={24} color={COLORS.TEXT_PRIMARY} />
+                    <MaterialIcons name="credit-card" size={24} color="#fff" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.accountName}>
@@ -196,7 +196,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     <Text style={styles.bountyName}>{
                       tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
                     } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
-                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? COLORS.SUCCESS_LIGHT : COLORS.ERROR_LIGHT}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
                   </View>
                 ))}
               </>
@@ -219,28 +219,28 @@ export default WalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BG_PRIMARY, // emerald-600
+    backgroundColor: '#059669',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: SPACING.SECTION_GAP - 4,
+    paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: COLORS.BG_PRIMARY,
-    gap: SPACING.COMPACT_GAP,
+    backgroundColor: '#059669',
+    gap: 8,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
+    gap: 8,
     transform: [
       { translateY: -2 },
       { translateX: -2 },
     ],
   },
   headerTitle: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: HEADER_LAYOUT.titleFontSize,
     fontWeight: 'bold',
     letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
@@ -257,10 +257,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SECTION_GAP,
   },
   balanceCard: {
-    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
-    borderRadius: RADIUS.LG,
-    padding: SPACING.SECTION_GAP - 4,
-    ...SHADOWS.MD,
+    backgroundColor: '#047857',
+    borderRadius: SPACING.SCREEN_HORIZONTAL,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     marginBottom: SPACING.COMPACT_GAP,
   },
   balanceCardHeader: {
@@ -268,15 +270,14 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SCREEN_HORIZONTAL,
   },
   balanceLabel: {
-    color: COLORS.TEXT_ACCENT, // emerald-300
+    color: '#6ee7b7',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     textTransform: 'uppercase',
     fontWeight: 'bold',
-    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDER,
   },
   balanceAmount: {
-    color: COLORS.TEXT_PRIMARY,
-    fontSize: TYPOGRAPHY.SIZE_XLARGE + 8,
+    color: '#fff',
+    fontSize: 32,
     fontWeight: 'bold',
     marginTop: 4,
   },
@@ -289,36 +290,35 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_SURFACE, // emerald-800
-    borderRadius: RADIUS.MD,
+    backgroundColor: '#065f46',
+    borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
-    paddingHorizontal: SPACING.CARD_PADDING + 2,
+    paddingHorizontal: 18,
     flex: 1,
     justifyContent: 'center',
     minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
     gap: SPACING.COMPACT_GAP,
-    ...SHADOWS.SM,
   },
   actionButtonText: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.ELEMENT_GAP,
+    marginBottom: SPACING.COMPACT_GAP,
   },
   sectionTitle: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   sectionManage: {
-    color: COLORS.TEXT_ACCENT, // emerald-300
+    color: '#6ee7b7',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '600',
+    fontWeight: 'bold',
     minWidth: SIZING.MIN_TOUCH_TARGET,
     minHeight: SIZING.MIN_TOUCH_TARGET,
     textAlign: 'center',
@@ -327,54 +327,52 @@ const styles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_OVERLAY, // emerald-900 with opacity
-    borderRadius: RADIUS.MD,
-    padding: SPACING.CARD_PADDING,
-    marginBottom: SPACING.LIST_ITEM_GAP + 8,
-    ...SHADOWS.SM,
+    backgroundColor: '#047857cc',
+    borderRadius: SPACING.ELEMENT_GAP,
+    padding: SPACING.SCREEN_HORIZONTAL,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     minHeight: SIZING.MIN_TOUCH_TARGET + SPACING.ELEMENT_GAP,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_SUBTLE,
   },
   accountIcon: {
     height: SIZING.AVATAR_MEDIUM,
     width: SIZING.AVATAR_MEDIUM,
-    backgroundColor: COLORS.BG_SURFACE, // emerald-800
-    borderRadius: RADIUS.SM,
+    backgroundColor: '#065f46',
+    borderRadius: SPACING.COMPACT_GAP,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.ELEMENT_GAP,
   },
   accountName: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: 'bold',
   },
   accountSub: {
-    color: COLORS.TEXT_SECONDARY, // emerald-100
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    color: '#6ee7b7',
+    fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_OVERLAY, // emerald-900 with opacity
-    borderRadius: RADIUS.MD,
-    padding: SPACING.CARD_PADDING,
-    marginBottom: SPACING.LIST_ITEM_GAP + 8,
-    ...SHADOWS.SM,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_SUBTLE,
+    backgroundColor: '#047857cc',
+    borderRadius: SPACING.ELEMENT_GAP,
+    padding: SPACING.SCREEN_HORIZONTAL,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
   bountyName: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '600',
-    flex: 1,
+    fontWeight: 'bold',
   },
   bountyAmount: {
-    color: COLORS.TEXT_PRIMARY,
+    color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
@@ -383,9 +381,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyStateText: {
-    color: COLORS.TEXT_ACCENT,
+    color: '#6ee7b7',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     opacity: 0.9,
   },
+  // bottom nav indicator removed; using shared BottomNav at app level
 });
 
