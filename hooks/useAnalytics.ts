@@ -1,26 +1,32 @@
 // hooks/useAnalytics.ts - Hook for tracking analytics events
 import { useCallback, useEffect } from 'react';
+import { AnalyticsEvent, AnalyticsProperties, analyticsService } from '../lib/services/analytics-service';
 import { useAuthContext } from './use-auth-context';
-import { analyticsService, AnalyticsEvent, AnalyticsProperties } from '../lib/services/analytics-service';
 
 /**
  * Hook for tracking analytics events with automatic user identification
  */
 export function useAnalytics() {
-  const { user } = useAuthContext();
+  const { session, profile } = useAuthContext();
+
+  const resolvedUserId = profile?.id ?? session?.user?.id;
+  const resolvedEmail = profile?.email ?? session?.user?.email ?? undefined;
+  const resolvedUsername = profile?.username ?? session?.user?.user_metadata?.username ?? undefined;
 
   // Identify user when authenticated
   useEffect(() => {
-    if (user?.id) {
-      analyticsService.identifyUser(user.id, {
-        email: user.email,
-        username: user.username,
-      }).catch(console.error);
+    if (resolvedUserId) {
+      analyticsService
+        .identifyUser(resolvedUserId, {
+          email: resolvedEmail,
+          username: resolvedUsername,
+        })
+        .catch(console.error);
     } else {
       // Reset analytics on logout
       analyticsService.reset().catch(console.error);
     }
-  }, [user?.id, user?.email, user?.username]);
+  }, [resolvedUserId, resolvedEmail, resolvedUsername]);
 
   /**
    * Track an analytics event

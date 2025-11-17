@@ -1,5 +1,6 @@
 // lib/services/sentry-init.ts - Sentry initialization for error tracking
 import * as Sentry from '@sentry/react-native';
+import type { Integration } from '@sentry/types';
 import Constants from 'expo-constants';
 
 // Sentry configuration
@@ -17,6 +18,22 @@ export function initializeSentry() {
   }
 
   try {
+    const ReactNativeTracingIntegration = (Sentry as { ReactNativeTracing?: new (options: {
+      routingInstrumentation?: unknown;
+      tracingOrigins?: Array<string | RegExp>;
+    }) => Integration }).ReactNativeTracing;
+
+    const integrations: Integration[] | undefined = ReactNativeTracingIntegration
+      ? [
+          new ReactNativeTracingIntegration({
+            // Routing instrumentation not needed for Expo Router
+            routingInstrumentation: undefined,
+            // Track automatic spans
+            tracingOrigins: ['localhost', /^\//],
+          }) as Integration,
+        ]
+      : undefined;
+
     Sentry.init({
       dsn: SENTRY_DSN,
       environment: ENVIRONMENT,
@@ -64,14 +81,7 @@ export function initializeSentry() {
         return event;
       },
       // Integrations
-      integrations: [
-        new Sentry.ReactNativeTracing({
-          // Routing instrumentation not needed for Expo Router
-          routingInstrumentation: undefined,
-          // Track automatic spans
-          tracingOrigins: ['localhost', /^\//],
-        }),
-      ],
+      integrations,
     });
 
     console.log('[Sentry] Initialized successfully');

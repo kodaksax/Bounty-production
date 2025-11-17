@@ -3,14 +3,16 @@
  * Tests the payment server endpoints with mocked Stripe
  */
 
-import request from 'supertest';
 import express from 'express';
+import request from 'supertest';
 
-// Mock environment before requiring the server
-process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
-process.env.SUPABASE_URL = 'https://test.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
-process.env.NODE_ENV = 'test';
+// Set environment variables before requiring the server
+beforeAll(() => {
+  process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
+  process.env.SUPABASE_URL = 'https://test.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  (process.env as any).NODE_ENV = 'test';
+});
 
 // Mock supabase client
 jest.mock('@supabase/supabase-js', () => ({
@@ -53,34 +55,34 @@ jest.mock('@supabase/supabase-js', () => ({
 // Mock Stripe
 const mockStripe = {
   customers: {
-    create: jest.fn(() => Promise.resolve({
+    create: jest.fn(async (_params?: any) => ({
       id: 'cus_new123',
       email: 'test@example.com',
     })),
-    retrieve: jest.fn(() => Promise.resolve({
+    retrieve: jest.fn(async (_id?: any) => ({
       id: 'cus_test123',
       email: 'test@example.com',
     })),
   },
   paymentIntents: {
-    create: jest.fn(() => Promise.resolve({
+    create: jest.fn(async (_params?: any) => ({
       id: 'pi_test123',
       client_secret: 'pi_test123_secret_abc',
       amount: 5000,
       currency: 'usd',
       status: 'requires_payment_method',
     })),
-    confirm: jest.fn(() => Promise.resolve({
+    confirm: jest.fn(async (_idOrParams?: any) => ({
       id: 'pi_test123',
       status: 'succeeded',
     })),
-    cancel: jest.fn(() => Promise.resolve({
+    cancel: jest.fn(async (_id?: any) => ({
       id: 'pi_test123',
       status: 'canceled',
     })),
   },
   refunds: {
-    create: jest.fn(() => Promise.resolve({
+    create: jest.fn(async (_params?: any) => ({
       id: 'ref_test123',
       amount: 5000,
       status: 'succeeded',

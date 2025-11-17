@@ -14,6 +14,8 @@ interface BountyCardProps {
   // When the poster has a pending submission to review, show review-needed state
   reviewNeeded?: boolean;
   revisionFeedback?: string | null;
+  // Hunter has submitted work and is waiting on poster action
+  submittedForReview?: boolean;
 }
 
 export function BountyCard({
@@ -25,6 +27,7 @@ export function BountyCard({
   revisionRequested,
   reviewNeeded,
   revisionFeedback,
+  submittedForReview,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
 
@@ -41,6 +44,7 @@ export function BountyCard({
 
   const getStatusColor = () => {
     if (reviewNeeded) return '#fbbf24'
+    if (submittedForReview) return '#38bdf8'
     switch (bounty.status) {
       case "open":
         return "#10b981"; // emerald-500
@@ -57,6 +61,7 @@ export function BountyCard({
 
   const getStatusLabel = () => {
     if (reviewNeeded) return 'REVIEW NEEDED'
+    if (submittedForReview) return 'SUBMITTED FOR REVIEW'
     switch (bounty.status) {
       case "open":
         return "OPEN";

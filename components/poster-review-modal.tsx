@@ -1,21 +1,25 @@
 // components/poster-review-modal.tsx - Modal for poster to review hunter's submission
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Modal,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
+import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
+import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { RatingStars } from './ui/rating-stars';
 
 interface PosterReviewModalProps {
@@ -28,6 +32,136 @@ interface PosterReviewModalProps {
   onClose: () => void;
   onComplete: () => void;
 }
+
+const SLIDER_HANDLE_WIDTH = 56;
+
+interface SlideToConfirmProps {
+  label: string;
+  onConfirmed: () => void;
+  disabled?: boolean;
+  isProcessing?: boolean;
+}
+
+const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideToConfirm({
+  label,
+  onConfirmed,
+  disabled = false,
+  isProcessing = false,
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const hasConfirmedRef = useRef(false);
+  const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH));
+  const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
+
+  useEffect(() => {
+    if (!isProcessing && !disabled && hasConfirmedRef.current) {
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: false,
+      }).start(() => {
+        hasConfirmedRef.current = false;
+      });
+    }
+  }, [disabled, isProcessing, translateX]);
+
+  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH, 0);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled && !isProcessing,
+        onMoveShouldSetPanResponder: () => !disabled && !isProcessing,
+        onPanResponderGrant: () => {
+          translateX.stopAnimation();
+        },
+        onPanResponderMove: (_evt, gestureState) => {
+          const newX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
+          translateX.setValue(newX);
+        },
+        onPanResponderRelease: (_evt, gestureState) => {
+          const releaseX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
+
+          if (releaseX >= maxTranslate * 0.92 && !hasConfirmedRef.current) {
+            hasConfirmedRef.current = true;
+            Animated.timing(translateX, {
+              toValue: maxTranslate,
+              duration: 180,
+              useNativeDriver: false,
+            }).start(() => {
+              onConfirmed();
+            });
+          } else {
+            Animated.spring(translateX, {
+              toValue: 0,
+              useNativeDriver: false,
+              bounciness: 8,
+              speed: 12,
+            }).start(() => {
+              hasConfirmedRef.current = false;
+            });
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: false,
+            bounciness: 8,
+            speed: 12,
+          }).start(() => {
+            hasConfirmedRef.current = false;
+          });
+        },
+      }),
+    [disabled, isProcessing, maxTranslate, onConfirmed, translateX]
+  );
+
+  const fillWidth = useMemo(() => Animated.add(translateX, handleOffset.current), [handleOffset, translateX]);
+
+  return (
+    <View style={styles.sliderWrapper}>
+      <View
+        style={styles.sliderTrack}
+        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+      >
+        <Animated.View style={[styles.sliderFill, { width: fillWidth }]} />
+        <Text style={styles.sliderLabel}>{label}</Text>
+        <Animated.View
+          style={[styles.sliderHandle, { transform: [{ translateX }] }]}
+          {...panResponder.panHandlers}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabelText}
+          accessibilityHint="Double tap then drag to the end to confirm payout"
+          accessibilityActions={[{ name: 'activate', label: 'Confirm payout' }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'activate' && !disabled && !isProcessing && !hasConfirmedRef.current) {
+              hasConfirmedRef.current = true;
+              if (maxTranslate <= 0) {
+                onConfirmed();
+                return;
+              }
+              Animated.timing(translateX, {
+                toValue: maxTranslate,
+                duration: 180,
+                useNativeDriver: false,
+              }).start(() => {
+                onConfirmed();
+              });
+            }
+          }}
+        >
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <MaterialIcons name="chevron-right" size={24} color="#fff" />
+          )}
+        </Animated.View>
+      </View>
+    </View>
+  );
+});
 
 export function PosterReviewModal({
   visible,
@@ -50,12 +184,30 @@ export function PosterReviewModal({
   const [ratingComment, setRatingComment] = useState('');
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [showPayoutWarning, setShowPayoutWarning] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const formattedPayoutAmount = useMemo(() => {
+    try {
+      return bountyAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    } catch {
+      return `$${Number.isFinite(bountyAmount) ? bountyAmount.toFixed(2) : '0.00'}`;
+    }
+  }, [bountyAmount]);
 
   useEffect(() => {
     if (visible) {
       loadSubmission();
     }
   }, [visible, bountyId]);
+
+  useEffect(() => {
+    if (!visible) {
+      setViewerVisible(false);
+      setSelectedAttachment(null);
+      setShowPayoutWarning(false);
+    }
+  }, [visible]);
 
   const loadSubmission = async () => {
     try {
@@ -70,8 +222,8 @@ export function PosterReviewModal({
     }
   };
 
-  const handleApprove = async () => {
-    if (!submission) return;
+  const handleApprove = async (): Promise<boolean> => {
+    if (!submission) return false;
 
     try {
       setIsProcessing(true);
@@ -96,10 +248,14 @@ export function PosterReviewModal({
         }
 
       // Show rating form
+      setShowPayoutWarning(false);
       setShowRatingForm(true);
+      return true;
     } catch (err) {
       console.error('Error approving completion:', err);
       Alert.alert('Error', 'Failed to approve completion. Please try again.');
+      setShowPayoutWarning(true);
+      return false;
     } finally {
       setIsProcessing(false);
     }
@@ -137,6 +293,18 @@ export function PosterReviewModal({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleHeaderClose = () => {
+    if (showRevisionForm) {
+      setShowRevisionForm(false);
+      return;
+    }
+    if (showPayoutWarning) {
+      setShowPayoutWarning(false);
+      return;
+    }
+    onClose();
   };
 
   const handleSubmitRating = async () => {
@@ -198,8 +366,41 @@ export function PosterReviewModal({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const renderProofItem = ({ item }: { item: ProofItem }) => (
-    <View style={styles.proofItem}>
+  const handleAttachmentPress = (item: ProofItem) => {
+    const remoteUri = item.url && item.url.length > 0 ? item.url : undefined;
+    const primaryUri = item.uri || remoteUri;
+
+    if (!primaryUri) {
+      Alert.alert('Unavailable', 'This attachment is missing a file reference.');
+      return;
+    }
+
+    const attachment: Attachment = {
+      id: item.id,
+      name: item.name || 'Attachment',
+      uri: primaryUri,
+      remoteUri,
+      mimeType: item.mimeType,
+      mime: item.mimeType,
+      size: item.size,
+    };
+
+    setSelectedAttachment(attachment);
+    setViewerVisible(true);
+  };
+
+  const renderProofItem = ({ item }: { item: ProofItem }) => {
+    const displayName = item.name || 'Attachment';
+
+    return (
+      <TouchableOpacity
+        style={styles.proofItem}
+        onPress={() => handleAttachmentPress(item)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`View attachment ${displayName}`}
+        accessibilityHint="Opens the attachment in a viewer"
+      >
       <View style={styles.proofIcon}>
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
@@ -209,50 +410,97 @@ export function PosterReviewModal({
       </View>
       <View style={styles.proofInfo}>
         <Text style={styles.proofName} numberOfLines={1}>
-          {item.name}
+          {displayName}
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-    </View>
-  );
+      <MaterialIcons name="open-in-new" size={20} color="#a7f3d0" />
+      </TouchableOpacity>
+    );
+  };
 
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={showRevisionForm ? () => setShowRevisionForm(false) : onClose}
-            accessibilityLabel={showRevisionForm ? 'Back to review' : 'Close review modal'}
-          >
-            <MaterialIcons name={showRevisionForm ? 'arrow-back' : 'close'} size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{showRevisionForm ? 'Request Changes' : 'Review Submission'}</Text>
-          <View style={{ width: 24 }} />
-        </View>
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
+      >
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleHeaderClose}
+              accessibilityLabel={showRevisionForm || showPayoutWarning ? 'Back to previous step' : 'Close review modal'}
+            >
+              <MaterialIcons name={(showRevisionForm || showPayoutWarning) ? 'arrow-back' : 'close'} size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{showRevisionForm ? 'Request Changes' : showPayoutWarning ? 'Confirm Payout' : 'Review Submission'}</Text>
+            <View style={{ width: 24 }} />
+          </View>
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
-            <Text style={styles.loadingText}>Loading submission...</Text>
-          </View>
-        ) : !submission ? (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="inbox" size={64} color="#6ee7b7" />
-            <Text style={styles.emptyText}>No submission yet</Text>
-            <Text style={styles.emptySubtext}>
-              Waiting for {hunterName} to submit their work.
-            </Text>
-          </View>
-        ) : showRatingForm ? (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#10b981" />
+              <Text style={styles.loadingText}>Loading submission...</Text>
+            </View>
+          ) : !submission ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="inbox" size={64} color="#6ee7b7" />
+              <Text style={styles.emptyText}>No submission yet</Text>
+              <Text style={styles.emptySubtext}>
+                Waiting for {hunterName} to submit their work.
+              </Text>
+            </View>
+          ) : showPayoutWarning ? (
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={styles.payoutWarningContainer}>
+                <View style={styles.warningIcon}>
+                  <MaterialIcons name="warning" size={28} color="#fbbf24" />
+                </View>
+                <Text style={styles.warningTitle}>Complete and release payment?</Text>
+                <Text style={styles.warningDescription}>
+                  {isForHonor
+                    ? 'Completing this bounty will mark the work as finished for honor and alert the hunter.'
+                    : `This will mark the bounty as completed and release ${formattedPayoutAmount} to ${hunterName}.`}
+                </Text>
+                {!isForHonor && bountyAmount > 0 && (
+                  <View style={styles.warningAmountChip}>
+                    <MaterialIcons name="account-balance-wallet" size={16} color="#fbbf24" />
+                    <Text style={styles.warningAmountText}>{formattedPayoutAmount} escrow release</Text>
+                  </View>
+                )}
+                <Text style={styles.warningFootnote}>Once you continue, this action cannot be undone.</Text>
+              </View>
+
+              <SlideToConfirm
+                label={isProcessing ? 'Processing payout…' : 'Slide to confirm payout'}
+                onConfirmed={() => {
+                  handleApprove();
+                }}
+                disabled={isProcessing}
+                isProcessing={isProcessing}
+              />
+
+              <View style={styles.warningActions}>
+                <TouchableOpacity
+                  style={[styles.warningCancelButton, isProcessing && styles.buttonDisabled]}
+                  onPress={() => setShowPayoutWarning(false)}
+                  disabled={isProcessing}
+                >
+                  <MaterialIcons name="arrow-back" size={18} color="#a7f3d0" />
+                  <Text style={styles.warningCancelText}>Back to review</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          ) : showRatingForm ? (
           /* Rating Form */
           <ScrollView
             style={styles.scrollView}
@@ -402,7 +650,7 @@ export function PosterReviewModal({
 
               <TouchableOpacity
                 style={[styles.approveButton, isProcessing && styles.buttonDisabled]}
-                onPress={handleApprove}
+                onPress={() => setShowPayoutWarning(true)}
                 disabled={isProcessing}
               >
                 {isProcessing ? (
@@ -410,7 +658,7 @@ export function PosterReviewModal({
                 ) : (
                   <>
                     <MaterialIcons name="check-circle" size={20} color="#fff" />
-                    <Text style={styles.approveButtonText}>Approve & Release</Text>
+                    <Text style={styles.approveButtonText}>Proceed to Payout</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -419,6 +667,16 @@ export function PosterReviewModal({
         )}
       </View>
     </Modal>
+
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={selectedAttachment}
+        onClose={() => {
+          setViewerVisible(false);
+          setSelectedAttachment(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -697,5 +955,122 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
+  },
+  payoutWarningContainer: {
+    gap: 16,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(5, 150, 105, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.35)',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  warningIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warningTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  warningDescription: {
+    color: 'rgba(255,254,245,0.85)',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  warningAmountChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+  },
+  warningAmountText: {
+    color: '#fbbf24',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  warningFootnote: {
+    color: 'rgba(255,254,245,0.6)',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  sliderWrapper: {
+    marginTop: 24,
+    marginBottom: 16,
+    width: '100%',
+  },
+  sliderTrack: {
+    position: 'relative',
+    backgroundColor: 'rgba(4, 120, 87, 0.4)',
+    borderRadius: 999,
+    height: 60,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.25)',
+  },
+  sliderFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(16, 185, 129, 0.45)',
+  },
+  sliderLabel: {
+    color: 'rgba(255,254,245,0.85)',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textAlign: 'center',
+  },
+  sliderHandle: {
+    position: 'absolute',
+    width: SLIDER_HANDLE_WIDTH,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    top: 2,
+    left: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  warningActions: {
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 12,
+  },
+  warningCancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.35)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+  },
+  warningCancelText: {
+    color: '#a7f3d0',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

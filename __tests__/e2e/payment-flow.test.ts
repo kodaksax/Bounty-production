@@ -197,8 +197,8 @@ describe('Payment Flow E2E Tests', () => {
 
     it('should only allow poster to release payment', async () => {
       const escrowId = 'pi_escrow555';
-      const posterId = 'user_poster';
-      const requesterId = 'user_hunter'; // Hunter tries to release
+  const posterId: string = 'user_poster';
+  const requesterId: string = 'user_hunter'; // Hunter tries to release
 
       // Business logic check before calling Stripe
       const isAuthorized = requesterId === posterId;
@@ -244,8 +244,8 @@ describe('Payment Flow E2E Tests', () => {
 
     it('should handle partial refunds for disputes', async () => {
       const escrowId = 'pi_escrow444';
-      const originalAmount = 10000;
-      const refundAmount = 5000; // Partial refund
+  const originalAmount: number = 10000;
+  const refundAmount: number = 5000; // Partial refund
 
       mockStripe.refunds.create.mockResolvedValue({
         id: 'ref_partial',
@@ -411,8 +411,8 @@ describe('Payment Flow E2E Tests', () => {
 
   describe('Payment Security', () => {
     it('should validate payment amount matches bounty amount', async () => {
-      const bountyAmount = 10000;
-      const paymentAmount = 15000; // Mismatched amount
+  const bountyAmount: number = 10000;
+  const paymentAmount: number = 15000; // Mismatched amount
 
       const isValid = bountyAmount === paymentAmount;
       expect(isValid).toBe(false);

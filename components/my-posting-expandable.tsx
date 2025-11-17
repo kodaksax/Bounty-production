@@ -105,7 +105,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           try {
             const submission = await completionService.getSubmission(String(bounty.id))
             if (mounted && submission) {
-              if (submission.status === 'revision_requested') {
+              // Only check pending-for-hunter if currentUserId is defined
+              let isPendingForHunter = false
+              if (currentUserId) {
+                const hunterId = String(currentUserId)
+                isPendingForHunter = submission.status === 'pending' && submission.hunter_id === hunterId
+              }
+
+              if (isPendingForHunter) {
+                setHasSubmission(true)
+                setSubmissionPending(true)
+                setReviewExpanded(false)
+                setPayoutExpanded(true)
+                setShowRevisionBanner(false)
+                setHasRevisionRequested(false)
+              } else if (submission.status === 'revision_requested') {
                 setHasRevisionRequested(true)
                 setRevisionFeedback(submission.poster_feedback || null)
                 setShowRevisionBanner(true)
@@ -114,6 +128,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 setReviewExpanded(false)
                 setSubmissionPending(false)
                 setHasSubmission(false)
+              } else {
+                setSubmissionPending(false)
+                setHasSubmission(false)
+                setShowRevisionBanner(false)
+                setHasRevisionRequested(false)
               }
             }
           } catch {}
@@ -372,6 +391,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     return STAGES.findIndex(s => s.id === stageToUse)
   }, [currentStage, localStageOverride])
 
+  const awaitingPosterAction = !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission)
+
   return (
     <View>
       <BountyCard
@@ -383,6 +404,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         revisionRequested={hasRevisionRequested && !isOwner}
         reviewNeeded={hasSubmission && isOwner}
         revisionFeedback={revisionFeedback}
+        submittedForReview={awaitingPosterAction}
       />
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>

@@ -10,10 +10,15 @@ export type PerformanceMetric =
   | 'payment_process'
   | 'message_send';
 
+type SentryTransaction = {
+  setData?: (key: string, value: unknown) => void;
+  finish?: () => void;
+};
+
 interface PerformanceTimer {
   name: string;
   startTime: number;
-  transaction?: ReturnType<typeof Sentry.startTransaction>;
+  transaction?: SentryTransaction;
 }
 
 class PerformanceService {
@@ -30,7 +35,13 @@ class PerformanceService {
       const startTime = Date.now();
 
       // Start Sentry transaction for distributed tracing
-      const transaction = Sentry.startTransaction({
+      const sentryStartTransaction = (Sentry as { startTransaction?: (context: {
+        name: string;
+        op?: string;
+        data?: Record<string, unknown>;
+      }) => SentryTransaction | undefined }).startTransaction;
+
+      const transaction = sentryStartTransaction?.({
         name: `${metric}:${name}`,
         op: metric,
         data: metadata,
@@ -66,13 +77,13 @@ class PerformanceService {
 
       // Finish Sentry transaction
       if (timer.transaction) {
-        timer.transaction.setData('duration_ms', duration);
+        timer.transaction.setData?.('duration_ms', duration);
         if (metadata) {
           Object.entries(metadata).forEach(([key, value]) => {
-            timer.transaction?.setData(key, value);
+            timer.transaction?.setData?.(key, value);
           });
         }
-        timer.transaction.finish();
+        timer.transaction.finish?.();
       }
 
       // Track timing in analytics
@@ -213,7 +224,7 @@ class PerformanceService {
   clearAllTimers(): void {
     this.timers.forEach((timer) => {
       if (timer.transaction) {
-        timer.transaction.finish();
+        timer.transaction.finish?.();
       }
     });
     this.timers.clear();

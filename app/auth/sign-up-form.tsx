@@ -1,5 +1,6 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
@@ -92,7 +93,7 @@ export function SignUpForm() {
       // If email confirmations are enabled, session may be null until user verifies email
       if (data.session) {
         // New users always need to complete onboarding - start from the index to check carousel status
-        router.replace('/onboarding/index')
+  router.replace('/onboarding/index' as Href)
       } else {
         // Show a friendly note and route to sign-in
         setAuthError('Check your email to confirm your account, then sign in.')
