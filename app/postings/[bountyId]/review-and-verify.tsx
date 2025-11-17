@@ -1,13 +1,12 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList, Linking, ScrollView,
+    FlatList,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -15,11 +14,15 @@ import {
     View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { ROUTES } from '../../../lib/routes';
-import { attachmentService } from '../../../lib/services/attachment-service';
+import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
-import type { Bounty } from '../../../lib/services/database.types';
+import type { Bounty, Profile } from '../../../lib/services/database.types';
+import { profileService } from '../../../lib/services/profile-service';
+import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
 interface ProofItem {
@@ -29,6 +32,8 @@ interface ProofItem {
   uri?: string; // local uri
   remoteUri?: string; // uploaded remote url
   size?: number;
+  mimeType?: string;
+  mime?: string;
 }
 
 export default function ReviewAndVerifyScreen() {
@@ -39,18 +44,25 @@ export default function ReviewAndVerifyScreen() {
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
+  const [hunterProfile, setHunterProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
+  const [isViewerVisible, setIsViewerVisible] = useState(false);
+  const [isRequestingRevision, setIsRequestingRevision] = useState(false);
 
   useEffect(() => {
     loadBounty();
   }, [bountyId]);
 
   useEffect(() => {
-    if (bounty) loadProofItems();
+    if (bounty) {
+      loadProofItems();
+      loadHunterProfile();
+    }
   }, [bounty]);
 
   const loadBounty = async () => {
@@ -98,6 +110,8 @@ export default function ReviewAndVerifyScreen() {
           uri: a.uri,
           remoteUri: a.remoteUri,
           size: a.size,
+          mimeType: a.mimeType,
+          mime: a.mimeType,
         }))
         setProofItems(items)
         return
@@ -111,69 +125,92 @@ export default function ReviewAndVerifyScreen() {
     }
   };
 
+  const loadHunterProfile = async () => {
+    try {
+      // First check if bounty has accepted_by field
+      let hunterId = bounty?.accepted_by;
+      
+      // If not, look for accepted request
+      if (!hunterId && bounty?.id) {
+        const requests = await bountyRequestService.getAll({
+          bountyId: String(bounty.id),
+          status: 'accepted',
+        });
+        if (requests.length > 0) {
+          hunterId = requests[0].hunter_id;
+        }
+      }
+
+      if (hunterId) {
+        const profile = await profileService.getById(hunterId);
+        setHunterProfile(profile);
+      }
+    } catch (err) {
+      console.error('Error loading hunter profile:', err);
+    }
+  };
+
   const openAttachment = async (item: ProofItem) => {
-    const url = item.remoteUri || item.uri
-    if (!url) {
-      Alert.alert('No URL', 'No remote URL available for this attachment')
-      return
-    }
-    try {
-      await Linking.openURL(url)
-    } catch (err) {
-      console.error('Failed to open attachment URL', err)
-      Alert.alert('Failed to open', 'Could not open attachment')
-    }
-  }
+    // Convert ProofItem to Attachment format for the viewer
+    const attachment: Attachment = {
+      id: item.id,
+      name: item.name,
+      uri: item.uri || '',
+      remoteUri: item.remoteUri,
+      mimeType: item.mimeType || item.mime,
+      mime: item.mimeType || item.mime,
+      size: item.size,
+      status: 'uploaded',
+    };
+    setSelectedAttachment(attachment);
+    setIsViewerVisible(true);
+  };
 
-  const handleUpload = async () => {
-    try {
-      Alert.alert('Add Proof', 'Choose upload type', [
-        { text: 'Photo from library', onPress: async () => {
-          const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 })
-          // new ImagePicker uses `canceled` (US spelling); older versions used `cancelled`.
-          if ((res as any).canceled || (res as any).cancelled) return
-          const uri = (res as any).assets?.[0]?.uri || (res as any).uri
-          const name = (uri || '').split('/').pop() || `image-${Date.now()}.jpg`
-          const attachment = { id: `att-${Date.now()}`, name, uri, mimeType: 'image/jpeg', size: undefined, status: 'uploading' }
-          // Optimistically add to UI
-          setProofItems(p => [...p, { id: attachment.id, type: 'image', name: attachment.name, uri: attachment.uri }])
+  const handleRequestRevision = async () => {
+    if (!bounty) return;
 
-          const uploaded = await attachmentService.upload(attachment as any, {
-            onProgress: (p) => {
-              // no-op for now; could update progress indicator
+    Alert.alert(
+      'Request Revision',
+      'Are you sure you want to request revisions? This will notify the hunter that changes are needed.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Request Revision',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsRequestingRevision(true);
+              // In a real implementation, this would call an API to update the bounty status
+              // and send a notification to the hunter
+              // For now, we'll just show a success message
+              
+              // Example API call (implement as needed):
+              // await bountyService.requestRevision(bounty.id, ratingComment);
+              
+              Alert.alert(
+                'Revision Requested',
+                'The hunter has been notified that revisions are needed.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => router.back(),
+                  },
+                ]
+              );
+            } catch (err) {
+              console.error('Error requesting revision:', err);
+              Alert.alert('Error', 'Failed to request revision. Please try again.');
+            } finally {
+              setIsRequestingRevision(false);
             }
-          })
-
-          // Persist to bounty
-          const success = await bountyService.addAttachmentToBounty((bounty as any).id, uploaded)
-          if (!success) {
-            Alert.alert('Upload saved locally', 'File uploaded but failed to persist to bounty')
-          }
-          // Refresh list to include remoteUri
-          await loadProofItems()
-        }},
-        { text: 'Choose file', onPress: async () => {
-          const res = await DocumentPicker.getDocumentAsync({ type: '*/*' }) as any
-          if (res.type !== 'success') return
-          const uri = res.uri
-          const name = res.name || `file-${Date.now()}`
-          const attachment = { id: `att-${Date.now()}`, name, uri, mimeType: res.mimeType || res.mimeType || undefined, size: res.size, status: 'uploading' }
-          setProofItems(p => [...p, { id: attachment.id, type: 'file', name: attachment.name, uri: attachment.uri }])
-
-          const uploaded = await attachmentService.upload(attachment as any)
-          const success = await bountyService.addAttachmentToBounty((bounty as any).id, uploaded)
-          if (!success) {
-            Alert.alert('Upload saved locally', 'File uploaded but failed to persist to bounty')
-          }
-          await loadProofItems()
-        }},
-        { text: 'Cancel', style: 'cancel' }
-      ])
-    } catch (err) {
-      console.error('Error uploading attachment', err)
-      Alert.alert('Upload failed', 'An error occurred while uploading the file')
-    }
-  }
+          },
+        },
+      ]
+    );
+  };
 
   const handleRatingPress = (value: number) => {
     setRating(value);
@@ -246,9 +283,9 @@ export default function ReviewAndVerifyScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <TouchableOpacity style={styles.backIcon} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -260,6 +297,33 @@ export default function ReviewAndVerifyScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hunter Profile Section */}
+        {hunterProfile && (
+          <View style={styles.hunterCard}>
+            <View style={styles.hunterInfo}>
+              <Avatar style={styles.hunterAvatar}>
+                <AvatarImage src={hunterProfile.avatar_url} alt={hunterProfile.username} />
+                <AvatarFallback>
+                  <Text style={styles.avatarFallbackText}>
+                    {hunterProfile.username?.charAt(0)?.toUpperCase() || '?'}
+                  </Text>
+                </AvatarFallback>
+              </Avatar>
+              <View style={styles.hunterDetails}>
+                <Text style={styles.hunterName}>{hunterProfile.username || 'Unknown Hunter'}</Text>
+                {hunterProfile.averageRating && (
+                  <View style={styles.ratingRow}>
+                    <MaterialIcons name="star" size={16} color="#fcd34d" />
+                    <Text style={styles.hunterRating}>
+                      {hunterProfile.averageRating.toFixed(1)} ({hunterProfile.ratingCount || 0})
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Bounty Info */}
         <View style={styles.bountyInfoCard}>
           <Text style={styles.bountyTitle} numberOfLines={2}>
@@ -339,21 +403,41 @@ export default function ReviewAndVerifyScreen() {
           />
         </View>
 
-        {/* Additional Files Section (Optional) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Add Additional Files (Optional)</Text>
-          <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
-            <MaterialIcons name="cloud-upload" size={24} color="#6ee7b7" />
-            <Text style={styles.uploadButtonText}>Upload Files</Text>
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          {/* Request Revision Button */}
+          <TouchableOpacity
+            style={[styles.revisionButton, isRequestingRevision && styles.revisionButtonDisabled]}
+            onPress={handleRequestRevision}
+            disabled={isRequestingRevision}
+          >
+            {isRequestingRevision ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <MaterialIcons name="edit" size={20} color="#fff" />
+                <Text style={styles.revisionButtonText}>Request Revision</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Next Button */}
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+            <Text style={styles.nextButtonText}>Proceed to Payout</Text>
+            <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-
-        {/* Next Button */}
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>Proceed to Payout</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#fff" />
-        </TouchableOpacity>
       </ScrollView>
+
+      {/* Attachment Viewer Modal */}
+      <AttachmentViewerModal
+        visible={isViewerVisible}
+        attachment={selectedAttachment}
+        onClose={() => {
+          setIsViewerVisible(false);
+          setSelectedAttachment(null);
+        }}
+      />
     </View>
   );
 }
@@ -413,7 +497,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: '#1a3d2e',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
@@ -429,9 +513,53 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    backgroundColor: '#1a3d2e',
   },
   content: {
     padding: 16,
+    backgroundColor: '#1a3d2e',
+  },
+  hunterCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    marginBottom: 16,
+  },
+  hunterInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hunterAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginRight: 12,
+  },
+  avatarFallbackText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#10b981',
+  },
+  hunterDetails: {
+    flex: 1,
+  },
+  hunterName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  hunterRating: {
+    color: '#fcd34d',
+    fontSize: 14,
+    fontWeight: '500',
   },
   bountyInfoCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
@@ -549,21 +677,25 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  uploadButton: {
+  buttonContainer: {
+    gap: 12,
+    marginTop: 8,
+  },
+  revisionButton: {
+    backgroundColor: '#f59e0b',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    paddingVertical: 14,
     borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-    borderStyle: 'dashed',
+    gap: 8,
   },
-  uploadButtonText: {
-    color: '#6ee7b7',
-    fontSize: 14,
+  revisionButtonDisabled: {
+    backgroundColor: 'rgba(245, 158, 11, 0.5)',
+  },
+  revisionButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '600',
   },
   nextButton: {
@@ -574,7 +706,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
-    marginTop: 8,
   },
   nextButtonText: {
     color: '#fff',
