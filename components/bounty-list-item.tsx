@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_OVERLAY, // Using semantic color token
+    backgroundColor: COLORS.BG_OVERLAY,
     borderRadius: RADIUS.MD,
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
@@ -149,95 +149,6 @@ const styles = StyleSheet.create({
     marginRight: SPACING.ELEMENT_GAP,
   },
   avatar: {
-    width: SIZING.AVATAR_SMALL + 4,
-    height: SIZING.AVATAR_SMALL + 4,
-    borderRadius: (SIZING.AVATAR_SMALL + 4) / 2,
-  },
-  avatarFallback: {
-    backgroundColor: COLORS.EMERALD_700,
-    width: SIZING.AVATAR_SMALL + 4,
-    height: SIZING.AVATAR_SMALL + 4,
-    borderRadius: (SIZING.AVATAR_SMALL + 4) / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: COLORS.TEXT_PRIMARY,
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '600',
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  title: {
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: 4,
-    lineHeight: getLineHeight(TYPOGRAPHY.SIZE_BODY),
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  username: {
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: RADIUS.FULL,
-    backgroundColor: COLORS.TEXT_MUTED,
-  },
-  distance: {
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    color: COLORS.TEXT_MUTED,
-  },
-  onlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: 2,
-    borderRadius: RADIUS.SM,
-  },
-  onlineText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: COLORS.EMERALD_300,
-    fontWeight: '500',
-  },
-  trailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
-    paddingLeft: SPACING.ELEMENT_GAP,
-  },
-  price: {
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '700',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  honorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.EMERALD_300,
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: 4,
-    borderRadius: RADIUS.SM,
-  },
-  honorText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: COLORS.EMERALD_900,
-    fontWeight: '600',
-  },
-})
-  avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -246,8 +157,9 @@ const styles = StyleSheet.create({
   },
   avatarFallback: {
     backgroundColor: '#064e3b', // dark emerald
-    width: '100%',
-    height: '100%',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -258,17 +170,20 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
+    justifyContent: 'center',
+    minHeight: SIZING.MIN_TOUCH_TARGET,
   },
   title: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: TYPOGRAPHY.SIZE_DEFAULT,
-    lineHeight: Math.round(TYPOGRAPHY.SIZE_DEFAULT * TYPOGRAPHY.LINE_HEIGHT_TIGHT),
+    fontSize: TYPOGRAPHY.SIZE_BODY,
+    lineHeight: getLineHeight(TYPOGRAPHY.SIZE_BODY),
     marginBottom: 4,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
   username: {
     color: '#a7f3d0', // emerald-200
