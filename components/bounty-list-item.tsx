@@ -138,8 +138,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_OVERLAY,
-    borderRadius: RADIUS.MD,
+    backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
+    borderRadius: SPACING.ELEMENT_GAP,
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
     marginBottom: 10,

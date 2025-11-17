@@ -18,7 +18,7 @@ import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
-import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY, COLORS, RADIUS, SHADOWS } from '../../lib/constants/accessibility'
+import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
@@ -318,12 +318,12 @@ function BountyAppInner() {
   const EmptyListComponent = useCallback(() => (
     <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
       {isLoadingBounties ? (
-        <Text style={{ color: COLORS.TEXT_SECONDARY, marginBottom: SPACING.COMPACT_GAP }}>Loading bounties...</Text>
+        <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
       ) : (
         <>
-          <Text style={{ color: COLORS.TEXT_SECONDARY, marginBottom: SPACING.COMPACT_GAP }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: COLORS.EMERALD_200, paddingHorizontal: SPACING.CARD_PADDING, paddingVertical: SPACING.COMPACT_GAP + 2, borderRadius: RADIUS.FULL }}>
-            <Text style={{ color: COLORS.EMERALD_900, fontWeight: '700' }}>Clear filter</Text>
+          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </>
       )}
@@ -333,7 +333,7 @@ function BountyAppInner() {
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
       <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-        <Text style={{ color: COLORS.TEXT_SECONDARY }}>Loading more...</Text>
+        <Text style={{ color: '#e5e7eb' }}>Loading more...</Text>
       </View>
     ) : null
   ), [loadingMore]);
@@ -485,7 +485,7 @@ function BountyAppInner() {
                     {permission?.granted && userLocation ? (
                       DISTANCE_OPTIONS.map((m) => (
                         <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
-                          <Text style={{ color: COLORS.TEXT_PRIMARY, fontWeight: '700' }}>{m} mi</Text>
+                          <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
                         </TouchableOpacity>
                       ))
                     ) : (
@@ -499,7 +499,7 @@ function BountyAppInner() {
                 {permission?.granted && userLocation ? (
                   DISTANCE_OPTIONS.map((m) => (
                     <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
-                      <Text style={{ color: COLORS.TEXT_PRIMARY, fontWeight: '700' }}>{m} mi</Text>
+                      <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
                     </TouchableOpacity>
                   ))
                 ) : (
@@ -597,9 +597,9 @@ export function BountyApp() {
 
 // Styles (consolidated with standardized spacing and sizing)
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.BG_PRIMARY, position: 'relative' },
+  container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: COLORS.BG_PRIMARY },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
   headerRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
   headerTitle: { 
     fontSize: HEADER_LAYOUT.titleFontSize, 
     fontWeight: 'bold', 
-    color: COLORS.TEXT_PRIMARY,
+    color: '#ffffff', 
     letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE 
   },
   balanceContainer: {
@@ -631,17 +631,17 @@ const styles = StyleSheet.create({
   balanceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    paddingVertical: SPACING.COMPACT_GAP - 2,
-    borderRadius: RADIUS.FULL,
+    backgroundColor: '#047857',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT, // emerald-300
+    borderColor: '#6ee7b7',
   },
   headerBalance: { 
-    fontSize: TYPOGRAPHY.SIZE_SMALL, 
+    fontSize: 14, 
     fontWeight: 'bold', 
-    color: COLORS.TEXT_PRIMARY
+    color: '#ffffff' 
   },
   searchWrapper: { 
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL, 
@@ -650,52 +650,51 @@ const styles = StyleSheet.create({
   searchButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: COLORS.BG_OVERLAY, // emerald-900 with opacity
-    borderRadius: RADIUS.FULL, 
-    paddingVertical: SPACING.COMPACT_GAP + 2, 
+    backgroundColor: 'rgba(5,46,27,0.35)', 
+    borderRadius: 999, 
+    paddingVertical: 10, 
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     minHeight: SIZING.MIN_TOUCH_TARGET 
   },
   searchIcon: { marginRight: SPACING.COMPACT_GAP },
   searchText: { 
-    color: COLORS.TEXT_SECONDARY, // emerald-100
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    opacity: 0.85,
+    color: 'rgba(255,255,255,0.85)', 
+    fontSize: TYPOGRAPHY.SIZE_SMALL 
   },
   filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
   gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
   chip: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: COLORS.BG_OVERLAY, // emerald-900 with opacity
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL - 2, 
+    backgroundColor: 'rgba(5,46,27,0.2)', 
+    paddingHorizontal: 14, 
     height: 36, 
-    borderRadius: RADIUS.FULL, 
+    borderRadius: 999, 
     marginRight: SPACING.COMPACT_GAP,
     minHeight: SIZING.MIN_TOUCH_TARGET 
   },
-  chipActive: { backgroundColor: COLORS.EMERALD_200 }, // emerald-200 for active
+  chipActive: { backgroundColor: '#a7f3d0' },
   chipLabel: { 
-    color: COLORS.TEXT_SECONDARY, // emerald-100
+    color: '#d1fae5', 
     fontSize: TYPOGRAPHY.SIZE_SMALL, 
     fontWeight: '600' 
   },
-  chipLabelActive: { color: COLORS.EMERALD_900 }, // dark text on light bg
+  chipLabelActive: { color: '#052e1b' },
   distanceChip: { 
-    backgroundColor: COLORS.BG_OVERLAY,
+    backgroundColor: 'rgba(5,46,27,0.2)', 
     paddingHorizontal: SPACING.ELEMENT_GAP, 
     height: 28, 
-    borderRadius: RADIUS.SM + 6, 
+    borderRadius: 14, 
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  distanceChipActive: { backgroundColor: COLORS.EMERALD_300 }, // emerald-300 for active
+  distanceChipActive: { backgroundColor: '#6ee7b7' },
   distanceChipLabel: { 
-    color: COLORS.TEXT_SECONDARY, // emerald-100
+    color: '#d1fae5', 
     fontSize: TYPOGRAPHY.SIZE_XSMALL, 
     fontWeight: '600' 
   },
-  distanceChipLabelActive: { color: COLORS.EMERALD_900 },
+  distanceChipLabelActive: { color: '#052e1b' },
   distanceClearButton: { 
     width: SIZING.ICON_LARGE, 
     height: SIZING.ICON_LARGE, 
@@ -710,20 +709,17 @@ const styles = StyleSheet.create({
     position: 'absolute', 
     top: 48, 
     right: SPACING.SCREEN_HORIZONTAL, 
-    backgroundColor: COLORS.BG_SURFACE, // emerald-800
+    backgroundColor: 'rgba(2,44,34,0.9)', 
     padding: SPACING.COMPACT_GAP, 
-    borderRadius: RADIUS.MD, 
-    zIndex: 60,
-    ...SHADOWS.MD,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_SUBTLE,
+    borderRadius: SPACING.COMPACT_GAP, 
+    zIndex: 60 
   },
   distanceOption: { 
     paddingVertical: SPACING.COMPACT_GAP, 
     paddingHorizontal: SPACING.ELEMENT_GAP 
   },
   dropdownNotice: { 
-    color: COLORS.TEXT_SECONDARY,
+    color: '#f3fff9', 
     padding: SPACING.COMPACT_GAP, 
     fontSize: TYPOGRAPHY.SIZE_XSMALL 
   },

@@ -218,12 +218,10 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: RADIUS.FULL,
+    borderRadius: 32,
   },
   navIconContainer: {
     // Slightly larger touch target matching other nav buttons but without a visible border
-    width: SIZING.MIN_TOUCH_TARGET,
-    height: SIZING.MIN_TOUCH_TARGET,
     padding: 10,
     alignItems: 'center',
     justifyContent: 'center',

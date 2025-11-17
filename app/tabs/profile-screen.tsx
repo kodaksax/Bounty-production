@@ -8,7 +8,6 @@ import { SkillsetChips } from "components/skillset-chips";
 import { ProfileSkeleton } from "components/ui/skeleton-loaders";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
-import { COLORS, SPACING, TYPOGRAPHY, RADIUS, SIZING } from "lib/constants/accessibility";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
@@ -395,34 +394,29 @@ export default ProfileScreen;
 
 const styles = StyleSheet.create({
   section: {
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    paddingVertical: SPACING.ELEMENT_GAP,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.ELEMENT_GAP,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    fontSize: 14,
     fontWeight: "600",
-    color: COLORS.TEXT_PRIMARY,
+    color: "#ffffff",
   },
   editButton: {
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: SPACING.COMPACT_GAP / 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: COLORS.INTERACTIVE_DEFAULT, // emerald-500
-    borderRadius: RADIUS.SM,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-    minWidth: SIZING.MIN_TOUCH_TARGET,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#10b981",
+    borderRadius: 4,
   },
   editButtonText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: COLORS.TEXT_ACCENT, // emerald-300
-    fontWeight: '600',
+    fontSize: 12,
+    color: "#6ee7b7",
   },
 });

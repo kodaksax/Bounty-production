@@ -100,119 +100,38 @@ export const TYPOGRAPHY = {
 // ============================================================================
 
 export const COLORS = {
-  // Emerald theme - primary brand colors
+  // Emerald theme
   EMERALD_50: '#ecfdf5',
   EMERALD_100: '#d1fae5',
   EMERALD_200: '#a7f3d0',
   EMERALD_300: '#6ee7b7',      // Light text on dark bg (7.4:1 contrast)
   EMERALD_400: '#34d399',
   EMERALD_500: '#10b981',      // Primary green (3.1:1 on white)
-  EMERALD_600: '#059669',      // Darker green (4.6:1 on white) - Main app background
-  EMERALD_700: '#047857',      // AA compliant on white (6.4:1) - Card backgrounds
-  EMERALD_800: '#065f46',      // Surface elements
-  EMERALD_900: '#064e3b',      // Darkest emerald
-  EMERALD_950: '#022c22',      // Ultra dark for overlays
+  EMERALD_600: '#059669',      // Darker green (4.6:1 on white)
+  EMERALD_700: '#047857',      // AA compliant on white (6.4:1)
+  EMERALD_800: '#065f46',
+  EMERALD_900: '#064e3b',
   
-  // Semantic background colors
-  BG_PRIMARY: '#059669',       // emerald-600 - Main app background
-  BG_SECONDARY: '#047857',     // emerald-700 - Card backgrounds
-  BG_SURFACE: '#065f46',       // emerald-800 - Surface elements
-  BG_OVERLAY: 'rgba(2, 44, 34, 0.55)', // emerald-950 with opacity
-  BG_DARK: '#022c22',          // emerald-950 - Ultra dark overlays
-  BG_CARD: 'rgba(4, 120, 87, 0.3)', // emerald-700 with opacity
+  // Background colors
+  BG_DARK: '#0a1f14',          // Dark emerald background
+  BG_DARK_SECONDARY: '#1a3d2e', // Slightly lighter bg
+  BG_CARD: 'rgba(5, 150, 105, 0.1)', // Card background
   
   // Text colors (all AA compliant on dark backgrounds)
   TEXT_PRIMARY: '#fffef5',     // Off-white (>15:1 contrast on dark)
-  TEXT_SECONDARY: '#d1fae5',   // emerald-100 (>10:1 contrast)
-  TEXT_MUTED: '#a7f3d0',       // emerald-200 (>6:1 contrast)
-  TEXT_ACCENT: '#6ee7b7',      // emerald-300 (7.4:1 contrast)
-  TEXT_DISABLED: 'rgba(209, 250, 229, 0.5)', // emerald-100 at 50% opacity
+  TEXT_SECONDARY: '#d1d5db',   // Gray-300 (>10:1 contrast)
+  TEXT_MUTED: '#9ca3af',       // Gray-400 (>6:1 contrast)
+  TEXT_EMERALD: '#6ee7b7',     // Emerald-300 (7.4:1 contrast)
   
   // Status colors
   ERROR: '#dc2626',            // Red-600
-  ERROR_LIGHT: '#fca5a5',      // Red-300
   WARNING: '#f59e0b',          // Amber-500
-  WARNING_LIGHT: '#fcd34d',    // Amber-300
   SUCCESS: '#10b981',          // Emerald-500
-  SUCCESS_LIGHT: '#6ee7b7',    // Emerald-300
   INFO: '#3b82f6',             // Blue-500
-  INFO_LIGHT: '#93c5fd',       // Blue-300
   
   // Border colors
-  BORDER_DEFAULT: '#047857',   // emerald-700
-  BORDER_LIGHT: '#6ee7b7',     // emerald-300
-  BORDER_DARK: '#022c22',      // emerald-950
-  BORDER_SUBTLE: 'rgba(110, 231, 183, 0.2)', // emerald-300 with opacity
-  
-  // Interactive colors
-  INTERACTIVE_DEFAULT: '#10b981',  // emerald-500
-  INTERACTIVE_HOVER: '#059669',    // emerald-600
-  INTERACTIVE_ACTIVE: '#047857',   // emerald-700
-  INTERACTIVE_DISABLED: 'rgba(16, 185, 129, 0.4)', // emerald-500 at 40% opacity
-} as const;
-
-// ============================================================================
-// BORDER RADIUS CONSTANTS
-// ============================================================================
-
-export const RADIUS = {
-  NONE: 0,
-  XS: 4,
-  SM: 8,
-  MD: 12,
-  LG: 16,
-  XL: 24,
-  XXL: 32,
-  FULL: 9999,
-} as const;
-
-// ============================================================================
-// SHADOW/ELEVATION CONSTANTS
-// ============================================================================
-
-export const SHADOWS = {
-  NONE: {
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  SM: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  MD: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  LG: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  XL: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 25,
-    elevation: 12,
-  },
-  GLOW: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 6,
-  },
+  BORDER_DEFAULT: '#374151',   // Gray-700
+  BORDER_LIGHT: 'rgba(110, 231, 183, 0.2)', // Emerald with opacity
 } as const;
 
 // ============================================================================
