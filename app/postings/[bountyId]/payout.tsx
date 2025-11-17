@@ -181,6 +181,50 @@ export default function PayoutScreen() {
     );
   };
 
+  const handleDeleteBounty = async () => {
+    if (!bounty) return;
+
+    Alert.alert(
+      'Delete Bounty',
+      'Permanently delete this bounty from your postings? It will only be visible in your history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsProcessing(true);
+
+              // Update bounty status to deleted
+              const updated = await bountyService.update(Number(bountyId), {
+                status: 'deleted',
+              });
+
+              if (!updated) {
+                throw new Error('Failed to delete bounty');
+              }
+
+              Alert.alert('Deleted', 'Bounty has been removed from your postings. You can still view it in your history.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    router.replace('/tabs/bounty-app');
+                  },
+                },
+              ]);
+            } catch (err) {
+              console.error('Error deleting bounty:', err);
+              Alert.alert('Error', 'Failed to delete bounty. Please try again.');
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -322,6 +366,21 @@ export default function PayoutScreen() {
                 <>
                   <MaterialIcons name="check" size={24} color="#fff" />
                   <Text style={styles.completeButtonText}>Mark as Complete</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
+              onPress={handleDeleteBounty}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <MaterialIcons name="delete" size={24} color="#fff" />
+                  <Text style={styles.deleteButtonText}>Delete</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -588,6 +647,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   completeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#ef4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  deleteButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

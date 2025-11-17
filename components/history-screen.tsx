@@ -29,12 +29,13 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   const loadHistory = async () => {
     try {
       setLoading(true);
-      // Load completed and archived bounties for the current user
-      const [completed, archived] = await Promise.all([
+      // Load completed, archived, and deleted bounties for the current user
+      const [completed, archived, deleted] = await Promise.all([
         bountyService.getAll({ userId: currentUserId, status: "completed" }),
         bountyService.getAll({ userId: currentUserId, status: "archived" }),
+        bountyService.getAll({ userId: currentUserId, status: "deleted" }),
       ]);
-      setBounties([...completed, ...archived].sort((a, b) => 
+      setBounties([...completed, ...archived, ...deleted].sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
     } catch (error) {
@@ -62,12 +63,20 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             styles.statusBadge,
             {
               backgroundColor:
-                item.status === "completed" ? "#6366f1" : "#6b7280",
+                item.status === "completed" 
+                  ? "#6366f1" 
+                  : item.status === "archived"
+                  ? "#6b7280"
+                  : "#ef4444", // deleted = red
             },
           ]}
         >
           <Text style={styles.statusText}>
-            {item.status === "completed" ? "COMPLETED" : "ARCHIVED"}
+            {item.status === "completed" 
+              ? "COMPLETED" 
+              : item.status === "archived"
+              ? "ARCHIVED"
+              : "DELETED"}
           </Text>
         </View>
         <Text style={styles.date}>
@@ -162,7 +171,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
               <MaterialIcons name="history" size={64} color="#6ee7b780" />
               <Text style={styles.emptyTitle}>No History Yet</Text>
               <Text style={styles.emptyText}>
-                Your completed and archived bounties will appear here
+                Your completed, archived, and deleted bounties will appear here
               </Text>
             </View>
           }

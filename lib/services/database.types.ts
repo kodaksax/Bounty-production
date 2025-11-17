@@ -11,7 +11,7 @@ export type Bounty = {
   // Backwards-compatible alias for older code expecting user_id
   user_id?: string
   created_at: string
-  status: "open" | "in_progress" | "completed" | "archived"
+  status: "open" | "in_progress" | "completed" | "archived" | "deleted"
   distance?: number
   // New optional fields for enhanced posting metadata
   work_type?: 'online' | 'in_person'
