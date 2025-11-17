@@ -28,6 +28,7 @@ import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
+import { COLORS, SPACING, TYPOGRAPHY, RADIUS, SHADOWS, SIZING } from "../lib/constants/accessibility"
 
 // Type for detail rows in Additional Details section
 interface DetailRow {
@@ -556,10 +557,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
                       <MaterialIcons name={detail.icon} size={16} color={detail.color} />
                       <View style={styles.detailContent}>
-                        <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
+                        <Text style={[styles.detailLabel, detail.urgent && { color: COLORS.WARNING }]}>
                           {detail.label}
                         </Text>
-                        <Text style={[styles.detailValue, detail.urgent && { color: '#fbbf24', fontWeight: '600' }]}>
+                        <Text style={[styles.detailValue, detail.urgent && { color: COLORS.WARNING, fontWeight: '600' }]}>
                           {detail.value}
                         </Text>
                       </View>
@@ -680,34 +681,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: SPACING.CARD_PADDING,
   },
   // Outer shadow wrapper (no overflow so shadow isn't clipped)
   cardShadow: {
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
+    borderRadius: RADIUS.XL,
+    ...SHADOWS.XL,
     backgroundColor: 'transparent',
   },
   // Inner rounded card
   card: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
-    borderRadius: 24,
+    backgroundColor: COLORS.BG_PRIMARY, // emerald-600
+    borderRadius: RADIUS.XL,
     overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#047857', // emerald-700
-    // Optional: ensure the darker header follows the rounded top
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    padding: SPACING.CARD_PADDING,
+    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
+    borderTopLeftRadius: RADIUS.XL,
+    borderTopRightRadius: RADIUS.XL,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -718,228 +714,245 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconButton: {
-    padding: 8,
+    padding: SPACING.COMPACT_GAP,
     marginRight: 4,
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    marginLeft: 8,
-    fontSize: 18,
+    marginLeft: SPACING.COMPACT_GAP,
+    fontSize: TYPOGRAPHY.SIZE_HEADER,
     fontWeight: 'bold',
-    letterSpacing: 1.6,
-    color: 'white',
+    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
+    color: COLORS.TEXT_PRIMARY,
   },
   closeButton: {
-    padding: 8,
+    padding: SPACING.COMPACT_GAP,
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: COLORS.BG_PRIMARY, // emerald-600
   },
   scrollContent: {
-    padding: 16,
+    padding: SPACING.CARD_PADDING,
   },
   bountyCard: {
-    backgroundColor: '#047857cc', // emerald-700/80
-    borderRadius: 12,
+    backgroundColor: COLORS.BG_OVERLAY, // emerald-700 with opacity
+    borderRadius: RADIUS.MD,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: SPACING.CARD_PADDING,
+    ...SHADOWS.SM,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_SUBTLE,
   },
   cardContent: {
-    padding: 16,
+    padding: SPACING.CARD_PADDING,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
+    gap: SPACING.ELEMENT_GAP,
+    marginBottom: SPACING.ELEMENT_GAP,
   },
   userTextInfo: {
     flex: 1,
   },
   avatar: {
-    width: 40,
-    height: 40,
+    width: SIZING.AVATAR_MEDIUM - 8,
+    height: SIZING.AVATAR_MEDIUM - 8,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/30
+    borderColor: COLORS.BORDER_SUBTLE,
   },
   avatarFallback: {
-    backgroundColor: '#064e3b', // emerald-900
+    backgroundColor: COLORS.EMERALD_900,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#a7f3d0', // emerald-200
-    fontSize: 12,
+    color: COLORS.TEXT_MUTED, // emerald-200
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
   },
   username: {
-    fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    color: COLORS.TEXT_SECONDARY, // emerald-100
+    fontWeight: '600',
   },
   postTime: {
-    fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    color: COLORS.TEXT_MUTED, // emerald-300
   },
   title: {
-    fontSize: 20,
+    fontSize: TYPOGRAPHY.SIZE_LARGE,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 12,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.ELEMENT_GAP,
   },
   priceDistanceContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.CARD_PADDING,
   },
   priceContainer: {
-    backgroundColor: '#064e3b80', // emerald-900/50
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: 'rgba(6, 78, 59, 0.5)', // emerald-900 with opacity
+    paddingHorizontal: SPACING.ELEMENT_GAP,
+    paddingVertical: SPACING.COMPACT_GAP - 2,
+    borderRadius: RADIUS.SM,
   },
   priceText: {
-    color: '#6ee7b7', // emerald-400
+    color: COLORS.SUCCESS_LIGHT, // emerald-400
     fontWeight: 'bold',
+    fontSize: TYPOGRAPHY.SIZE_BODY,
   },
   distanceText: {
-    fontSize: 14,
-    color: '#a7f3d0', // emerald-200
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    color: COLORS.TEXT_MUTED, // emerald-200
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#d1fae5', // emerald-100
-    paddingHorizontal: 10,
+    backgroundColor: COLORS.EMERALD_100,
+    paddingHorizontal: SPACING.COMPACT_GAP + 2,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: RADIUS.MD,
     gap: 4,
   },
   onlineText: {
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
     fontWeight: '600',
-    color: '#065f46', // emerald-800
+    color: COLORS.EMERALD_800,
   },
   descriptionContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.CARD_PADDING,
   },
   additionalDetailsContainer: {
-    marginBottom: 16,
-    backgroundColor: '#05543280', // emerald-800/50
-    padding: 12,
-    borderRadius: 8,
+    marginBottom: SPACING.CARD_PADDING,
+    backgroundColor: 'rgba(5, 84, 50, 0.5)', // emerald-800 with opacity
+    padding: SPACING.ELEMENT_GAP,
+    borderRadius: RADIUS.SM,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
-    gap: 10,
+    marginBottom: SPACING.COMPACT_GAP,
+    gap: SPACING.COMPACT_GAP + 2,
   },
   detailContent: {
     flex: 1,
   },
   detailLabel: {
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
     fontWeight: '600',
-    color: '#a7f3d0', // emerald-300
+    color: COLORS.TEXT_MUTED, // emerald-300
     marginBottom: 2,
   },
   detailValue: {
-    fontSize: 14,
-    color: '#d1fae5', // emerald-100
-    lineHeight: 18,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    color: COLORS.TEXT_SECONDARY, // emerald-100
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_SMALL * TYPOGRAPHY.LINE_HEIGHT_NORMAL),
   },
   attachmentsSection: {
-    marginBottom: 16,
+    marginBottom: SPACING.CARD_PADDING,
   },
   sectionHeader: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '500',
-    color: '#a7f3d0', // emerald-200
-    marginBottom: 8,
+    color: COLORS.TEXT_MUTED, // emerald-200
+    marginBottom: SPACING.COMPACT_GAP,
   },
   descriptionText: {
-    color: 'white',
-    fontSize: 14,
-    lineHeight: 20,
+    color: COLORS.TEXT_PRIMARY,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    lineHeight: Math.round(TYPOGRAPHY.SIZE_SMALL * TYPOGRAPHY.LINE_HEIGHT_RELAXED),
   },
   attachmentsContainer: {
-    gap: 8,
+    gap: SPACING.COMPACT_GAP,
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#05543280', // emerald-800/50
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: 'rgba(5, 84, 50, 0.5)', // emerald-800 with opacity
+    padding: SPACING.ELEMENT_GAP,
+    borderRadius: RADIUS.SM,
   },
   attachmentIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: '#064e3b', // emerald-900
+    width: SIZING.AVATAR_MEDIUM - 8,
+    height: SIZING.AVATAR_MEDIUM - 8,
+    borderRadius: RADIUS.SM - 2,
+    backgroundColor: COLORS.EMERALD_900,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.ELEMENT_GAP,
   },
   attachmentInfo: {
     flex: 1,
   },
   attachmentName: {
-    fontSize: 14,
-    color: 'white',
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: '500',
   },
   attachmentSize: {
-    fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    color: COLORS.TEXT_MUTED, // emerald-300
   },
   downloadButton: {
-    padding: 8,
+    padding: SPACING.COMPACT_GAP,
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   contactContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.CARD_PADDING,
   },
   messageButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0', // emerald-200
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
+    backgroundColor: COLORS.EMERALD_200, // emerald-200
+    paddingVertical: SPACING.SCREEN_HORIZONTAL - 2,
+    paddingHorizontal: SPACING.SECTION_GAP - 4,
+    borderRadius: RADIUS.MD,
+    gap: SPACING.COMPACT_GAP,
+    minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
+    ...SHADOWS.SM,
   },
   messageButtonText: {
-    color: '#065f46', // emerald-800
-    fontSize: 16,
+    color: COLORS.EMERALD_800,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: '600',
   },
   actionContainer: {
-    padding: 16,
-    paddingTop: 16,
-    backgroundColor: '#047857', // emerald-700
+    padding: SPACING.CARD_PADDING,
+    paddingTop: SPACING.CARD_PADDING,
+    backgroundColor: COLORS.BG_SECONDARY, // emerald-700
     borderTopWidth: 1,
-    borderTopColor: '#05966920', // emerald-600/20
+    borderTopColor: COLORS.BORDER_SUBTLE,
   },
   acceptButton: {
     width: '100%',
-    paddingVertical: 16,
-    backgroundColor: '#10b981', // emerald-500
-    borderRadius: 12,
+    paddingVertical: SPACING.CARD_PADDING,
+    backgroundColor: COLORS.INTERACTIVE_DEFAULT, // emerald-500
+    borderRadius: RADIUS.MD,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    minHeight: SIZING.BUTTON_HEIGHT_DEFAULT + 8,
+    ...SHADOWS.SM,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: COLORS.INTERACTIVE_HOVER, // emerald-600
     opacity: 0.6,
   },
   acceptButtonText: {
-    color: 'white',
+    color: COLORS.TEXT_PRIMARY,
     fontWeight: '500',
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.SIZE_BODY,
   },
 });
