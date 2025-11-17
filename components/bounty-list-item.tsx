@@ -1,13 +1,13 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { SPACING, SIZING, TYPOGRAPHY, COLORS, RADIUS, getLineHeight } from '../lib/constants/accessibility'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+import { COLORS, RADIUS, SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
 import { BountyDetailModal } from "./bountydetailmodal"
-import { useRouter } from 'expo-router'
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 
 export interface BountyListItemProps {
   id: number
