@@ -113,9 +113,11 @@ export default function HunterPayoutScreen() {
   };
 
   const handleArchive = async () => {
+    if (!bounty || !routeBountyId) return;
+
     Alert.alert(
       'Archive Bounty',
-      'Archive this completed bounty? You can view it later in your archived bounties.',
+      'Archive this completed bounty? You can view it later in your archived bounties and history.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -123,10 +125,17 @@ export default function HunterPayoutScreen() {
           onPress: async () => {
             try {
               setIsProcessing(true);
-              // In real implementation, archive the bounty
-              await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+              
+              // Update bounty status to archived
+              const updated = await bountyService.update(routeBountyId, {
+                status: 'archived',
+              });
 
-              Alert.alert('Archived', 'Bounty archived successfully.', [
+              if (!updated) {
+                throw new Error('Failed to archive bounty');
+              }
+
+              Alert.alert('Archived', 'Bounty archived successfully. You can find it in your archives and history.', [
                 {
                   text: 'OK',
                   onPress: () => {
@@ -147,9 +156,11 @@ export default function HunterPayoutScreen() {
   };
 
   const handleDelete = async () => {
+    if (!bounty || !routeBountyId) return;
+
     Alert.alert(
       'Delete Bounty',
-      'Permanently delete this bounty from your list? This cannot be undone.',
+      'Permanently delete this bounty from your in-progress list? You can still see it in your history. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -158,10 +169,17 @@ export default function HunterPayoutScreen() {
           onPress: async () => {
             try {
               setIsProcessing(true);
-              // In real implementation, remove from hunter's in progress
-              await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+              
+              // Update bounty status to deleted
+              const updated = await bountyService.update(routeBountyId, {
+                status: 'deleted',
+              });
 
-              Alert.alert('Deleted', 'Bounty removed from your list.', [
+              if (!updated) {
+                throw new Error('Failed to delete bounty');
+              }
+
+              Alert.alert('Deleted', 'Bounty removed from your in-progress list. You can still view it in your history.', [
                 {
                   text: 'OK',
                   onPress: () => {
