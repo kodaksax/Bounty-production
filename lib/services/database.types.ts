@@ -11,7 +11,7 @@ export type Bounty = {
   // Backwards-compatible alias for older code expecting user_id
   user_id?: string
   created_at: string
-  status: "open" | "in_progress" | "completed" | "archived"
+  status: "open" | "in_progress" | "completed" | "archived" | "cancelled" | "cancellation_requested"
   distance?: number
   // New optional fields for enhanced posting metadata
   work_type?: 'online' | 'in_person'
@@ -52,6 +52,9 @@ export type Profile = {
   updated_at?: string
   display_name?: string
   location?: string
+  // Withdrawal and cancellation tracking
+  withdrawal_count?: number
+  cancellation_count?: number
   // Aggregated rating stats (optional; populated by joined queries)
   averageRating?: number
   ratingCount?: number
@@ -71,6 +74,22 @@ export type BountyRequest = {
   hunter_id: string
   status: "pending" | "accepted" | "rejected"
   created_at: string
+}
+
+export type BountyCancellation = {
+  id: string
+  bounty_id: number
+  requester_id: string
+  requester_type: 'poster' | 'hunter'
+  reason: string
+  status: 'pending' | 'accepted' | 'rejected' | 'disputed'
+  responder_id?: string
+  response_message?: string
+  refund_amount?: number
+  refund_percentage?: number
+  created_at: string
+  updated_at?: string
+  resolved_at?: string
 }
 
 export type Database = {

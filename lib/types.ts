@@ -167,6 +167,23 @@ export interface Request {
   createdAt: string;
 }
 
+// Bounty Cancellation
+export interface BountyCancellation {
+  id: string;
+  bountyId: string;
+  requesterId: string;
+  requesterType: 'poster' | 'hunter';
+  reason: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'disputed';
+  responderId?: string;
+  responseMessage?: string;
+  refundAmount?: number;
+  refundPercentage?: number;
+  createdAt: string;
+  updatedAt?: string;
+  resolvedAt?: string;
+}
+
 // Attachment metadata for bounties
 export interface Attachment {
   id: string;
@@ -181,7 +198,7 @@ export interface Attachment {
 }
 
 // Notification Types
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow';
+export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected';
 
 export interface Notification {
   id: string;
@@ -197,6 +214,7 @@ export interface Notification {
     senderId?: string;
     followerId?: string;
     amount?: number;
+    cancellationId?: string;
     [key: string]: any;
   };
   read: boolean;
