@@ -9,6 +9,9 @@ interface BountyCardProps {
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onCancel?: () => void; // New: Navigate to cancellation request screen
+  onViewCancellation?: () => void; // New: Navigate to cancellation response screen
+  onViewDispute?: () => void; // New: Navigate to dispute screen
   // If a revision has been requested for the current user, show an indicator
   revisionRequested?: boolean;
   // When the poster has a pending submission to review, show review-needed state
@@ -16,6 +19,9 @@ interface BountyCardProps {
   revisionFeedback?: string | null;
   // Hunter has submitted work and is waiting on poster action
   submittedForReview?: boolean;
+  // Cancellation/dispute states
+  hasCancellationRequest?: boolean;
+  hasDispute?: boolean;
 }
 
 export function BountyCard({
@@ -24,10 +30,15 @@ export function BountyCard({
   onPress,
   onEdit,
   onDelete,
+  onCancel,
+  onViewCancellation,
+  onViewDispute,
   revisionRequested,
   reviewNeeded,
   revisionFeedback,
   submittedForReview,
+  hasCancellationRequest,
+  hasDispute,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
 
@@ -54,6 +65,10 @@ export function BountyCard({
         return "#6366f1"; // indigo-500
       case "archived":
         return "#6b7280"; // gray-500
+      case "cancelled":
+        return "#ef4444"; // red-500
+      case "cancellation_requested":
+        return "#f97316"; // orange-500
       default:
         return "#10b981";
     }
@@ -71,6 +86,10 @@ export function BountyCard({
         return "COMPLETED";
       case "archived":
         return "ARCHIVED";
+      case "cancelled":
+        return "CANCELLED";
+      case "cancellation_requested":
+        return "CANCELLATION PENDING";
       default:
         return "OPEN";
     }
@@ -92,6 +111,19 @@ export function BountyCard({
           <View style={styles.revisionBadge}>
             <MaterialIcons name="feedback" size={12} color="#92400e" />
             <Text style={styles.revisionText}>REVISION REQUESTED</Text>
+          </View>
+        )}
+        {/* Cancellation/Dispute indicators */}
+        {hasCancellationRequest && (
+          <View style={styles.cancellationBadge}>
+            <MaterialIcons name="cancel" size={12} color="#92400e" />
+            <Text style={styles.cancellationText}>CANCELLATION</Text>
+          </View>
+        )}
+        {hasDispute && (
+          <View style={styles.disputeBadge}>
+            <MaterialIcons name="gavel" size={12} color="#7c2d12" />
+            <Text style={styles.disputeText}>DISPUTE</Text>
           </View>
         )}
         {bounty.is_time_sensitive && (
@@ -163,11 +195,11 @@ export function BountyCard({
       </View>
 
       {/* Owner actions row (only visible to owner) */}
-      {isOwner && (onEdit || onDelete) && (
+      {isOwner && (onEdit || onDelete || onCancel || onViewCancellation || onViewDispute) && (
         <View style={styles.ownerActions}>
           <Text style={styles.ownerLabel}>Your posting</Text>
           <View style={styles.actionButtons}>
-            {onEdit && (
+            {onEdit && bounty.status !== 'cancelled' && bounty.status !== 'cancellation_requested' && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
@@ -179,7 +211,7 @@ export function BountyCard({
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
-            {onDelete && (
+            {onDelete && bounty.status === 'open' && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
@@ -189,6 +221,42 @@ export function BountyCard({
               >
                 <MaterialIcons name="delete" size={16} color="#ef4444" />
                 <Text style={styles.actionButtonText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+            {onCancel && (bounty.status === 'open' || bounty.status === 'in_progress') && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.cancelButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onCancel();
+                }}
+              >
+                <MaterialIcons name="cancel" size={16} color="#f97316" />
+                <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+            {onViewCancellation && bounty.status === 'cancellation_requested' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.viewButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onViewCancellation();
+                }}
+              >
+                <MaterialIcons name="visibility" size={16} color="#3b82f6" />
+                <Text style={[styles.actionButtonText, styles.viewButtonText]}>View Request</Text>
+              </TouchableOpacity>
+            )}
+            {onViewDispute && hasDispute && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.disputeButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onViewDispute();
+                }}
+              >
+                <MaterialIcons name="gavel" size={16} color="#dc2626" />
+                <Text style={[styles.actionButtonText, styles.disputeButtonText]}>View Dispute</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -344,6 +412,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.4,
   },
+  cancellationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(249, 115, 22, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  cancellationText: {
+    color: '#92400e',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  disputeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  disputeText: {
+    color: '#7c2d12',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
   ownerActions: {
     marginTop: 12,
     paddingTop: 12,
@@ -375,5 +473,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#d1fae5",
+  },
+  cancelButton: {
+    backgroundColor: "rgba(249, 115, 22, 0.2)",
+  },
+  cancelButtonText: {
+    color: "#fb923c",
+  },
+  viewButton: {
+    backgroundColor: "rgba(59, 130, 246, 0.2)",
+  },
+  viewButtonText: {
+    color: "#60a5fa",
+  },
+  disputeButton: {
+    backgroundColor: "rgba(220, 38, 38, 0.2)",
+  },
+  disputeButtonText: {
+    color: "#f87171",
   },
 });

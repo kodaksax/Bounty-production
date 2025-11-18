@@ -1,7 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { bountyService } from 'lib/services/bounty-service'
+import { cancellationService } from 'lib/services/cancellation-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
+import { disputeService } from 'lib/services/dispute-service'
 import { messageService } from 'lib/services/message-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -55,6 +58,7 @@ const STAGES = [
 ]
 
 export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
+  const router = useRouter()
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [wipExpanded, setWipExpanded] = useState(false)
   const [readyToSubmitPressed, setReadyToSubmitPressed] = useState(false)
@@ -68,6 +72,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [showRevisionBanner, setShowRevisionBanner] = useState(false)
   // Persisted flag so the card-level badge remains even if the banner is dismissed
   const [hasRevisionRequested, setHasRevisionRequested] = useState(false)
+  
+  // Cancellation and dispute state
+  const [hasCancellationRequest, setHasCancellationRequest] = useState(false)
+  const [hasDispute, setHasDispute] = useState(false)
   
   // Hunter completion submission state
   const [timeElapsed, setTimeElapsed] = useState(0)
@@ -141,6 +149,22 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         try {
           const ready = await completionService.getReady(String(bounty.id))
           if (mounted) setReadyRecord(ready)
+        } catch {}
+        
+        // Check for cancellation request
+        try {
+          const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
+          if (mounted && cancellation && cancellation.status === 'pending') {
+            setHasCancellationRequest(true)
+          }
+        } catch {}
+        
+        // Check for active dispute
+        try {
+          const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
+          if (mounted && dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+            setHasDispute(true)
+          }
         } catch {}
       } catch {}
     }
@@ -393,6 +417,18 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   const awaitingPosterAction = !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission)
 
+  const handleCancelBounty = () => {
+    router.push(`/bounty/${bounty.id}/cancel`)
+  }
+
+  const handleViewCancellation = () => {
+    router.push(`/bounty/${bounty.id}/cancellation-response`)
+  }
+
+  const handleViewDispute = () => {
+    router.push(`/bounty/${bounty.id}/dispute`)
+  }
+
   return (
     <View>
       <BountyCard
@@ -401,10 +437,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         onPress={() => { if (!isListScrolling) { animate(); onToggle(); } }}
         onEdit={onEdit}
         onDelete={onDelete}
+        onCancel={handleCancelBounty}
+        onViewCancellation={handleViewCancellation}
+        onViewDispute={handleViewDispute}
         revisionRequested={hasRevisionRequested && !isOwner}
         reviewNeeded={hasSubmission && isOwner}
         revisionFeedback={revisionFeedback}
         submittedForReview={awaitingPosterAction}
+        hasCancellationRequest={hasCancellationRequest}
+        hasDispute={hasDispute}
       />
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
