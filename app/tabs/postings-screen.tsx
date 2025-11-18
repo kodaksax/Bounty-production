@@ -273,10 +273,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       const mine = await bountyService.getByUserId(currentUserId)
-      setMyBounties(mine)
+      // Filter out archived and deleted bounties from My Postings view
+      const activeBounties = mine.filter(b => b.status !== 'archived' && b.status !== 'deleted')
+      setMyBounties(activeBounties)
       setIsLoading((prev) => ({ ...prev, myBounties: false }))
       // Load related requests
-      await loadRequestsForMyBounties(mine)
+      await loadRequestsForMyBounties(activeBounties)
     } catch (e: any) {
       console.error('Error loading my bounties:', e)
       setError('Failed to load your bounties')
@@ -295,7 +297,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       const map = new Map<string, Bounty>()
       for (const r of relevant) {
         const b = r?.bounty as Bounty | undefined
-        if (b && !map.has(String(b.id))) map.set(String(b.id), b)
+        // Filter out archived and deleted bounties from in-progress view
+        if (b && !map.has(String(b.id)) && b.status !== 'archived' && b.status !== 'deleted') {
+          map.set(String(b.id), b)
+        }
       }
       setInProgressBounties(Array.from(map.values()))
     } catch (e: any) {
