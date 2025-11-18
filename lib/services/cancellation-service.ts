@@ -183,7 +183,8 @@ export const cancellationService = {
   async acceptCancellation(
     cancellationId: string,
     responderId: string,
-    responseMessage?: string
+    responseMessage?: string,
+    walletRefundCallback?: (bountyId: string, title: string, refundPercentage: number) => Promise<boolean>
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
@@ -227,6 +228,20 @@ export const cancellationService = {
       await bountyService.update(cancellation.bountyId, {
         status: 'cancelled',
       });
+
+      // Process wallet refund if callback provided
+      if (walletRefundCallback) {
+        try {
+          await walletRefundCallback(cancellation.bountyId, bounty.title, refundPercentage);
+        } catch (walletError) {
+          logger.error('Error processing wallet refund', { error: walletError, cancellationId });
+          // Don't fail the entire operation if wallet refund fails
+        }
+      }
+
+      // Update requester's stats
+      await this.updateUserStats(cancellation.requesterId, 
+        cancellation.requesterType === 'hunter' ? 'withdrawal' : 'cancellation');
 
       return true;
     } catch (err) {
