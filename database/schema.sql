@@ -287,6 +287,31 @@ CREATE INDEX idx_bounty_cancellations_bounty_id ON bounty_cancellations(bounty_i
 CREATE INDEX idx_bounty_cancellations_requester_id ON bounty_cancellations(requester_id);
 CREATE INDEX idx_bounty_cancellations_status ON bounty_cancellations(status);
 
+-- Bounty disputes table
+CREATE TABLE IF NOT EXISTS bounty_disputes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    cancellation_id uuid NOT NULL REFERENCES bounty_cancellations(id) ON DELETE CASCADE,
+    bounty_id uuid NOT NULL REFERENCES bounties(id) ON DELETE CASCADE,
+    initiator_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    reason text NOT NULL,
+    evidence_json jsonb,
+    status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'resolved', 'closed')),
+    resolution text,
+    resolved_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+    resolved_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER trg_bounty_disputes_updated_at
+BEFORE UPDATE ON bounty_disputes
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX idx_bounty_disputes_cancellation_id ON bounty_disputes(cancellation_id);
+CREATE INDEX idx_bounty_disputes_bounty_id ON bounty_disputes(bounty_id);
+CREATE INDEX idx_bounty_disputes_initiator_id ON bounty_disputes(initiator_id);
+CREATE INDEX idx_bounty_disputes_status ON bounty_disputes(status);
+
 -- BountyExpo Database Schema
 -- This script creates the necessary tables for the BountyExpo application
 

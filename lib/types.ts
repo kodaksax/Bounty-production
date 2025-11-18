@@ -184,6 +184,31 @@ export interface BountyCancellation {
   resolvedAt?: string;
 }
 
+// Bounty Dispute
+export interface BountyDispute {
+  id: string;
+  cancellationId: string;
+  bountyId: string;
+  initiatorId: string;
+  reason: string;
+  evidence?: DisputeEvidence[];
+  status: 'open' | 'under_review' | 'resolved' | 'closed';
+  resolution?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Dispute Evidence
+export interface DisputeEvidence {
+  id: string;
+  type: 'text' | 'image' | 'document' | 'link';
+  content: string;
+  description?: string;
+  uploadedAt: string;
+}
+
 // Attachment metadata for bounties
 export interface Attachment {
   id: string;

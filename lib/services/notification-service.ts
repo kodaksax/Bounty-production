@@ -474,7 +474,16 @@ export class NotificationService {
         created_at: new Date().toISOString(),
       };
 
-      await this.createNotification(notification);
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation request notification:', error);
+        return false;
+      }
+
       return true;
     } catch (error) {
       console.error('Error sending cancellation request notification:', error);
@@ -505,7 +514,16 @@ export class NotificationService {
         created_at: new Date().toISOString(),
       };
 
-      await this.createNotification(notification);
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation accepted notification:', error);
+        return false;
+      }
+
       return true;
     } catch (error) {
       console.error('Error sending cancellation accepted notification:', error);
@@ -535,7 +553,16 @@ export class NotificationService {
         created_at: new Date().toISOString(),
       };
 
-      await this.createNotification(notification);
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation rejected notification:', error);
+        return false;
+      }
+
       return true;
     } catch (error) {
       console.error('Error sending cancellation rejected notification:', error);
