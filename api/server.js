@@ -1368,6 +1368,72 @@ app.get('/api/user-id', (req, res) => {
   res.type('text').send('00000000-0000-0000-0000-000000000001');
 });
 
+// Delete current user account (authenticated user self-deletion)
+app.delete('/auth/delete-account', async (req, res) => {
+  try {
+    // Get the user ID from the authorization header (JWT token)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Unauthorized',
+        message: 'No authentication token provided' 
+      });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    // Check if supabaseAdmin is available
+    if (!supabaseAdmin) {
+      return res.status(503).json({ 
+        success: false,
+        error: 'Service Unavailable',
+        message: 'Supabase admin client not configured. Please check server environment variables.' 
+      });
+    }
+
+    // Verify the token and get user info
+    const { data: { user }, error: verifyError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (verifyError || !user) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Unauthorized',
+        message: 'Invalid or expired authentication token' 
+      });
+    }
+
+    const userId = user.id;
+    console.log(`[DELETE /auth/delete-account] Deleting account for user: ${userId}`);
+
+    // Delete user from Supabase Auth (this will cascade to profiles and trigger cleanup)
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    
+    if (deleteError) {
+      console.error('[DELETE /auth/delete-account] Supabase delete error:', deleteError);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Deletion Failed',
+        message: `Failed to delete user account: ${deleteError.message}` 
+      });
+    }
+
+    console.log(`[DELETE /auth/delete-account] Successfully deleted user: ${userId}`);
+    
+    return res.json({ 
+      success: true,
+      message: 'Account successfully deleted. All associated data has been cleaned up.' 
+    });
+  } catch (error) {
+    console.error('[DELETE /auth/delete-account] Unexpected error:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message || 'An unexpected error occurred during account deletion' 
+    });
+  }
+});
+
 // ==================== LEGACY USERS ENDPOINTS ====================
 
 // Keep existing users endpoints for compatibility

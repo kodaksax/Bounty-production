@@ -14,6 +14,7 @@
  */
 
 import { supabase } from '../supabase';
+import { getApiBaseUrl } from '../config/api';
 
 /**
  * Get information about what will happen when user deletes their account
@@ -123,9 +124,9 @@ export async function deleteUserAccount(): Promise<{
 }> {
   try {
     // Get the current user
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user, session } } = await supabase.auth.getUser();
     
-    if (!user) {
+    if (!user || !session) {
       return {
         success: false,
         message: 'No authenticated user found',
@@ -152,36 +153,45 @@ export async function deleteUserAccount(): Promise<{
       cleanupDetails.push(`${info.pendingApplications} pending application(s) will be rejected`);
     }
 
-    // Attempt to delete from auth (this will cascade to profile and trigger cleanup)
-    // Note: This requires admin privileges or service role key
-    // In production, this should be done server-side
+    // Call the backend API to delete the user
+    // The backend has the service role key to properly delete from auth.users
+    const apiBaseUrl = getApiBaseUrl(3000); // Default to port 3000 for the api server
+    
     try {
-      const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
-      
-      if (authDeleteError) {
-        console.error('[AccountDeletion] Auth deletion failed:', authDeleteError);
-        
-        // If admin API is not available (client-side), provide instructions
-        if (authDeleteError.message?.includes('not authorized') || 
-            authDeleteError.message?.includes('admin')) {
-          return {
-            success: false,
-            message: 'Account deletion requires admin privileges. Please contact support or use the Supabase Dashboard to delete your account.',
-            info,
-          };
-        }
-        
+      const response = await fetch(`${apiBaseUrl}/auth/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('[AccountDeletion] API deletion failed:', result);
         return {
           success: false,
-          message: `Failed to delete account: ${authDeleteError.message}`,
+          message: result.message || 'Failed to delete account',
           info,
         };
       }
-    } catch (e: any) {
-      console.warn('[AccountDeletion] Auth admin API not available:', e);
+
+      // Sign out the user after successful deletion
+      await supabase.auth.signOut();
+
+      return {
+        success: true,
+        message: 'Account deleted successfully.\n\n' + 
+                 (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : ''),
+        info,
+      };
+    } catch (fetchError: any) {
+      console.error('[AccountDeletion] Network error:', fetchError);
       
-      // For client-side, we can try to delete the profile directly
-      // The auth.users row will need to be deleted by an admin
+      // Fallback: Try to delete profile directly if API is not available
+      console.warn('[AccountDeletion] API not available, attempting fallback...');
+      
       try {
         const { error: profileError } = await supabase
           .from('profiles')
@@ -201,28 +211,18 @@ export async function deleteUserAccount(): Promise<{
 
         return {
           success: true,
-          message: 'Account data deleted successfully. An admin will need to complete the deletion from the authentication system.\n\n' + 
+          message: 'Account data deleted successfully. Note: Complete deletion requires the backend API to be running. An admin may need to complete the deletion from Supabase Dashboard.\n\n' + 
                    (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : ''),
           info,
         };
       } catch (profileError: any) {
         return {
           success: false,
-          message: `Failed to delete account: ${profileError.message}`,
+          message: `Failed to delete account: ${profileError.message}. Please ensure the backend API is running.`,
           info,
         };
       }
     }
-
-    // Sign out after successful deletion
-    await supabase.auth.signOut();
-
-    return {
-      success: true,
-      message: 'Account deleted successfully.\n\n' + 
-               (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : ''),
-      info,
-    };
   } catch (error: any) {
     console.error('[AccountDeletion] Unexpected error:', error);
     return {
