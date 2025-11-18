@@ -1,6 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
-import { Clipboard } from 'react-native';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
@@ -98,7 +98,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
     try {
       const message = messages.find(m => m.id === messageId);
       if (message) {
-        Clipboard.setString(message.text);
+        await Clipboard.setStringAsync(message.text);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to copy message');

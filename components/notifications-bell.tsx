@@ -1,20 +1,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  FlatList,
+  Modal,
   Text,
   TouchableOpacity,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '../lib/context/notification-context';
 import type { Notification } from '../lib/types';
-import { formatDistanceToNow } from 'date-fns';
 
 export function NotificationsBell() {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -72,7 +70,7 @@ export function NotificationsBell() {
   const renderNotification = ({ item }: { item: Notification }) => (
     <TouchableOpacity
       onPress={() => handleNotificationPress(item)}
-      className={`border-b border-gray-200 p-4 ${!item.read ? 'bg-emerald-50' : 'bg-white'}`}
+      className={"border-b border-gray-200 p-4 bg-white"}
       activeOpacity={0.7}
     >
       <View className="flex-row items-start">
@@ -117,7 +115,8 @@ export function NotificationsBell() {
         transparent={false}
         onRequestClose={() => setDropdownVisible(false)}
       >
-        <View className="flex-1 bg-white" style={{ paddingTop: insets.top }}>
+  {/* Root modal view: use the same emerald-600 as the header for cohesion */}
+  <View className="flex-1 bg-emerald-600" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
           {/* Header */}
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-600">
             <View className="flex-row items-center">
@@ -129,15 +128,15 @@ export function NotificationsBell() {
             </TouchableOpacity>
           </View>
 
-          {/* Action bar */}
+          {/* Action bar — match emerald palette and use white text for contrast */}
           {notifications.length > 0 && (
-            <View className="flex-row items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-              <Text className="text-sm text-gray-600">
+            <View className="flex-row items-center justify-between px-4 py-2 bg-emerald-700 border-b border-emerald-700">
+              <Text className="text-sm text-white">
                 {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
               </Text>
               {unreadCount > 0 && (
                 <TouchableOpacity onPress={handleMarkAllRead}>
-                  <Text className="text-sm font-semibold text-emerald-600">Mark all read</Text>
+                  <Text className="text-sm font-semibold text-emerald-200">Mark all read</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -146,14 +145,14 @@ export function NotificationsBell() {
           {/* Notifications list */}
           {loading ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#10b981" />
-              <Text className="text-gray-500 mt-2">Loading notifications...</Text>
+              <ActivityIndicator size="large" color="#ffffff" />
+              <Text className="text-white mt-2">Loading notifications...</Text>
             </View>
           ) : notifications.length === 0 ? (
             <View className="flex-1 items-center justify-center px-4">
-              <MaterialIcons name="notifications-none" size={64} color="#d1d5db" />
-              <Text className="text-gray-500 text-lg font-semibold mt-4">No notifications yet</Text>
-              <Text className="text-gray-400 text-center mt-2">
+              <MaterialIcons name="notifications-none" size={64} color="#ffffff" />
+              <Text className="text-white text-lg font-semibold mt-4">No notifications yet</Text>
+              <Text className="text-emerald-100 text-center mt-2">
                 When someone applies to your bounties or sends you a message, you'll see it here
               </Text>
             </View>

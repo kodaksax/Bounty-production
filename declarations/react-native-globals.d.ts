@@ -10,7 +10,6 @@ declare const ScrollView: any
 declare const Modal: any
 declare const TextInput: any
 declare const Image: any
-declare const SafeAreaView: any
 declare const Pressable: any
 
 declare module '@expo/vector-icons/MaterialIcons' {
