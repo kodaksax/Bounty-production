@@ -340,6 +340,31 @@ export class NotificationService {
     });
   }
 
+  async sendMessageNotification(userId: string, senderId: string, conversationId: string, messageText: string) {
+    // Get sender info
+    const { users } = await import('../db/schema');
+    const senderInfo = await db
+      .select({ handle: users.handle })
+      .from(users)
+      .where(eq(users.id, senderId))
+      .limit(1);
+
+    const senderHandle = senderInfo[0]?.handle || 'Someone';
+    
+    // Truncate message for preview
+    const preview = messageText.length > 100 
+      ? messageText.substring(0, 100) + '...'
+      : messageText;
+
+    return this.createNotification({
+      userId,
+      type: 'message',
+      title: `Message from ${senderHandle}`,
+      body: preview,
+      data: { senderId, conversationId, messageText },
+    });
+  }
+
   async notifyFollow(userId: string, followerId: string, followerName: string) {
     return this.createNotification({
       userId,

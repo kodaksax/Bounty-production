@@ -89,6 +89,42 @@ export const notificationPreferences = pgTable('notification_preferences', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Conversations table for messaging
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  is_group: boolean('is_group').default(false).notNull(),
+  bounty_id: uuid('bounty_id').references(() => bounties.id),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Conversation participants table
+export const conversationParticipants = pgTable('conversation_participants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversation_id: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
+  user_id: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  joined_at: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete
+  last_read_at: timestamp('last_read_at', { withTimezone: true }),
+}, (table) => ({
+  // Unique constraint to ensure a user can only be in a conversation once
+  unique_conversation_user: unique().on(table.conversation_id, table.user_id),
+}));
+
+// Messages table
+export const messages = pgTable('messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversation_id: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }).notNull(),
+  sender_id: uuid('sender_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  text: text('text').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  media_url: text('media_url'),
+  reply_to: uuid('reply_to').references(() => messages.id),
+  is_pinned: boolean('is_pinned').default(false).notNull(),
+  status: text('status').default('sent').notNull(), // sent, delivered, read
+});
+
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   bounties: many(bounties),
@@ -96,6 +132,8 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   notifications: many(notifications),
   pushTokens: many(pushTokens),
   notificationPreferences: one(notificationPreferences),
+  conversationParticipants: many(conversationParticipants),
+  sentMessages: many(messages),
 }));
 
 export const bountiesRelations = relations(bounties, ({ one, many }) => ({
@@ -104,6 +142,7 @@ export const bountiesRelations = relations(bounties, ({ one, many }) => ({
     references: [users.id],
   }),
   walletTransactions: many(walletTransactions),
+  conversations: many(conversations),
 }));
 
 export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
@@ -135,5 +174,40 @@ export const notificationPreferencesRelations = relations(notificationPreference
   user: one(users, {
     fields: [notificationPreferences.user_id],
     references: [users.id],
+  }),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  bounty: one(bounties, {
+    fields: [conversations.bounty_id],
+    references: [bounties.id],
+  }),
+  participants: many(conversationParticipants),
+  messages: many(messages),
+}));
+
+export const conversationParticipantsRelations = relations(conversationParticipants, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [conversationParticipants.conversation_id],
+    references: [conversations.id],
+  }),
+  user: one(users, {
+    fields: [conversationParticipants.user_id],
+    references: [users.id],
+  }),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversation_id],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.sender_id],
+    references: [users.id],
+  }),
+  replyToMessage: one(messages, {
+    fields: [messages.reply_to],
+    references: [messages.id],
   }),
 }));
