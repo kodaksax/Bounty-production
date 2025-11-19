@@ -32,6 +32,7 @@ interface WalletContextValue {
   updateDisputeStatus: (transactionId: string, status: "none" | "pending" | "resolved") => Promise<void>;
   createEscrow: (bountyId: string | number, amount: number, title: string, posterId: string) => Promise<WalletTransactionRecord>;
   releaseFunds: (bountyId: string | number, hunterId: string, title: string) => Promise<boolean>;
+  refundEscrow: (bountyId: string | number, title: string, refundPercentage: number) => Promise<boolean>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -213,6 +214,53 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true;
   }, [transactions, logTransaction, persistTransactions]);
 
+  // Refund escrowed funds back to poster when bounty is cancelled
+  const refundEscrow = useCallback(async (bountyId: string | number, title: string, refundPercentage: number = 100) => {
+    // Find the escrow transaction for this bounty
+    const bountyIdStr = String(bountyId);
+    const escrowTx = transactions.find(
+      tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
+    );
+
+    if (!escrowTx) {
+      console.error('No funded escrow found for bounty:', bountyId);
+      return false;
+    }
+
+    const escrowAmount = Math.abs(escrowTx.amount);
+    const refundAmount = (escrowAmount * refundPercentage) / 100;
+
+    // Update escrow transaction status
+    setTransactions(prev => {
+      const next = prev.map(tx => 
+        tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'refunded' } } as WalletTransactionRecord) : tx
+      ) as WalletTransactionRecord[];
+      persistTransactions(next);
+      return next;
+    });
+
+    // Return refund amount to poster's balance
+    setBalance(prev => {
+      const next = prev + refundAmount;
+      persist(next);
+      return next;
+    });
+
+    // Log refund transaction
+    await logTransaction({
+      type: 'refund',
+      amount: refundAmount, // positive for poster receiving refund
+      details: {
+        title,
+        bounty_id: bountyIdStr,
+        status: 'completed',
+        method: `${refundPercentage}% refund`,
+      },
+    });
+
+    return true;
+  }, [transactions, persistTransactions, logTransaction, persist]);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
@@ -226,6 +274,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateDisputeStatus,
     createEscrow,
     releaseFunds,
+    refundEscrow,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

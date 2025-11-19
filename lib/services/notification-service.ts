@@ -451,6 +451,124 @@ export class NotificationService {
       }
     } catch {}
   }
+
+  /**
+   * Send cancellation request notification
+   */
+  async sendCancellationRequestNotification(
+    recipientId: string,
+    bountyId: string,
+    bountyTitle: string,
+    requesterType: 'poster' | 'hunter'
+  ): Promise<boolean> {
+    try {
+      const notification: Omit<Notification, 'id'> = {
+        user_id: recipientId,
+        type: 'cancellation_request',
+        title: 'Cancellation Request',
+        body: `The ${requesterType} has requested to cancel the bounty "${bountyTitle}"`,
+        data: {
+          bountyId,
+        },
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation request notification:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error sending cancellation request notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send cancellation accepted notification
+   */
+  async sendCancellationAcceptedNotification(
+    recipientId: string,
+    bountyId: string,
+    bountyTitle: string,
+    refundAmount: number
+  ): Promise<boolean> {
+    try {
+      const notification: Omit<Notification, 'id'> = {
+        user_id: recipientId,
+        type: 'cancellation_accepted',
+        title: 'Cancellation Accepted',
+        body: `Your cancellation request for "${bountyTitle}" has been accepted. Refund: $${refundAmount.toFixed(2)}`,
+        data: {
+          bountyId,
+          amount: refundAmount,
+        },
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation accepted notification:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error sending cancellation accepted notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send cancellation rejected notification
+   */
+  async sendCancellationRejectedNotification(
+    recipientId: string,
+    bountyId: string,
+    bountyTitle: string,
+    reason: string
+  ): Promise<boolean> {
+    try {
+      const notification: Omit<Notification, 'id'> = {
+        user_id: recipientId,
+        type: 'cancellation_rejected',
+        title: 'Cancellation Rejected',
+        body: `Your cancellation request for "${bountyTitle}" has been rejected. Reason: ${reason}`,
+        data: {
+          bountyId,
+        },
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+
+      // Insert notification directly into Supabase
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notification);
+
+      if (error) {
+        console.error('Error creating cancellation rejected notification:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error sending cancellation rejected notification:', error);
+      return false;
+    }
+  }
 }
 
 export const notificationService = NotificationService.getInstance();

@@ -900,7 +900,7 @@ export const bountyService = {
   /**
    * Update a bounty's status
    */
-  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived"): Promise<Bounty | null> {
+  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
     return this.update(id, { status })
   },
 

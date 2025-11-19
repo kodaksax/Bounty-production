@@ -35,7 +35,7 @@ DO $$ BEGIN
 END $$;
 
 -- Recreate enum types
-CREATE TYPE bounty_status_enum AS ENUM ('open', 'in_progress', 'completed', 'archived');
+CREATE TYPE bounty_status_enum AS ENUM ('open', 'in_progress', 'completed', 'archived', 'cancelled', 'cancellation_requested');
 CREATE TYPE work_type_enum AS ENUM ('online', 'in_person');
 CREATE TYPE request_status_enum AS ENUM ('pending', 'accepted', 'rejected');
 CREATE TYPE wallet_tx_type_enum AS ENUM ('escrow', 'release', 'refund', 'deposit', 'withdrawal');
@@ -59,6 +59,8 @@ CREATE TABLE profiles (
     about text,
     phone text,
     balance numeric(10,2) NOT NULL DEFAULT 0.00,
+    withdrawal_count integer DEFAULT 0,
+    cancellation_count integer DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW()
 );
@@ -259,6 +261,56 @@ CREATE TABLE IF NOT EXISTS blocked_users (
 
 CREATE INDEX idx_blocked_users_blocker_id ON blocked_users(blocker_id);
 CREATE INDEX idx_blocked_users_blocked_id ON blocked_users(blocked_id);
+
+-- Bounty cancellations table
+CREATE TABLE IF NOT EXISTS bounty_cancellations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    bounty_id uuid NOT NULL REFERENCES bounties(id) ON DELETE CASCADE,
+    requester_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    requester_type text NOT NULL CHECK (requester_type IN ('poster', 'hunter')),
+    reason text NOT NULL,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'disputed')),
+    responder_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+    response_message text,
+    refund_amount numeric(10,2),
+    refund_percentage numeric(5,2),
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW(),
+    resolved_at timestamptz
+);
+
+CREATE TRIGGER trg_bounty_cancellations_updated_at
+BEFORE UPDATE ON bounty_cancellations
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX idx_bounty_cancellations_bounty_id ON bounty_cancellations(bounty_id);
+CREATE INDEX idx_bounty_cancellations_requester_id ON bounty_cancellations(requester_id);
+CREATE INDEX idx_bounty_cancellations_status ON bounty_cancellations(status);
+
+-- Bounty disputes table
+CREATE TABLE IF NOT EXISTS bounty_disputes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    cancellation_id uuid NOT NULL REFERENCES bounty_cancellations(id) ON DELETE CASCADE,
+    bounty_id uuid NOT NULL REFERENCES bounties(id) ON DELETE CASCADE,
+    initiator_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    reason text NOT NULL,
+    evidence_json jsonb,
+    status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'resolved', 'closed')),
+    resolution text,
+    resolved_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+    resolved_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT NOW(),
+    updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER trg_bounty_disputes_updated_at
+BEFORE UPDATE ON bounty_disputes
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX idx_bounty_disputes_cancellation_id ON bounty_disputes(cancellation_id);
+CREATE INDEX idx_bounty_disputes_bounty_id ON bounty_disputes(bounty_id);
+CREATE INDEX idx_bounty_disputes_initiator_id ON bounty_disputes(initiator_id);
+CREATE INDEX idx_bounty_disputes_status ON bounty_disputes(status);
 
 -- BountyExpo Database Schema
 -- This script creates the necessary tables for the BountyExpo application
