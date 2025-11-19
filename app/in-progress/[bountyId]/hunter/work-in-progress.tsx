@@ -52,6 +52,9 @@ export default function HunterWorkInProgressScreen() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [progressUpdate, setProgressUpdate] = useState('');
+  const [isPostingUpdate, setIsPostingUpdate] = useState(false);
+  const [showProgressForm, setShowProgressForm] = useState(false);
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -142,6 +145,56 @@ export default function HunterWorkInProgressScreen() {
     } finally {
       setIsSendingMessage(false);
     }
+  };
+
+  const handlePostProgressUpdate = async () => {
+    if (!progressUpdate.trim()) {
+      Alert.alert('Empty Update', 'Please enter a progress update.');
+      return;
+    }
+
+    try {
+      setIsPostingUpdate(true);
+      
+      // Send progress update via message
+      if (conversation) {
+        await messageService.sendMessage(
+          conversation.id,
+          `📋 Progress Update: ${progressUpdate.trim()}`,
+          currentUserId
+        );
+      }
+
+      setProgressUpdate('');
+      setShowProgressForm(false);
+      Alert.alert('Success', 'Progress update posted successfully!');
+    } catch (err) {
+      console.error('Error posting progress update:', err);
+      Alert.alert('Error', 'Failed to post progress update. Please try again.');
+    } finally {
+      setIsPostingUpdate(false);
+    }
+  };
+
+  const handleMarkAsComplete = () => {
+    Alert.alert(
+      'Mark as Complete',
+      'Are you ready to submit your work for review? You can add proof of completion on the next screen.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            if (routeBountyId) {
+              router.push({
+                pathname: '/in-progress/[bountyId]/hunter/review-and-verify',
+                params: { bountyId: routeBountyId },
+              });
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleNext = () => {
@@ -314,6 +367,65 @@ export default function HunterWorkInProgressScreen() {
           </View>
         )}
 
+        {/* Progress Updates Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Progress Updates</Text>
+            <TouchableOpacity
+              style={styles.addUpdateButton}
+              onPress={() => setShowProgressForm(!showProgressForm)}
+            >
+              <MaterialIcons
+                name={showProgressForm ? 'remove' : 'add'}
+                size={20}
+                color="#10b981"
+              />
+              <Text style={styles.addUpdateText}>
+                {showProgressForm ? 'Hide' : 'Add Update'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showProgressForm && (
+            <View style={styles.progressFormContainer}>
+              <TextInput
+                style={styles.progressInput}
+                placeholder="Describe your progress..."
+                placeholderTextColor="rgba(255,254,245,0.4)"
+                value={progressUpdate}
+                onChangeText={setProgressUpdate}
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.postUpdateButton,
+                  (!progressUpdate.trim() || isPostingUpdate) && styles.postUpdateButtonDisabled,
+                ]}
+                onPress={handlePostProgressUpdate}
+                disabled={!progressUpdate.trim() || isPostingUpdate}
+              >
+                {isPostingUpdate ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="send" size={18} color="#fff" />
+                    <Text style={styles.postUpdateButtonText}>Post Update</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.progressHint}>
+            <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
+            <Text style={styles.progressHintText}>
+              Share progress updates with the poster to keep them informed
+            </Text>
+          </View>
+        </View>
+
         {/* Context Panel - Description */}
         <View style={styles.contextPanel}>
           <Text style={styles.contextTitle}>Description</Text>
@@ -344,6 +456,12 @@ export default function HunterWorkInProgressScreen() {
             </View>
           )}
         </View>
+
+        {/* Mark as Complete Button */}
+        <TouchableOpacity style={styles.completeButton} onPress={handleMarkAsComplete}>
+          <MaterialIcons name="check-circle" size={20} color="#fff" />
+          <Text style={styles.completeButtonText}>Mark as Complete</Text>
+        </TouchableOpacity>
 
         {/* Next Button */}
         <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
@@ -538,6 +656,94 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addUpdateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  addUpdateText: {
+    color: '#10b981',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  progressFormContainer: {
+    gap: 12,
+    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  progressInput: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  postUpdateButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  postUpdateButtonDisabled: {
+    backgroundColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  postUpdateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  progressHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 8,
+  },
+  progressHintText: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    flex: 1,
+  },
+  completeButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    marginBottom: 12,
+  },
+  completeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   messageInputContainer: {
     flexDirection: 'row',
