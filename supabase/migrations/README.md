@@ -109,9 +109,49 @@ DROP TABLE IF EXISTS public.completion_ready;
 -- ALTER TABLE public.bounties DROP COLUMN IF EXISTS accepted_by;
 ```
 
-## Related Files
+## Migration: 20251119_add_bounty_requests_table.sql
 
-This migration supports the following code changes:
+This migration adds the bounty_requests table that tracks hunter applications for bounties.
+
+### Tables Created
+
+1. **bounty_requests** - Stores applications from hunters to bounties
+   - `id` (uuid, PK)
+   - `bounty_id` (uuid, FK to bounties)
+   - `hunter_id` (uuid, FK to profiles) - The applicant
+   - `poster_id` (uuid, FK to profiles) - Denormalized for faster queries
+   - `status` (request_status_enum) - 'pending', 'accepted', 'rejected'
+   - `created_at` (timestamptz)
+   - `updated_at` (timestamptz)
+
+### Indexes Created
+
+- `idx_bounty_requests_bounty_id` - Fast lookups by bounty
+- `idx_bounty_requests_hunter_id` - Fast lookups by hunter
+- `idx_bounty_requests_poster_id` - Fast lookups by poster
+- `idx_bounty_requests_status` - Fast lookups by status
+
+### Row Level Security (RLS)
+
+The migration includes comprehensive RLS policies:
+- Posters can view and update requests for their bounties
+- Hunters can view and create their own applications
+- Hunters can delete their own pending applications
+- Posters can delete requests for their bounties
+
+### Related Files
+
+This migration supports the bounty acceptance flow:
+- `lib/services/bounty-request-service.ts` - Service layer for applications
+- `components/bountydetailmodal.tsx` - Apply button functionality
+- `components/applicant-card.tsx` - Request card UI
+- `app/tabs/postings-screen.tsx` - Request list and accept/reject handlers
+
+---
+
+## Related Files (Completion Flow)
+
+The completion migration supports the following code changes:
 - `lib/services/completion-service.ts` - Service layer for completion operations
 - `components/my-posting-expandable.tsx` - UI for bounty progress tracking
 - `components/poster-review-modal.tsx` - UI for poster review actions
