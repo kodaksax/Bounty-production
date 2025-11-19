@@ -33,11 +33,12 @@ export class BountyService {
           return { success: false, error: `Cannot accept bounty with status: ${bounty.status}` };
         }
 
-        // Update bounty status to in_progress
+        // Update bounty status to in_progress and set hunter
         await tx
           .update(bounties)
           .set({ 
             status: 'in_progress',
+            hunter_id: hunterId,
             updated_at: new Date(),
           })
           .where(eq(bounties.id, bountyId));
@@ -123,6 +124,14 @@ export class BountyService {
 
         if (bounty.status !== 'in_progress') {
           return { success: false, error: `Cannot complete bounty with status: ${bounty.status}` };
+        }
+
+        // Verify that the person completing is the hunter who accepted it
+        if (bounty.hunter_id && bounty.hunter_id !== completedBy) {
+          return { 
+            success: false, 
+            error: 'Only the hunter who accepted this bounty can mark it as complete' 
+          };
         }
 
         // Note: We do NOT update bounty status to 'completed' here.
