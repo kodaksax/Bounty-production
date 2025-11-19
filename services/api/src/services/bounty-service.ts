@@ -102,7 +102,7 @@ export class BountyService {
 
   /**
    * Complete a bounty - transitions from 'in_progress' to 'completed'
-   * Creates BOUNTY_COMPLETED outbox event and release transaction
+   * Creates COMPLETION_RELEASE outbox event to trigger fund transfer to hunter
    */
   async completeBounty(bountyId: string, completedBy: string): Promise<{ success: boolean; error?: string }> {
     try {
@@ -125,26 +125,44 @@ export class BountyService {
           return { success: false, error: `Cannot complete bounty with status: ${bounty.status}` };
         }
 
-        // Update bounty status to completed
-        await tx
-          .update(bounties)
-          .set({ 
-            status: 'completed',
-            updated_at: new Date(),
-          })
-          .where(eq(bounties.id, bountyId));
+        // Note: We do NOT update bounty status to 'completed' here.
+        // The completion-release-service will update it after successful payment transfer.
+        // This prevents race conditions where the bounty is marked complete before payment processes.
 
-        // Create release transaction if bounty had amount
-        if (bounty.amount_cents > 0) {
-          await walletService.createTransaction({
-            user_id: completedBy, // Payment goes to the hunter who completed it
-            bountyId: bountyId,
-            type: 'release',
-            amount: bounty.amount_cents / 100, // Convert cents to dollars
+        // Create COMPLETION_RELEASE outbox event if bounty has payment
+        if (bounty.amount_cents > 0 && !bounty.is_for_honor) {
+          // Verify payment_intent_id exists
+          if (!bounty.payment_intent_id) {
+            return { success: false, error: 'No payment intent found for this bounty. Cannot process completion.' };
+          }
+
+          // Create outbox event for fund release
+          await outboxService.createEvent({
+            type: 'COMPLETION_RELEASE',
+            payload: {
+              bountyId,
+              hunterId: completedBy,
+              paymentIntentId: bounty.payment_intent_id,
+              creatorId: bounty.creator_id,
+              amount: bounty.amount_cents,
+              title: bounty.title,
+            },
+            status: 'pending',
           });
+
+          console.log(`💸 Created COMPLETION_RELEASE event for bounty ${bountyId}`);
+        } else {
+          // For honor-only bounties, mark as completed immediately
+          await tx
+            .update(bounties)
+            .set({ 
+              status: 'completed',
+              updated_at: new Date(),
+            })
+            .where(eq(bounties.id, bountyId));
         }
 
-        // Create outbox event for BOUNTY_COMPLETED
+        // Create outbox event for notifications
         await outboxService.createEvent({
           type: 'BOUNTY_COMPLETED',
           payload: {
@@ -159,17 +177,12 @@ export class BountyService {
         });
 
         // Publish realtime event
-        await realtimeService.publishBountyStatusChange(bountyId, 'completed');
+        await realtimeService.publishBountyStatusChange(bountyId, 'in_progress'); // Still in_progress until payment completes
 
         // Send notifications
         try {
-          // Notify the poster that bounty is complete
+          // Notify the poster that bounty work is complete (pending payment for paid bounties)
           await notificationService.notifyBountyCompletion(bounty.creator_id, bountyId, bounty.title);
-          
-          // Notify the hunter about payment (if there's an amount)
-          if (bounty.amount_cents > 0 && completedBy) {
-            await notificationService.notifyPayment(completedBy, bounty.amount_cents, bountyId, bounty.title);
-          }
         } catch (error) {
           console.error('Failed to send completion notifications:', error);
         }
