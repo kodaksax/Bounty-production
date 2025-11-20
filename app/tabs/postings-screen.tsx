@@ -130,7 +130,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
   // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
   const STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
-  const { balance, deposit, createEscrow } = useWallet()
+  const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
@@ -397,6 +397,19 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setIsSubmitting(true)
       setError(null)
 
+      // Validate balance BEFORE posting bounty for paid bounties
+      if (!formData.isForHonor && formData.amount > 0) {
+        if (balance < formData.amount) {
+          Alert.alert(
+            'Insufficient Balance',
+            'You do not have enough balance to post this bounty. Please add funds to your wallet.',
+            [{ text: 'OK' }]
+          )
+          setIsSubmitting(false)
+          return; // Don't post the bounty at all
+        }
+      }
+
       // Prepare bounty data
     const bountyData: Omit<Bounty, "id" | "created_at"> & { attachments_json?: string } = {
   title: formData.title,
@@ -436,6 +449,30 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       }
 
       console.log("Bounty posted successfully:", bounty)
+
+      // Create escrow for paid bounties (funds are held when bounty is posted)
+      if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
+        try {
+          await createEscrow(
+            bounty.id,
+            bounty.amount,
+            bounty.title,
+            currentUserId
+          )
+          console.log('✅ Escrow created for posted bounty:', bounty.id)
+        } catch (escrowError) {
+          console.error('Error creating escrow:', escrowError)
+          // If escrow creation fails, delete the bounty to maintain consistency
+          await bountyService.delete(bounty.id)
+          Alert.alert(
+            'Escrow Failed',
+            'Failed to create escrow for this bounty. The bounty has been removed.',
+            [{ text: 'OK' }]
+          )
+          setIsSubmitting(false)
+          return; // Don't add to UI state
+        }
+      }
 
       // Important: Update local state with the new bounty
       if (bounty) {
@@ -632,27 +669,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // Create escrow transaction for paid bounties (use fetched or embedded bounty object)
-      const bountyForEscrow = bountyObj
-      if (bountyForEscrow && !bountyForEscrow.is_for_honor && bountyForEscrow.amount > 0) {
-        try {
-          await createEscrow(
-            // bounty IDs may be UUID strings; pass through as-is
-            bountyForEscrow.id,
-            bountyForEscrow.amount,
-            bountyForEscrow.title,
-            currentUserId
-          )
-          console.log('✅ Escrow created for bounty:', bountyForEscrow.id)
-        } catch (escrowError) {
-          console.error('Error creating escrow:', escrowError)
-          Alert.alert(
-            'Escrow Creation Failed',
-            'Failed to create escrow transaction. The request has been accepted but funds were not secured. Please contact support.',
-            [{ text: 'OK' }]
-          )
-        }
-      }
+      // Note: Wallet escrow was already created when the bounty was posted (funds deducted from poster's balance).
+      // The ESCROW_HOLD outbox event for Stripe PaymentIntent creation happens in acceptBounty() service.
+      // No additional escrow creation needed during request acceptance.
 
       // Auto-create a conversation for coordination (use bountyId as context)
         try {
@@ -894,22 +913,38 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           style: "destructive",
           onPress: async () => {
             try {
-              // Optimistic update
-              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+              // Process refund FIRST for paid bounties before any other operations
+              if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
+                try {
+                  await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                  console.log('✅ Escrowed funds refunded for deleted bounty:', bounty.id);
+                } catch (refundError) {
+                  console.error('Error refunding escrow:', refundError);
+                  Alert.alert(
+                    'Refund Failed',
+                    'Could not refund escrowed funds. Please contact support before deleting.',
+                    [{ text: 'OK' }]
+                  );
+                  return; // Don't proceed with deletion if refund fails
+                }
+              }
 
-              // API call
+              // Delete from API first (no optimistic update before API call)
               const success = await bountyService.delete(bounty.id)
 
               if (!success) {
                 throw new Error("Failed to delete bounty")
               }
 
+              // Update UI only after successful deletion
+              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+              
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
-              // Rollback on error
-              setMyBounties((prev) => [...prev, bounty])
+              // Error handling - no rollback needed since we didn't optimistically update
               setError(err.message || "Failed to delete posting")
+              Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
             }
           },
         },

@@ -213,21 +213,33 @@ export class OutboxWorker {
 
   /**
    * Handle BOUNTY_COMPLETED events
+   * Note: This is for notifications only. The actual payment release is handled by COMPLETION_RELEASE event.
    */
   private async handleBountyCompleted(event: OutboxEvent): Promise<void> {
-    const { bountyId, completedBy, creatorId, amount, title } = event.payload;
+    const { bountyId, completedBy, creatorId, amount, isForHonor, title } = event.payload;
     
     console.log(`🏆 BOUNTY_COMPLETED: Bounty "${title}" (${bountyId}) completed by ${completedBy}`);
-    console.log(`💰 Payment: ${amount > 0 ? `$${amount / 100} released` : 'Honor earned'}`);
+    console.log(`💰 Payment: ${amount > 0 && !isForHonor ? `$${amount / 100} being released via COMPLETION_RELEASE` : 'Honor earned'}`);
     
-    // In the future, this could:
-    // - Release escrow funds
-    // - Send completion notifications
-    // - Update reputation scores
-    // - Trigger external integrations
-    // - Generate invoices/receipts
+    // Send completion notification
+    try {
+      // The completion-release-service will send payment notifications after successful transfer
+      // For honor-only bounties, we can congratulate the hunter here
+      if (isForHonor || amount === 0) {
+        console.log(`🎉 Honor-only bounty completed - sending congratulations`);
+      }
+      
+      // In the future, this could:
+      // - Update reputation scores
+      // - Trigger external integrations
+      // - Generate completion certificates
+      // - Update calendar/timeline
+      
+    } catch (error) {
+      console.error(`❌ Failed to handle completion for bounty ${bountyId}:`, error);
+      // Don't throw - notification failure shouldn't prevent event completion
+    }
     
-    // For now, just log the event
     console.log(`📝 Logged BOUNTY_COMPLETED event for bounty ${bountyId}`);
   }
 

@@ -33,11 +33,12 @@ export class BountyService {
           return { success: false, error: `Cannot accept bounty with status: ${bounty.status}` };
         }
 
-        // Update bounty status to in_progress
+        // Update bounty status to in_progress and set hunter
         await tx
           .update(bounties)
           .set({ 
             status: 'in_progress',
+            hunter_id: hunterId,
             updated_at: new Date(),
           })
           .where(eq(bounties.id, bountyId));
@@ -102,7 +103,7 @@ export class BountyService {
 
   /**
    * Complete a bounty - transitions from 'in_progress' to 'completed'
-   * Creates BOUNTY_COMPLETED outbox event and release transaction
+   * Creates COMPLETION_RELEASE outbox event to trigger fund transfer to hunter
    */
   async completeBounty(bountyId: string, completedBy: string): Promise<{ success: boolean; error?: string }> {
     try {
@@ -125,26 +126,52 @@ export class BountyService {
           return { success: false, error: `Cannot complete bounty with status: ${bounty.status}` };
         }
 
-        // Update bounty status to completed
-        await tx
-          .update(bounties)
-          .set({ 
-            status: 'completed',
-            updated_at: new Date(),
-          })
-          .where(eq(bounties.id, bountyId));
-
-        // Create release transaction if bounty had amount
-        if (bounty.amount_cents > 0) {
-          await walletService.createTransaction({
-            user_id: completedBy, // Payment goes to the hunter who completed it
-            bountyId: bountyId,
-            type: 'release',
-            amount: bounty.amount_cents / 100, // Convert cents to dollars
-          });
+        // Verify that the person completing is the hunter who accepted it
+        if (bounty.hunter_id && bounty.hunter_id !== completedBy) {
+          return { 
+            success: false, 
+            error: 'Only the hunter who accepted this bounty can mark it as complete' 
+          };
         }
 
-        // Create outbox event for BOUNTY_COMPLETED
+        // Note: We do NOT update bounty status to 'completed' here.
+        // The completion-release-service will update it after successful payment transfer.
+        // This prevents race conditions where the bounty is marked complete before payment processes.
+
+        // Create COMPLETION_RELEASE outbox event if bounty has payment
+        if (bounty.amount_cents > 0 && !bounty.is_for_honor) {
+          // Verify payment_intent_id exists
+          if (!bounty.payment_intent_id) {
+            return { success: false, error: 'No payment intent found for this bounty. Cannot process completion.' };
+          }
+
+          // Create outbox event for fund release
+          await outboxService.createEvent({
+            type: 'COMPLETION_RELEASE',
+            payload: {
+              bountyId,
+              hunterId: completedBy,
+              paymentIntentId: bounty.payment_intent_id,
+              creatorId: bounty.creator_id,
+              amount: bounty.amount_cents,
+              title: bounty.title,
+            },
+            status: 'pending',
+          });
+
+          console.log(`💸 Created COMPLETION_RELEASE event for bounty ${bountyId}`);
+        } else {
+          // For honor-only bounties, mark as completed immediately
+          await tx
+            .update(bounties)
+            .set({ 
+              status: 'completed',
+              updated_at: new Date(),
+            })
+            .where(eq(bounties.id, bountyId));
+        }
+
+        // Create outbox event for notifications
         await outboxService.createEvent({
           type: 'BOUNTY_COMPLETED',
           payload: {
@@ -158,18 +185,13 @@ export class BountyService {
           status: 'pending',
         });
 
-        // Publish realtime event
-        await realtimeService.publishBountyStatusChange(bountyId, 'completed');
+        // Note: Don't publish realtime event here - the completion-release-service
+        // will publish the status change to 'completed' after payment succeeds.
 
         // Send notifications
         try {
-          // Notify the poster that bounty is complete
+          // Notify the poster that bounty work is complete (pending payment for paid bounties)
           await notificationService.notifyBountyCompletion(bounty.creator_id, bountyId, bounty.title);
-          
-          // Notify the hunter about payment (if there's an amount)
-          if (bounty.amount_cents > 0 && completedBy) {
-            await notificationService.notifyPayment(completedBy, bounty.amount_cents, bountyId, bounty.title);
-          }
         } catch (error) {
           console.error('Failed to send completion notifications:', error);
         }

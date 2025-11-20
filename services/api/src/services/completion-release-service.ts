@@ -186,6 +186,12 @@ export class CompletionReleaseService {
         platformFeeCents
       );
 
+      // Publish realtime event for bounty status change
+      const { realtimeService } = require('./realtime-service');
+      await realtimeService.publishBountyStatusChange(request.bountyId, 'completed');
+
+      console.log(`✅ Bounty ${request.bountyId} marked as completed and emails sent`);
+
       return {
         success: true,
         transferId,
