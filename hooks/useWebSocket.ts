@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import { logClientError, logClientInfo } from '../lib/services/monitoring';
 import { wsAdapter } from '../lib/services/websocket-adapter';
 import { supabase } from '../lib/supabase';
-import { logClientInfo, logClientError } from '../lib/services/monitoring';
 
 export interface WebSocketState {
   isConnected: boolean;
@@ -67,13 +67,14 @@ export function useWebSocket() {
 
   useEffect(() => {
     // Set up event listeners
+    const verboseClient = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
     const unsubscribeConnect = wsAdapter.on('connect', () => {
-      logClientInfo('WebSocket connected');
+      if (verboseClient) logClientInfo('WebSocket connected');
       updateState();
     });
 
     const unsubscribeDisconnect = wsAdapter.on('disconnect', () => {
-      logClientInfo('WebSocket disconnected');
+      if (verboseClient) logClientInfo('WebSocket disconnected');
       updateState();
     });
 
@@ -82,8 +83,7 @@ export function useWebSocket() {
       updateState();
     });
 
-    // Connect on mount
-    connect();
+    // Initial connect handled by provider based on auth state to avoid double connect spam
 
     // Handle app state changes (reconnect when app comes to foreground)
     const handleAppStateChange = (nextAppState: AppStateStatus) => {

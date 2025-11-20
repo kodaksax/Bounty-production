@@ -6,6 +6,8 @@
  */
 
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
+import { getApiBaseUrl } from '../config/api';
 import { supabase } from '../supabase';
 
 type EventHandler = (data: any) => void;
@@ -34,6 +36,12 @@ class WebSocketAdapter {
   private token: string | null = null;
   private url: string = '';
   private intentionalDisconnect: boolean = false;
+  private lastOpenTime: number = 0;
+  private minStableConnectionMs: number = 5000; // Consider connection stable after 5s
+  private verbose: boolean = process.env.EXPO_PUBLIC_WS_VERBOSE === '1';
+  private pingIntervalMs: number = 20000; // 20s
+  private pingTimer?: NodeJS.Timeout;
+  private lastPongTime: number = 0;
 
   /**
    * Connect to WebSocket server
@@ -48,12 +56,24 @@ class WebSocketAdapter {
 
     this.token = session.data.session.access_token;
     
-    // Determine WebSocket URL
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
-    const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-    this.url = url || `${wsUrl}/messages/subscribe?token=${this.token}`;
+    // Determine WebSocket URL (robustly resolve reachable host for devices)
+    const preferredApi =
+      (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined) ||
+      (process.env.EXPO_PUBLIC_API_URL as string | undefined) ||
+      undefined;
 
-    console.log('[WebSocket] Connecting to:', this.url);
+    const directWs = (process.env.EXPO_PUBLIC_WS_URL as string | undefined)?.trim();
+    const apiUrl = getApiBaseUrl(3001);
+    const baseForWs = directWs && directWs.length > 0 ? directWs : apiUrl;
+    const wsBase = baseForWs
+      .replace('http://', 'ws://')
+      .replace('https://', 'wss://');
+
+    this.url = url || `${wsBase}/messages/subscribe?token=${this.token}`;
+
+    if (this.verbose || this.reconnectAttempts === 0 || this.reconnectAttempts % 3 === 0) {
+      console.log('[WebSocket] Connecting to:', this.url);
+    }
     this.intentionalDisconnect = false;
 
     try {
@@ -69,38 +89,85 @@ class WebSocketAdapter {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        console.log('[WebSocket] Connected successfully');
+        this.lastOpenTime = Date.now();
+        this.lastPongTime = Date.now();
+        if (this.verbose || this.reconnectAttempts === 0) {
+          console.log('[WebSocket] Connected successfully');
+        }
         this.connected = true;
-        this.reconnectAttempts = 0;
-        this.reconnectDelay = 1000;
+
+        // start heartbeat pings
+        try {
+          if (this.pingTimer) clearInterval(this.pingTimer as any);
+          this.pingTimer = setInterval(() => {
+            try {
+              if (!this.ws || !this.connected) return;
+              // send a lightweight ping message; server should respond with 'pong'
+              this.ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+              // if we haven't received a pong in 2 intervals, consider connection stale
+              const now = Date.now();
+              if (this.lastPongTime && now - this.lastPongTime > this.pingIntervalMs * 2) {
+                if (this.verbose) console.warn('[WebSocket] No pong received - closing stale socket');
+                try { this.ws?.close(); } catch {};
+              }
+            } catch (e) { /* ignore ping errors */ }
+          }, this.pingIntervalMs) as unknown as NodeJS.Timeout;
+        } catch (e) {}
+
+        // Do NOT reset attempts immediately; only after a stable connection duration.
         this.emit('connect', {});
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data: MessageEvent = JSON.parse(event.data);
-          console.log('[WebSocket] Received:', data.type);
-          
+          if (data.type === 'pong') {
+            this.lastPongTime = Date.now();
+            if (this.verbose) console.log('[WebSocket] Received pong');
+            return;
+          }
+
+          if (this.verbose) console.log('[WebSocket] Received:', data.type);
           // Emit specific event type
           this.emit(data.type, data);
-          
           // Also emit generic 'message' event
           this.emit('message', data);
         } catch (error) {
-          console.error('[WebSocket] Error parsing message:', error);
+          if (this.verbose) console.error('[WebSocket] Error parsing message:', error);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error);
-        this.emit('error', error);
+        try {
+          const info = {
+            platform: Platform.OS,
+            url: this.url,
+            readyState: this.ws?.readyState,
+            message: (error as any)?.message,
+            type: (error as any)?.type,
+          };
+          console.error('[WebSocket] Error event', info);
+          this.emit('error', info);
+        } catch (e) {
+          console.error('[WebSocket] Error (unserializable):', error);
+          this.emit('error', { error });
+        }
       };
 
       this.ws.onclose = (event) => {
-        console.log('[WebSocket] Connection closed:', event.code, event.reason);
+        const uptime = this.lastOpenTime ? Date.now() - this.lastOpenTime : 0;
+        if (this.verbose || this.reconnectAttempts === 0 || uptime < this.minStableConnectionMs) {
+          console.log('[WebSocket] Connection closed:', event.code, event.reason, `uptime=${uptime}ms`);
+        }
         this.connected = false;
-        this.emit('disconnect', { code: event.code, reason: event.reason });
-        
+        this.emit('disconnect', { code: event.code, reason: event.reason, uptime });
+        // clear heartbeat timer
+        try { if (this.pingTimer) { clearInterval(this.pingTimer as any); this.pingTimer = undefined; } } catch {}
+        // Reset attempts only if connection lived long enough to be considered stable
+        if (uptime >= this.minStableConnectionMs) {
+          this.reconnectAttempts = 0;
+          this.reconnectDelay = 1000;
+        }
         // Attempt to reconnect unless intentionally disconnected
         if (!this.intentionalDisconnect) {
           this.scheduleReconnect();

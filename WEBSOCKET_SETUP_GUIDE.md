@@ -163,6 +163,31 @@ EXPO_PUBLIC_API_URL="http://192.168.1.100:3001"  # Replace with your local IP or
 - For simulators/emulators, you can use `localhost`
 - For production, use your production API URL with HTTPS/WSS
 
+Optional override:
+
+```bash
+# If you expose a dedicated WebSocket endpoint, you can override directly
+EXPO_PUBLIC_WS_URL="ws://192.168.1.100:3001"
+```
+
+Note: The client now auto-resolves `localhost` to your LAN IP during development, but setting `EXPO_PUBLIC_API_URL` (or `EXPO_PUBLIC_WS_URL`) removes ambiguity and avoids connection issues on physical devices.
+
+Verbose / Log Control:
+
+```bash
+# Suppress repetitive client info/error console logs (default behavior)
+# Set to 1 to see every connect/disconnect/error event
+EXPO_PUBLIC_LOG_CLIENT_VERBOSE=0
+
+# Enable very chatty WebSocket adapter logs (each attempt, close, etc.)
+EXPO_PUBLIC_WS_VERBOSE=0
+```
+
+The adapter now:
+- Uses exponential backoff without resetting attempts after very short-lived connections
+- Treats a connection as "stable" after 5s and only then resets attempt counter
+- Deduplicates identical info/error messages printed within 2 seconds unless verbose flags are enabled
+
 ### WebSocket Auto-Connection
 
 The WebSocket client automatically connects when:
