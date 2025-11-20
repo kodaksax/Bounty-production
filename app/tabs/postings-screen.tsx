@@ -906,11 +906,16 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   console.log('✅ Escrowed funds refunded for deleted bounty:', bounty.id);
                 } catch (refundError) {
                   console.error('Error refunding escrow:', refundError);
-                  // Continue with deletion even if refund fails - user can contact support
+                  Alert.alert(
+                    'Refund Failed',
+                    'Could not refund escrowed funds. Please contact support before deleting.',
+                    [{ text: 'OK' }]
+                  );
+                  return; // Don't proceed with deletion
                 }
               }
 
-              // Optimistic update
+              // Optimistic update only after refund succeeds (if needed)
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
 
               // API call
