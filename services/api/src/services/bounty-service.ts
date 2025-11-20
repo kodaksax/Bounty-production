@@ -186,7 +186,7 @@ export class BountyService {
         });
 
         // Publish realtime event
-        await realtimeService.publishBountyStatusChange(bountyId, 'in_progress'); // Still in_progress until payment completes
+        await realtimeService.publishBountyStatusChange(bountyId, 'pending_payment'); // Work complete, payment pending
 
         // Send notifications
         try {
