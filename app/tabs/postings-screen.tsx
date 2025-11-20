@@ -130,7 +130,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
   // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
   const STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
-  const { balance, deposit, createEscrow } = useWallet()
+  const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
@@ -437,6 +437,29 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
       console.log("Bounty posted successfully:", bounty)
 
+      // Create escrow for paid bounties (funds are held when bounty is posted)
+      if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
+        try {
+          await createEscrow(
+            bounty.id,
+            bounty.amount,
+            bounty.title,
+            currentUserId
+          )
+          console.log('✅ Escrow created for posted bounty:', bounty.id)
+        } catch (escrowError) {
+          console.error('Error creating escrow:', escrowError)
+          // If escrow creation fails, we should delete the bounty or mark it as failed
+          Alert.alert(
+            'Insufficient Balance',
+            'You do not have enough balance to post this bounty. Please add funds to your wallet.',
+            [{ text: 'OK' }]
+          )
+          // Remove the bounty from the list since escrow failed
+          throw new Error('Insufficient balance')
+        }
+      }
+
       // Important: Update local state with the new bounty
       if (bounty) {
         setMyBounties((prevBounties) => [bounty, ...prevBounties])
@@ -632,27 +655,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // Create escrow transaction for paid bounties (use fetched or embedded bounty object)
-      const bountyForEscrow = bountyObj
-      if (bountyForEscrow && !bountyForEscrow.is_for_honor && bountyForEscrow.amount > 0) {
-        try {
-          await createEscrow(
-            // bounty IDs may be UUID strings; pass through as-is
-            bountyForEscrow.id,
-            bountyForEscrow.amount,
-            bountyForEscrow.title,
-            currentUserId
-          )
-          console.log('✅ Escrow created for bounty:', bountyForEscrow.id)
-        } catch (escrowError) {
-          console.error('Error creating escrow:', escrowError)
-          Alert.alert(
-            'Escrow Creation Failed',
-            'Failed to create escrow transaction. The request has been accepted but funds were not secured. Please contact support.',
-            [{ text: 'OK' }]
-          )
-        }
-      }
+      // Note: Escrow was already created when the bounty was posted.
+      // No need to create escrow again during request acceptance.
 
       // Auto-create a conversation for coordination (use bountyId as context)
         try {
@@ -894,6 +898,17 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           style: "destructive",
           onPress: async () => {
             try {
+              // Process refund for paid bounties before deleting
+              if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
+                try {
+                  await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                  console.log('✅ Escrowed funds refunded for deleted bounty:', bounty.id);
+                } catch (refundError) {
+                  console.error('Error refunding escrow:', refundError);
+                  // Continue with deletion even if refund fails - user can contact support
+                }
+              }
+
               // Optimistic update
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
 

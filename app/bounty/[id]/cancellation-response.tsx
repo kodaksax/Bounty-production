@@ -13,6 +13,7 @@ import { ArrowLeft, AlertCircle, CheckCircle, XCircle } from 'lucide-react-nativ
 import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
+import { useWallet } from 'lib/wallet-context';
 import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 
@@ -21,6 +22,7 @@ export default function CancellationResponseScreen() {
   const router = useRouter();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
+  const { refundEscrow } = useWallet();
   
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [cancellation, setCancellation] = useState<BountyCancellation | null>(null);
@@ -77,7 +79,11 @@ export default function CancellationResponseScreen() {
               const success = await cancellationService.acceptCancellation(
                 cancellation.id,
                 userId,
-                responseMessage || undefined
+                responseMessage || undefined,
+                async (bountyId: string, title: string, refundPercentage: number) => {
+                  // Process wallet refund
+                  return await refundEscrow(bountyId, title, refundPercentage);
+                }
               );
               
               if (success) {
