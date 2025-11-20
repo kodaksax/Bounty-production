@@ -6,6 +6,7 @@
  */
 
 import NetInfo from '@react-native-community/netinfo';
+import getApiBaseFallback from 'lib/utils/dev-host';
 import { Platform } from 'react-native';
 import { getApiBaseUrl } from '../config/api';
 import { supabase } from '../supabase';
@@ -64,12 +65,33 @@ class WebSocketAdapter {
 
     const directWs = (process.env.EXPO_PUBLIC_WS_URL as string | undefined)?.trim();
     const apiUrl = getApiBaseUrl(3001);
-    const baseForWs = directWs && directWs.length > 0 ? directWs : apiUrl;
+    let baseForWs = directWs && directWs.length > 0 ? directWs : apiUrl;
     const wsBase = baseForWs
       .replace('http://', 'ws://')
       .replace('https://', 'wss://');
 
-    this.url = url || `${wsBase}/messages/subscribe?token=${this.token}`;
+    // Before opening a WebSocket, probe the HTTP(S) base to detect unreachable
+    // dev-machine host bindings (common when the backend isn't bound to the
+    // LAN interface). If the preferred host is unreachable, try the dev-host
+    // fallback which derives the host from Expo debug manifest / emulator
+    // defaults.
+    try {
+      const httpProbe = wsBase.replace(/^wss?:/, 'https:').replace(/^https:/, 'https:').replace(/^ws:/, 'http:');
+      const reachable = await this.probeHost(httpProbe, 1500);
+      if (!reachable) {
+        const fallback = getApiBaseFallback();
+        if (fallback && fallback !== apiUrl) {
+          const fallbackWs = fallback.replace('http://', 'ws://').replace('https://', 'wss://');
+          if (this.verbose) console.log('[WebSocket] Preferred host unreachable; using fallback host:', fallbackWs);
+          baseForWs = fallbackWs;
+        }
+      }
+    } catch (e) {
+      // ignore probing errors and continue with original host
+      if (this.verbose) console.warn('[WebSocket] Host probe failed:', e);
+    }
+
+    this.url = url || `${wsBase.replace(/^(wss?:\/\/)?/, baseForWs.startsWith('ws') ? '' : '') || baseForWs}/messages/subscribe?token=${this.token}`;
 
     if (this.verbose || this.reconnectAttempts === 0 || this.reconnectAttempts % 3 === 0) {
       console.log('[WebSocket] Connecting to:', this.url);
@@ -204,6 +226,30 @@ class WebSocketAdapter {
       this.reconnectAttempts++;
       this.connect();
     }, delay);
+  }
+
+  /**
+   * Probe a host by performing a short HTTP fetch to detect quick failures.
+   * Returns true if the host responded (any status), false if unreachable.
+   */
+  private async probeHost(url: string, timeoutMs = 1500): Promise<boolean> {
+    try {
+      // Normalize to http(s) URL - many servers will respond to GET /
+      const probeUrl = url.startsWith('http') ? url : (`${url}`);
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(probeUrl, { method: 'GET', signal: controller.signal as any });
+        clearTimeout(id);
+        // If we got any response (even 404) consider host reachable
+        return !!res;
+      } catch (e) {
+        clearTimeout(id);
+        return false;
+      }
+    } catch (e) {
+      return false;
+    }
   }
 
   /**
