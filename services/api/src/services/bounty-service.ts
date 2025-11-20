@@ -185,8 +185,8 @@ export class BountyService {
           status: 'pending',
         });
 
-        // Publish realtime event
-        await realtimeService.publishBountyStatusChange(bountyId, 'pending_payment'); // Work complete, payment pending
+        // Note: Don't publish realtime event here - the completion-release-service
+        // will publish the status change to 'completed' after payment succeeds.
 
         // Send notifications
         try {

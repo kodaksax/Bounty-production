@@ -38,9 +38,23 @@ The payment flow ensures secure transactions between bounty creators (posters) a
 
 ## Payment Flow Diagrams
 
-### 1. Escrow Creation (Bounty Acceptance)
+### 1. Escrow Creation (Two-Phase: Posting & Acceptance)
 
 ```
+┌─────────────────────────────────────────────────────────────┐
+│ User posts bounty via /bounties/new endpoint                │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ bountyService.createBounty()                                │
+│ ├─ Check poster wallet balance                              │
+│ ├─ Deduct bounty amount from poster wallet                  │
+│ ├─ Create escrow wallet transaction record                  │
+│ └─ Send bounty posted confirmation email                    │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ User accepts bounty via /bounties/:id/accept endpoint       │
 └────────────────────────┬────────────────────────────────────┘
@@ -48,23 +62,22 @@ The payment flow ensures secure transactions between bounty creators (posters) a
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ bountyService.acceptBounty()                                │
-│ ├─ Update bounty: status = 'in_progress', hunter_id set    │
-│ ├─ Create ESCROW_HOLD outbox event                         │
-│ ├─ Create escrow wallet transaction record                 │
-│ └─ Send escrow confirmation email to poster                │
+│ ├─ Update bounty: status = 'in_progress', hunter_id set     │
+│ ├─ Create ESCROW_HOLD outbox event                          │
+│ └─ Send escrow confirmation email to poster                 │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ Outbox Worker processes ESCROW_HOLD event                  │
-│ ├─ Call stripeConnectService.createEscrowPaymentIntent()   │
-│ ├─ Create Stripe PaymentIntent (captures funds)            │
-│ ├─ Store payment_intent_id on bounty                       │
-│ └─ Log ESCROW_HELD success                                 │
+│ Outbox Worker processes ESCROW_HOLD event                   │
+│ ├─ Call stripeConnectService.createEscrowPaymentIntent()    │
+│ ├─ Create Stripe PaymentIntent (captures funds)             │
+│ ├─ Store payment_intent_id on bounty                        │
+│ └─ Log ESCROW_HELD success                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Result**: Funds are held securely via Stripe PaymentIntent
+**Result**: Funds are held securely in escrow from posting; Stripe PaymentIntent is created and linked on bounty acceptance.
 
 ### 2. Fund Release (Bounty Completion)
 

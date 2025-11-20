@@ -5,17 +5,17 @@ This PR implements the complete escrow payment flow for BountyExpo, fulfilling a
 
 ## ✅ Requirements Completed
 
-### 1. Escrow Creation Trigger on Bounty Acceptance ✓
-**Implementation**: When a bounty is accepted, an `ESCROW_HOLD` outbox event is created which triggers:
-- Creation of a Stripe PaymentIntent to hold funds
+### 1. Escrow Creation Trigger on Bounty Post ✓
+**Implementation**: When a bounty is posted, funds are immediately deducted from the poster's wallet balance:
+- Validation of sufficient wallet balance before posting
 - Recording of escrow transaction in `wallet_transactions` table
-- Storage of `payment_intent_id` on the bounty record
-- Email confirmation to the poster
+- Deduction of funds from poster's balance
+- On bounty acceptance, an `ESCROW_HOLD` event creates the Stripe PaymentIntent
 
 **Flow**:
 ```
-Accept Bounty → ESCROW_HOLD Event → Outbox Worker → 
-Create PaymentIntent → Store payment_intent_id → Email Confirmation
+Post Bounty → Check Balance → Deduct Funds → Create Local Escrow →
+Accept Bounty → ESCROW_HOLD Event → Create PaymentIntent
 ```
 
 ### 2. Fund Release on Completion Approval ✓

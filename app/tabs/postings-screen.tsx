@@ -397,6 +397,19 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setIsSubmitting(true)
       setError(null)
 
+      // Validate balance BEFORE posting bounty for paid bounties
+      if (!formData.isForHonor && formData.amount > 0) {
+        if (balance < formData.amount) {
+          Alert.alert(
+            'Insufficient Balance',
+            'You do not have enough balance to post this bounty. Please add funds to your wallet.',
+            [{ text: 'OK' }]
+          )
+          setIsSubmitting(false)
+          return; // Don't post the bounty at all
+        }
+      }
+
       // Prepare bounty data
     const bountyData: Omit<Bounty, "id" | "created_at"> & { attachments_json?: string } = {
   title: formData.title,
@@ -449,15 +462,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           console.log('✅ Escrow created for posted bounty:', bounty.id)
         } catch (escrowError) {
           console.error('Error creating escrow:', escrowError)
-          // If escrow creation fails, delete the bounty and remove from UI state
-          await bountyService.deleteBounty(bounty.id)
-          setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+          // If escrow creation fails, delete the bounty to maintain consistency
+          await bountyService.delete(bounty.id)
           Alert.alert(
-            'Insufficient Balance',
-            'You do not have enough balance to post this bounty. Please add funds to your wallet.',
+            'Escrow Failed',
+            'Failed to create escrow for this bounty. The bounty has been removed.',
             [{ text: 'OK' }]
           )
-          throw new Error('Insufficient balance')
+          setIsSubmitting(false)
+          return; // Don't add to UI state
         }
       }
 
@@ -656,8 +669,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         }
       }
 
-      // Note: Escrow was already created when the bounty was posted.
-      // No need to create escrow again during request acceptance.
+      // Note: Wallet escrow was already created when the bounty was posted (funds deducted from poster's balance).
+      // The ESCROW_HOLD outbox event for Stripe PaymentIntent creation happens in acceptBounty() service.
+      // No additional escrow creation needed during request acceptance.
 
       // Auto-create a conversation for coordination (use bountyId as context)
         try {
@@ -899,7 +913,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           style: "destructive",
           onPress: async () => {
             try {
-              // Process refund for paid bounties before deleting
+              // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
                 try {
                   await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
@@ -911,26 +925,26 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     'Could not refund escrowed funds. Please contact support before deleting.',
                     [{ text: 'OK' }]
                   );
-                  return; // Don't proceed with deletion
+                  return; // Don't proceed with deletion if refund fails
                 }
               }
 
-              // Optimistic update only after refund succeeds (if needed)
-              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
-
-              // API call
+              // Delete from API first (no optimistic update before API call)
               const success = await bountyService.delete(bounty.id)
 
               if (!success) {
                 throw new Error("Failed to delete bounty")
               }
 
+              // Update UI only after successful deletion
+              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+              
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
-              // Rollback on error
-              setMyBounties((prev) => [...prev, bounty])
+              // Error handling - no rollback needed since we didn't optimistically update
               setError(err.message || "Failed to delete posting")
+              Alert.alert('Error', err.message || 'Failed to delete bounty. Please try again.')
             }
           },
         },
