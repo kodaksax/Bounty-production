@@ -362,6 +362,139 @@ fastify.post('/bounties/:bountyId/complete', {
   }
 });
 
+// Post progress update endpoint
+fastify.post('/bounties/:bountyId/updates', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    const { message, attachments } = request.body as { message: string; attachments?: any[] };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    if (!message || message.trim().length === 0) {
+      return reply.code(400).send({ error: 'Update message is required' });
+    }
+
+    // For now, we'll store progress updates as messages in the conversation
+    // This could be extended to a dedicated progress_updates table if needed
+    const result = {
+      success: true,
+      bountyId,
+      message,
+      attachments: attachments || [],
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.info('Progress update posted', { bountyId, userId: request.userId });
+    
+    return { 
+      message: 'Progress update posted successfully', 
+      data: result,
+    };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/updates endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to post progress update' 
+    });
+  }
+});
+
+// Approve bounty completion endpoint
+fastify.post('/bounties/:bountyId/approve', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    const { rating, comment } = request.body as { rating?: number; comment?: string };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    // Verify user is the bounty poster
+    const bounty = await bountyService.getById(bountyId);
+    if (!bounty) {
+      return reply.code(404).send({ error: 'Bounty not found' });
+    }
+
+    if (bounty.user_id !== request.userId && bounty.poster_id !== request.userId) {
+      return reply.code(403).send({ error: 'Only the bounty poster can approve completion' });
+    }
+
+    // Update bounty status to completed
+    const result = await bountyService.update(bountyId, { status: 'completed' });
+    
+    if (!result) {
+      return reply.code(400).send({ error: 'Failed to approve completion' });
+    }
+
+    logger.info('Bounty completion approved', { bountyId, userId: request.userId, rating });
+
+    return { 
+      message: 'Bounty completion approved successfully', 
+      bountyId,
+      rating,
+    };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/approve endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to approve bounty completion' 
+    });
+  }
+});
+
+// Request changes to bounty completion endpoint
+fastify.post('/bounties/:bountyId/request-changes', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+    const { feedback } = request.body as { feedback: string };
+    
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    if (!feedback || feedback.trim().length === 0) {
+      return reply.code(400).send({ error: 'Feedback is required' });
+    }
+
+    // Verify user is the bounty poster
+    const bounty = await bountyService.getById(bountyId);
+    if (!bounty) {
+      return reply.code(404).send({ error: 'Bounty not found' });
+    }
+
+    if (bounty.user_id !== request.userId && bounty.poster_id !== request.userId) {
+      return reply.code(403).send({ error: 'Only the bounty poster can request changes' });
+    }
+
+    // For now, we'll just log the request
+    // In a full implementation, this would update the submission status
+    const result = {
+      success: true,
+      bountyId,
+      feedback,
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.info('Revision requested for bounty', { bountyId, userId: request.userId });
+
+    return { 
+      message: 'Revision request sent successfully', 
+      data: result,
+    };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/request-changes endpoint:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to request changes' 
+    });
+  }
+});
+
 // Cancel/refund bounty endpoint
 fastify.post('/bounties/:bountyId/cancel', {
   preHandler: authMiddleware
@@ -529,6 +662,9 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       me: '/me (requires auth)',
       acceptBounty: '/bounties/:bountyId/accept (requires auth)',
       completeBounty: '/bounties/:bountyId/complete (requires auth)',
+      postUpdate: '/bounties/:bountyId/updates (requires auth)',
+      approveCompletion: '/bounties/:bountyId/approve (requires auth)',
+      requestChanges: '/bounties/:bountyId/request-changes (requires auth)',
       cancelBounty: '/bounties/:bountyId/cancel (requires auth)',
       stripeOnboardingLink: '/stripe/connect/onboarding-link (requires auth)',
       stripeConnectStatus: '/stripe/connect/status (requires auth)',

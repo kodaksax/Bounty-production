@@ -20,6 +20,7 @@ import { useAuthContext } from '../../../hooks/use-auth-context';
 import { ROUTES } from '../../../lib/routes';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { completionService } from '../../../lib/services/completion-service';
 import type { Bounty, Profile } from '../../../lib/services/database.types';
 import { profileService } from '../../../lib/services/profile-service';
 import type { Attachment } from '../../../lib/types';
@@ -169,6 +170,11 @@ export default function ReviewAndVerifyScreen() {
   const handleRequestRevision = async () => {
     if (!bounty) return;
 
+    if (!ratingComment || ratingComment.trim().length === 0) {
+      Alert.alert('Feedback Required', 'Please provide feedback about what needs to be revised.');
+      return;
+    }
+
     Alert.alert(
       'Request Revision',
       'Are you sure you want to request revisions? This will notify the hunter that changes are needed.',
@@ -183,12 +189,15 @@ export default function ReviewAndVerifyScreen() {
           onPress: async () => {
             try {
               setIsRequestingRevision(true);
-              // In a real implementation, this would call an API to update the bounty status
-              // and send a notification to the hunter
-              // For now, we'll just show a success message
               
-              // Example API call (implement as needed):
-              // await bountyService.requestRevision(bounty.id, ratingComment);
+              // Get the submission to find its ID
+              const submission = await completionService.getSubmission(String(bounty.id));
+              if (!submission || !submission.id) {
+                throw new Error('No submission found for this bounty');
+              }
+              
+              // Request revision via completion service
+              await completionService.requestRevision(submission.id, ratingComment.trim());
               
               Alert.alert(
                 'Revision Requested',
@@ -202,7 +211,7 @@ export default function ReviewAndVerifyScreen() {
               );
             } catch (err) {
               console.error('Error requesting revision:', err);
-              Alert.alert('Error', 'Failed to request revision. Please try again.');
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to request revision. Please try again.');
             } finally {
               setIsRequestingRevision(false);
             }
@@ -216,18 +225,52 @@ export default function ReviewAndVerifyScreen() {
     setRating(value);
   };
 
-  const handleNext = () => {
+  const handleApprove = async () => {
     if (rating === 0) {
-      Alert.alert('Rating Required', 'Please provide a rating before proceeding to payout.');
+      Alert.alert('Rating Required', 'Please provide a rating before approving.');
       return;
     }
 
-    // Save rating (in real implementation, persist to backend)
-    console.log('Saving rating:', { rating, comment: ratingComment });
+    if (!bounty || !hunterProfile) return;
 
-    // Navigate to payout
-    const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
-    if (id) router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: String(id) } })
+    try {
+      setIsRequestingRevision(true); // Reuse this state for loading
+      
+      // Approve the submission via completion service
+      await completionService.approveSubmission(String(bounty.id));
+
+      // Submit rating
+      await completionService.submitRating({
+        bounty_id: String(bounty.id),
+        from_user_id: currentUserId,
+        to_user_id: hunterProfile.id,
+        rating,
+        comment: ratingComment.trim() || undefined,
+      });
+
+      Alert.alert(
+        'Work Approved',
+        'The work has been approved and the hunter will be paid.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              const id = Array.isArray(bountyId) ? bountyId[0] : bountyId;
+              if (id) router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: String(id) } });
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      console.error('Error approving completion:', err);
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to approve work. Please try again.');
+    } finally {
+      setIsRequestingRevision(false);
+    }
+  };
+
+  const handleNext = () => {
+    handleApprove();
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -423,7 +466,7 @@ export default function ReviewAndVerifyScreen() {
 
           {/* Next Button */}
           <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextButtonText}>Proceed to Payout</Text>
+            <Text style={styles.nextButtonText}>Approve & Proceed to Payout</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>

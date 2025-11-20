@@ -326,13 +326,30 @@ export default function PayoutScreen() {
 
         {/* Already Completed Notice */}
         {bounty.status === 'completed' && (
-          <View style={styles.completedCard}>
-            <MaterialIcons name="check-circle" size={48} color="#10b981" />
-            <Text style={styles.completedTitle}>Bounty Completed</Text>
-            <Text style={styles.completedSubtext}>
-              This bounty has already been completed and archived.
-            </Text>
-          </View>
+          <>
+            <View style={styles.completedCard}>
+              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <Text style={styles.completedTitle}>Bounty Completed</Text>
+              <Text style={styles.completedSubtext}>
+                This bounty has already been completed and archived.
+              </Text>
+            </View>
+
+            {/* Receipt Download */}
+            <TouchableOpacity
+              style={styles.receiptButton}
+              onPress={() => {
+                // TODO: Implement actual receipt generation and download
+                Alert.alert(
+                  'Receipt',
+                  `Transaction Receipt\n\nBounty: ${bounty.title}\nAmount: ${bounty.is_for_honor ? 'For Honor' : '$' + bounty.amount.toFixed(2)}\nStatus: Completed\nDate: ${bounty.created_at}\n\nReceipt download feature coming soon!`
+                );
+              }}
+            >
+              <MaterialIcons name="receipt" size={20} color="#10b981" />
+              <Text style={styles.receiptButtonText}>Download Receipt</Text>
+            </TouchableOpacity>
+          </>
         )}
 
         {/* Action Buttons */}
@@ -618,6 +635,23 @@ const styles = StyleSheet.create({
     color: '#6ee7b7',
     fontSize: 14,
     textAlign: 'center',
+  },
+  receiptButton: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  receiptButtonText: {
+    color: '#10b981',
+    fontSize: 15,
+    fontWeight: '600',
   },
   actionButtons: {
     gap: 12,
