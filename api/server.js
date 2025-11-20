@@ -1423,11 +1423,23 @@ app.delete('/auth/delete-account', async (req, res) => {
     
     if (deleteError) {
       console.error('[DELETE /auth/delete-account] Supabase delete error:', deleteError);
+      
+      // Sanitize error for development mode - include helpful info without sensitive data
+      let sanitizedDetails;
+      if (process.env.NODE_ENV === 'development') {
+        sanitizedDetails = {
+          errorCode: deleteError.code,
+          errorMessage: deleteError.message,
+          errorStatus: deleteError.status,
+          // Exclude any potentially sensitive fields like tokens, emails, internal IDs
+        };
+      }
+      
       return res.status(500).json({ 
         success: false,
         error: 'Deletion Failed',
         message: `Failed to delete user account: ${deleteError.message}`,
-        details: process.env.NODE_ENV === 'development' ? deleteError : undefined
+        details: sanitizedDetails
       });
     }
 

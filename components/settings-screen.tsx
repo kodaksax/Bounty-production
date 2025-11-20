@@ -220,75 +220,89 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                   text: 'Delete',
                   style: 'destructive',
                   onPress: async () => {
-                    try {
-                      // Lazy imports
-                      // eslint-disable-next-line @typescript-eslint/no-var-requires
-                      const { supabase } = require('../lib/supabase');
-                      // eslint-disable-next-line @typescript-eslint/no-var-requires
-                      const SecureStore = require('expo-secure-store');
-                      // eslint-disable-next-line @typescript-eslint/no-var-requires
-                      const { authProfileService } = require('../lib/services/auth-profile-service');
-                      // eslint-disable-next-line @typescript-eslint/no-var-requires
-                      const { deleteUserAccount } = require('../lib/services/account-deletion-service');
+                    // Lazy imports
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const { supabase } = require('../lib/supabase');
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const SecureStore = require('expo-secure-store');
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const { authProfileService } = require('../lib/services/auth-profile-service');
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const { deleteUserAccount } = require('../lib/services/account-deletion-service');
 
-                      // Get current user ID before deleting
-                      const currentUserId = authProfile?.id;
+                    // Get current user ID before deleting
+                    const currentUserId = authProfile?.id;
 
-                      if (!currentUserId) {
-                        Alert.alert('Error', 'Unable to identify user account. Please sign in again and try again.');
-                        return;
-                      }
-
-                      // Show loading state
-                      Alert.alert('Deleting Account', 'Please wait while we delete your account...');
-
-                      // Delete user account and associated data
-                      const result = await deleteUserAccount();
-                      
-                      if (!result.success) {
-                        console.error('[DeleteAccount] Deletion failed:', result.message);
-                        Alert.alert('Deletion Failed', result.message);
-                        return;
-                      }
-
-                      // Clear user-specific draft data
-                      try {
-                        await authProfileService.clearUserDraftData(currentUserId);
-                      } catch (e) {
-                        console.warn('[DeleteAccount] Draft cleanup failed', e);
-                      }
-
-                      // Clear any stored tokens
-                      try {
-                        await SecureStore.deleteItemAsync('sb-access-token');
-                        await SecureStore.deleteItemAsync('sb-refresh-token');
-                      } catch (e) {
-                        console.warn('[DeleteAccount] SecureStore cleanup failed', e);
-                      }
-
-                      // Sign out (may already be done by deleteUserAccount)
-                      try {
-                        await supabase.auth.signOut();
-                      } catch (e) {
-                        console.warn('[DeleteAccount] Sign out failed', e);
-                      }
-
-                      // Route to sign-in screen
-                      try {
-                        // eslint-disable-next-line @typescript-eslint/no-var-requires
-                        const { router } = require('expo-router');
-                        if (router && typeof router.replace === 'function') {
-                          router.replace('/auth/sign-in-form');
-                        }
-                      } catch (e) {
-                        console.warn('[DeleteAccount] Router navigation failed', e);
-                      }
-
-                      Alert.alert('Account Deleted', result.message || 'Your account has been permanently deleted.');
-                    } catch (e) {
-                      console.error('[DeleteAccount] Error:', e);
-                      Alert.alert('Error', `Failed to delete account: ${e.message || 'Unknown error'}. Please try again or contact support.`);
+                    if (!currentUserId) {
+                      Alert.alert('Error', 'Unable to identify user account. Please sign in again and try again.');
+                      return;
                     }
+
+                    // Show a second confirmation dialog with loading option
+                    Alert.alert(
+                      'Final Confirmation',
+                      'This will permanently delete your account. Are you absolutely sure?',
+                      [
+                        {
+                          text: 'Cancel',
+                          style: 'cancel',
+                        },
+                        {
+                          text: 'Yes, Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              // Delete user account and associated data
+                              const result = await deleteUserAccount();
+                              
+                              if (!result.success) {
+                                console.error('[DeleteAccount] Deletion failed:', result.message);
+                                Alert.alert('Deletion Failed', result.message);
+                                return;
+                              }
+
+                              // Clear user-specific draft data
+                              try {
+                                await authProfileService.clearUserDraftData(currentUserId);
+                              } catch (e) {
+                                console.warn('[DeleteAccount] Draft cleanup failed', e);
+                              }
+
+                              // Clear any stored tokens
+                              try {
+                                await SecureStore.deleteItemAsync('sb-access-token');
+                                await SecureStore.deleteItemAsync('sb-refresh-token');
+                              } catch (e) {
+                                console.warn('[DeleteAccount] SecureStore cleanup failed', e);
+                              }
+
+                              // Sign out (may already be done by deleteUserAccount)
+                              try {
+                                await supabase.auth.signOut();
+                              } catch (e) {
+                                console.warn('[DeleteAccount] Sign out failed', e);
+                              }
+
+                              // Route to sign-in screen
+                              try {
+                                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                                const { router } = require('expo-router');
+                                if (router && typeof router.replace === 'function') {
+                                  router.replace('/auth/sign-in-form');
+                                }
+                              } catch (e) {
+                                console.warn('[DeleteAccount] Router navigation failed', e);
+                              }
+
+                              Alert.alert('Account Deleted', result.message || 'Your account has been permanently deleted.');
+                            } catch (e) {
+                              console.error('[DeleteAccount] Error:', e);
+                              Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+                            }
+                          },
+                        },
+                      ]
+                    );
                   },
                 },
               ]
