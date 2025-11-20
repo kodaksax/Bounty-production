@@ -123,17 +123,26 @@ export async function deleteUserAccount(): Promise<{
   };
 }> {
   try {
-    // Get the current user
-    const { data: { user, session } } = await supabase.auth.getUser();
+    // First try to get the session which includes user info
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (!user || !session) {
+    if (sessionError) {
+      console.error('[AccountDeletion] Session error:', sessionError);
       return {
         success: false,
-        message: 'No authenticated user found',
+        message: 'Failed to verify authentication. Please try signing out and signing in again.',
+      };
+    }
+    
+    if (!session) {
+      return {
+        success: false,
+        message: 'No active session found. Please sign in again to delete your account.',
       };
     }
 
-    const userId = user.id;
+    const userId = session.user.id;
+    const accessToken = session.access_token;
 
     // Get information about what will be cleaned up
     const info = await getAccountDeletionInfo(userId);
@@ -155,20 +164,48 @@ export async function deleteUserAccount(): Promise<{
 
     // Call the backend API to delete the user
     // The backend has the service role key to properly delete from auth.users
-    const apiBaseUrl = getApiBaseUrl(3000); // Default to port 3000 for the api server
+    const apiBaseUrl = getApiBaseUrl(3001); // Use port 3001 for the api server (matches server.js)
+    
+    console.log('[AccountDeletion] API URL:', apiBaseUrl);
+    console.log('[AccountDeletion] User ID:', userId);
     
     try {
       const response = await fetch(`${apiBaseUrl}/auth/delete-account`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(30000), // 30 second timeout
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.message || errorJson.error || 'Failed to delete account';
+        } catch {
+          errorMessage = errorText || 'Failed to delete account';
+        }
+        
+        console.error('[AccountDeletion] API deletion failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage
+        });
+        
+        return {
+          success: false,
+          message: `Failed to delete account: ${errorMessage}`,
+          info,
+        };
+      }
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         console.error('[AccountDeletion] API deletion failed:', result);
         return {
           success: false,
@@ -189,6 +226,15 @@ export async function deleteUserAccount(): Promise<{
     } catch (fetchError: any) {
       console.error('[AccountDeletion] Network error:', fetchError);
       
+      // Provide more helpful error messages based on error type
+      let errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+      
+      if (fetchError.name === 'AbortError') {
+        errorMessage = 'Request timed out. Please check your internet connection and try again.';
+      } else if (fetchError.message?.includes('Network request failed')) {
+        errorMessage = 'Network error. Please ensure you have an active internet connection and the server is running.';
+      }
+      
       // Fallback: Try to delete profile directly if API is not available
       console.warn('[AccountDeletion] API not available, attempting fallback...');
       
@@ -199,9 +245,10 @@ export async function deleteUserAccount(): Promise<{
           .eq('id', userId);
         
         if (profileError) {
+          console.error('[AccountDeletion] Fallback profile deletion failed:', profileError);
           return {
             success: false,
-            message: `Failed to delete profile: ${profileError.message}`,
+            message: `${errorMessage}\n\nFallback deletion also failed: ${profileError.message}`,
             info,
           };
         }
@@ -211,14 +258,15 @@ export async function deleteUserAccount(): Promise<{
 
         return {
           success: true,
-          message: 'Account data deleted successfully. Note: Complete deletion requires the backend API to be running. An admin may need to complete the deletion from Supabase Dashboard.\n\n' + 
+          message: 'Account data deleted successfully.\n\nNote: Complete deletion requires the backend API to be running. An admin may need to complete the deletion from Supabase Dashboard.\n\n' + 
                    (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : ''),
           info,
         };
       } catch (profileError: any) {
+        console.error('[AccountDeletion] Fallback failed:', profileError);
         return {
           success: false,
-          message: `Failed to delete account: ${profileError.message}. Please ensure the backend API is running.`,
+          message: `${errorMessage}\n\nFallback deletion failed: ${profileError.message}. Please contact support for assistance.`,
           info,
         };
       }

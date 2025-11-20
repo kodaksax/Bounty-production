@@ -235,15 +235,19 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                       const currentUserId = authProfile?.id;
 
                       if (!currentUserId) {
-                        Alert.alert('Error', 'Unable to identify user account.');
+                        Alert.alert('Error', 'Unable to identify user account. Please sign in again and try again.');
                         return;
                       }
+
+                      // Show loading state
+                      Alert.alert('Deleting Account', 'Please wait while we delete your account...');
 
                       // Delete user account and associated data
                       const result = await deleteUserAccount();
                       
                       if (!result.success) {
-                        Alert.alert('Error', result.message);
+                        console.error('[DeleteAccount] Deletion failed:', result.message);
+                        Alert.alert('Deletion Failed', result.message);
                         return;
                       }
 
@@ -262,7 +266,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                         console.warn('[DeleteAccount] SecureStore cleanup failed', e);
                       }
 
-                      // Sign out
+                      // Sign out (may already be done by deleteUserAccount)
                       try {
                         await supabase.auth.signOut();
                       } catch (e) {
@@ -280,10 +284,10 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                         console.warn('[DeleteAccount] Router navigation failed', e);
                       }
 
-                      Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+                      Alert.alert('Account Deleted', result.message || 'Your account has been permanently deleted.');
                     } catch (e) {
                       console.error('[DeleteAccount] Error:', e);
-                      Alert.alert('Error', 'Failed to delete account. Please contact support.');
+                      Alert.alert('Error', `Failed to delete account: ${e.message || 'Unknown error'}. Please try again or contact support.`);
                     }
                   },
                 },
