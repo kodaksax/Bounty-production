@@ -449,13 +449,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           console.log('✅ Escrow created for posted bounty:', bounty.id)
         } catch (escrowError) {
           console.error('Error creating escrow:', escrowError)
-          // If escrow creation fails, we should delete the bounty or mark it as failed
+          // If escrow creation fails, delete the bounty and remove from UI state
+          await bountyService.deleteBounty(bounty.id)
+          setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
           Alert.alert(
             'Insufficient Balance',
             'You do not have enough balance to post this bounty. Please add funds to your wallet.',
             [{ text: 'OK' }]
           )
-          // Remove the bounty from the list since escrow failed
           throw new Error('Insufficient balance')
         }
       }
