@@ -68,9 +68,11 @@ const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
 const { registerAnalyticsRoutes } = require('./routes/analytics');
+const { registerMessagingRoutes } = require('./routes/messaging');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
+const { wsMessagingService } = require('./services/websocket-messaging-service');
 const { refundService } = require('./services/refund-service');
 const { stripeConnectService } = require('./services/stripe-connect-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
@@ -112,6 +114,9 @@ const startServer = async () => {
   // Register search routes
   await registerSearchRoutes(fastify);
 
+  // Register messaging routes
+  await registerMessagingRoutes(fastify);
+
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {
     fastify.get('/events/subscribe', { websocket: true }, (connection: any, req: any) => {
@@ -126,6 +131,102 @@ const startServer = async () => {
         message: 'Connected to BountyExpo realtime events',
         timestamp: new Date().toISOString()
       }));
+    });
+
+    // WebSocket route for messaging
+    fastify.get('/messages/subscribe', { websocket: true }, async (connection: any, req: any) => {
+      console.log('💬 New WebSocket connection for messaging');
+      
+      // Extract token from query string or headers
+      const token = req.query?.token || req.headers?.authorization?.replace('Bearer ', '');
+      
+      if (!token) {
+        connection.socket.send(JSON.stringify({
+          type: 'error',
+          message: 'Authentication required. Provide token in query string or Authorization header.',
+          timestamp: new Date().toISOString()
+        }));
+        connection.socket.close();
+        return;
+      }
+
+      // Authenticate the connection
+      const auth = await wsMessagingService.authenticateConnection(token);
+      
+      if (!auth) {
+        connection.socket.send(JSON.stringify({
+          type: 'error',
+          message: 'Authentication failed. Invalid or expired token.',
+          timestamp: new Date().toISOString()
+        }));
+        connection.socket.close();
+        return;
+      }
+
+      const { userId } = auth;
+
+      // Get user's conversations
+      const { conversations: conversationParticipants } = await import('./db/schema');
+      const { eq, and, sql } = await import('drizzle-orm');
+      
+      const userConvs = await db
+        .select({ conversation_id: conversationParticipants.conversation_id })
+        .from(conversationParticipants)
+        .where(
+          and(
+            eq(conversationParticipants.user_id, userId),
+            sql`${conversationParticipants.deleted_at} IS NULL`
+          )
+        );
+
+      const conversationIds = userConvs.map(c => c.conversation_id);
+
+      // Add client to messaging service
+      await wsMessagingService.addClient(userId, connection, conversationIds);
+      
+      // Send connection confirmation
+      connection.socket.send(JSON.stringify({
+        type: 'connected',
+        message: 'Connected to BountyExpo messaging',
+        userId,
+        conversationIds,
+        timestamp: new Date().toISOString()
+      }));
+
+      // Handle incoming messages from client
+      connection.socket.on('message', async (message: any) => {
+        try {
+          const data = JSON.parse(message.toString());
+          
+          switch (data.type) {
+            case 'join':
+              // Join a conversation room
+              if (data.conversationId) {
+                wsMessagingService.joinRoom(userId, data.conversationId);
+              }
+              break;
+              
+            case 'leave':
+              // Leave a conversation room
+              if (data.conversationId) {
+                wsMessagingService.leaveRoom(userId, data.conversationId);
+              }
+              break;
+              
+            case 'typing':
+              // Handle typing indicator
+              if (data.conversationId) {
+                wsMessagingService.handleTyping(userId, data.conversationId, data.isTyping || false);
+              }
+              break;
+              
+            default:
+              console.log(`Unknown message type: ${data.type}`);
+          }
+        } catch (error) {
+          console.error('Error handling WebSocket message:', error);
+        }
+      });
     });
   });
 };
@@ -401,7 +502,18 @@ fastify.get('/events/subscribe-info', async (request: FastifyRequest, reply: Fas
 
 // Realtime service stats endpoint
 fastify.get('/events/stats', async (request: FastifyRequest, reply: FastifyReply) => {
-  const stats = realtimeService.getStats();
+  const eventStats = realtimeService.getStats();
+  const messagingStats = wsMessagingService.getStats();
+  return {
+    events: eventStats,
+    messaging: messagingStats,
+    timestamp: new Date().toISOString()
+  };
+});
+
+// Messaging stats endpoint
+fastify.get('/messages/stats', async (request: FastifyRequest, reply: FastifyReply) => {
+  const stats = wsMessagingService.getStats();
   return {
     ...stats,
     timestamp: new Date().toISOString()
@@ -424,6 +536,13 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       eventsSubscribe: '/events/subscribe (WebSocket endpoint)',
       eventsSubscribeInfo: '/events/subscribe-info',
       eventsStats: '/events/stats',
+      messagesSubscribe: '/messages/subscribe (WebSocket endpoint, requires auth token)',
+      conversations: '/api/conversations (requires auth)',
+      conversationMessages: '/api/conversations/:id/messages (requires auth)',
+      sendMessage: 'POST /api/conversations/:id/messages (requires auth)',
+      createConversation: 'POST /api/conversations (requires auth)',
+      updateMessageStatus: 'POST /api/conversations/:id/messages/status (requires auth)',
+      typing: 'POST /api/conversations/:id/typing (requires auth)',
     },
     features: {
       escrow: 'Automatic escrow on bounty acceptance',
@@ -433,6 +552,9 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       emailReceipts: 'Email receipts for all transactions',
       errorHandling: 'Comprehensive error handling with retries',
       edgeCases: 'Validation for insufficient funds and unverified accounts',
+      messaging: 'Real-time messaging with WebSocket support',
+      pushNotifications: 'Push notifications for offline users',
+      presence: 'Online/offline presence tracking',
     }
   };
 });

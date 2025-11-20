@@ -18,6 +18,7 @@ import { NotificationProvider } from '../lib/context/notification-context';
 import { initMixpanel, track } from "../lib/mixpanel";
 import { StripeProvider } from '../lib/stripe-context';
 import AuthProvider from '../providers/auth-provider';
+import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
 
@@ -197,13 +198,15 @@ function RootLayout({ children }: { children: React.ReactNode }) {
             <AdminProvider>
               <StripeProvider>
                 <NotificationProvider>
-                  <RootErrorBoundary>
-                    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                      <View style={styles.inner}>
-                        <Slot />
-                      </View>
-                    </ThemeProvider>
-                  </RootErrorBoundary>
+                  <WebSocketProvider>
+                    <RootErrorBoundary>
+                      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                        <View style={styles.inner}>
+                          <Slot />
+                        </View>
+                      </ThemeProvider>
+                    </RootErrorBoundary>
+                  </WebSocketProvider>
                 </NotificationProvider>
               </StripeProvider>
             </AdminProvider>
