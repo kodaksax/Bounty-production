@@ -1374,6 +1374,7 @@ app.delete('/auth/delete-account', async (req, res) => {
     // Get the user ID from the authorization header (JWT token)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('[DELETE /auth/delete-account] Missing authorization header');
       return res.status(401).json({ 
         success: false, 
         error: 'Unauthorized',
@@ -1385,6 +1386,7 @@ app.delete('/auth/delete-account', async (req, res) => {
     
     // Check if supabaseAdmin is available
     if (!supabaseAdmin) {
+      console.error('[DELETE /auth/delete-account] Supabase admin not configured');
       return res.status(503).json({ 
         success: false,
         error: 'Service Unavailable',
@@ -1395,7 +1397,17 @@ app.delete('/auth/delete-account', async (req, res) => {
     // Verify the token and get user info
     const { data: { user }, error: verifyError } = await supabaseAdmin.auth.getUser(token);
     
-    if (verifyError || !user) {
+    if (verifyError) {
+      console.error('[DELETE /auth/delete-account] Token verification error:', verifyError);
+      return res.status(401).json({ 
+        success: false,
+        error: 'Unauthorized',
+        message: `Invalid or expired authentication token: ${verifyError.message}` 
+      });
+    }
+    
+    if (!user) {
+      console.error('[DELETE /auth/delete-account] No user found for token');
       return res.status(401).json({ 
         success: false,
         error: 'Unauthorized',
@@ -1404,17 +1416,30 @@ app.delete('/auth/delete-account', async (req, res) => {
     }
 
     const userId = user.id;
-    console.log(`[DELETE /auth/delete-account] Deleting account for user: ${userId}`);
+    console.log(`[DELETE /auth/delete-account] Deleting account for user: ${userId} (${user.email})`);
 
     // Delete user from Supabase Auth (this will cascade to profiles and trigger cleanup)
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
     
     if (deleteError) {
       console.error('[DELETE /auth/delete-account] Supabase delete error:', deleteError);
+      
+      // Sanitize error for development mode - include helpful info without sensitive data
+      let sanitizedDetails;
+      if (process.env.NODE_ENV === 'development') {
+        sanitizedDetails = {
+          errorCode: deleteError.code,
+          errorMessage: deleteError.message,
+          errorStatus: deleteError.status,
+          // Exclude any potentially sensitive fields like tokens, emails, internal IDs
+        };
+      }
+      
       return res.status(500).json({ 
         success: false,
         error: 'Deletion Failed',
-        message: `Failed to delete user account: ${deleteError.message}` 
+        message: `Failed to delete user account: ${deleteError.message}`,
+        details: sanitizedDetails
       });
     }
 
@@ -1429,7 +1454,8 @@ app.delete('/auth/delete-account', async (req, res) => {
     return res.status(500).json({ 
       success: false,
       error: 'Internal Server Error',
-      message: error.message || 'An unexpected error occurred during account deletion' 
+      message: error.message || 'An unexpected error occurred during account deletion',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
