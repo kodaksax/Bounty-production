@@ -14,7 +14,7 @@ import { supabase } from '../supabase';
 type EventHandler = (data: any) => void;
 
 interface MessageEvent {
-  type: 'message.new' | 'message.delivered' | 'message.read' | 'typing.start' | 'typing.stop' | 'presence.update' | 'connected' | 'error';
+  type: 'message.new' | 'message.delivered' | 'message.read' | 'typing.start' | 'typing.stop' | 'presence.update' | 'connected' | 'error' | 'pong';
   conversationId?: string;
   messageId?: string;
   senderId?: string;
@@ -30,7 +30,7 @@ class WebSocketAdapter {
   private ws: WebSocket | null = null;
   private listeners: Map<string, EventHandler[]> = new Map();
   private connected: boolean = false;
-  private reconnectTimer?: NodeJS.Timeout;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private reconnectDelay: number = 1000; // Start with 1 second
@@ -41,7 +41,7 @@ class WebSocketAdapter {
   private minStableConnectionMs: number = 5000; // Consider connection stable after 5s
   private verbose: boolean = process.env.EXPO_PUBLIC_WS_VERBOSE === '1';
   private pingIntervalMs: number = 20000; // 20s
-  private pingTimer?: NodeJS.Timeout;
+  private pingTimer?: ReturnType<typeof setInterval>;
   private lastPongTime: number = 0;
 
   /**
@@ -91,7 +91,17 @@ class WebSocketAdapter {
       if (this.verbose) console.warn('[WebSocket] Host probe failed:', e);
     }
 
-    this.url = url || `${wsBase.replace(/^(wss?:\/\/)?/, baseForWs.startsWith('ws') ? '' : '') || baseForWs}/messages/subscribe?token=${this.token}`;
+    // Ensure the final WebSocket URL includes a ws:// or wss:// scheme.
+    // `wsBase` is derived from `baseForWs` (which should include http/https or ws/wss),
+    // so prefer using `wsBase` directly. The previous replace removed the scheme
+    // and produced URLs like "192.168.0.59:3001/..." which cause readyState=3 errors.
+    const resolvedBase = wsBase && wsBase.length > 0 ? wsBase : baseForWs;
+    this.url = url || `${resolvedBase.replace(/\/+$/,'')}/messages/subscribe?token=${this.token}`;
+
+    // If the resolved URL doesn't include a scheme, warn to help diagnose dev host issues
+    if (!/^wss?:\/\//i.test(this.url)) {
+      console.warn('[WebSocket] Constructed URL missing ws/wss scheme:', this.url);
+    }
 
     if (this.verbose || this.reconnectAttempts === 0 || this.reconnectAttempts % 3 === 0) {
       console.log('[WebSocket] Connecting to:', this.url);
@@ -120,7 +130,7 @@ class WebSocketAdapter {
 
         // start heartbeat pings
         try {
-          if (this.pingTimer) clearInterval(this.pingTimer as any);
+          if (this.pingTimer) clearInterval(this.pingTimer);
           this.pingTimer = setInterval(() => {
             try {
               if (!this.ws || !this.connected) return;
@@ -133,7 +143,7 @@ class WebSocketAdapter {
                 try { this.ws?.close(); } catch {};
               }
             } catch (e) { /* ignore ping errors */ }
-          }, this.pingIntervalMs) as unknown as NodeJS.Timeout;
+          }, this.pingIntervalMs);
         } catch (e) {}
 
         // Do NOT reset attempts immediately; only after a stable connection duration.
@@ -184,7 +194,7 @@ class WebSocketAdapter {
         this.connected = false;
         this.emit('disconnect', { code: event.code, reason: event.reason, uptime });
         // clear heartbeat timer
-        try { if (this.pingTimer) { clearInterval(this.pingTimer as any); this.pingTimer = undefined; } } catch {}
+        try { if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = undefined; } } catch {}
         // Reset attempts only if connection lived long enough to be considered stable
         if (uptime >= this.minStableConnectionMs) {
           this.reconnectAttempts = 0;

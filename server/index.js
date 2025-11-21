@@ -105,6 +105,61 @@ app.get('/health', (req, res) => {
   });
 });
 
+// DELETE /auth/delete-account
+// Fully deletes an authenticated user and related application data.
+// Requires a valid Supabase auth bearer token. Uses service role key for admin deletion.
+app.delete('/auth/delete-account', authenticateUser, async (req, res) => {
+  const userId = req.user.id;
+  console.log(`[AccountDeletionAPI] Received deletion request for user ${userId}`);
+  try {
+    // Step 1: Nullify conversations.created_by to avoid FK restriction if it exists
+    try {
+      const { error: convErr } = await supabase
+        .from('conversations')
+        .update({ created_by: null })
+        .eq('created_by', userId);
+      if (convErr) {
+        console.warn('[AccountDeletionAPI] conversations pre-cleanup error (continuing):', convErr.message);
+      }
+    } catch (e) {
+      console.warn('[AccountDeletionAPI] conversations pre-cleanup threw (continuing):', e.message);
+    }
+
+    // Step 2: Delete auth user via admin API (cascades if DB FK set up)
+    let adminDeleted = false;
+    try {
+      if (supabase.auth?.admin?.deleteUser) {
+        const { error: adminError } = await supabase.auth.admin.deleteUser(userId);
+        if (adminError) {
+          console.warn('[AccountDeletionAPI] admin.deleteUser failed, will fallback:', adminError.message);
+        } else {
+          adminDeleted = true;
+        }
+      }
+    } catch (e) {
+      console.warn('[AccountDeletionAPI] admin.deleteUser threw, will fallback:', e.message);
+    }
+
+    // Step 3: Fallback manual profile deletion if still present
+    if (!adminDeleted) {
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+      if (profileErr) {
+        console.error('[AccountDeletionAPI] Manual profile deletion failed:', profileErr.message);
+        return res.status(500).json({ success: false, message: `Failed to delete account: ${profileErr.message}` });
+      }
+    }
+
+    console.log(`[AccountDeletionAPI] Deletion flow complete for user ${userId}`);
+    return res.json({ success: true, message: 'Account deletion completed successfully.' });
+  } catch (e) {
+    console.error('[AccountDeletionAPI] Unexpected error:', e);
+    return res.status(500).json({ success: false, message: e.message || 'Unexpected error deleting account.' });
+  }
+});
+
 // Unauthenticated debug endpoint for device reachability
 // Returns server listen address, remote request info and a small echo for quick device tests
 app.get('/debug', (req, res) => {

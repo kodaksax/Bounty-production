@@ -27,6 +27,11 @@ if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
 
+// Ensure Sentry is initialized as early as possible so that Sentry.wrap
+// (used at the bottom of this file) is called after initialization.
+import { initializeSentry } from '../lib/services/sentry-init';
+initializeSentry();
+
 export const metadata = {
   title: "Bounty App",
   description: "Find and complete bounties near you",

@@ -13,8 +13,8 @@
  * This means users can be safely deleted even with active bounties, escrow, etc.
  */
 
-import { supabase } from '../supabase';
 import { getApiBaseUrl } from '../config/api';
+import { supabase } from '../supabase';
 
 /**
  * Get information about what will happen when user deletes their account
@@ -169,16 +169,27 @@ export async function deleteUserAccount(): Promise<{
     console.log('[AccountDeletion] API URL:', apiBaseUrl);
     console.log('[AccountDeletion] User ID:', userId);
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      try {
+        controller.abort();
+      } catch (abortErr) {
+        console.warn('[AccountDeletion] AbortController abort failed:', abortErr);
+      }
+    }, 30000);
+
     try {
       const response = await fetch(`${apiBaseUrl}/auth/delete-account`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          // Omit Content-Type to prevent Fastify empty JSON body error when no body is sent
         },
-        // Add timeout to prevent hanging
-        signal: AbortSignal.timeout(30000), // 30 second timeout
+        // No body needed; server only relies on auth token. If you later need meta, send body: '{}'
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -224,6 +235,7 @@ export async function deleteUserAccount(): Promise<{
         info,
       };
     } catch (fetchError: any) {
+      clearTimeout(timeoutId);
       console.error('[AccountDeletion] Network error:', fetchError);
       
       // Provide more helpful error messages based on error type
@@ -239,6 +251,76 @@ export async function deleteUserAccount(): Promise<{
       console.warn('[AccountDeletion] API not available, attempting fallback...');
       
       try {
+        // Pre-fallback cleanup sequence (best-effort, each step non-fatal):
+        // 1. Delete completion submissions by this user (hunter)
+        try {
+          const { error: compErr } = await supabase
+            .from('completion_submissions')
+            .delete()
+            .eq('hunter_id', userId);
+          if (compErr) console.warn('[AccountDeletion] Fallback completion_submissions cleanup failed (continuing):', compErr);
+        } catch (e) {
+          console.warn('[AccountDeletion] Fallback completion_submissions cleanup threw (continuing):', e);
+        }
+        // 2. Delete bounty requests by this user (hunter applications)
+        try {
+          const { error: reqErr } = await supabase
+            .from('bounty_requests')
+            .delete()
+            .eq('user_id', userId);
+          if (reqErr) console.warn('[AccountDeletion] Fallback bounty_requests cleanup failed (continuing):', reqErr);
+        } catch (e) {
+          console.warn('[AccountDeletion] Fallback bounty_requests cleanup threw (continuing):', e);
+        }
+        // 3. Delete bounties created by this user to avoid NOT NULL poster_id violation
+        try {
+          const { error: bntyErr } = await supabase
+            .from('bounties')
+            .delete()
+            .eq('poster_id', userId);
+          if (bntyErr) console.warn('[AccountDeletion] Fallback bounties cleanup failed (continuing):', bntyErr);
+        } catch (e) {
+          console.warn('[AccountDeletion] Fallback bounties cleanup threw (continuing):', e);
+        }
+        // 4. Delete conversations created by this user, ensuring children removed first
+        try {
+          // Fetch conversation ids
+          const { data: convs, error: convListErr } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('created_by', userId);
+          if (convListErr) {
+            console.warn('[AccountDeletion] Fallback conversations list failed (continuing):', convListErr);
+          } else if (convs && convs.length > 0) {
+            const ids = convs.map((c: any) => c.id);
+            // Delete messages first
+            const { error: msgErr } = await supabase
+              .from('messages')
+              .delete()
+              .in('conversation_id', ids);
+            if (msgErr) console.warn('[AccountDeletion] Fallback messages deletion failed (continuing):', msgErr);
+            // Delete participants
+            const { error: partErr } = await supabase
+              .from('conversation_participants')
+              .delete()
+              .in('conversation_id', ids);
+            if (partErr) console.warn('[AccountDeletion] Fallback participants deletion failed (continuing):', partErr);
+            // Delete conversations
+            const { error: convDelErr } = await supabase
+              .from('conversations')
+              .delete()
+              .in('id', ids);
+            if (convDelErr) console.warn('[AccountDeletion] Fallback conversations deletion failed (continuing):', convDelErr);
+          }
+          // Remove any participant rows for this user in other conversations
+          const { error: partUserErr } = await supabase
+            .from('conversation_participants')
+            .delete()
+            .eq('user_id', userId);
+          if (partUserErr) console.warn('[AccountDeletion] Fallback participant rows for user deletion failed (continuing):', partUserErr);
+        } catch (e) {
+          console.warn('[AccountDeletion] Fallback conversations cascade deletion threw (continuing):', e);
+        }
         const { error: profileError } = await supabase
           .from('profiles')
           .delete()

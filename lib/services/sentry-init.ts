@@ -11,6 +11,16 @@ const ENVIRONMENT = process.env.NODE_ENV || 'development';
  * Initialize Sentry for error tracking
  */
 export function initializeSentry() {
+  try {
+    // Avoid double-initialization: if a Sentry client already exists, skip init.
+    const hub = (Sentry as any).getCurrentHub && (Sentry as any).getCurrentHub();
+    if (hub && hub.getClient && hub.getClient()) {
+      console.log('[Sentry] Already initialized (skipping)');
+      return;
+    }
+  } catch (e) {
+    // ignore guard failures
+  }
   // Only initialize if DSN is provided and not in development
   if (!SENTRY_DSN || SENTRY_DSN === 'YOUR_SENTRY_DSN') {
     console.log('[Sentry] DSN not configured, error tracking disabled');

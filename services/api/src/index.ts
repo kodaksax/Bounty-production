@@ -84,38 +84,167 @@ const { backendAnalytics } = require('./services/analytics');
 // Initialize analytics on startup
 backendAnalytics.initialize();
 
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
 // Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({
   logger: logger
 });
 
-// Register WebSocket plugin
+// Register WebSocket plugin and all routes
 const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
-  
+
   // Register global rate limiting middleware for all routes except health
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Skip rate limiting for health check
-    if (request.url === '/health') {
-      return;
-    }
+    if (request.url === '/health') return;
     await rateLimitMiddleware(request, reply);
   });
-  
+
   // Register admin routes with security middleware
   await registerAdminRoutes(fastify);
-  
+
   // Register analytics routes with security middleware
   await registerAnalyticsRoutes(fastify);
-  
+
   // Register notification routes
   await registerNotificationRoutes(fastify);
-  
+
   // Register search routes
   await registerSearchRoutes(fastify);
 
   // Register messaging routes
   await registerMessagingRoutes(fastify);
+
+  // Delete account endpoint
+  fastify.delete('/auth/delete-account', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ success: false, message: 'User ID not found in token' });
+      }
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceKey) {
+        return reply.code(500).send({ success: false, message: 'Supabase service credentials not configured on API server' });
+      }
+
+      const sAdmin = createSupabaseClient(supabaseUrl, serviceKey);
+
+      // --- Dependent data cleanup (order matters) ---
+      // 1. Delete completion submissions tied to this user as hunter
+      try {
+        const { error: compErr } = await sAdmin
+          .from('completion_submissions')
+          .delete()
+          .eq('hunter_id', request.userId);
+        if (compErr) request.log.warn({ err: compErr }, 'completion_submissions cleanup failed (continuing)');
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'completion_submissions cleanup threw (continuing)');
+      }
+
+      // 2. Delete bounty requests by this user (hunter applications)
+      try {
+        const { error: reqErr } = await sAdmin
+          .from('bounty_requests')
+          .delete()
+          .eq('user_id', request.userId);
+        if (reqErr) request.log.warn({ err: reqErr }, 'bounty_requests cleanup failed (continuing)');
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'bounty_requests cleanup threw (continuing)');
+      }
+
+      // 3. Delete bounties created by this user to avoid NOT NULL poster_id violations on profile deletion
+      // (If business rules require archival/refund flows, implement them here before deletion.)
+      try {
+        const { error: bntyErr } = await sAdmin
+          .from('bounties')
+          .delete()
+          .eq('poster_id', request.userId);
+        if (bntyErr) request.log.warn({ err: bntyErr }, 'bounties cleanup failed (continuing)');
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'bounties cleanup threw (continuing)');
+      }
+
+      // 4. Delete conversations created by this user, with explicit child cleanup to avoid FK/RLS issues
+      try {
+        // Fetch conversation ids first
+        const { data: convs, error: convListErr } = await sAdmin
+          .from('conversations')
+          .select('id')
+          .eq('created_by', request.userId);
+        if (convListErr) {
+          request.log.warn({ err: convListErr }, 'conversations list failed (continuing)');
+        } else if (convs && convs.length > 0) {
+          const ids = convs.map((c: any) => c.id);
+          // Delete messages in those conversations
+          const { error: msgErr } = await sAdmin
+            .from('messages')
+            .delete()
+            .in('conversation_id', ids);
+          if (msgErr) request.log.warn({ err: msgErr }, 'messages deletion failed (continuing)');
+          // Delete participants in those conversations
+          const { error: partErr } = await sAdmin
+            .from('conversation_participants')
+            .delete()
+            .in('conversation_id', ids);
+          if (partErr) request.log.warn({ err: partErr }, 'participants deletion failed (continuing)');
+          // Finally delete the conversations
+          const { error: convDelErr } = await sAdmin
+            .from('conversations')
+            .delete()
+            .in('id', ids);
+          if (convDelErr) request.log.warn({ err: convDelErr }, 'conversations deletion failed (continuing)');
+        }
+        // Also remove any participant rows for this user in other conversations
+        const { error: partUserErr } = await sAdmin
+          .from('conversation_participants')
+          .delete()
+          .eq('user_id', request.userId);
+        if (partUserErr) request.log.warn({ err: partUserErr }, 'participant rows for user deletion failed (continuing)');
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'conversations cascade deletion threw (continuing)');
+      }
+
+      // Attempt admin deletion of auth user
+      let adminDeleted = false;
+      try {
+        const { error: adminError } = await sAdmin.auth.admin.deleteUser(request.userId);
+        if (adminError) {
+          request.log.warn({ err: adminError }, 'admin.deleteUser failed, will fallback');
+        } else {
+          adminDeleted = true;
+        }
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'admin.deleteUser threw, will fallback');
+      }
+
+      // Fallback: delete profile row if still present
+      if (!adminDeleted) {
+        const { error: profileErr } = await sAdmin
+          .from('profiles')
+          .delete()
+          .eq('id', request.userId);
+        if (profileErr) {
+          return reply.code(500).send({ success: false, message: `Failed to delete account: ${profileErr.message}` });
+        }
+      }
+
+      // Also remove from local API service users table if it exists
+      try {
+        await db.delete(users).where(eq(users.id, request.userId));
+      } catch (e) {
+        // non-fatal
+      }
+
+      return { success: true, message: 'Account deletion completed successfully.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error deleting account';
+      return reply.code(500).send({ success: false, message });
+    }
+  });
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {
@@ -166,7 +295,7 @@ const startServer = async () => {
       const { userId } = auth;
 
       // Get user's conversations
-      const { conversations: conversationParticipants } = await import('./db/schema');
+      const { conversationParticipants } = await import('./db/schema');
       const { eq, and, sql } = await import('drizzle-orm');
       
       const userConvs = await db
@@ -179,7 +308,7 @@ const startServer = async () => {
           )
         );
 
-      const conversationIds = userConvs.map(c => c.conversation_id);
+      const conversationIds = (userConvs as Array<{ conversation_id: string }>).map((c) => c.conversation_id);
 
       // Add client to messaging service
       await wsMessagingService.addClient(userId, connection, conversationIds);
