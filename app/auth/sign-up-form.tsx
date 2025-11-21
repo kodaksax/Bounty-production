@@ -3,7 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
@@ -90,14 +90,39 @@ export function SignUpForm() {
         return
       }
 
-      // If email confirmations are enabled, session may be null until user verifies email
+      // Ensure any implicit session is cleared so we land on a fresh sign-in screen
       if (data.session) {
-        // New users always need to complete onboarding - start from the index to check carousel status
-  router.replace('/onboarding/index' as Href)
-      } else {
-        // Show a friendly note and route to sign-in
-        setAuthError('Check your email to confirm your account, then sign in.')
+        try {
+          await supabase.auth.signOut()
+        } catch (signOutError) {
+          console.warn('[sign-up] Unable to sign out newly created session', signOutError)
+        }
       }
+
+      setEmail('')
+      setPassword('')
+      setConfirmPassword('')
+      setAgeVerified(false)
+      setTermsAccepted(false)
+
+      const navigateToSignIn = () => {
+        // Small delay keeps the Alert dismissal smooth before navigation occurs
+        setTimeout(() => {
+          router.replace('/auth/sign-in-form' as Href)
+        }, 125)
+      }
+
+      Alert.alert(
+        'Confirm Your Email',
+        'Check your email to confirm your account, then sign in with your credentials.',
+        [
+          {
+            text: 'Go to Sign In',
+            onPress: navigateToSignIn,
+          },
+        ],
+        { cancelable: false }
+      )
     } catch (e: any) {
       setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
       console.error('[sign-up] Error:', e)

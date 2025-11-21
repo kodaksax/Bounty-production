@@ -1,10 +1,10 @@
+import * as Sentry from '@sentry/react-native'
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
 import { PropsWithChildren, useContext, useEffect, useState } from 'react'
-import { authProfileService } from '../lib/services/auth-profile-service'
 import { analyticsService } from '../lib/services/analytics-service'
-import * as Sentry from '@sentry/react-native'
+import { authProfileService } from '../lib/services/auth-profile-service'
 
 type AuthData = {
   session: Session | null | undefined
@@ -118,7 +118,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         session,
         isLoading,
         profile,
-        isLoggedIn: session != undefined,
+        isLoggedIn: Boolean(session),
         isEmailVerified,
       }}
     >

@@ -110,9 +110,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
 
-  //Supabase auth
-  const { isLoggedIn } = useAuthContext()
-
   // Load any custom fonts (add family names if you have them)
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -191,8 +188,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
-    // Monitor session expiration (only when authenticated)
-    useSessionMonitor();
     
     return (
       <RootFrame bgColor={color}>
@@ -200,6 +195,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
           <BrandedSplash />
         ) : (
           <AuthProvider>
+            <SessionMonitorGate />
             <AdminProvider>
               <StripeProvider>
                 <NotificationProvider>
@@ -231,6 +227,13 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     </SafeAreaProvider>
   );
 }
+
+// Lightweight gate component that mounts the session monitor once auth context is available
+const SessionMonitorGate = () => {
+  const { isLoggedIn } = useAuthContext();
+  useSessionMonitor({ enabled: !!isLoggedIn });
+  return null;
+};
 
 const styles = StyleSheet.create({
   container: {
