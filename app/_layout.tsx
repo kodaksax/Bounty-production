@@ -32,6 +32,17 @@ if (__DEV__) {
 import { initializeSentry } from '../lib/services/sentry-init';
 initializeSentry();
 
+if (__DEV__) {
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].includes('SafeAreaView has been deprecated')) {
+      console.trace('SafeAreaView warning stack');
+    }
+    // PowerShell needs tuple typing to satisfy TS since args is unknown[]
+    originalWarn(...(args as [unknown, ...unknown[]]));
+  };
+}
+
 export const metadata = {
   title: "Bounty App",
   description: "Find and complete bounties near you",

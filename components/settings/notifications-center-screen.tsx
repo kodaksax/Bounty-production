@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL } from '../../lib/config/api';
 import { supabase } from '../../lib/supabase';
 
@@ -36,6 +36,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
   });
   const [loaded, setLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadPreferences();
@@ -172,7 +173,10 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-emerald-600">
+    <View
+      className="flex-1 bg-emerald-600"
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+    >
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#fff" />
@@ -275,7 +279,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
           />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

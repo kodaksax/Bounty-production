@@ -13,19 +13,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../components/attachment-viewer-modal';
 import type { Attachment } from '../lib/types';
 
 export function AttachmentViewerTestScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
+  const insets = useSafeAreaInsets();
 
   // Sample attachments for testing different file types
   const sampleAttachments: Attachment[] = [
@@ -102,7 +103,12 @@ export function AttachmentViewerTestScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View
+      style={[
+        styles.safeArea,
+        { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) },
+      ]}
+    >
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -212,7 +218,7 @@ export function AttachmentViewerTestScreen() {
           onClose={handleCloseViewer}
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
