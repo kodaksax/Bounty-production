@@ -223,14 +223,25 @@ function BountyAppInner() {
 
   // Check if onboarding is needed and redirect
   useEffect(() => {
-    if (!profileLoading && !hasCheckedOnboarding) {
-      setHasCheckedOnboarding(true)
-      if (!isComplete) {
-        // Profile is incomplete, redirect to onboarding
-        router.push('/onboarding/username')
+    const checkOnboarding = async () => {
+      if (!profileLoading && !hasCheckedOnboarding) {
+        setHasCheckedOnboarding(true);
+        
+        // Check if onboarding was completed
+        const onboardingComplete = await AsyncStorage.getItem('@bounty_onboarding_completed');
+        
+        // Redirect to onboarding if:
+        // 1. Profile is incomplete (no username), OR
+        // 2. Onboarding was never marked as complete
+        if (!isComplete || onboardingComplete !== 'true') {
+          // Profile is incomplete, redirect to onboarding
+          router.push('/onboarding/username');
+        }
       }
-    }
-  }, [profileLoading, isComplete, hasCheckedOnboarding, router])
+    };
+    
+    checkOnboarding();
+  }, [profileLoading, isComplete, hasCheckedOnboarding, router]);
 
   // Restore last-selected chip on mount
   useEffect(() => {

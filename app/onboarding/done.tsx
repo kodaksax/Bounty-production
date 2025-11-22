@@ -4,6 +4,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -14,14 +15,19 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { supabase } from '../../lib/supabase';
+
+const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
 
 export default function DoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile } = useUserProfile();
   const { profile: normalized } = useNormalizedProfile();
+  const { userId } = useAuthProfile();
   const displayProfile = normalized || (localProfile ? { username: localProfile.username, name: (localProfile as any).displayName || undefined, _raw: localProfile } : null as any);
   
   const [scaleAnim] = useState(new Animated.Value(0));
@@ -42,7 +48,32 @@ export default function DoneScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+    
+    // Mark onboarding as complete in AsyncStorage
+    const markComplete = async () => {
+      try {
+        await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+        
+        // Also update the Supabase profile to mark onboarding as complete
+        if (userId) {
+          const { error } = await supabase
+            .from('profiles')
+            .update({ onboarding_completed: true })
+            .eq('id', userId);
+            
+          if (error) {
+            console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
+          } else {
+            console.log('[Onboarding] Successfully marked onboarding as complete for user:', userId);
+          }
+        }
+      } catch (error) {
+        console.error('[Onboarding] Error marking onboarding as complete:', error);
+      }
+    };
+    
+    markComplete();
+  }, [scaleAnim, fadeAnim, userId]);
 
   const handleContinue = () => {
     // Navigate to the Bounty app dashboard
