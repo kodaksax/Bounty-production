@@ -28,7 +28,7 @@ export const userProfileService = {
       const newProfile: UserProfile = {
         id: userId,
         username: updates.username || '',
-        avatar_url: updates.avatar || undefined,
+        avatar: updates.avatar,
         title: updates.title,
         languages: updates.languages || [],
         skills: updates.skills || [],
