@@ -13,8 +13,42 @@
  * This means users can be safely deleted even with active bounties, escrow, etc.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../config/api';
 import { supabase } from '../supabase';
+
+/**
+ * Clear all local storage data for the user
+ * This should be called after successful account deletion to ensure
+ * a fresh state for any future sign-ups with the same device
+ */
+async function clearLocalUserData(): Promise<void> {
+  try {
+    // Clear all profile and onboarding related keys
+    const keysToRemove = [
+      '@bounty_onboarding_complete',
+      '@bounty_onboarding_completed',
+      'BE:userProfile',
+      'BE:allProfiles',
+      'BE:acceptedLegal',
+      'profileData',
+      'profileSkills',
+    ];
+    
+    // Also clear any user-specific keys (those with userId in them)
+    const allKeys = await AsyncStorage.getAllKeys();
+    const userSpecificKeys = allKeys.filter(key => 
+      key.includes('BE:userProfile:') || 
+      key.includes('profileData:') || 
+      key.includes('profileSkills:')
+    );
+    
+    await AsyncStorage.multiRemove([...keysToRemove, ...userSpecificKeys]);
+    console.log('[AccountDeletion] Cleared local user data');
+  } catch (error) {
+    console.error('[AccountDeletion] Error clearing local data:', error);
+  }
+}
 
 /**
  * Get information about what will happen when user deletes their account
@@ -225,6 +259,9 @@ export async function deleteUserAccount(): Promise<{
         };
       }
 
+      // Clear all local user data before signing out
+      await clearLocalUserData();
+
       // Sign out the user after successful deletion
       await supabase.auth.signOut();
 
@@ -334,6 +371,9 @@ export async function deleteUserAccount(): Promise<{
             info,
           };
         }
+
+        // Clear all local user data before signing out
+        await clearLocalUserData();
 
         // Sign out the user
         await supabase.auth.signOut();

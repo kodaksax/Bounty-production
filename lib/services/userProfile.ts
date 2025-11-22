@@ -14,6 +14,7 @@ const PROFILES_KEY = 'BE:allProfiles'; // For username uniqueness check
 interface ProfileData {
   username: string;
   displayName?: string;
+  title?: string;
   bio?: string;
   avatar?: string;
   location?: string;

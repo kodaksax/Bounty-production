@@ -40,6 +40,9 @@ export default function DetailsScreen() {
   const [displayName, setDisplayName] = useState<string>(
     (normalized as any)?.name || (localProfile as any)?.displayName || ''
   );
+  const [title, setTitle] = useState<string>(
+    ((normalized as any)?._raw && (normalized as any)._raw.title) || (localProfile as any)?.title || ''
+  );
   const [bio, setBio] = useState<string>(
     ((normalized as any)?._raw && (normalized as any)._raw.bio) || (localProfile as any)?.bio || ''
   );
@@ -123,6 +126,8 @@ export default function DetailsScreen() {
       displayName: displayName.trim() || undefined,
       // Use flexible typing for optional fields
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      title: (title.trim() || undefined) as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       bio: (bio.trim() || undefined) as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       location: (location.trim() || undefined) as any,
@@ -190,6 +195,20 @@ export default function DetailsScreen() {
               autoCapitalize="words"
             />
             <Text style={styles.hint}>How you'd like to be called</Text>
+          </View>
+
+          {/* Title/Profession */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Title/Profession (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Full Stack Developer, Designer"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              autoCapitalize="words"
+            />
+            <Text style={styles.hint}>Your professional title or role</Text>
           </View>
 
           {/* Bio */}
