@@ -43,7 +43,7 @@ Successfully implemented a comprehensive in-app modal component for viewing and 
 **Technical Implementation:**
 - Uses `expo-file-system` for downloads (with proper cache directory handling)
 - Uses `expo-sharing` for save functionality
-- Uses `expo-av` with `ResizeMode` enum for video playback
+- Uses `expo-video` via `VideoView` and `contentFit` controls for video playback
 - Uses `react-native-webview` for PDF preview on web
 - Follows existing modal patterns (based on ReportModal)
 - Type-safe TypeScript implementation
@@ -198,7 +198,7 @@ Suggested integration points:
 ## Dependencies
 
 All required dependencies already installed:
-- ✅ `expo-av@16.0.7` - Video playback
+- ✅ `expo-video@3.0.14` - Video playback
 - ✅ `expo-file-system@19.0.17` - File operations
 - ✅ `expo-sharing@14.0.7` - Share functionality
 - ✅ `react-native-webview@13.15.0` - Document preview

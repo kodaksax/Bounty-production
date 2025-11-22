@@ -1,7 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons";
-import { Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { usePortfolioUpload } from "hooks/use-portfolio-upload";
 import { useAuthProfile } from "hooks/useAuthProfile";
 import { useFollow } from "hooks/useFollow";
@@ -10,16 +10,16 @@ import { usePortfolio } from "hooks/usePortfolio";
 import { OptimizedImage } from "lib/components/OptimizedImage";
 import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface EnhancedProfileSectionProps {
@@ -27,6 +27,40 @@ interface EnhancedProfileSectionProps {
   isOwnProfile?: boolean;
   showPortfolio?: boolean; // control whether to render the portfolio list here
   activityStats?: { jobsAccepted: number; bountiesPosted: number; badgesEarned: number };
+}
+
+function usePortfolioVideoPlayer(item: PortfolioItem | null) {
+  const source = useMemo(() => {
+    if (item?.type === 'video' && item.url) {
+      return { uri: item.url };
+    }
+
+    return null;
+  }, [item]);
+
+  const player = useVideoPlayer(source, (playerInstance) => {
+    playerInstance.pause();
+    playerInstance.loop = false;
+    playerInstance.muted = false;
+    playerInstance.volume = 1;
+  });
+
+  useEffect(() => {
+    if (!item || item.type !== 'video') {
+      player.pause();
+      return;
+    }
+
+    const subscription = player.addListener('statusChange', ({ status, error }) => {
+      if (status === 'error' && error) {
+        console.error('[Portfolio] Video playback error:', error);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [item, player]);
+
+  return { player, hasVideo: !!source };
 }
 
 export function EnhancedProfileSection({ 
@@ -62,6 +96,7 @@ export function EnhancedProfileSection({
   } = useFollow(userId || 'current-user');
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
+  const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
   const { profile: authProfileFromHook } = useAuthProfile();
 
   // profileLoading already accounts for local + supabase fetch inside useNormalizedProfile
@@ -329,48 +364,53 @@ export function EnhancedProfileSection({
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
             <View className="bg-emerald-800 rounded-xl p-4 m-4 max-w-lg w-full">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-lg font-bold text-white">Portfolio Item</Text>
-              <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
-                <MaterialIcons name="close" size={24} color="white" />
-              </TouchableOpacity>
-            </View>
-            
-            {selectedPortfolioItem && (
-              <>
-                {selectedPortfolioItem.type === 'video' ? (
-                  <Video
-                    source={{ uri: selectedPortfolioItem.url }}
-                    rate={1.0}
-                    volume={1.0}
-                    isMuted={false}
-                    useNativeControls
-                    shouldPlay={false}
-                    style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                  />
-                ) : (
-                  <OptimizedImage
-                    source={{ uri: selectedPortfolioItem.thumbnail || selectedPortfolioItem.url }}
-                    style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                    resizeMode="contain"
-                    useThumbnail={false}
-                    priority="high"
-                    alt={selectedPortfolioItem.title || 'Portfolio item detail'}
-                  />
-                )}
-                {selectedPortfolioItem.title && (
-                  <Text className="text-base font-medium text-white mb-2">
-                    {selectedPortfolioItem.title}
-                  </Text>
-                )}
-                {selectedPortfolioItem.description && (
-                  <Text className="text-sm text-emerald-200">
-                    {selectedPortfolioItem.description}
-                  </Text>
-                )}
-                    </>
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="text-lg font-bold text-white">Portfolio Item</Text>
+                <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
+                  <MaterialIcons name="close" size={24} color="white" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedPortfolioItem && (
+                <>
+                  {selectedPortfolioItem.type === 'video' ? (
+                    hasSelectedVideo ? (
+                      <VideoView
+                        player={selectedVideoPlayer}
+                        nativeControls
+                        contentFit="contain"
+                        style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
+                      />
+                    ) : (
+                      <View className="bg-black/50 rounded-lg items-center justify-center h-64 mb-3">
+                        <Text className="text-white">Unable to load video preview</Text>
+                      </View>
+                    )
+                  ) : (
+                    <OptimizedImage
+                      source={{ uri: selectedPortfolioItem.thumbnail || selectedPortfolioItem.url }}
+                      style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
+                      resizeMode="contain"
+                      useThumbnail={false}
+                      priority="high"
+                      alt={selectedPortfolioItem.title || 'Portfolio item detail'}
+                    />
                   )}
-                </View>
+
+                  {selectedPortfolioItem.title && (
+                    <Text className="text-base font-medium text-white mb-2">
+                      {selectedPortfolioItem.title}
+                    </Text>
+                  )}
+
+                  {selectedPortfolioItem.description && (
+                    <Text className="text-sm text-emerald-200">
+                      {selectedPortfolioItem.description}
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
               </Pressable>
             </Pressable>
           </Modal>
@@ -392,6 +432,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
     }
   })
   const [selectedPortfolioItem, setSelectedPortfolioItem] = React.useState<PortfolioItem | null>(null)
+  const { player: standaloneVideoPlayer, hasVideo: standaloneHasVideo } = usePortfolioVideoPlayer(selectedPortfolioItem)
   const handleDeletePortfolioItem = async (itemId: string) => {
     Alert.alert(
       'Delete item',
@@ -478,15 +519,18 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
             {selectedPortfolioItem && (
               <>
                 {selectedPortfolioItem.type === 'video' ? (
-                  <Video
-                    source={{ uri: selectedPortfolioItem.url }}
-                    rate={1.0}
-                    volume={1.0}
-                    isMuted={false}
-                    useNativeControls
-                    shouldPlay={false}
-                    style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
-                  />
+                  standaloneHasVideo ? (
+                    <VideoView
+                      player={standaloneVideoPlayer}
+                      nativeControls
+                      contentFit="contain"
+                      style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
+                    />
+                  ) : (
+                    <View className="bg-black/50 rounded-lg items-center justify-center h-64 mb-3">
+                      <Text className="text-white">Unable to load video preview</Text>
+                    </View>
+                  )
                 ) : (
                   <OptimizedImage source={{ uri: selectedPortfolioItem.thumbnail || selectedPortfolioItem.url }} style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }} resizeMode="contain" useThumbnail={false} priority="high" alt={selectedPortfolioItem.title || 'Portfolio item detail'} />
                 )}

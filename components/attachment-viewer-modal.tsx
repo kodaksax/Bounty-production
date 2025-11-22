@@ -1,21 +1,21 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import React, { useState } from 'react';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
 
@@ -47,7 +47,7 @@ export function AttachmentViewerModal({
   onClose,
 }: AttachmentViewerModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [scale, setScale] = useState(1);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   if (!attachment) return null;
 
@@ -77,9 +77,50 @@ export function AttachmentViewerModal({
   };
 
   const fileType = getFileType();
+  const isUriValid = isValidUri(uri);
+
+  const videoSource = useMemo(() => {
+    if (fileType === 'video' && isUriValid) {
+      return { uri };
+    }
+    return null;
+  }, [fileType, isUriValid, uri]);
+
+  const videoPlayer = useVideoPlayer(videoSource, (player) => {
+    player.pause();
+    player.loop = false;
+    player.muted = false;
+  });
 
   // Check if file size is reasonable (< 100MB for viewing)
   const isFileSizeReasonable = !attachment.size || attachment.size < 100 * 1024 * 1024;
+
+  useEffect(() => {
+    setVideoError(null);
+  }, [attachment?.id]);
+
+  useEffect(() => {
+    if (fileType !== 'video' || !videoSource) {
+      return;
+    }
+
+    const subscription = videoPlayer.addListener('statusChange', ({ status, error }) => {
+      if (status === 'error' && error) {
+        console.error('[AttachmentViewer] Video playback error:', error);
+        setVideoError(error.message ?? 'Unable to play this video');
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [fileType, videoPlayer, videoSource]);
+
+  useEffect(() => {
+    if (!visible) {
+      videoPlayer.pause();
+    }
+  }, [visible, videoPlayer]);
 
   /**
    * Download/save attachment to device
@@ -174,7 +215,7 @@ export function AttachmentViewerModal({
    * Render content based on file type
    */
   const renderContent = () => {
-    if (!isValidUri(uri)) {
+    if (!isUriValid) {
       return (
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={64} color="#ef4444" />
@@ -217,16 +258,20 @@ export function AttachmentViewerModal({
       case 'video':
         return (
           <View style={styles.videoContainer}>
-            <Video
-              source={{ uri }}
-              style={styles.video}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              onError={(error) => {
-                console.error('[AttachmentViewer] Video load error:', error);
-              }}
-            />
+            {videoError ? (
+              <View style={styles.errorContainer}>
+                <MaterialIcons name="error-outline" size={64} color="#ef4444" />
+                <Text style={styles.errorText}>Unable to play this video</Text>
+                <Text style={styles.errorSubtext}>{videoError}</Text>
+              </View>
+            ) : (
+              <VideoView
+                player={videoPlayer}
+                style={styles.video}
+                nativeControls
+                contentFit="contain"
+              />
+            )}
           </View>
         );
 

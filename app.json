@@ -68,7 +68,8 @@
           "project": "react-native",
           "organization": "bounty-4e"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

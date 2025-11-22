@@ -47,7 +47,7 @@ components/
 All required dependencies are already included in the project:
 - `expo-file-system`: File operations and downloads
 - `expo-sharing`: Device share/save functionality
-- `expo-av`: Video playback
+- `expo-video`: Video playback
 - `react-native-webview`: Document preview (web only)
 - `@expo/vector-icons`: UI icons
 
