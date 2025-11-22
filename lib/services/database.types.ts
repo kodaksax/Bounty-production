@@ -52,6 +52,7 @@ export type Profile = {
   updated_at?: string
   display_name?: string
   location?: string
+  onboarding_completed?: boolean
   // Withdrawal and cancellation tracking
   withdrawal_count?: number
   cancellation_count?: number

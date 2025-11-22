@@ -56,10 +56,16 @@ export default function DoneScreen() {
         
         // Also update the Supabase profile to mark onboarding as complete
         if (userId) {
-          await supabase
+          const { error } = await supabase
             .from('profiles')
             .update({ onboarding_completed: true })
             .eq('id', userId);
+            
+          if (error) {
+            console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
+          } else {
+            console.log('[Onboarding] Successfully marked onboarding as complete for user:', userId);
+          }
         }
       } catch (error) {
         console.error('[Onboarding] Error marking onboarding as complete:', error);
