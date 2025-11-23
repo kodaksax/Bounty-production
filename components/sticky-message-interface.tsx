@@ -21,6 +21,7 @@ interface StickyMessageInterfaceProps {
   accentColor?: string; // defaults to emerald
   isOtherUserTyping?: boolean; // for typing indicator
   onTypingChange?: (isTyping: boolean) => void; // notify parent when user starts/stops typing
+  typingTimeout?: number; // milliseconds to wait before stopping typing indicator (default: 2000)
 }
 
 /**
@@ -38,6 +39,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   accentColor = '#059669',
   isOtherUserTyping = false,
   onTypingChange,
+  typingTimeout = 2000,
 }) => {
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -76,13 +78,13 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
       if (newText.length > 0) {
         onTypingChange(true);
         
-        // Reset timeout - if user stops typing for 2 seconds, mark as stopped
+        // Reset timeout - if user stops typing for configured duration, mark as stopped
         if (typingTimeoutRef.current) {
           clearTimeout(typingTimeoutRef.current);
         }
         typingTimeoutRef.current = setTimeout(() => {
           onTypingChange(false);
-        }, 2000);
+        }, typingTimeout);
       } else {
         onTypingChange(false);
         if (typingTimeoutRef.current) {
@@ -100,8 +102,8 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   };
 
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
-    // Determine if this is a new message (recently added)
-    const isNewMessage = index === messages.length - 1 && messages.length > 0;
+    // Only animate messages added in the last 500ms
+    const isNewMessage = Date.now() - item.createdAt < 500;
     
     return (
       <AnimatedMessage 

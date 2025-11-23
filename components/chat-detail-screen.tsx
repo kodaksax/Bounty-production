@@ -83,7 +83,6 @@ export function ChatDetailScreen({
   const [messages, setMessages] = useState<Message[]>(() => getConversationMessages(conversation.id))
   const { balance } = useWallet()
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false)
-  const [isCurrentUserTyping, setIsCurrentUserTyping] = useState(false)
   // no manual scroll ref needed; handled by StickyMessageInterface
   
   // Get the other participant's ID (not the current user)
