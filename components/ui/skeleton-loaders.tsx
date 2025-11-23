@@ -52,6 +52,31 @@ export function ConversationItemSkeleton() {
 }
 
 /**
+ * Skeleton loader for individual chat messages
+ */
+export function ChatMessageSkeleton({ isUser = false }: { isUser?: boolean }) {
+  return (
+    <View style={[styles.chatMessage, isUser ? styles.chatMessageUser : styles.chatMessageOther]}>
+      <Skeleton className="h-3 w-48 mb-1 bg-emerald-700/40" />
+      <Skeleton className="h-3 w-32 bg-emerald-700/40" />
+    </View>
+  );
+}
+
+/**
+ * Multiple chat message skeletons for loading state
+ */
+export function ChatMessagesListSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <ChatMessageSkeleton key={i} isUser={i % 2 === 0} />
+      ))}
+    </>
+  );
+}
+
+/**
  * Skeleton loader for wallet transaction items
  */
 export function TransactionItemSkeleton() {
@@ -222,6 +247,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  chatMessage: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: '80%',
+  },
+  chatMessageUser: {
+    alignSelf: 'flex-end',
+    backgroundColor: 'rgba(4, 120, 87, 0.3)',
+    marginRight: 8,
+  },
+  chatMessageOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(4, 120, 87, 0.2)',
+    marginLeft: 8,
   },
   transactionItem: {
     flexDirection: 'row',

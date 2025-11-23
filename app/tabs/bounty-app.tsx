@@ -9,6 +9,7 @@ import { BountyListItem } from 'components/bounty-list-item'
 import { NotificationsBell } from 'components/notifications-bell'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
+import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -329,7 +330,9 @@ function BountyAppInner() {
   const EmptyListComponent = useCallback(() => (
     <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
       {isLoadingBounties ? (
-        <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>Loading bounties...</Text>
+        <View style={{ width: '100%' }}>
+          <PostingsListSkeleton count={5} />
+        </View>
       ) : (
         <>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
@@ -343,8 +346,8 @@ function BountyAppInner() {
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
-      <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#e5e7eb' }}>Loading more...</Text>
+      <View style={{ paddingVertical: 8 }}>
+        <PostingsListSkeleton count={2} />
       </View>
     ) : null
   ), [loadingMore]);
