@@ -70,7 +70,7 @@ export function ChatMessagesListSkeleton({ count = 4 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <ChatMessageSkeleton key={i} isUser={i % 2 === 0} />
+        <ChatMessageSkeleton key={`chat-skeleton-${i}`} isUser={i % 2 === 0} />
       ))}
     </>
   );

@@ -31,18 +31,11 @@ export function SkeletonWrapper({
   children,
   fadeDuration = 300,
 }: SkeletonWrapperProps) {
-  // Initialize animated values based on current loading state
-  const [isLoading, setIsLoading] = React.useState(loading);
   const skeletonOpacity = useRef(new Animated.Value(loading ? 1 : 0)).current;
   const contentOpacity = useRef(new Animated.Value(loading ? 0 : 1)).current;
 
-  // Sync internal loading state with prop
   useEffect(() => {
-    setIsLoading(loading);
-  }, [loading]);
-
-  useEffect(() => {
-    if (isLoading) {
+    if (loading) {
       // Show skeleton, hide content
       Animated.parallel([
         Animated.timing(skeletonOpacity, {
@@ -71,7 +64,7 @@ export function SkeletonWrapper({
         }),
       ]).start();
     }
-  }, [isLoading, skeletonOpacity, contentOpacity, fadeDuration]);
+  }, [loading, skeletonOpacity, contentOpacity, fadeDuration]);
 
   return (
     <View style={{ position: 'relative' }}>
@@ -82,7 +75,7 @@ export function SkeletonWrapper({
       
       {/* Skeleton layer (positioned absolutely on top during loading) */}
       {/* Only render skeleton when loading to stop internal animations */}
-      {isLoading && (
+      {loading && (
         <Animated.View 
           style={{ 
             position: 'absolute', 

@@ -1,7 +1,6 @@
-import { useEffect, useRef } from "react"
+import React, { useEffect, useRef } from "react"
 import { Animated, ViewProps } from "react-native"
 import { cn } from "lib/utils"
-import React from "react"
 
 interface SkeletonProps extends ViewProps {
   className?: string
@@ -14,8 +13,12 @@ const Skeleton = React.memo(function Skeleton({
 }: SkeletonProps) {
   // Animated pulse effect using opacity
   const pulseAnim = useRef(new Animated.Value(0.3)).current
+  const isMounted = useRef(true)
 
   useEffect(() => {
+    // Track mount status
+    isMounted.current = true
+
     // Create a looping pulse animation
     const pulse = Animated.loop(
       Animated.sequence([
@@ -35,6 +38,7 @@ const Skeleton = React.memo(function Skeleton({
     pulse.start()
 
     return () => {
+      isMounted.current = false
       pulse.stop()
     }
   }, [pulseAnim])
