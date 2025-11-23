@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
-import { useHapticFeedback } from 'lib/haptic-feedback';
+import { useHapticFeedback } from '../lib/haptic-feedback';
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 

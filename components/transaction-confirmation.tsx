@@ -24,7 +24,7 @@ export function TransactionConfirmation({
   // Trigger success haptic when component mounts (transaction completed)
   useEffect(() => {
     triggerHaptic('success');
-  }, []);
+  }, [triggerHaptic]);
   
   return (
     <View style={styles.container}>
