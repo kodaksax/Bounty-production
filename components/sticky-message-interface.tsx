@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
+import { useHapticFeedback } from 'lib/haptic-feedback';
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -38,6 +39,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
   const expandedInputRef = useRef<TextInput | null>(null)
+  const { triggerHaptic } = useHapticFeedback()
 
   useEffect(() => {
     if (atBottom) {
@@ -48,6 +50,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    triggerHaptic('medium'); // Medium haptic for sending message
     onSend(trimmed);
     setText('');
     if (expanded) setExpanded(false)

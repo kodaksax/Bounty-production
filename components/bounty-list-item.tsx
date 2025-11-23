@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { COLORS, RADIUS, SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
+import { useHapticFeedback } from '../lib/haptic-feedback'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 
@@ -25,6 +26,7 @@ export interface BountyListItemProps {
 export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type, poster_avatar }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
+  const { triggerHaptic } = useHapticFeedback()
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id)
 
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
@@ -57,9 +59,15 @@ export function BountyListItem({ id, title, username, price, distance, descripti
 
   const handleAvatarPress = (e: any) => {
     e.stopPropagation()
+    triggerHaptic('light') // Light haptic for avatar tap
     if (user_id) {
       router.push(`/profile/${user_id}`)
     }
+  }
+
+  const handleBountyPress = () => {
+    triggerHaptic('light') // Light haptic for bounty tap
+    setShowDetail(true)
   }
 
   return (
@@ -67,7 +75,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       <TouchableOpacity
         activeOpacity={0.8}
         style={styles.row}
-        onPress={() => setShowDetail(true)}
+        onPress={handleBountyPress}
         accessibilityRole="button"
         accessibilityLabel={`Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`}
         accessibilityHint="Tap to view bounty details and apply"
