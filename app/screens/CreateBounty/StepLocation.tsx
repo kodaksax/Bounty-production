@@ -80,7 +80,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, on
     setErrors({ ...errors, location: error || '' });
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const locationError = validateLocation(draft.location, draft.workType);
     
     if (locationError) {
@@ -91,7 +91,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, on
 
     // This is the final step, so submit the form
     if (onSubmit) {
-      onSubmit();
+      await onSubmit();
     } else {
       onNext();
     }

@@ -87,7 +87,7 @@ export function StepCoreIdea({ draft, onUpdate, onNext, onBack }: StepCoreIdeaPr
 
   const isValid = !validateTitle(draft.title) && !validateDescription(draft.description);
 
-  const scrollRef = useRef<any>(null);
+  const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     const t = setTimeout(() => scrollRef.current?.scrollTo?.({ y: 0, animated: false }), 50);
     return () => clearTimeout(t);
