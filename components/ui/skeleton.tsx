@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react"
 import { Animated, ViewProps } from "react-native"
 import { cn } from "lib/utils"
+import React from "react"
 
 interface SkeletonProps extends ViewProps {
   className?: string
 }
 
-function Skeleton({
+const Skeleton = React.memo(function Skeleton({
   className,
   style,
   ...props
@@ -45,6 +46,6 @@ function Skeleton({
       {...props}
     />
   )
-}
+})
 
 export { Skeleton }
