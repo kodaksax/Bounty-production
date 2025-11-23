@@ -178,7 +178,7 @@ export function PostingsListSkeleton({ count = 3 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <PostingCardSkeleton key={i} />
+        <PostingCardSkeleton key={`posting-skeleton-${i}`} />
       ))}
     </>
   );
@@ -191,7 +191,7 @@ export function ConversationsListSkeleton({ count = 5 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <ConversationItemSkeleton key={i} />
+        <ConversationItemSkeleton key={`conversation-skeleton-${i}`} />
       ))}
     </>
   );
@@ -204,7 +204,7 @@ export function TransactionsListSkeleton({ count = 4 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <TransactionItemSkeleton key={i} />
+        <TransactionItemSkeleton key={`transaction-skeleton-${i}`} />
       ))}
     </>
   );
