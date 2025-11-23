@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, View } from 'react-native';
+import React, { useEffect, useRef } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 
 interface SkeletonWrapperProps {
   /** Whether the content is still loading */
@@ -67,7 +67,7 @@ export function SkeletonWrapper({
   }, [loading, skeletonOpacity, contentOpacity, fadeDuration]);
 
   return (
-    <View style={{ position: 'relative' }}>
+    <View style={styles.container}>
       {/* Content layer */}
       <Animated.View style={{ opacity: contentOpacity }}>
         {children}
@@ -77,14 +77,7 @@ export function SkeletonWrapper({
       {/* Only render skeleton when loading to stop internal animations */}
       {loading && (
         <Animated.View 
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            right: 0,
-            bottom: 0,
-            opacity: skeletonOpacity,
-          }}
+          style={[styles.skeletonLayer, { opacity: skeletonOpacity }]}
           pointerEvents="none"
         >
           {skeleton}
@@ -93,3 +86,16 @@ export function SkeletonWrapper({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  skeletonLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+});
