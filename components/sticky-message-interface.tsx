@@ -1,13 +1,14 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export interface ChatMessage {
   id: string;
   text: string;
   isUser: boolean;
   createdAt: number; // epoch ms
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 interface StickyMessageInterfaceProps {
@@ -18,11 +19,14 @@ interface StickyMessageInterfaceProps {
   topInset?: number;
   bottomInset?: number;
   accentColor?: string; // defaults to emerald
+  isOtherUserTyping?: boolean; // for typing indicator
+  onTypingChange?: (isTyping: boolean) => void; // notify parent when user starts/stops typing
 }
 
 /**
  * Reusable sticky messaging interface: scrollable message list with pinned composer.
  * Keeps Bounty aesthetic: emerald background, rounded bubbles, subtle translucency.
+ * Features: animated message entry, read receipts, typing indicators.
  */
 export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   messages,
@@ -32,12 +36,15 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   topInset = 0,
   bottomInset = 0,
   accentColor = '#059669',
+  isOtherUserTyping = false,
+  onTypingChange,
 }) => {
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
-  const expandedInputRef = useRef<TextInput | null>(null)
+  const expandedInputRef = useRef<TextInput | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (atBottom) {
@@ -50,7 +57,40 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
     if (!trimmed) return;
     onSend(trimmed);
     setText('');
-    if (expanded) setExpanded(false)
+    if (expanded) setExpanded(false);
+    // Stop typing when message is sent
+    if (onTypingChange) {
+      onTypingChange(false);
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  };
+
+  const handleTextChange = (newText: string) => {
+    setText(newText);
+    
+    // Notify parent about typing status
+    if (onTypingChange) {
+      if (newText.length > 0) {
+        onTypingChange(true);
+        
+        // Reset timeout - if user stops typing for 2 seconds, mark as stopped
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(() => {
+          onTypingChange(false);
+        }, 2000);
+      } else {
+        onTypingChange(false);
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
+      }
+    }
   };
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -59,14 +99,17 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
     setAtBottom(distanceFromBottom < 24); // threshold
   };
 
-  const renderItem = ({ item }: { item: ChatMessage }) => (
-    <View className={cn('mb-3 px-3 max-w-[80%]', item.isUser ? 'ml-auto' : 'mr-auto')}
-      style={{ opacity: 1 }}>
-      <View className={cn('px-3 py-2 rounded-2xl', item.isUser ? 'bg-white rounded-br-none' : 'bg-emerald-700/60 rounded-bl-none')}> 
-        <Text className={cn('text-sm', item.isUser ? 'text-gray-900' : 'text-white')}>{item.text}</Text>
-      </View>
-    </View>
-  );
+  const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
+    // Determine if this is a new message (recently added)
+    const isNewMessage = index === messages.length - 1 && messages.length > 0;
+    
+    return (
+      <AnimatedMessage 
+        message={item} 
+        isNewMessage={isNewMessage}
+      />
+    );
+  };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.select({ ios: 'padding', android: undefined })}>
@@ -80,6 +123,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={isOtherUserTyping ? <TypingIndicator /> : null}
         />
 
         {/* Sticky composer */}
@@ -135,7 +179,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                   <TextInput
                     ref={expandedInputRef}
                     value={text}
-                    onChangeText={setText}
+                    onChangeText={handleTextChange}
                     placeholder={placeholder}
                     placeholderTextColor="#c7f9d7"
                     multiline
@@ -166,5 +210,158 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
         </Modal>
       </View>
     </KeyboardAvoidingView>
+  );
+};
+
+/**
+ * Animated message component with slide-in effect and read receipts
+ */
+const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }> = ({ message, isNewMessage }) => {
+  const slideAnim = useRef(new Animated.Value(isNewMessage ? 20 : 0)).current;
+  const fadeAnim = useRef(new Animated.Value(isNewMessage ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (isNewMessage) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isNewMessage, slideAnim, fadeAnim]);
+
+  // Render read receipt icon for sent messages
+  const renderReadReceipt = () => {
+    if (!message.isUser || !message.status) return null;
+
+    let iconName: any = 'check';
+    let iconColor = '#6ee7b7'; // emerald-300
+
+    switch (message.status) {
+      case 'sending':
+        iconName = 'schedule';
+        iconColor = '#a7f3d0'; // emerald-200
+        break;
+      case 'sent':
+        iconName = 'check';
+        iconColor = '#6ee7b7'; // emerald-300
+        break;
+      case 'delivered':
+        iconName = 'done-all';
+        iconColor = '#6ee7b7'; // emerald-300
+        break;
+      case 'read':
+        iconName = 'done-all';
+        iconColor = '#10b981'; // emerald-500 (brighter for read)
+        break;
+      case 'failed':
+        iconName = 'error';
+        iconColor = '#f87171'; // red-400
+        break;
+    }
+
+    return (
+      <View className="flex-row items-center mt-0.5">
+        <MaterialIcons name={iconName} size={14} color={iconColor} />
+      </View>
+    );
+  };
+
+  return (
+    <Animated.View 
+      className={cn('mb-3 px-3 max-w-[80%]', message.isUser ? 'ml-auto' : 'mr-auto')}
+      style={{ 
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }]
+      }}
+    >
+      <View className={cn('px-3 py-2 rounded-2xl', message.isUser ? 'bg-white rounded-br-none' : 'bg-emerald-700/60 rounded-bl-none')}> 
+        <Text className={cn('text-sm', message.isUser ? 'text-gray-900' : 'text-white')}>{message.text}</Text>
+      </View>
+      {renderReadReceipt()}
+    </Animated.View>
+  );
+};
+
+/**
+ * Typing indicator component with animated dots
+ */
+const TypingIndicator: React.FC = () => {
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createAnimation = (anim: Animated.Value, delay: number) => 
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, {
+            toValue: -5,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const anim1 = createAnimation(dot1Anim, 0);
+    const anim2 = createAnimation(dot2Anim, 150);
+    const anim3 = createAnimation(dot3Anim, 300);
+
+    anim1.start();
+    anim2.start();
+    anim3.start();
+
+    return () => {
+      anim1.stop();
+      anim2.stop();
+      anim3.stop();
+    };
+  }, [dot1Anim, dot2Anim, dot3Anim]);
+
+  return (
+    <View className="mb-3 px-3 max-w-[80%] mr-auto">
+      <View className="px-4 py-3 rounded-2xl bg-emerald-700/60 rounded-bl-none flex-row gap-1.5">
+        <Animated.View 
+          style={{ 
+            width: 8, 
+            height: 8, 
+            borderRadius: 4, 
+            backgroundColor: '#d1fae5',
+            transform: [{ translateY: dot1Anim }]
+          }} 
+        />
+        <Animated.View 
+          style={{ 
+            width: 8, 
+            height: 8, 
+            borderRadius: 4, 
+            backgroundColor: '#d1fae5',
+            transform: [{ translateY: dot2Anim }]
+          }} 
+        />
+        <Animated.View 
+          style={{ 
+            width: 8, 
+            height: 8, 
+            borderRadius: 4, 
+            backgroundColor: '#d1fae5',
+            transform: [{ translateY: dot3Anim }]
+          }} 
+        />
+      </View>
+    </View>
   );
 };
