@@ -8,6 +8,7 @@ interface SkeletonProps extends ViewProps {
 
 function Skeleton({
   className,
+  style,
   ...props
 }: SkeletonProps) {
   // Animated pulse effect using opacity
@@ -40,7 +41,7 @@ function Skeleton({
   return (
     <Animated.View
       className={cn("rounded-md bg-muted", className)}
-      style={{ opacity: pulseAnim }}
+      style={[{ opacity: pulseAnim }, style]}
       {...props}
     />
   )
