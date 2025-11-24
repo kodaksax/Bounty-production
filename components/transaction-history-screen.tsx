@@ -184,7 +184,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: 10 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8 }}
         style={{ maxHeight: 70 }}
       >
         <TouchableOpacity
