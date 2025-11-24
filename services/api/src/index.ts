@@ -69,12 +69,14 @@ const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
 const { registerAnalyticsRoutes } = require('./routes/analytics');
 const { registerMessagingRoutes } = require('./routes/messaging');
+const { registerStaleBountyRoutes } = require('./routes/stale-bounty');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
 const { wsMessagingService } = require('./services/websocket-messaging-service');
 const { refundService } = require('./services/refund-service');
 const { stripeConnectService } = require('./services/stripe-connect-service');
+const { staleBountyService } = require('./services/stale-bounty-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
 
 // Import logger and analytics
@@ -115,6 +117,9 @@ const startServer = async () => {
 
   // Register messaging routes
   await registerMessagingRoutes(fastify);
+
+  // Register stale bounty routes
+  await registerStaleBountyRoutes(fastify);
 
   // Delete account endpoint
   fastify.delete('/auth/delete-account', {
@@ -166,6 +171,16 @@ const startServer = async () => {
         if (bntyErr) request.log.warn({ err: bntyErr }, 'bounties cleanup failed (continuing)');
       } catch (e: any) {
         request.log.warn({ err: e?.message || e }, 'bounties cleanup threw (continuing)');
+      }
+
+      // 3.5. Detect and mark stale bounties where this user was the hunter
+      try {
+        const staleResult = await staleBountyService.detectStaleBounties(request.userId);
+        if (staleResult.success && staleResult.staleBountyCount > 0) {
+          request.log.info({ staleBountyCount: staleResult.staleBountyCount }, 'Stale bounties detected and marked');
+        }
+      } catch (e: any) {
+        request.log.warn({ err: e?.message || e }, 'Stale bounty detection failed (continuing)');
       }
 
       // 4. Delete conversations created by this user, with explicit child cleanup to avoid FK/RLS issues

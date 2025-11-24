@@ -26,6 +26,10 @@ export type Bounty = {
   // Profile data from joined query (populated when fetched with profile join)
   username?: string
   poster_avatar?: string
+  // Stale bounty fields
+  is_stale?: boolean
+  stale_reason?: string
+  stale_detected_at?: string
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

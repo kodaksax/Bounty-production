@@ -6,7 +6,7 @@ import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 // Initialize Expo SDK
 const expo = new Expo();
 
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow';
+export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
 
 export interface CreateNotificationParams {
   userId: string;
@@ -382,6 +382,36 @@ export class NotificationService {
       title: 'Revision Requested',
       body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
       data: { bountyId, feedback, isRevision: true },
+    });
+  }
+
+  async notifyBountyStale(posterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: posterId,
+      type: 'stale_bounty',
+      title: 'Action Required: Bounty Needs Attention',
+      body: `The hunter for "${bountyTitle}" has deleted their account. Please review and take action.`,
+      data: { bountyId, isStale: true },
+    });
+  }
+
+  async notifyStaleBountyCancelled(posterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: posterId,
+      type: 'stale_bounty_cancelled',
+      title: 'Bounty Cancelled',
+      body: `"${bountyTitle}" has been cancelled and your funds will be refunded.`,
+      data: { bountyId, isCancelled: true },
+    });
+  }
+
+  async notifyStaleBountyReposted(posterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: posterId,
+      type: 'stale_bounty_reposted',
+      title: 'Bounty Reposted',
+      body: `"${bountyTitle}" has been reposted and is now open for new hunters.`,
+      data: { bountyId, isReposted: true },
     });
   }
 

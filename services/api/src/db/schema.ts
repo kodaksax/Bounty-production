@@ -7,6 +7,7 @@ export const users = pgTable('users', {
   handle: text('handle').notNull(),
   stripe_account_id: text('stripe_account_id'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp
 });
 
 // Bounties table as specified in requirements
@@ -22,6 +23,9 @@ export const bounties = pgTable('bounties', {
   payment_intent_id: text('payment_intent_id'), // Store Stripe PaymentIntent ID for escrow
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  is_stale: boolean('is_stale').default(false).notNull(), // Flag for stale bounties (hunter deleted)
+  stale_reason: text('stale_reason'), // Reason why bounty became stale (e.g., 'hunter_deleted')
+  stale_detected_at: timestamp('stale_detected_at', { withTimezone: true }), // When stale was detected
 });
 
 // Wallet transactions table for tracking financial movements

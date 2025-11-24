@@ -6,6 +6,7 @@ import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
 import { disputeService } from 'lib/services/dispute-service'
 import { messageService } from 'lib/services/message-service'
+import { staleBountyService } from 'lib/services/stale-bounty-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
@@ -23,6 +24,7 @@ import {
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
+import { StaleBountyAlert } from './stale-bounty-alert'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
@@ -429,6 +431,36 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     router.push(`/bounty/${bounty.id}/dispute`)
   }
 
+  const handleCancelStaleBounty = async (bountyId: number) => {
+    try {
+      const result = await staleBountyService.cancelStaleBounty(bountyId)
+      if (result.success) {
+        Alert.alert('Success', 'Bounty cancelled successfully. Your funds will be refunded.', [
+          { text: 'OK', onPress: () => onRefresh?.() }
+        ])
+      } else {
+        Alert.alert('Error', result.error || 'Failed to cancel bounty')
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred')
+    }
+  }
+
+  const handleRepostStaleBounty = async (bountyId: number) => {
+    try {
+      const result = await staleBountyService.repostStaleBounty(bountyId)
+      if (result.success) {
+        Alert.alert('Success', 'Bounty reposted successfully. It is now open for new hunters.', [
+          { text: 'OK', onPress: () => onRefresh?.() }
+        ])
+      } else {
+        Alert.alert('Error', result.error || 'Failed to repost bounty')
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred')
+    }
+  }
+
   return (
     <View>
       <BountyCard
@@ -449,6 +481,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       />
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
+          {/* Show stale bounty alert if bounty is stale and user is the owner */}
+          {bounty.is_stale && isOwner && (
+            <StaleBountyAlert
+              bounty={bounty}
+              onCancel={handleCancelStaleBounty}
+              onRepost={handleRepostStaleBounty}
+            />
+          )}
+          
           {/* Compact header row mirroring detail card */}
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Progress</Text>
