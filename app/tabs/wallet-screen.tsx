@@ -13,7 +13,7 @@ import { WithdrawScreen } from "../../components/withdraw-screen";
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
-import { useWallet } from '../../lib/wallet-context';
+import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
 
 interface WalletScreenProps {
@@ -35,11 +35,34 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     setShowAddMoney(false);
   };
 
-  // Filter bounty related transactions (posted/completed/received)
-  const bountyTransactions = useMemo(() => transactions
-    .filter(t => t.type === 'bounty_posted' || t.type === 'bounty_completed' || t.type === 'bounty_received')
-    .slice(0, 20) // cap for now
+  // Get recent transactions for preview (show all types, not just bounty-related)
+  const recentTransactions = useMemo(() => transactions
+    .slice(0, 5) // show most recent 5 transactions as preview
   , [transactions]);
+
+  // Helper function to get transaction label
+  const getTransactionLabel = (tx: WalletTransactionRecord): string => {
+    switch (tx.type) {
+      case 'deposit':
+        return `Deposit${tx.details.method ? ` via ${tx.details.method}` : ''}`;
+      case 'withdrawal':
+        return `Withdrawal${tx.details.method ? ` to ${tx.details.method}` : ''}`;
+      case 'bounty_posted':
+        return `Posted${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      case 'bounty_completed':
+        return `Completed${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      case 'bounty_received':
+        return `Received${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      case 'escrow':
+        return `Escrow${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      case 'release':
+        return `Released${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      case 'refund':
+        return `Refund${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+      default:
+        return 'Transaction';
+    }
+  };
 
   if (showWithdraw) {
     return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
@@ -169,11 +192,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           
 
 
-        {/* Bounty Postings Section */}
+        {/* Transaction History Section */}
         
   <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}> 
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Bounty Postings</Text>
+            <Text style={styles.sectionTitle}>Transaction History</Text>
             <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
               <Text style={styles.sectionManage}>View All</Text>
             </TouchableOpacity>
@@ -184,18 +207,16 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <EmptyState
                 icon="receipt-long"
                 title="No Transactions Yet"
-                description="Your bounty transactions will appear here once you post or complete a bounty."
+                description="Your transaction history will appear here once you add funds, post, or complete a bounty."
                 actionLabel="Browse Bounties"
                 onAction={() => {}}
                 style={{ paddingVertical: 40 }}
               />
             ) : (
               <>
-                {bountyTransactions.map(tx => (
+                {recentTransactions.map(tx => (
                   <View key={tx.id} style={styles.bountyCard}>
-                    <Text style={styles.bountyName}>{
-                      tx.type === 'bounty_posted' ? 'Posted' : tx.type === 'bounty_completed' ? 'Completed' : 'Received'
-                    } {tx.details.title ? `· ${tx.details.title}` : ''}</Text>
+                    <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
                     <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
                   </View>
                 ))}

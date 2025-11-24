@@ -6,7 +6,7 @@ import { format } from "date-fns"
 import { cn } from "lib/utils"
 import { useWallet } from "lib/wallet-context"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Text, TouchableOpacity, View } from "react-native"
+import { Text, TouchableOpacity, View, ScrollView } from "react-native"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 
 export interface Transaction {
@@ -180,86 +180,92 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         <Text className="text-2xl font-bold text-white">Transaction History</Text>
       </View>
 
-      {/* Filters - improved for iPhone */}
-      <View className="px-5 py-2 overflow-x-auto ios-scroll no-scrollbar">
-        <View className="flex space-x-3" style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity
-            style={{
-              paddingHorizontal: 18,
-              paddingVertical: 10,
-              borderRadius: 20,
-              backgroundColor: activeFilter === "all" ? '#047857' : 'rgba(4,120,87,0.4)',
-              minHeight: 44, // iOS touch target
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-            onPress={() => handleFilterChange("all")}
-          >
-            <Text style={{ 
-              color: activeFilter === 'all' ? '#fff' : '#d1fae5',
-              fontWeight: activeFilter === 'all' ? '600' : '500',
-              fontSize: 15
-            }}>All Transactions</Text>
-          </TouchableOpacity>
+      {/* Filters - horizontal scrollable carousel */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: 10 }}
+        style={{ maxHeight: 70 }}
+      >
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 18,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: activeFilter === "all" ? '#047857' : 'rgba(4,120,87,0.4)',
+            minHeight: 44, // iOS touch target
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+          onPress={() => handleFilterChange("all")}
+        >
+          <Text style={{ 
+            color: activeFilter === 'all' ? '#fff' : '#d1fae5',
+            fontWeight: activeFilter === 'all' ? '600' : '500',
+            fontSize: 15
+          }}>All Transactions</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={{
-              paddingHorizontal: 18,
-              paddingVertical: 10,
-              borderRadius: 20,
-              backgroundColor: activeFilter === "deposits" ? '#047857' : 'rgba(4,120,87,0.4)',
-              minHeight: 44,
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-            onPress={() => handleFilterChange("deposits")}
-          >
-            <Text style={{ 
-              color: activeFilter === 'deposits' ? '#fff' : '#d1fae5',
-              fontWeight: activeFilter === 'deposits' ? '600' : '500',
-              fontSize: 15
-            }}>Deposits</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 18,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: activeFilter === "deposits" ? '#047857' : 'rgba(4,120,87,0.4)',
+            minHeight: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginLeft: 10
+          }}
+          onPress={() => handleFilterChange("deposits")}
+        >
+          <Text style={{ 
+            color: activeFilter === 'deposits' ? '#fff' : '#d1fae5',
+            fontWeight: activeFilter === 'deposits' ? '600' : '500',
+            fontSize: 15
+          }}>Deposits</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={{
-              paddingHorizontal: 18,
-              paddingVertical: 10,
-              borderRadius: 20,
-              backgroundColor: activeFilter === "withdrawals" ? '#047857' : 'rgba(4,120,87,0.4)',
-              minHeight: 44,
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-            onPress={() => handleFilterChange("withdrawals")}
-          >
-            <Text style={{ 
-              color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5',
-              fontWeight: activeFilter === 'withdrawals' ? '600' : '500',
-              fontSize: 15
-            }}>Withdrawals</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 18,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: activeFilter === "withdrawals" ? '#047857' : 'rgba(4,120,87,0.4)',
+            minHeight: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginLeft: 10
+          }}
+          onPress={() => handleFilterChange("withdrawals")}
+        >
+          <Text style={{ 
+            color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5',
+            fontWeight: activeFilter === 'withdrawals' ? '600' : '500',
+            fontSize: 15
+          }}>Withdrawals</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={{
-              paddingHorizontal: 18,
-              paddingVertical: 10,
-              borderRadius: 20,
-              backgroundColor: activeFilter === "bounties" ? '#047857' : 'rgba(4,120,87,0.4)',
-              minHeight: 44,
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-            onPress={() => handleFilterChange("bounties")}
-          >
-            <Text style={{ 
-              color: activeFilter === 'bounties' ? '#fff' : '#d1fae5',
-              fontWeight: activeFilter === 'bounties' ? '600' : '500',
-              fontSize: 15
-            }}>Bounties</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 18,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: activeFilter === "bounties" ? '#047857' : 'rgba(4,120,87,0.4)',
+            minHeight: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginLeft: 10
+          }}
+          onPress={() => handleFilterChange("bounties")}
+        >
+          <Text style={{ 
+            color: activeFilter === 'bounties' ? '#fff' : '#d1fae5',
+            fontWeight: activeFilter === 'bounties' ? '600' : '500',
+            fontSize: 15
+          }}>Bounties</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {/* Error message */}
       {error && (
