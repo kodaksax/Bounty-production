@@ -5,8 +5,8 @@ import type { Bounty } from '../lib/services/database.types';
 
 interface StaleBountyAlertProps {
   bounty: Bounty;
-  onCancel: (bountyId: number) => void;
-  onRepost: (bountyId: number) => void;
+  onCancel: (bountyId: number | string) => void;
+  onRepost: (bountyId: number | string) => void;
 }
 
 /**

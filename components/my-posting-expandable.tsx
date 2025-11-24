@@ -431,7 +431,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     router.push(`/bounty/${bounty.id}/dispute`)
   }
 
-  const handleCancelStaleBounty = async (bountyId: number) => {
+  const handleCancelStaleBounty = async (bountyId: number | string) => {
     try {
       const result = await staleBountyService.cancelStaleBounty(bountyId)
       if (result.success) {
@@ -446,7 +446,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     }
   }
 
-  const handleRepostStaleBounty = async (bountyId: number) => {
+  const handleRepostStaleBounty = async (bountyId: number | string) => {
     try {
       const result = await staleBountyService.repostStaleBounty(bountyId)
       if (result.success) {

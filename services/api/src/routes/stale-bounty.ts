@@ -25,6 +25,13 @@ export async function registerStaleBountyRoutes(fastify: FastifyInstance) {
     preHandler: authMiddleware,
   }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
+      if (!request.userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Authentication required',
+        });
+      }
+      
       const staleBounties = await staleBountyService.getStaleBountiesForPoster(request.userId);
       
       return {

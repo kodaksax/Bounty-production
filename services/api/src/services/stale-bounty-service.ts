@@ -79,7 +79,7 @@ export class StaleBountyService {
   /**
    * Get all stale bounties for a specific poster
    */
-  async getStaleBountiesForPoster(posterId: string): Promise<any[]> {
+  async getStaleBountiesForPoster(posterId: string): Promise<typeof bounties.$inferSelect[]> {
     try {
       const staleBounties = await db
         .select()
@@ -155,7 +155,7 @@ export class StaleBountyService {
           // Create refund transaction record
           await walletService.createTransaction({
             user_id: bounty.creator_id,
-            bountyId: bountyId,
+            bountyId,
             type: 'refund',
             amount: bounty.amount_cents / 100, // Convert cents to dollars
           });
