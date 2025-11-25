@@ -25,7 +25,7 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' |
 
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
-  const { isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
+  const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
   
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
@@ -129,30 +129,32 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           icon="help-center"
         />
         
-        {/* Admin Tab Toggle */}
-        <View className="bg-black/30 rounded-xl p-4 mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <MaterialIcons name="admin-panel-settings" size={22} color="#34d399" />
-              <View className="ml-2 flex-1">
-                <Text className="text-white font-medium text-sm">Admin Tab</Text>
-                <Text className="text-emerald-200 text-xs leading-4 mt-1" numberOfLines={2}>
-                  {isAdminTabEnabled 
-                    ? 'Admin tab is visible, replacing the profile tab in navigation.' 
-                    : 'Enable to show admin tab in navigation bar.'}
-                </Text>
+        {/* Admin Tab Toggle - only visible to users with admin permissions */}
+        {isAdmin && (
+          <View className="bg-black/30 rounded-xl p-4 mb-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center flex-1">
+                <MaterialIcons name="admin-panel-settings" size={22} color="#34d399" />
+                <View className="ml-2 flex-1">
+                  <Text className="text-white font-medium text-sm">Admin Tab</Text>
+                  <Text className="text-emerald-200 text-xs leading-4 mt-1" numberOfLines={2}>
+                    {isAdminTabEnabled 
+                      ? 'Admin tab is visible, replacing the profile tab in navigation.' 
+                      : 'Enable to show admin tab in navigation bar.'}
+                  </Text>
+                </View>
               </View>
+              <Switch
+                value={isAdminTabEnabled}
+                onValueChange={handleAdminToggle}
+                trackColor={{ false: '#374151', true: '#10b981' }}
+                thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
+                accessibilityLabel="Toggle admin tab visibility"
+                accessibilityHint={isAdminTabEnabled ? 'Disable to hide admin tab' : 'Enable to show admin tab in navigation'}
+              />
             </View>
-            <Switch
-              value={isAdminTabEnabled}
-              onValueChange={handleAdminToggle}
-              trackColor={{ false: '#374151', true: '#10b981' }}
-              thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
-              accessibilityLabel="Toggle admin tab visibility"
-              accessibilityHint={isAdminTabEnabled ? 'Disable to hide admin tab' : 'Enable to show admin tab in navigation'}
-            />
           </View>
-        </View>
+        )}
         
         <SettingsCard
           title="Legal: Terms & Privacy"
