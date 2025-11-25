@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { API_BASE_URL } from './config/api';
 
 // Local transaction shape (subset aligning with transaction history component)
 export type WalletTransactionType = 'deposit' | 'withdrawal' | 'bounty_posted' | 'bounty_completed' | 'bounty_received' | 'escrow' | 'release' | 'refund';
@@ -26,6 +27,7 @@ interface WalletContextValue {
   withdraw: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<boolean>; // false if insufficient
   setBalance: (amount: number) => void;
   refresh: () => Promise<void>;
+  refreshFromApi: (accessToken?: string) => Promise<void>; // Refresh from API with auth token
   transactions: WalletTransactionRecord[];
   logTransaction: (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => Promise<WalletTransactionRecord>;
   clearAllTransactions: () => Promise<void>;
@@ -261,6 +263,76 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true;
   }, [transactions, persistTransactions, logTransaction, persist]);
 
+  // Refresh wallet data from the API (fetches real transaction history and balance)
+  const refreshFromApi = useCallback(async (accessToken?: string) => {
+    if (!accessToken) {
+      console.log('[wallet] No access token provided, skipping API refresh');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Fetch balance from API
+      const balanceResponse = await fetch(`${API_BASE_URL}/wallet/balance`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json();
+        setBalance(balanceData.balance);
+        await persist(balanceData.balance);
+      }
+
+      // Fetch transactions from API
+      const txResponse = await fetch(`${API_BASE_URL}/wallet/transactions?limit=100`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (txResponse.ok) {
+        const txData = await txResponse.json();
+        if (txData.transactions && Array.isArray(txData.transactions)) {
+          // Map API transactions to local format
+          const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map((tx: any) => ({
+            id: tx.id,
+            type: tx.type as WalletTransactionType,
+            amount: tx.type === 'escrow' || tx.type === 'withdrawal' || tx.type === 'bounty_posted' 
+              ? -Math.abs(tx.amount) 
+              : Math.abs(tx.amount),
+            date: new Date(tx.date),
+            details: {
+              title: tx.details?.title,
+              method: tx.details?.method,
+              status: tx.details?.status,
+              bounty_id: tx.details?.bounty_id,
+            },
+          }));
+
+          // Merge with local transactions (API transactions take precedence)
+          const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+          const localOnlyTx = transactions.filter(tx => !apiTxIds.has(tx.id));
+          const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+          
+          // Sort by date descending
+          mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+          setTransactions(mergedTransactions);
+          await persistTransactions(mergedTransactions);
+        }
+      }
+    } catch (error) {
+      console.error('[wallet] Error refreshing from API:', error);
+      // Fall back to local data
+    } finally {
+      setIsLoading(false);
+    }
+  }, [persist, persistTransactions, transactions]);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
@@ -268,6 +340,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     withdraw,
     setBalance: (amt: number) => { setBalance(amt); persist(amt); },
     refresh,
+    refreshFromApi,
     transactions,
     logTransaction,
     clearAllTransactions,

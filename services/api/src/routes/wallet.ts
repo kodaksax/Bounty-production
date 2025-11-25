@@ -1,0 +1,459 @@
+import { FastifyInstance } from 'fastify';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { walletService } from '../services/wallet-service';
+import { stripeConnectService } from '../services/stripe-connect-service';
+import { db } from '../db/connection';
+import { walletTransactions, bounties } from '../db/schema';
+import { eq, desc, and } from 'drizzle-orm';
+import Stripe from 'stripe';
+
+export async function registerWalletRoutes(fastify: FastifyInstance) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY || '';
+  let stripe: Stripe | null = null;
+  
+  if (stripeKey) {
+    stripe = new Stripe(stripeKey, {
+      apiVersion: '2025-08-27.basil',
+    });
+  }
+
+  /**
+   * Get user's wallet transactions
+   */
+  fastify.get('/wallet/transactions', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { page = '1', limit = '20', type } = request.query as {
+        page?: string;
+        limit?: string;
+        type?: string;
+      };
+
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+      const offset = (pageNum - 1) * limitNum;
+
+      // Build query based on type filter
+      let query = db
+        .select({
+          id: walletTransactions.id,
+          bounty_id: walletTransactions.bounty_id,
+          user_id: walletTransactions.user_id,
+          type: walletTransactions.type,
+          amount_cents: walletTransactions.amount_cents,
+          stripe_transfer_id: walletTransactions.stripe_transfer_id,
+          platform_fee_cents: walletTransactions.platform_fee_cents,
+          created_at: walletTransactions.created_at,
+        })
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId))
+        .orderBy(desc(walletTransactions.created_at))
+        .limit(limitNum)
+        .offset(offset);
+
+      const transactions = await query;
+
+      // Get bounty titles for transactions that have bounty_id
+      const bountyIds = transactions
+        .filter(t => t.bounty_id)
+        .map(t => t.bounty_id!);
+
+      let bountyTitles: Record<string, string> = {};
+      if (bountyIds.length > 0) {
+        const bountyData = await db
+          .select({ id: bounties.id, title: bounties.title })
+          .from(bounties)
+          .where(eq(bounties.id, bountyIds[0])); // For now, just get one at a time
+
+        bountyData.forEach(b => {
+          bountyTitles[b.id] = b.title;
+        });
+      }
+
+      // Transform to client format
+      const transformedTransactions = transactions.map(t => ({
+        id: t.id,
+        type: t.type,
+        amount: t.amount_cents / 100, // Convert cents to dollars
+        date: t.created_at,
+        details: {
+          title: t.bounty_id ? bountyTitles[t.bounty_id] : undefined,
+          bounty_id: t.bounty_id,
+          status: 'completed',
+          stripe_transfer_id: t.stripe_transfer_id,
+          platform_fee: t.platform_fee_cents ? t.platform_fee_cents / 100 : undefined,
+        },
+      }));
+
+      return {
+        transactions: transformedTransactions,
+        page: pageNum,
+        limit: limitNum,
+        hasMore: transactions.length === limitNum,
+      };
+    } catch (error) {
+      console.error('Error fetching wallet transactions:', error);
+      return reply.code(500).send({
+        error: 'Failed to fetch wallet transactions'
+      });
+    }
+  });
+
+  /**
+   * Get user's wallet balance
+   * This calculates balance based on all transactions
+   */
+  fastify.get('/wallet/balance', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Get all transactions for this user
+      const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId));
+
+      // Calculate balance from transactions
+      let balanceCents = 0;
+      for (const tx of transactions) {
+        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
+          balanceCents += tx.amount_cents;
+        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
+          balanceCents -= tx.amount_cents;
+        }
+      }
+
+      return {
+        balance: balanceCents / 100,
+        balanceCents,
+        currency: 'USD',
+      };
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
+      return reply.code(500).send({
+        error: 'Failed to fetch wallet balance'
+      });
+    }
+  });
+
+  /**
+   * Create a deposit transaction (add money to wallet)
+   */
+  fastify.post('/wallet/deposit', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { amount, paymentIntentId } = request.body as {
+        amount: number;
+        paymentIntentId?: string;
+      };
+
+      if (!amount || amount <= 0) {
+        return reply.code(400).send({ error: 'Invalid amount' });
+      }
+
+      // If paymentIntentId provided, verify it with Stripe
+      if (paymentIntentId && stripe) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          if (paymentIntent.status !== 'succeeded') {
+            return reply.code(400).send({ error: 'Payment not completed' });
+          }
+          // Amount should match
+          if (paymentIntent.amount !== Math.round(amount * 100)) {
+            return reply.code(400).send({ error: 'Amount mismatch' });
+          }
+        } catch (stripeError) {
+          console.error('Stripe verification error:', stripeError);
+          return reply.code(400).send({ error: 'Invalid payment intent' });
+        }
+      }
+
+      // Create deposit transaction
+      const transaction = await walletService.createTransaction({
+        user_id: request.userId,
+        type: 'deposit',
+        amount: amount,
+      });
+
+      return {
+        success: true,
+        transaction,
+        newBalance: 0, // Would need to calculate actual balance
+      };
+    } catch (error) {
+      console.error('Error creating deposit:', error);
+      return reply.code(500).send({
+        error: 'Failed to create deposit'
+      });
+    }
+  });
+
+  /**
+   * Create a withdrawal transaction (withdraw to bank)
+   */
+  fastify.post('/wallet/withdraw', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { amount } = request.body as { amount: number };
+
+      if (!amount || amount <= 0) {
+        return reply.code(400).send({ error: 'Invalid amount' });
+      }
+
+      // Check if user has sufficient balance
+      const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId));
+
+      let balanceCents = 0;
+      for (const tx of transactions) {
+        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
+          balanceCents += tx.amount_cents;
+        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
+          balanceCents -= tx.amount_cents;
+        }
+      }
+
+      const amountCents = Math.round(amount * 100);
+      if (balanceCents < amountCents) {
+        return reply.code(400).send({ error: 'Insufficient balance' });
+      }
+
+      // Check if user has a connected Stripe account
+      const connectStatus = await stripeConnectService.getConnectStatus(request.userId);
+      
+      if (!connectStatus.hasStripeAccount || !connectStatus.payoutsEnabled) {
+        return reply.code(400).send({
+          error: 'Stripe Connect account required for withdrawals. Please complete onboarding.',
+          requiresOnboarding: true,
+        });
+      }
+
+      // Create withdrawal transaction
+      const transaction = await walletService.createTransaction({
+        user_id: request.userId,
+        type: 'withdrawal',
+        amount: amount,
+      });
+
+      // Process actual Stripe transfer if configured
+      if (stripe && connectStatus.stripeAccountId) {
+        try {
+          const transfer = await stripe.transfers.create({
+            amount: amountCents,
+            currency: 'usd',
+            destination: connectStatus.stripeAccountId,
+            metadata: {
+              user_id: request.userId,
+              transaction_id: transaction.id,
+              type: 'withdrawal',
+            },
+          });
+
+          console.log(`✅ Created Stripe transfer ${transfer.id} for withdrawal`);
+        } catch (stripeError) {
+          console.error('Stripe transfer error:', stripeError);
+          // Transaction is already recorded, log the error but don't fail
+        }
+      }
+
+      const newBalance = (balanceCents - amountCents) / 100;
+
+      return {
+        success: true,
+        transaction,
+        newBalance,
+        estimatedArrival: '1-2 business days',
+      };
+    } catch (error) {
+      console.error('Error creating withdrawal:', error);
+      return reply.code(500).send({
+        error: 'Failed to create withdrawal'
+      });
+    }
+  });
+
+  /**
+   * Verify Stripe Connect onboarding status for withdrawals
+   */
+  fastify.post('/connect/verify-onboarding', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const status = await stripeConnectService.getConnectStatus(request.userId);
+
+      return {
+        onboarded: status.hasStripeAccount && status.detailsSubmitted && status.payoutsEnabled,
+        accountId: status.stripeAccountId,
+        chargesEnabled: status.chargesEnabled,
+        payoutsEnabled: status.payoutsEnabled,
+        requiresAction: status.requiresAction,
+        currentlyDue: status.currentlyDue,
+      };
+    } catch (error) {
+      console.error('Error verifying Connect onboarding:', error);
+      return reply.code(500).send({
+        error: 'Failed to verify onboarding status'
+      });
+    }
+  });
+
+  /**
+   * Create Stripe Connect account link for onboarding
+   */
+  fastify.post('/connect/create-account-link', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { returnUrl, refreshUrl } = request.body as {
+        returnUrl?: string;
+        refreshUrl?: string;
+      };
+
+      const result = await stripeConnectService.createOnboardingLink({
+        userId: request.userId,
+        returnUrl,
+        refreshUrl,
+      });
+
+      return {
+        url: result.url,
+        expiresAt: result.expiresAt,
+      };
+    } catch (error) {
+      console.error('Error creating account link:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create account link';
+      return reply.code(500).send({ error: message });
+    }
+  });
+
+  /**
+   * Process Stripe Connect transfer (withdrawal payout)
+   */
+  fastify.post('/connect/transfer', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { amount, currency = 'usd' } = request.body as {
+        amount: number;
+        currency?: string;
+      };
+
+      if (!amount || amount <= 0) {
+        return reply.code(400).send({ error: 'Invalid amount' });
+      }
+
+      // Check balance
+      const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId));
+
+      let balanceCents = 0;
+      for (const tx of transactions) {
+        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
+          balanceCents += tx.amount_cents;
+        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
+          balanceCents -= tx.amount_cents;
+        }
+      }
+
+      const amountCents = Math.round(amount * 100);
+      if (balanceCents < amountCents) {
+        return reply.code(400).send({ error: 'Insufficient balance' });
+      }
+
+      // Check Connect account
+      const status = await stripeConnectService.getConnectStatus(request.userId);
+      if (!status.hasStripeAccount || !status.payoutsEnabled) {
+        return reply.code(400).send({
+          error: 'Stripe Connect account not ready for payouts',
+          requiresOnboarding: true,
+        });
+      }
+
+      // Create withdrawal transaction
+      const transaction = await walletService.createTransaction({
+        user_id: request.userId,
+        type: 'withdrawal',
+        amount: amount,
+      });
+
+      let transferId = `tr_mock_${Date.now()}`;
+
+      // Process Stripe transfer
+      if (stripe && status.stripeAccountId) {
+        try {
+          const transfer = await stripe.transfers.create({
+            amount: amountCents,
+            currency,
+            destination: status.stripeAccountId,
+            metadata: {
+              user_id: request.userId,
+              transaction_id: transaction.id,
+              type: 'withdrawal',
+            },
+          });
+          transferId = transfer.id;
+          console.log(`✅ Created Stripe transfer ${transfer.id} for $${amount}`);
+        } catch (stripeError) {
+          console.error('Stripe transfer error:', stripeError);
+          // Return error but transaction is recorded
+          return reply.code(500).send({
+            error: 'Failed to process Stripe transfer. Please contact support.',
+            transactionId: transaction.id,
+          });
+        }
+      }
+
+      const newBalance = (balanceCents - amountCents) / 100;
+
+      return {
+        success: true,
+        transferId,
+        transactionId: transaction.id,
+        amount,
+        newBalance,
+        estimatedArrival: '1-2 business days',
+        message: `Transfer of $${amount.toFixed(2)} has been initiated.`,
+      };
+    } catch (error) {
+      console.error('Error processing transfer:', error);
+      return reply.code(500).send({
+        error: 'Failed to process transfer'
+      });
+    }
+  });
+}

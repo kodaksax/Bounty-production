@@ -78,6 +78,7 @@ const { refundService } = require('./services/refund-service');
 const { stripeConnectService } = require('./services/stripe-connect-service');
 const { staleBountyService } = require('./services/stale-bounty-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
+const { registerWalletRoutes } = require('./routes/wallet');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -813,6 +814,13 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       stripeOnboardingLink: '/stripe/connect/onboarding-link (requires auth)',
       stripeConnectStatus: '/stripe/connect/status (requires auth)',
       validatePayment: '/stripe/validate-payment (requires auth)',
+      walletBalance: '/wallet/balance (requires auth)',
+      walletTransactions: '/wallet/transactions (requires auth)',
+      walletDeposit: 'POST /wallet/deposit (requires auth)',
+      walletWithdraw: 'POST /wallet/withdraw (requires auth)',
+      connectVerify: 'POST /connect/verify-onboarding (requires auth)',
+      connectAccountLink: 'POST /connect/create-account-link (requires auth)',
+      connectTransfer: 'POST /connect/transfer (requires auth)',
       eventsSubscribe: '/events/subscribe (WebSocket endpoint)',
       eventsSubscribeInfo: '/events/subscribe-info',
       eventsStats: '/events/stats',
@@ -829,6 +837,8 @@ fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
       release: 'Automatic fund release on completion with platform fee',
       refund: 'Full refund on cancellation',
       stripeConnect: 'Stripe Connect onboarding for hunters',
+      walletTransactions: 'Real wallet transaction history from database',
+      balanceUpdates: 'Real-time balance updates on escrow/release/refund',
       emailReceipts: 'Email receipts for all transactions',
       errorHandling: 'Comprehensive error handling with retries',
       edgeCases: 'Validation for insufficient funds and unverified accounts',
@@ -847,6 +857,9 @@ const start = async () => {
 
     // Register Apple Pay routes (async) now that `fastify` has been created
     await registerApplePayRoutes(fastify);
+
+    // Register Wallet routes for transactions and balance
+    await registerWalletRoutes(fastify);
 
     await startServer();
     await fastify.listen({ port, host });

@@ -2,7 +2,7 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
@@ -15,6 +15,7 @@ import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
+import { useAuthContext } from '../../hooks/use-auth-context';
 
 
 interface WalletScreenProps {
@@ -26,15 +27,25 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const { balance, transactions } = useWallet();
+  const { balance, transactions, refreshFromApi } = useWallet();
   const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
+  const { session } = useAuthContext();
 
-  
+  // Refresh wallet data from API when user is authenticated
+  useEffect(() => {
+    if (session?.access_token) {
+      refreshFromApi(session.access_token);
+    }
+  }, [session?.access_token, refreshFromApi]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
     setShowAddMoney(false);
+    // Refresh wallet after adding money
+    if (session?.access_token) {
+      refreshFromApi(session.access_token);
+    }
   };
 
   // Get recent transactions for preview (show all types, not just bounty-related)
