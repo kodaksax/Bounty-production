@@ -103,9 +103,26 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
       }
     } catch (error: any) {
       console.error('Connect onboarding error:', error);
+      
+      // Provide detailed error messages with troubleshooting guidance
+      let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
+      let errorTitle = 'Onboarding Failed';
+      
+      // Check for common Stripe Connect issues
+      if (error.message?.includes('account already exists')) {
+        errorTitle = 'Account Already Exists';
+        errorMessage = 'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
+      } else if (error.message?.includes('not configured') || error.message?.includes('STRIPE_SECRET_KEY')) {
+        errorTitle = 'Service Unavailable';
+        errorMessage = 'Stripe Connect is not configured on this server. Please contact support to enable withdrawals.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorTitle = 'Network Error';
+        errorMessage = 'Unable to connect to the payment service. Please check your internet connection and try again.';
+      }
+      
       Alert.alert(
-        'Onboarding Failed',
-        error.message || 'Unable to start Connect onboarding. Please try again.',
+        errorTitle,
+        errorMessage + '\n\nIf this problem persists, please contact support at support@bountyexpo.com',
         [{ text: 'OK' }]
       );
     } finally {
