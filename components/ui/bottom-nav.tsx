@@ -1,8 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
-import { A11Y, RADIUS, SIZING } from "../../lib/constants/accessibility";
+import { Animated, StyleSheet, TouchableOpacity, View, ViewStyle } from "react-native";
+import { A11Y, SIZING } from "../../lib/constants/accessibility";
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
@@ -66,9 +66,19 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
     outputRange: ['0deg', '90deg'],
   });
 
+  // Dynamic nav bar style - when admin tab is shown, use flexible spacing centered around GPS
+  // When admin tab is hidden, use equal-spaced layout
+  const bottomNavStyle: ViewStyle = showAdmin 
+    ? {
+        ...styles.bottomNav,
+        justifyContent: 'center', // Center items around GPS when admin is shown
+        gap: 8, // Tighter spacing when admin tab is visible
+      }
+    : styles.bottomNav; // Equal-spaced layout when admin is hidden
+
   return (
     <View style={styles.bottomNavContainer}>
-      <View style={styles.bottomNav}>
+      <View style={bottomNavStyle}>
         <TouchableOpacity 
           onPress={() => handleNavigate("create")} 
           style={styles.navButton}
