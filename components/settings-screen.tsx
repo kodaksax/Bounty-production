@@ -39,7 +39,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     avatar: authProfile?.avatar || normalizedProfile?.avatar || '/placeholder.svg?height=48&width=48',
   }
 
-  const handleAdminToggle = async (value: boolean) => {
+  const handleAdminTabToggle = async (value: boolean) => {
     await setAdminTabEnabled(value)
     Alert.alert(
       value ? 'Admin Tab Enabled' : 'Admin Tab Disabled',
@@ -146,7 +146,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               </View>
               <Switch
                 value={isAdminTabEnabled}
-                onValueChange={handleAdminToggle}
+                onValueChange={handleAdminTabToggle}
                 trackColor={{ false: '#374151', true: '#10b981' }}
                 thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
                 accessibilityLabel="Toggle admin tab visibility"

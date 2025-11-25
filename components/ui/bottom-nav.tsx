@@ -66,13 +66,14 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
     outputRange: ['0deg', '90deg'],
   });
 
-  // Dynamic nav bar style - when admin tab is shown, use flexible spacing centered around GPS
-  // When admin tab is hidden, use equal-spaced layout
+  // Dynamic nav bar style based on admin tab visibility:
+  // When admin tab is shown: use centered layout with tighter spacing (spacing can be disregarded per requirements)
+  // When admin tab is hidden: use equal-spaced layout with GPS icon naturally centered
   const bottomNavStyle: ViewStyle = showAdmin 
     ? {
         ...styles.bottomNav,
-        justifyContent: 'center', // Center items around GPS when admin is shown
-        gap: 8, // Tighter spacing when admin tab is visible
+        justifyContent: 'center', // Compact centered layout when admin is shown
+        gap: 8, // Tighter spacing when admin tab is visible (spacing disregarded)
       }
     : styles.bottomNav; // Equal-spaced layout when admin is hidden
 

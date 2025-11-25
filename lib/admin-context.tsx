@@ -105,7 +105,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         await setIsAdmin(false);
-        // Reset admin tab preference on sign out so it's hidden on next sign in (initial login behavior)
+        // Reset admin tab visibility preference on sign out for all users.
+        // This ensures the admin tab is hidden on the next sign in (initial login behavior).
         await setAdminTabEnabled(false);
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         await verifyAdminStatus();
