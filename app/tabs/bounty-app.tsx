@@ -33,7 +33,9 @@ type Bounty = BountyType
 function BountyAppInner() {
   const router = useRouter()
   const { screen } = useLocalSearchParams<{ screen?: string }>()
-  const { isAdmin } = useAdmin()
+  const { isAdmin, isAdminTabEnabled } = useAdmin()
+  // Admin tab is only shown if user has admin permissions AND has enabled the toggle
+  const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
   const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'create', 'admin'])
   const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
@@ -292,11 +294,11 @@ function BountyAppInner() {
   // to avoid triggering navigation/state updates during render (which causes
   // the "Cannot update a component while rendering a different component" error).
   useEffect(() => {
-    if (activeScreen === 'admin' && isAdmin) {
+    if (activeScreen === 'admin' && showAdminTab) {
       // Perform navigation once when admin tab becomes active
       router.push('/(admin)')
     }
-  }, [activeScreen, isAdmin, router])
+  }, [activeScreen, showAdminTab, router])
 
   // FlatList optimization: memoized functions
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
@@ -591,12 +593,12 @@ function BountyAppInner() {
           onNavigate={setActiveScreen}
           onConversationModeChange={(inConv) => setShowBottomNav(!inConv)}
         />
-      ) : activeScreen === "admin" && isAdmin ? (
+      ) : activeScreen === "admin" && showAdminTab ? (
         // admin navigation is handled by effect to avoid updating navigation during render
         null
       ) : null}
 
-      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={isAdmin} />}
+      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} />}
     </View>
   )
 }
