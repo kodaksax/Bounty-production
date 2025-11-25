@@ -223,7 +223,7 @@ export interface Attachment {
 }
 
 // Notification Types
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected';
+export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
 
 export interface Notification {
   id: string;

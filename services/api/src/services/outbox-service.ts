@@ -19,7 +19,10 @@ export type OutboxEventType =
   | 'ESCROW_HOLD' 
   | 'COMPLETION_RELEASE'
   | 'REFUND_RETRY'
-  | 'BOUNTY_REFUNDED';
+  | 'BOUNTY_REFUNDED'
+  | 'BOUNTY_STALE'
+  | 'STALE_BOUNTY_REFUND'
+  | 'BOUNTY_REPOSTED';
 
 export interface CreateOutboxEventInput {
   type: OutboxEventType;
