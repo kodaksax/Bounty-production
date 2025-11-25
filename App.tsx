@@ -14,9 +14,9 @@ import { analyticsService } from './lib/services/analytics-service';
 // Initialize Analytics (Mixpanel)
 const MIXPANEL_TOKEN = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN;
 if (MIXPANEL_TOKEN) {
-	analyticsService.initialize(MIXPANEL_TOKEN).catch((error) => {
-		console.error('[Analytics] Initialization failed:', error);
-	});
+  analyticsService.initialize(MIXPANEL_TOKEN).catch((error) => {
+    console.error('[Analytics] Initialization failed:', error);
+  });
 }
 
 import 'expo-router/entry';
@@ -26,8 +26,8 @@ import 'expo-router/entry';
 // But do not export a React component – expo-router handles root mounting.
 
 if (__DEV__) {
-	// eslint-disable-next-line no-console
-	console.log('[AppEntry] expo-router entry imported (navigation context should be established)');
+  // eslint-disable-next-line no-console
+  console.log('[AppEntry] expo-router entry imported (navigation context should be established)');
 }
 // Note: Do NOT export a React component from this file. The `expo-router/entry` import above
 // establishes the navigation/root mounting. Root-level providers (Stripe, Theme, Auth, etc.)
