@@ -11,6 +11,7 @@ import { EmptyState } from "../../components/ui/empty-state";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawScreen } from "../../components/withdraw-screen";
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
+import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { useWallet } from '../../lib/wallet-context';
@@ -27,6 +28,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const { balance, transactions } = useWallet();
   const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
+  const { triggerHaptic } = useHapticFeedback();
 
   
 
@@ -86,7 +88,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             <View style={styles.balanceActionsRow}>
               <TouchableOpacity 
                 style={styles.actionButton} 
-                onPress={() => setShowAddMoney(true)}
+                onPress={() => {
+                  triggerHaptic('medium');
+                  setShowAddMoney(true);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="Add money to wallet"
                 accessibilityHint="Add funds to your wallet using a payment method"
@@ -96,7 +101,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.actionButton} 
-                onPress={() => setShowWithdraw(true)}
+                onPress={() => {
+                  triggerHaptic('medium');
+                  setShowWithdraw(true);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="Withdraw money from wallet"
                 accessibilityHint="Transfer funds from your wallet to your bank account"

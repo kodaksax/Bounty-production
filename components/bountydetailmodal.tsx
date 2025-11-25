@@ -19,6 +19,7 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { useHapticFeedback } from '../lib/haptic-feedback'
 import { ROUTES } from '../lib/routes'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
@@ -66,6 +67,7 @@ interface BountyDetailModalProps {
 export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
   const router = useRouter()
   const { isEmailVerified } = useAuthContext()
+  const { triggerHaptic } = useHapticFeedback()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
@@ -230,6 +232,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   // Handle attachment open
   const handleAttachmentOpen = async (attachment: AttachmentMeta) => {
+    triggerHaptic('light') // Light haptic for attachment tap
     try {
       let uri = attachment.remoteUri || attachment.uri;
       if (!uri) {
@@ -270,6 +273,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   // Handle message poster button
   const handleMessagePoster = async () => {
+    triggerHaptic('medium') // Medium haptic for message action
     if (!bounty.user_id || !currentUserId) {
       Alert.alert('Error', 'Unable to start conversation.')
       return
@@ -331,6 +335,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   // Handle apply for bounty
   const handleApplyForBounty = async () => {
+    triggerHaptic('medium') // Medium haptic for apply action
     // Email verification gate: Block applying if email is not verified
     if (!isEmailVerified) {
       Alert.alert(

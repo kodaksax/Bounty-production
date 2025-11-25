@@ -16,6 +16,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHapticFeedback } from '../lib/haptic-feedback';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
 import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
@@ -175,6 +176,7 @@ export function PosterReviewModal({
 }: PosterReviewModalProps) {
   const insets = useSafeAreaInsets();
   const { releaseFunds } = useWallet();
+  const { triggerHaptic } = useHapticFeedback();
 
   const [submission, setSubmission] = useState<CompletionSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -237,6 +239,8 @@ export function PosterReviewModal({
             // Pass bountyId through as string (wallet now accepts string|number)
             await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
             console.log('✅ Escrow released for bounty:', bountyId);
+            // Trigger success haptic for successful payment release
+            triggerHaptic('success');
           } catch (escrowError) {
             console.error('Error releasing escrow:', escrowError);
             Alert.alert(
@@ -245,6 +249,9 @@ export function PosterReviewModal({
               [{ text: 'OK' }]
             );
           }
+        } else {
+          // For honor bounties, still trigger success haptic for approval
+          triggerHaptic('success');
         }
 
       // Show rating form

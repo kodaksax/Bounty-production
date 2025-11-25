@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useHapticFeedback } from "../lib/haptic-feedback";
 
 interface TransactionConfirmationProps {
   type: 'deposit' | 'withdrawal';
@@ -18,6 +19,12 @@ export function TransactionConfirmation({
   onViewTransaction 
 }: TransactionConfirmationProps) {
   const isDeposit = type === 'deposit';
+  const { triggerHaptic } = useHapticFeedback();
+  
+  // Trigger success haptic when component mounts (transaction completed)
+  useEffect(() => {
+    triggerHaptic('success');
+  }, [triggerHaptic]);
   
   return (
     <View style={styles.container}>
