@@ -25,7 +25,7 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' |
 
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
-  const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
+  const { isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
   
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
