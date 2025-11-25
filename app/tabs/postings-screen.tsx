@@ -25,7 +25,7 @@ import { EditPostingModal } from "../../components/edit-posting-modal"
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { EmptyState } from '../../components/ui/empty-state'
-import { PostingsListSkeleton, ApplicantCardSkeleton } from '../../components/ui/skeleton-loaders'
+import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useWallet } from '../../lib/wallet-context'
@@ -793,11 +793,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             user_id: hunterIdForConv,
             type: 'acceptance',
             title: 'Bounty Application Accepted!',
-            body: `Your application for "${bountyForEscrow?.title || bountyObj?.title || 'the bounty'}" has been accepted!`,
+            body: `Your application for "${bountyObj?.title || (request.bounty as any)?.title || 'the bounty'}" has been accepted!`,
             data: {
               bountyId: bountyId,
               posterId: currentUserId,
-              ...(bountyForEscrow?.amount && { amount: bountyForEscrow.amount }),
+              ...((bountyObj?.amount || (request.bounty as any)?.amount) && { amount: (bountyObj?.amount ?? (request.bounty as any)?.amount) }),
             }
           })
         })

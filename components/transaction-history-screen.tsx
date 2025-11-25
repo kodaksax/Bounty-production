@@ -8,6 +8,7 @@ import { useWallet } from "lib/wallet-context"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 import { TransactionDetailModal } from "./transaction-detail-modal"
+import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 
 export interface Transaction {
   id: string
@@ -274,8 +275,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {/* Transaction list */}
       <View className="flex-1 px-4 pb-safe overflow-y-auto ios-scroll">
         {isLoading && currentPage === 1 ? (
-          <View className="flex justify-center items-center py-10">
-            <View className="h-8 w-8 rounded-full border-2 border-white border-t-transparent animate-spin"></View>
+          <View className="py-6">
+            <TransactionsListSkeleton count={5} />
           </View>
         ) : transactions.length === 0 ? (
           <View className="flex flex-col items-center justify-center py-10 text-center">

@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useHapticFeedback } from '../lib/haptic-feedback'
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -14,6 +15,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   const [amount, setAmount] = useState<string>(initialAmount.toString())
   const [isForHonor, setIsForHonor] = useState<boolean>(false)
   const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
+  const { triggerHaptic } = useHapticFeedback()
 
   // Format the amount with commas for thousands
   const formattedAmount = () => {
@@ -77,6 +79,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   const handleAddBounty = () => {
     const numAmount = Number.parseFloat(amount)
     if (!isNaN(numAmount)) {
+      triggerHaptic('medium') // Medium haptic for bounty creation
       onAddAmount(numAmount, isForHonor)
     }
   }

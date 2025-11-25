@@ -48,11 +48,10 @@ export function AttachmentViewerModal({
 }: AttachmentViewerModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-
-  if (!attachment) return null;
-
-  const mimeType = attachment.mime || attachment.mimeType || '';
-  const uri = attachment.remoteUri || attachment.uri;
+  const hasAttachment = Boolean(attachment);
+  const mimeType = attachment?.mime || attachment?.mimeType || '';
+  const uri = attachment?.remoteUri || attachment?.uri || '';
+  const displayName = attachment?.name || 'Attachment';
 
   // Security validation
   const isValidUri = (uri: string): boolean => {
@@ -93,7 +92,7 @@ export function AttachmentViewerModal({
   });
 
   // Check if file size is reasonable (< 100MB for viewing)
-  const isFileSizeReasonable = !attachment.size || attachment.size < 100 * 1024 * 1024;
+  const isFileSizeReasonable = !attachment?.size || attachment.size < 100 * 1024 * 1024;
 
   useEffect(() => {
     setVideoError(null);
@@ -126,7 +125,7 @@ export function AttachmentViewerModal({
    * Download/save attachment to device
    */
   const handleDownload = async () => {
-    if (!isValidUri(uri)) {
+    if (!attachment || !isValidUri(uri)) {
       Alert.alert('Error', 'Invalid file URI');
       return;
     }
@@ -215,6 +214,15 @@ export function AttachmentViewerModal({
    * Render content based on file type
    */
   const renderContent = () => {
+    if (!hasAttachment) {
+      return (
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="insert-drive-file" size={64} color="#6ee7b7" />
+          <Text style={styles.errorText}>No attachment selected</Text>
+        </View>
+      );
+    }
+
     if (!isUriValid) {
       return (
         <View style={styles.errorContainer}>
@@ -292,7 +300,7 @@ export function AttachmentViewerModal({
           return (
             <View style={styles.documentPreview}>
               <MaterialIcons name="picture-as-pdf" size={80} color="#ef4444" />
-              <Text style={styles.documentName}>{attachment.name}</Text>
+              <Text style={styles.documentName}>{displayName}</Text>
               <Text style={styles.documentHint}>Tap download to view this PDF</Text>
             </View>
           );
@@ -302,7 +310,7 @@ export function AttachmentViewerModal({
         return (
           <View style={styles.documentPreview}>
             <MaterialIcons name="description" size={80} color="#10b981" />
-            <Text style={styles.documentName}>{attachment.name}</Text>
+            <Text style={styles.documentName}>{displayName}</Text>
             <Text style={styles.documentHint}>Tap download to view this document</Text>
           </View>
         );
@@ -312,7 +320,7 @@ export function AttachmentViewerModal({
         return (
           <View style={styles.documentPreview}>
             <MaterialIcons name="insert-drive-file" size={80} color="#6ee7b7" />
-            <Text style={styles.documentName}>{attachment.name}</Text>
+            <Text style={styles.documentName}>{displayName}</Text>
             <Text style={styles.documentHint}>Tap download to view this file</Text>
           </View>
         );
@@ -339,9 +347,9 @@ export function AttachmentViewerModal({
         <View style={styles.header}>
           <View style={styles.headerInfo}>
             <Text style={styles.fileName} numberOfLines={1}>
-              {attachment.name}
+              {displayName}
             </Text>
-            {attachment.size && (
+            {attachment?.size && (
               <Text style={styles.fileSize}>{formatFileSize(attachment.size)}</Text>
             )}
           </View>
