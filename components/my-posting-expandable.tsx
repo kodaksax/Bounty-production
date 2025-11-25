@@ -316,52 +316,78 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
   
   const handleSubmitCompletion = async () => {
-    if (proofItems.length === 0) {
-      alert('Please attach at least one proof of completion')
-      return
-    }
     if (!completionMessage.trim()) {
-      alert('Please add a message describing your completed work')
+      Alert.alert('Completion Message Required', 'Please add a message describing your completed work.')
       return
     }
     
-    try {
-      setIsSubmitting(true)
+    // Helper for pluralization
+    const proofCount = proofItems.length
+    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`
+    
+    // Define the actual submission logic
+    const performSubmission = async () => {
+      try {
+        setIsSubmitting(true)
 
-      // Check for existing pending submission to avoid duplicates
-      const existing = await completionService.getSubmission(String(bounty.id))
-      if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId || '')) {
-        // Already have a pending submission from this hunter — avoid duplicate
-        alert('You already have a pending submission. Please wait for the poster to review or check your submission.')
+        // Check for existing pending submission to avoid duplicates
+        const existing = await completionService.getSubmission(String(bounty.id))
+        if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId || '')) {
+          // Already have a pending submission from this hunter — avoid duplicate
+          Alert.alert('Submission Pending', 'You already have a pending submission. Please wait for the poster to review or check your submission.')
+          setIsSubmitting(false)
+          setHasSubmission(true)
+          return
+        }
+
+        const resp = await completionService.submitCompletion({
+          bounty_id: String(bounty.id),
+          hunter_id: currentUserId || '',
+          message: completionMessage.trim(),
+          proof_items: proofItems,
+        })
+
+        if (resp) {
+          Alert.alert('Submission Successful', 'Your work has been submitted for review!')
+          // Lock review UI and show waiting state
+          setSubmissionPending(true)
+          setHasSubmission(true)
+          // Clear the revision badge on resubmission
+          setHasRevisionRequested(false)
+          setReviewExpanded(false)
+          setPayoutExpanded(true)
+          // Trigger parent refresh to update list
+          if (onRefresh) onRefresh()
+        }
+      } catch (err) {
+        console.error('Error submitting completion:', err)
+        Alert.alert('Error', 'Failed to submit completion. Please try again.')
+      } finally {
         setIsSubmitting(false)
-        setHasSubmission(true)
-        return
       }
+    }
 
-      const resp = await completionService.submitCompletion({
-        bounty_id: String(bounty.id),
-        hunter_id: currentUserId || '',
-        message: completionMessage.trim(),
-        proof_items: proofItems,
-      })
-
-      if (resp) {
-        alert('Your work has been submitted for review!')
-        // Lock review UI and show waiting state
-        setSubmissionPending(true)
-        setHasSubmission(true)
-        // Clear the revision badge on resubmission
-        setHasRevisionRequested(false)
-        setReviewExpanded(false)
-        setPayoutExpanded(true)
-        // Trigger parent refresh to update list
-        if (onRefresh) onRefresh()
-      }
-    } catch (err) {
-      console.error('Error submitting completion:', err)
-      alert('Failed to submit completion. Please try again.')
-    } finally {
-      setIsSubmitting(false)
+    // Show different confirmation dialogs based on whether proof is attached
+    if (proofItems.length === 0) {
+      // No proof attached - show warning
+      Alert.alert(
+        'No Proof Attached',
+        'You are submitting without any proof of completion. The poster may request revisions. Are you sure you want to continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Submit Anyway', style: 'destructive', onPress: performSubmission },
+        ]
+      )
+    } else {
+      // Proof attached - show confirmation
+      Alert.alert(
+        'Confirm Submission',
+        `You have attached ${proofLabel}. Are you ready to submit your work for review?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Submit', onPress: performSubmission },
+        ]
+      )
     }
   }
   

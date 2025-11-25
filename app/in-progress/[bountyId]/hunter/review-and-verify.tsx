@@ -223,61 +223,82 @@ export default function HunterReviewAndVerifyScreen() {
   };
 
   const handleRequestReview = async () => {
-    if (proofItems.length === 0) {
-      Alert.alert(
-        'No Proof Attached',
-        'Please attach at least one proof of completion before requesting review.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     if (!messageText.trim()) {
       Alert.alert(
-        'Add a Message',
+        'Completion Message Required',
         'Please add a message describing your completed work.',
         [{ text: 'OK' }]
       );
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      
-      // Submit completion via service
-      await completionService.submitCompletion({
-        bounty_id: String(bounty?.id),
-        hunter_id: currentUserId,
-        message: messageText.trim(),
-        proof_items: proofItems,
-      });
+    // Helper for pluralization
+    const proofCount = proofItems.length;
+    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`;
 
-      // Update bounty status to indicate submission pending review
-      // (In real implementation, backend should handle this)
+    // Define the actual submission logic
+    const performSubmission = async () => {
+      try {
+        setIsSubmitting(true);
+        
+        // Submit completion via service
+        await completionService.submitCompletion({
+          bounty_id: String(bounty?.id),
+          hunter_id: currentUserId,
+          message: messageText.trim(),
+          proof_items: proofItems,
+        });
 
-      Alert.alert(
-        'Review Requested',
-        'Your work has been submitted for review. The poster will verify and release payment.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate to payout screen (waiting state)
-              if (routeBountyId) {
-                router.push({
-                  pathname: '/in-progress/[bountyId]/hunter/payout',
-                  params: { bountyId: routeBountyId },
-                });
-              }
+        // Update bounty status to indicate submission pending review
+        // (In real implementation, backend should handle this)
+
+        Alert.alert(
+          'Submission Successful',
+          'Your work has been submitted for review. The poster will verify and release payment.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to payout screen (waiting state)
+                if (routeBountyId) {
+                  router.push({
+                    pathname: '/in-progress/[bountyId]/hunter/payout',
+                    params: { bountyId: routeBountyId },
+                  });
+                }
+              },
             },
-          },
+          ]
+        );
+      } catch (err) {
+        console.error('Error requesting review:', err);
+        Alert.alert('Error', 'Failed to request review. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    // Show different confirmation dialogs based on whether proof is attached
+    if (proofItems.length === 0) {
+      // No proof attached - show warning
+      Alert.alert(
+        'No Proof Attached',
+        'You are submitting without any proof of completion. The poster may request revisions. Are you sure you want to continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Submit Anyway', style: 'destructive', onPress: performSubmission },
         ]
       );
-    } catch (err) {
-      console.error('Error requesting review:', err);
-      Alert.alert('Error', 'Failed to request review. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      // Proof attached - show confirmation
+      Alert.alert(
+        'Confirm Submission',
+        `You have attached ${proofLabel}. Are you ready to submit your work for review?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Submit', onPress: performSubmission },
+        ]
+      );
     }
   };
 
