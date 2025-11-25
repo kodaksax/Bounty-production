@@ -1,10 +1,8 @@
 import { StepperHeader } from 'app/components/StepperHeader';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
+import { StepCoreIdea } from 'app/screens/CreateBounty/StepCoreIdea';
 import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
-import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
-import { StepReview } from 'app/screens/CreateBounty/StepReview';
-import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
 import { bountyService } from 'app/services/bountyService';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
@@ -19,13 +17,11 @@ interface CreateBountyFlowProps {
   onStepChange?: (step: number) => void;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 3;
 const STEP_TITLES = [
-  'Title & Category',
-  'Details & Requirements',
-  'Compensation',
-  'Location & Visibility',
-  'Review & Confirm',
+  'The Core Idea',
+  'The Reward',
+  'Location (Optional)',
 ];
 
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
@@ -92,7 +88,14 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
     if (currentStep < TOTAL_STEPS) {
       const next = currentStep + 1;
       setCurrentStep(next);
+    } else if (currentStep === TOTAL_STEPS) {
+      // Submit on the last step
+      handleSubmit();
     }
+  };
+
+  const handleSubmit = async () => {
+    await submit();
   };
 
   const handleBack = () => {
@@ -152,7 +155,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         {/* Step Content */}
         <View className="flex-1">
           {currentStep === 1 && (
-            <StepTitle
+            <StepCoreIdea
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
@@ -160,14 +163,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
             />
           )}
           {currentStep === 2 && (
-            <StepDetails
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              onBack={handleBack}
-            />
-          )}
-          {currentStep === 3 && (
             <StepCompensation
               draft={draft}
               onUpdate={saveDraft}
@@ -175,20 +170,14 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
               onBack={handleBack}
             />
           )}
-          {currentStep === 4 && (
+          {currentStep === 3 && (
             <StepLocation
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
               onBack={handleBack}
-            />
-          )}
-          {currentStep === 5 && (
-            <StepReview
-              draft={draft}
-              onSubmit={submit}
-              onBack={handleBack}
               isSubmitting={isSubmitting}
+              onSubmit={submit}
             />
           )}
         </View>
