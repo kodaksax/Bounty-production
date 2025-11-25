@@ -3,7 +3,7 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import { useAddressLibrary } from 'app/hooks/useAddressLibrary';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SavedAddress } from '../../../lib/types';
 
@@ -12,11 +12,9 @@ interface StepLocationProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
-  isSubmitting?: boolean;
-  onSubmit?: () => Promise<void>;
 }
 
-export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, onSubmit }: StepLocationProps) {
+export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
@@ -80,7 +78,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, on
     setErrors({ ...errors, location: error || '' });
   };
 
-  const handleNext = async () => {
+  const handleNext = () => {
     const locationError = validateLocation(draft.location, draft.workType);
     
     if (locationError) {
@@ -89,12 +87,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, on
       return;
     }
 
-    // This is the final step, so submit the form
-    if (onSubmit) {
-      await onSubmit();
-    } else {
-      onNext();
-    }
+    onNext();
   };
 
   const isValid = draft.workType === 'online' || !validateLocation(draft.location, draft.workType);
@@ -310,35 +303,26 @@ export function StepLocation({ draft, onUpdate, onNext, onBack, isSubmitting, on
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleNext}
-            disabled={!isValid || isSubmitting}
+            disabled={!isValid}
             className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${
-              isValid && !isSubmitting ? 'bg-emerald-500' : 'bg-emerald-700/30'
+              isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
             }`}
-            accessibilityLabel={onSubmit ? "Create bounty" : "Continue to next step"}
+            accessibilityLabel="Continue to next step"
             accessibilityRole="button"
-            accessibilityState={{ disabled: !isValid || isSubmitting }}
+            accessibilityState={{ disabled: !isValid }}
           >
-            {isSubmitting ? (
-              <>
-                <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-                <Text className="text-white font-semibold">Creating...</Text>
-              </>
-            ) : (
-              <>
-                <Text
-                  className={`font-semibold mr-2 ${
-                    isValid ? 'text-white' : 'text-emerald-400/40'
-                  }`}
-                >
-                  {onSubmit ? 'Create Bounty' : 'Next'}
-                </Text>
-                <MaterialIcons
-                  name={onSubmit ? 'check' : 'arrow-forward'}
-                  size={20}
-                  color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
-                />
-              </>
-            )}
+            <Text
+              className={`font-semibold mr-2 ${
+                isValid ? 'text-white' : 'text-emerald-400/40'
+              }`}
+            >
+              Next
+            </Text>
+            <MaterialIcons
+              name="arrow-forward"
+              size={20}
+              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+            />
           </TouchableOpacity>
         </View>
       </View>
