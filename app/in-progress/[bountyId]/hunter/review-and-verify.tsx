@@ -225,12 +225,16 @@ export default function HunterReviewAndVerifyScreen() {
   const handleRequestReview = async () => {
     if (!messageText.trim()) {
       Alert.alert(
-        'Add a Message',
+        'Completion Message Required',
         'Please add a message describing your completed work.',
         [{ text: 'OK' }]
       );
       return;
     }
+
+    // Helper for pluralization
+    const proofCount = proofItems.length;
+    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`;
 
     // Define the actual submission logic
     const performSubmission = async () => {
@@ -249,7 +253,7 @@ export default function HunterReviewAndVerifyScreen() {
         // (In real implementation, backend should handle this)
 
         Alert.alert(
-          'Review Requested',
+          'Submission Successful',
           'Your work has been submitted for review. The poster will verify and release payment.',
           [
             {
@@ -289,7 +293,7 @@ export default function HunterReviewAndVerifyScreen() {
       // Proof attached - show confirmation
       Alert.alert(
         'Confirm Submission',
-        `You have attached ${proofItems.length} proof item${proofItems.length > 1 ? 's' : ''}. Are you ready to submit your work for review?`,
+        `You have attached ${proofLabel}. Are you ready to submit your work for review?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Submit', onPress: performSubmission },

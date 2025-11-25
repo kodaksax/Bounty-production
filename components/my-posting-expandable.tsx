@@ -317,9 +317,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   
   const handleSubmitCompletion = async () => {
     if (!completionMessage.trim()) {
-      Alert.alert('Message Required', 'Please add a message describing your completed work')
+      Alert.alert('Completion Message Required', 'Please add a message describing your completed work.')
       return
     }
+    
+    // Helper for pluralization
+    const proofCount = proofItems.length
+    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`
     
     // Define the actual submission logic
     const performSubmission = async () => {
@@ -344,7 +348,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         })
 
         if (resp) {
-          Alert.alert('Success', 'Your work has been submitted for review!')
+          Alert.alert('Submission Successful', 'Your work has been submitted for review!')
           // Lock review UI and show waiting state
           setSubmissionPending(true)
           setHasSubmission(true)
@@ -378,7 +382,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       // Proof attached - show confirmation
       Alert.alert(
         'Confirm Submission',
-        `You have attached ${proofItems.length} proof item${proofItems.length > 1 ? 's' : ''}. Are you ready to submit your work for review?`,
+        `You have attached ${proofLabel}. Are you ready to submit your work for review?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Submit', onPress: performSubmission },
