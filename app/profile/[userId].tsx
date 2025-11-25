@@ -23,6 +23,7 @@ import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
+import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
@@ -255,10 +256,23 @@ export default function UserProfileScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <MaterialIcons name="gps-fixed" size={20} color="#ffffff" />
+            <Text style={styles.headerTitle}>BOUNTY</Text>
+          </View>
+          <View style={{ width: 40 }} />
         </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        >
+          <UserProfileScreenSkeleton />
+        </ScrollView>
       </View>
     );
   }
