@@ -294,6 +294,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
       });
 
+      // Transaction types that represent outflow (money leaving the user's wallet)
+      const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
+
       if (txResponse.ok) {
         const txData = await txResponse.json();
         if (txData.transactions && Array.isArray(txData.transactions)) {
@@ -301,7 +304,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map((tx: any) => ({
             id: tx.id,
             type: tx.type as WalletTransactionType,
-            amount: tx.type === 'escrow' || tx.type === 'withdrawal' || tx.type === 'bounty_posted' 
+            // Use centralized config for transaction sign
+            amount: OUTFLOW_TYPES.includes(tx.type) 
               ? -Math.abs(tx.amount) 
               : Math.abs(tx.amount),
             date: new Date(tx.date),

@@ -7,6 +7,31 @@ import { walletTransactions, bounties } from '../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import Stripe from 'stripe';
 
+// Transaction types that add to balance (inflow)
+const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
+// Transaction types that subtract from balance (outflow)
+const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
+
+/**
+ * Calculate wallet balance from transactions
+ */
+async function calculateUserBalance(userId: string): Promise<number> {
+  const transactions = await db
+    .select()
+    .from(walletTransactions)
+    .where(eq(walletTransactions.user_id, userId));
+
+  let balanceCents = 0;
+  for (const tx of transactions) {
+    if (INFLOW_TYPES.includes(tx.type)) {
+      balanceCents += tx.amount_cents;
+    } else if (OUTFLOW_TYPES.includes(tx.type)) {
+      balanceCents -= tx.amount_cents;
+    }
+  }
+  return balanceCents;
+}
+
 export async function registerWalletRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';
   let stripe: Stripe | null = null;
@@ -65,14 +90,18 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       let bountyTitles: Record<string, string> = {};
       if (bountyIds.length > 0) {
-        const bountyData = await db
-          .select({ id: bounties.id, title: bounties.title })
-          .from(bounties)
-          .where(eq(bounties.id, bountyIds[0])); // For now, just get one at a time
+        // Fetch all bounty titles for the transactions
+        const uniqueBountyIds = [...new Set(bountyIds)];
+        for (const bid of uniqueBountyIds) {
+          const bountyData = await db
+            .select({ id: bounties.id, title: bounties.title })
+            .from(bounties)
+            .where(eq(bounties.id, bid));
 
-        bountyData.forEach(b => {
-          bountyTitles[b.id] = b.title;
-        });
+          bountyData.forEach(b => {
+            bountyTitles[b.id] = b.title;
+          });
+        }
       }
 
       // Transform to client format
@@ -116,21 +145,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      // Get all transactions for this user
-      const transactions = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId));
-
-      // Calculate balance from transactions
-      let balanceCents = 0;
-      for (const tx of transactions) {
-        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
-          balanceCents += tx.amount_cents;
-        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
-          balanceCents -= tx.amount_cents;
-        }
-      }
+      const balanceCents = await calculateUserBalance(request.userId);
 
       return {
         balance: balanceCents / 100,
@@ -189,10 +204,13 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         amount: amount,
       });
 
+      // Calculate new balance after deposit
+      const newBalanceCents = await calculateUserBalance(request.userId);
+
       return {
         success: true,
         transaction,
-        newBalance: 0, // Would need to calculate actual balance
+        newBalance: newBalanceCents / 100,
       };
     } catch (error) {
       console.error('Error creating deposit:', error);
@@ -220,20 +238,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       // Check if user has sufficient balance
-      const transactions = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId));
-
-      let balanceCents = 0;
-      for (const tx of transactions) {
-        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
-          balanceCents += tx.amount_cents;
-        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
-          balanceCents -= tx.amount_cents;
-        }
-      }
-
+      const balanceCents = await calculateUserBalance(request.userId);
       const amountCents = Math.round(amount * 100);
       if (balanceCents < amountCents) {
         return reply.code(400).send({ error: 'Insufficient balance' });
@@ -376,20 +381,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       // Check balance
-      const transactions = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId));
-
-      let balanceCents = 0;
-      for (const tx of transactions) {
-        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
-          balanceCents += tx.amount_cents;
-        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
-          balanceCents -= tx.amount_cents;
-        }
-      }
-
+      const balanceCents = await calculateUserBalance(request.userId);
       const amountCents = Math.round(amount * 100);
       if (balanceCents < amountCents) {
         return reply.code(400).send({ error: 'Insufficient balance' });
@@ -479,20 +471,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       // Check user has sufficient balance
-      const userTransactions = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId));
-
-      let balanceCents = 0;
-      for (const tx of userTransactions) {
-        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
-          balanceCents += tx.amount_cents;
-        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
-          balanceCents -= tx.amount_cents;
-        }
-      }
-
+      const balanceCents = await calculateUserBalance(request.userId);
       const amountCents = Math.round(amount * 100);
       if (balanceCents < amountCents) {
         return reply.code(400).send({ error: 'Insufficient balance' });
@@ -628,10 +607,13 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         platform_fee_cents: platformFeeCents,
       }).returning();
 
-      // Record platform fee
+      // Record platform fee - use a well-known UUID for platform account
+      // This should be a fixed UUID that doesn't conflict with user IDs
+      const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
+      
       await db.insert(walletTransactions).values({
         bounty_id: bountyId,
-        user_id: 'platform',
+        user_id: PLATFORM_ACCOUNT_ID,
         type: 'platform_fee',
         amount_cents: platformFeeCents,
         platform_fee_cents: 0,

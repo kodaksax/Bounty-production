@@ -185,7 +185,7 @@ if (event.type === 'account.updated') {
 - Stripe Connect Documentation: https://stripe.com/docs/connect
 - Stripe Express Accounts: https://stripe.com/docs/connect/express-accounts
 - Stripe Status Page: https://status.stripe.com/
-- BountyExpo Support: support@bountyexpo.com
+- BountyExpo Support: Please contact your administrator or check the repository for support information
 
 ## Logs and Debugging
 
