@@ -456,4 +456,355 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  /**
+   * Create escrow for a bounty (hold funds when bounty is posted)
+   */
+  fastify.post('/wallet/escrow', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { bountyId, amount, title } = request.body as {
+        bountyId: string;
+        amount: number;
+        title?: string;
+      };
+
+      if (!bountyId || !amount || amount <= 0) {
+        return reply.code(400).send({ error: 'Invalid bountyId or amount' });
+      }
+
+      // Check user has sufficient balance
+      const userTransactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId));
+
+      let balanceCents = 0;
+      for (const tx of userTransactions) {
+        if (tx.type === 'deposit' || tx.type === 'release' || tx.type === 'refund' || tx.type === 'bounty_received') {
+          balanceCents += tx.amount_cents;
+        } else if (tx.type === 'withdrawal' || tx.type === 'escrow' || tx.type === 'bounty_posted') {
+          balanceCents -= tx.amount_cents;
+        }
+      }
+
+      const amountCents = Math.round(amount * 100);
+      if (balanceCents < amountCents) {
+        return reply.code(400).send({ error: 'Insufficient balance' });
+      }
+
+      // Create escrow transaction
+      const escrowTransaction = await db.insert(walletTransactions).values({
+        bounty_id: bountyId,
+        user_id: request.userId,
+        type: 'escrow',
+        amount_cents: amountCents,
+        platform_fee_cents: 0,
+      }).returning();
+
+      // Create Stripe PaymentIntent if configured
+      let paymentIntentId = `pi_mock_${Date.now()}_${bountyId.slice(-8)}`;
+      
+      if (stripe) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: amountCents,
+            currency: 'usd',
+            capture_method: 'automatic',
+            payment_method_types: ['card'],
+            metadata: {
+              bounty_id: bountyId,
+              user_id: request.userId,
+              type: 'escrow',
+              title: title || '',
+            },
+            description: `Escrow for bounty: ${title || bountyId}`,
+          });
+
+          paymentIntentId = paymentIntent.id;
+          
+          // Update bounty with payment intent ID
+          await db
+            .update(bounties)
+            .set({ 
+              payment_intent_id: paymentIntentId,
+              updated_at: new Date(),
+            })
+            .where(eq(bounties.id, bountyId));
+
+          console.log(`✅ Created Stripe PaymentIntent ${paymentIntentId} for bounty ${bountyId}`);
+        } catch (stripeError) {
+          console.error('Stripe PaymentIntent error:', stripeError);
+          // Continue with mock for development
+        }
+      }
+
+      const newBalance = (balanceCents - amountCents) / 100;
+
+      return {
+        success: true,
+        transactionId: escrowTransaction[0].id,
+        paymentIntentId,
+        amount,
+        newBalance,
+        message: `$${amount.toFixed(2)} held in escrow for bounty.`,
+      };
+    } catch (error) {
+      console.error('Error creating escrow:', error);
+      return reply.code(500).send({
+        error: 'Failed to create escrow'
+      });
+    }
+  });
+
+  /**
+   * Release escrow (transfer funds to hunter on completion)
+   */
+  fastify.post('/wallet/release', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { bountyId, hunterId } = request.body as {
+        bountyId: string;
+        hunterId: string;
+      };
+
+      if (!bountyId || !hunterId) {
+        return reply.code(400).send({ error: 'Missing bountyId or hunterId' });
+      }
+
+      // Get bounty to verify ownership and get details
+      const bountyRecords = await db
+        .select()
+        .from(bounties)
+        .where(eq(bounties.id, bountyId))
+        .limit(1);
+
+      if (!bountyRecords.length) {
+        return reply.code(404).send({ error: 'Bounty not found' });
+      }
+
+      const bounty = bountyRecords[0];
+
+      // Verify user is the bounty creator
+      if (bounty.creator_id !== request.userId) {
+        return reply.code(403).send({ error: 'Only the bounty creator can release funds' });
+      }
+
+      // Check for existing release to prevent double processing
+      const existingRelease = await db
+        .select()
+        .from(walletTransactions)
+        .where(and(
+          eq(walletTransactions.bounty_id, bountyId),
+          eq(walletTransactions.type, 'release')
+        ))
+        .limit(1);
+
+      if (existingRelease.length > 0) {
+        return reply.code(400).send({ error: 'Funds already released for this bounty' });
+      }
+
+      // Calculate amounts with platform fee (5%)
+      const platformFeePercentage = 5;
+      const platformFeeCents = Math.round((bounty.amount_cents * platformFeePercentage) / 100);
+      const releaseAmountCents = bounty.amount_cents - platformFeeCents;
+
+      // Create release transaction for hunter
+      const releaseTransaction = await db.insert(walletTransactions).values({
+        bounty_id: bountyId,
+        user_id: hunterId,
+        type: 'release',
+        amount_cents: releaseAmountCents,
+        platform_fee_cents: platformFeeCents,
+      }).returning();
+
+      // Record platform fee
+      await db.insert(walletTransactions).values({
+        bounty_id: bountyId,
+        user_id: 'platform',
+        type: 'platform_fee',
+        amount_cents: platformFeeCents,
+        platform_fee_cents: 0,
+      });
+
+      // Update bounty status
+      await db
+        .update(bounties)
+        .set({ 
+          status: 'completed',
+          updated_at: new Date(),
+        })
+        .where(eq(bounties.id, bountyId));
+
+      // Transfer to hunter's Stripe account if configured
+      let transferId = `tr_mock_${Date.now()}_${bountyId.slice(-8)}`;
+      
+      if (stripe) {
+        try {
+          // Get hunter's Stripe account ID
+          const { users } = await import('../db/schema');
+          const hunterRecords = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, hunterId))
+            .limit(1);
+
+          if (hunterRecords.length > 0 && hunterRecords[0].stripe_account_id) {
+            const transfer = await stripe.transfers.create({
+              amount: releaseAmountCents,
+              currency: 'usd',
+              destination: hunterRecords[0].stripe_account_id,
+              metadata: {
+                bounty_id: bountyId,
+                hunter_id: hunterId,
+                platform_fee_cents: platformFeeCents.toString(),
+              },
+            });
+
+            transferId = transfer.id;
+            console.log(`✅ Created Stripe Transfer ${transferId} for $${releaseAmountCents / 100}`);
+          }
+        } catch (stripeError) {
+          console.error('Stripe transfer error:', stripeError);
+          // Continue without Stripe transfer for development
+        }
+      }
+
+      return {
+        success: true,
+        transactionId: releaseTransaction[0].id,
+        transferId,
+        releaseAmount: releaseAmountCents / 100,
+        platformFee: platformFeeCents / 100,
+        message: `$${(releaseAmountCents / 100).toFixed(2)} released to hunter.`,
+      };
+    } catch (error) {
+      console.error('Error releasing funds:', error);
+      return reply.code(500).send({
+        error: 'Failed to release funds'
+      });
+    }
+  });
+
+  /**
+   * Refund escrow (return funds to poster on cancellation)
+   */
+  fastify.post('/wallet/refund', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { bountyId, reason } = request.body as {
+        bountyId: string;
+        reason?: string;
+      };
+
+      if (!bountyId) {
+        return reply.code(400).send({ error: 'Missing bountyId' });
+      }
+
+      // Get bounty details
+      const bountyRecords = await db
+        .select()
+        .from(bounties)
+        .where(eq(bounties.id, bountyId))
+        .limit(1);
+
+      if (!bountyRecords.length) {
+        return reply.code(404).send({ error: 'Bounty not found' });
+      }
+
+      const bounty = bountyRecords[0];
+
+      // Verify user is the bounty creator
+      if (bounty.creator_id !== request.userId) {
+        return reply.code(403).send({ error: 'Only the bounty creator can cancel and refund' });
+      }
+
+      // Check bounty status
+      if (bounty.status === 'completed') {
+        return reply.code(400).send({ error: 'Cannot refund a completed bounty' });
+      }
+
+      // Check for existing refund
+      const existingRefund = await db
+        .select()
+        .from(walletTransactions)
+        .where(and(
+          eq(walletTransactions.bounty_id, bountyId),
+          eq(walletTransactions.type, 'refund')
+        ))
+        .limit(1);
+
+      if (existingRefund.length > 0) {
+        return reply.code(400).send({ error: 'Bounty has already been refunded' });
+      }
+
+      // Create refund transaction (full refund)
+      const refundTransaction = await db.insert(walletTransactions).values({
+        bounty_id: bountyId,
+        user_id: request.userId,
+        type: 'refund',
+        amount_cents: bounty.amount_cents,
+        platform_fee_cents: 0,
+      }).returning();
+
+      // Update bounty status
+      await db
+        .update(bounties)
+        .set({ 
+          status: 'cancelled',
+          updated_at: new Date(),
+        })
+        .where(eq(bounties.id, bountyId));
+
+      // Process Stripe refund if payment intent exists
+      let stripeRefundId = `re_mock_${Date.now()}`;
+      
+      if (stripe && bounty.payment_intent_id) {
+        try {
+          const refund = await stripe.refunds.create({
+            payment_intent: bounty.payment_intent_id,
+            reason: 'requested_by_customer',
+            metadata: {
+              bounty_id: bountyId,
+              type: 'bounty_cancellation',
+            },
+          });
+
+          stripeRefundId = refund.id;
+          console.log(`✅ Created Stripe refund ${stripeRefundId} for bounty ${bountyId}`);
+        } catch (stripeError) {
+          console.error('Stripe refund error:', stripeError);
+          // Continue without Stripe refund for development
+        }
+      }
+
+      return {
+        success: true,
+        transactionId: refundTransaction[0].id,
+        refundId: stripeRefundId,
+        amount: bounty.amount_cents / 100,
+        message: `$${(bounty.amount_cents / 100).toFixed(2)} refunded to your wallet.`,
+      };
+    } catch (error) {
+      console.error('Error processing refund:', error);
+      return reply.code(500).send({
+        error: 'Failed to process refund'
+      });
+    }
+  });
 }

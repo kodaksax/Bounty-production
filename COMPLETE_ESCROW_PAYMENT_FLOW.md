@@ -10,35 +10,42 @@ The payment flow ensures secure transactions between bounty creators (posters) a
 
 ### Core Components
 
-1. **Bounty Service** (`services/bounty-service.ts`)
+1. **Wallet Routes** (`services/api/src/routes/wallet.ts`)
+   - `/wallet/balance` - Get user's wallet balance
+   - `/wallet/transactions` - Get transaction history
+   - `/wallet/escrow` - Create escrow for bounty
+   - `/wallet/release` - Release funds to hunter
+   - `/wallet/refund` - Refund on cancellation
+
+2. **Bounty Service** (`services/bounty-service.ts`)
    - Handles bounty lifecycle: accept, complete
    - Creates outbox events for payment triggers
    - Validates business logic and permissions
 
-2. **Completion Release Service** (`services/completion-release-service.ts`)
+3. **Completion Release Service** (`services/completion-release-service.ts`)
    - Processes fund transfers to hunters
-   - Calculates platform fees
+   - Calculates platform fees (5%)
    - Creates Stripe Transfers
    - Updates bounty status on successful payment
 
-3. **Refund Service** (`services/refund-service.ts`)
+4. **Refund Service** (`services/refund-service.ts`)
    - Handles bounty cancellations
    - Processes Stripe refunds
    - Manages refund transaction records
 
-4. **Email Service** (`services/email-service.ts`)
+5. **Email Service** (`services/email-service.ts`)
    - Sends transaction receipts
    - Provides detailed payment breakdowns
    - Supports escrow, release, and refund confirmations
 
-5. **Outbox Worker** (`services/outbox-worker.ts`)
+6. **Outbox Worker** (`services/outbox-worker.ts`)
    - Processes async payment events
    - Handles retries with exponential backoff
    - Ensures reliable event processing
 
 ## Payment Flow Diagrams
 
-### 1. Escrow Creation (Two-Phase: Posting & Acceptance)
+### 1. Escrow Creation (When Bounty is Posted)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -144,6 +151,111 @@ The payment flow ensures secure transactions between bounty creators (posters) a
 
 ## API Endpoints
 
+### Wallet Balance
+```http
+GET /wallet/balance
+Authorization: Bearer <token>
+
+Response:
+{
+  "balance": 100.00,
+  "balanceCents": 10000,
+  "currency": "USD"
+}
+```
+
+### Wallet Transactions
+```http
+GET /wallet/transactions?page=1&limit=20
+Authorization: Bearer <token>
+
+Response:
+{
+  "transactions": [
+    {
+      "id": "uuid",
+      "type": "escrow",
+      "amount": -25.00,
+      "date": "2024-01-15T10:30:00Z",
+      "details": {
+        "title": "Bounty Title",
+        "bounty_id": "uuid",
+        "status": "completed"
+      }
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "hasMore": true
+}
+```
+
+### Create Escrow
+```http
+POST /wallet/escrow
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "bountyId": "uuid",
+  "amount": 25.00,
+  "title": "Bounty Title"
+}
+
+Response:
+{
+  "success": true,
+  "transactionId": "uuid",
+  "paymentIntentId": "pi_xxx",
+  "amount": 25.00,
+  "newBalance": 75.00,
+  "message": "$25.00 held in escrow for bounty."
+}
+```
+
+### Release Funds
+```http
+POST /wallet/release
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "bountyId": "uuid",
+  "hunterId": "uuid"
+}
+
+Response:
+{
+  "success": true,
+  "transactionId": "uuid",
+  "transferId": "tr_xxx",
+  "releaseAmount": 23.75,
+  "platformFee": 1.25,
+  "message": "$23.75 released to hunter."
+}
+```
+
+### Refund Escrow
+```http
+POST /wallet/refund
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "bountyId": "uuid",
+  "reason": "Cancellation reason (optional)"
+}
+
+Response:
+{
+  "success": true,
+  "transactionId": "uuid",
+  "refundId": "re_xxx",
+  "amount": 25.00,
+  "message": "$25.00 refunded to your wallet."
+}
+```
+
 ### Accept Bounty
 ```http
 POST /bounties/:bountyId/accept
@@ -212,7 +324,7 @@ CREATE TABLE wallet_transactions (
   id UUID PRIMARY KEY,
   bounty_id UUID REFERENCES bounties(id),
   user_id UUID NOT NULL REFERENCES users(id),
-  type TEXT NOT NULL,  -- 'escrow', 'release', 'refund', 'platform_fee'
+  type TEXT NOT NULL,  -- 'escrow', 'release', 'refund', 'platform_fee', 'deposit', 'withdrawal'
   amount_cents INTEGER NOT NULL,
   stripe_transfer_id TEXT,  -- Stripe Transfer ID for releases
   platform_fee_cents INTEGER DEFAULT 0,
