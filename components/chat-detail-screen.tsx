@@ -17,6 +17,7 @@ interface Message extends ChatMessage {
   time: string
   isAudio?: boolean
   audioDuration?: string
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
 }
 
 interface ChatDetailScreenProps {
@@ -32,39 +33,39 @@ const getConversationMessages = (conversationId: string): Message[] => {
   const nextTime = () => base + idx++ * 1000 * 60 * 3 // 3 min increments
   const conversations: Record<string, Message[]> = {
     "1": [
-      { id: "1-1", text: "Hey, how are you?", time: "12:10", isUser: true, createdAt: nextTime() },
-      { id: "1-2", text: "What are you doing tonight?", time: "12:10", isUser: true, createdAt: nextTime() },
+      { id: "1-1", text: "Hey, how are you?", time: "12:10", isUser: true, createdAt: nextTime(), status: 'read' },
+      { id: "1-2", text: "What are you doing tonight?", time: "12:10", isUser: true, createdAt: nextTime(), status: 'read' },
       { id: "1-3", text: "", time: "12:12", isUser: false, isAudio: true, audioDuration: "00:35", createdAt: nextTime() },
-      { id: "1-4", text: "I was thinking of going to a local comedy club. Do you have any recommendations?", time: "12:15", isUser: true, createdAt: nextTime() },
+      { id: "1-4", text: "I was thinking of going to a local comedy club. Do you have any recommendations?", time: "12:15", isUser: true, createdAt: nextTime(), status: 'delivered' },
       { id: "1-5", text: '"The Laugh Lounge" is known for its hilarious stand-up acts. You should check it out!', time: "12:16", isUser: false, createdAt: nextTime() },
-      { id: "1-6", text: "Sounds great! I'll see if any tickets are available.", time: "12:15", isUser: true, createdAt: nextTime() },
+      { id: "1-6", text: "Sounds great! I'll see if any tickets are available.", time: "12:15", isUser: true, createdAt: nextTime(), status: 'sent' },
     ],
     "2": [
-      { id: "2-1", text: "When is the next design review?", time: "10:30", isUser: true, createdAt: nextTime() },
+      { id: "2-1", text: "When is the next design review?", time: "10:30", isUser: true, createdAt: nextTime(), status: 'read' },
       { id: "2-2", text: "Tomorrow at 2pm", time: "10:35", isUser: false, createdAt: nextTime() },
       { id: "2-3", text: "Can we go through the wireframes first?", time: "10:40", isUser: false, createdAt: nextTime() },
-      { id: "2-4", text: "Yes, I'll prepare them tonight", time: "10:45", isUser: true, createdAt: nextTime() },
+      { id: "2-4", text: "Yes, I'll prepare them tonight", time: "10:45", isUser: true, createdAt: nextTime(), status: 'delivered' },
       { id: "2-5", text: "When is the meeting scheduled?", time: "12:34", isUser: false, createdAt: nextTime() },
     ],
     "3": [
-      { id: "3-1", text: "I just finished the project", time: "11:20", isUser: true, createdAt: nextTime() },
-      { id: "3-2", text: "Can you take a look?", time: "11:21", isUser: true, createdAt: nextTime() },
+      { id: "3-1", text: "I just finished the project", time: "11:20", isUser: true, createdAt: nextTime(), status: 'read' },
+      { id: "3-2", text: "Can you take a look?", time: "11:21", isUser: true, createdAt: nextTime(), status: 'read' },
       { id: "3-3", text: "Sure, send it over", time: "11:25", isUser: false, createdAt: nextTime() },
-      { id: "3-4", text: "Just emailed you the files", time: "11:30", isUser: true, createdAt: nextTime() },
+      { id: "3-4", text: "Just emailed you the files", time: "11:30", isUser: true, createdAt: nextTime(), status: 'delivered' },
       { id: "3-5", text: "Nice work, I love it 👍", time: "12:30", isUser: false, createdAt: nextTime() },
     ],
     "4": [
-      { id: "4-1", text: "Are we still meeting today?", time: "10:15", isUser: true, createdAt: nextTime() },
+      { id: "4-1", text: "Are we still meeting today?", time: "10:15", isUser: true, createdAt: nextTime(), status: 'read' },
       { id: "4-2", text: "Unfortunately, I won't be here today...", time: "11:30", isUser: false, createdAt: nextTime() },
-      { id: "4-3", text: "No problem, we can reschedule", time: "11:32", isUser: true, createdAt: nextTime() },
-      { id: "4-4", text: "How about next Monday?", time: "11:33", isUser: true, createdAt: nextTime() },
+      { id: "4-3", text: "No problem, we can reschedule", time: "11:32", isUser: true, createdAt: nextTime(), status: 'read' },
+      { id: "4-4", text: "How about next Monday?", time: "11:33", isUser: true, createdAt: nextTime(), status: 'delivered' },
       { id: "4-5", text: "That works for me", time: "11:40", isUser: false, createdAt: nextTime() },
     ],
     "5": [
       { id: "5-1", text: "Hi! How are you doing?", time: "Yesterday", isUser: false, createdAt: nextTime() - 86400000 },
-      { id: "5-2", text: "I'm good, thanks! How about you?", time: "Yesterday", isUser: true, createdAt: nextTime() - 86400000 },
+      { id: "5-2", text: "I'm good, thanks! How about you?", time: "Yesterday", isUser: true, createdAt: nextTime() - 86400000, status: 'read' },
       { id: "5-3", text: "Great! Just busy with work", time: "Yesterday", isUser: false, createdAt: nextTime() - 86400000 },
-      { id: "5-4", text: "Same here. Let's catch up soon", time: "Yesterday", isUser: true, createdAt: nextTime() - 86400000 },
+      { id: "5-4", text: "Same here. Let's catch up soon", time: "Yesterday", isUser: true, createdAt: nextTime() - 86400000, status: 'read' },
       { id: "5-5", text: "Definitely!", time: "Yesterday", isUser: false, createdAt: nextTime() - 86400000 },
     ],
   }
@@ -81,6 +82,7 @@ export function ChatDetailScreen({
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>(() => getConversationMessages(conversation.id))
   const { balance } = useWallet()
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false)
   // no manual scroll ref needed; handled by StickyMessageInterface
   
   // Get the other participant's ID (not the current user)
@@ -104,14 +106,31 @@ export function ChatDetailScreen({
       createdAt: Date.now(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isUser: true,
+      status: 'sending', // Start with sending status
     }
     setMessages(prev => [...prev, newMsg])
-    // Simulated bot reply
-    setTimeout(()=>{
+    
+    // Simulate status updates: sending -> sent -> delivered
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => 
+        m.id === newMsg.id ? { ...m, status: 'sent' as const } : m
+      ))
+    }, 500)
+    
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => 
+        m.id === newMsg.id ? { ...m, status: 'delivered' as const } : m
+      ))
+    }, 1000)
+    
+    // Simulated bot reply with typing indicator
+    setIsOtherUserTyping(true)
+    setTimeout(() => {
+      setIsOtherUserTyping(false)
       let responseText = ''
       const lower = text.toLowerCase()
       if (/[?]/.test(lower)) responseText = 'Let me check on that and circle back.'
-      else if (lower.includes('hello')|| lower.includes('hi')) responseText = 'Hey! Need help with a bounty?'
+      else if (lower.includes('hello') || lower.includes('hi')) responseText = 'Hey! Need help with a bounty?'
       else responseText = 'Acknowledged.'
       const response: Message = {
         id: `${conversation.id}-${Date.now()+1}`,
@@ -121,7 +140,18 @@ export function ChatDetailScreen({
         isUser: false,
       }
       setMessages(prev => [...prev, response])
-    }, 900)
+      
+      // Mark user's message as read when they reply
+      setMessages(prev => prev.map(m => 
+        m.id === newMsg.id ? { ...m, status: 'read' as const } : m
+      ))
+    }, 1500) // Show typing for 1.5 seconds
+  }
+
+  const handleTypingChange = (isTyping: boolean) => {
+    setIsCurrentUserTyping(isTyping)
+    // In a real app, this would emit a typing event via WebSocket
+    // e.g., websocketService.emitTyping(conversation.id, isTyping)
   }
 
   return (
@@ -190,11 +220,19 @@ export function ChatDetailScreen({
       {/* Messages + Sticky Composer */}
       <View className="flex-1">
         <StickyMessageInterface
-          messages={messages.map(m => ({ id: m.id, text: m.text, isUser: m.isUser, createdAt: m.createdAt }))}
+          messages={messages.map(m => ({ 
+            id: m.id, 
+            text: m.text, 
+            isUser: m.isUser, 
+            createdAt: m.createdAt,
+            status: m.status 
+          }))}
           onSend={handleSendMessage}
           topInset={120} // offset for combined header + chat header so first message isn't hidden
           bottomInset={0}
           placeholder="Message"
+          isOtherUserTyping={isOtherUserTyping}
+          onTypingChange={handleTypingChange}
         />
       </View>
     </View>
