@@ -5,7 +5,7 @@ import { AchievementsGrid } from "components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
-import { ProfileSkeleton } from "components/ui/skeleton-loaders";
+import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -332,8 +332,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             }}
           />
         ) : (
-          <View className="px-4 py-4">
-            <ProfileSkeleton />
+          <View className="px-4 py-2">
+            <EnhancedProfileSectionSkeleton />
           </View>
         )}
 

@@ -21,6 +21,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton-loaders";
 
 interface EnhancedProfileSectionProps {
   userId?: string;
@@ -102,8 +103,8 @@ export function EnhancedProfileSection({
   // profileLoading already accounts for local + supabase fetch inside useNormalizedProfile
   if (profileLoading) {
     return (
-      <View className="p-4 items-center">
-        <ActivityIndicator size="large" color="#ffffff" />
+      <View className="px-4 py-2">
+        <EnhancedProfileSectionSkeleton />
       </View>
     );
   }
@@ -443,6 +444,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
       ]
     );
   };
+
   return (
       <View className="mb-4 px-4">
       <View className="flex-row justify-between items-center mb-2">
@@ -454,9 +456,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
         )}
       </View>
       {portfolioLoading ? (
-        <View className="items-center py-4">
-          <ActivityIndicator size="small" color="#ffffff" />
-        </View>
+        <PortfolioSkeleton count={3} />
       ) : items.length === 0 ? (
         <View className="bg-emerald-700/20 p-4 rounded-lg">
           <Text className="text-center text-white text-sm">{isOwnProfile ? 'Add your first portfolio item' : 'No portfolio items yet'}</Text>
