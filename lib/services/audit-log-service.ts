@@ -158,7 +158,13 @@ const mockAuditLogs: AuditLogEntry[] = [
   },
 ];
 
-// Simulate network delay
+/**
+ * Simulates network delay for development/testing purposes.
+ * This function wraps data with a configurable delay to mimic real API calls.
+ * Should be replaced with actual API calls in production.
+ * @param data - The data to return after delay
+ * @param delayMs - Delay in milliseconds (default: 400ms)
+ */
 function simulateNetwork<T>(data: T, delayMs = 400): Promise<T> {
   return new Promise((resolve) => {
     setTimeout(() => resolve(data), delayMs);

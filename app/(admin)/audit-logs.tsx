@@ -572,14 +572,37 @@ export default function AuditLogsScreen() {
               <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>Additional Details</Text>
                 <View style={styles.metadataContainer}>
-                  {Object.entries(selectedLog.metadata).map(([key, value]) => (
-                    <View key={key} style={styles.metadataRow}>
-                      <Text style={styles.metadataKey}>{key}:</Text>
-                      <Text style={styles.metadataValue}>
-                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                      </Text>
-                    </View>
-                  ))}
+                  {Object.entries(selectedLog.metadata).map(([key, value]) => {
+                    // Format key for display (camelCase to Title Case)
+                    const formattedKey = key
+                      .replace(/([A-Z])/g, ' $1')
+                      .replace(/^./, (str) => str.toUpperCase())
+                      .trim();
+                    
+                    // Format value based on type
+                    let formattedValue: string;
+                    if (value === null || value === undefined) {
+                      formattedValue = '-';
+                    } else if (typeof value === 'boolean') {
+                      formattedValue = value ? 'Yes' : 'No';
+                    } else if (typeof value === 'number') {
+                      formattedValue = value.toLocaleString();
+                    } else if (typeof value === 'object') {
+                      // For complex objects, show a simplified representation
+                      formattedValue = Array.isArray(value)
+                        ? `${value.length} item${value.length !== 1 ? 's' : ''}`
+                        : `${Object.keys(value).length} properties`;
+                    } else {
+                      formattedValue = String(value);
+                    }
+
+                    return (
+                      <View key={key} style={styles.metadataRow}>
+                        <Text style={styles.metadataKey}>{formattedKey}:</Text>
+                        <Text style={styles.metadataValue}>{formattedValue}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
             )}

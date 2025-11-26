@@ -5,7 +5,6 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Platform,
@@ -19,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
+import { ROUTES } from '../../lib/routes';
 import { reportService } from '../../lib/services/report-service';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
 
@@ -26,7 +26,10 @@ type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
 type FilterPriority = 'all' | 'critical' | 'high' | 'medium' | 'low';
 type SortOption = 'newest' | 'oldest' | 'priority';
 
-// Calculate priority based on report reason and age
+/**
+ * Calculate priority based on report reason and age.
+ * Fraud and harassment reports escalate to critical after a time threshold.
+ */
 function calculatePriority(
   reason: string,
   createdAt: string
@@ -42,7 +45,25 @@ function calculatePriority(
   return 'low';
 }
 
-// Mock data for development with enhanced fields
+/**
+ * Calculate stats from a list of reports.
+ * Extracted for reusability and maintainability.
+ */
+function calculateStatsFromReports(reports: EnhancedReport[]): ReportStats {
+  return {
+    pending: reports.filter((r) => r.status === 'pending').length,
+    reviewed: reports.filter((r) => r.status === 'reviewed').length,
+    resolved: reports.filter((r) => r.status === 'resolved').length,
+    dismissed: reports.filter((r) => r.status === 'dismissed').length,
+    critical: reports.filter((r) => r.priority === 'critical').length,
+    high: reports.filter((r) => r.priority === 'high').length,
+  };
+}
+
+/**
+ * Mock data for development with enhanced fields.
+ * In production, this would be fetched from the API.
+ */
 const mockReports: EnhancedReport[] = [
   {
     id: 'report-001',
@@ -150,34 +171,17 @@ export default function AdminReportsScreen() {
           priority: calculatePriority(r.reason, r.created_at),
         }));
         setReports(enhanced);
-
-        // Calculate stats
-        const newStats: ReportStats = {
-          pending: enhanced.filter((r) => r.status === 'pending').length,
-          reviewed: enhanced.filter((r) => r.status === 'reviewed').length,
-          resolved: enhanced.filter((r) => r.status === 'resolved').length,
-          dismissed: enhanced.filter((r) => r.status === 'dismissed').length,
-          critical: enhanced.filter((r) => r.priority === 'critical').length,
-          high: enhanced.filter((r) => r.priority === 'high').length,
-        };
-        setStats(newStats);
+        setStats(calculateStatsFromReports(enhanced));
       } else {
         // Fall back to mock data for demo
         setReports(mockReports);
-        const newStats: ReportStats = {
-          pending: mockReports.filter((r) => r.status === 'pending').length,
-          reviewed: mockReports.filter((r) => r.status === 'reviewed').length,
-          resolved: mockReports.filter((r) => r.status === 'resolved').length,
-          dismissed: mockReports.filter((r) => r.status === 'dismissed').length,
-          critical: mockReports.filter((r) => r.priority === 'critical').length,
-          high: mockReports.filter((r) => r.priority === 'high').length,
-        };
-        setStats(newStats);
+        setStats(calculateStatsFromReports(mockReports));
       }
     } catch (err) {
       console.error('Error fetching reports:', err);
       // Fall back to mock data
       setReports(mockReports);
+      setStats(calculateStatsFromReports(mockReports));
     } finally {
       setIsLoading(false);
     }
@@ -272,11 +276,11 @@ export default function AdminReportsScreen() {
           {
             text: 'View Content',
             onPress: () => {
-              // Navigate to the reported content
+              // Navigate to the reported content using ROUTES constants
               if (report.content_type === 'bounty') {
-                router.push(`/(admin)/bounty/${report.content_id}` as any);
+                router.push(ROUTES.ADMIN.BOUNTY_DETAIL(report.content_id));
               } else if (report.content_type === 'profile') {
-                router.push(`/(admin)/user/${report.content_id}` as any);
+                router.push(ROUTES.ADMIN.USER_DETAIL(report.content_id));
               }
             },
           },
@@ -656,7 +660,7 @@ export default function AdminReportsScreen() {
         onBack={() => router.back()}
         actions={
           <TouchableOpacity
-            onPress={() => router.push('/(admin)/audit-logs' as any)}
+            onPress={() => router.push(ROUTES.ADMIN.AUDIT_LOGS)}
             style={styles.headerAction}
             accessibilityLabel="View audit logs"
           >
