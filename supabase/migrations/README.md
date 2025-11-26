@@ -149,6 +149,39 @@ This migration supports the bounty acceptance flow:
 
 ---
 
+## Migration: 20251126_add_age_verification_columns.sql
+
+This migration adds age verification columns to support 18+ compliance requirements.
+
+### Columns Added
+
+1. **age_verified** (boolean) - Whether the user confirmed they are 18 or older during sign-up
+   - Defaults to `false` for new profiles
+   - Set to `true` during profile creation when user checks the 18+ box
+
+2. **age_verified_at** (timestamptz) - Timestamp of when the user agreed to being 18+
+   - Used for audit and compliance purposes
+   - Set to the current timestamp when age_verified is set to true
+   - For backfilled users, uses their profile creation date
+
+### Indexes Created
+
+- `idx_profiles_age_verified` - Fast lookups by age verification status
+
+### Backfill Logic
+
+Existing users who signed up with `age_verified: true` in their auth metadata are automatically backfilled:
+- `age_verified` is set to `true`
+- `age_verified_at` is set to their profile creation date
+
+### Related Files
+
+- `lib/services/auth-profile-service.ts` - AuthProfile interface and profile creation logic
+- `app/auth/sign-up-form.tsx` - Age verification checkbox in sign-up form
+- `database/schema.sql` - Main database schema
+
+---
+
 ## Related Files (Completion Flow)
 
 The completion migration supports the following code changes:

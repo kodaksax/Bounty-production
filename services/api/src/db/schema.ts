@@ -6,6 +6,8 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   handle: text('handle').notNull(),
   stripe_account_id: text('stripe_account_id'),
+  age_verified: boolean('age_verified').default(false), // Whether user confirmed they are 18+
+  age_verified_at: timestamp('age_verified_at', { withTimezone: true }), // Timestamp for audit purposes
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp
 });

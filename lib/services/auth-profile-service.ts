@@ -23,6 +23,7 @@ export interface AuthProfile {
   about?: string;
   phone?: string;
   age_verified?: boolean;
+  age_verified_at?: string; // ISO timestamp for audit purposes
   balance: number;
   created_at?: string;
   updated_at?: string;
@@ -134,6 +135,7 @@ export class AuthProfileService {
         about: data.about || undefined,
         phone: data.phone || undefined,
         age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+        age_verified_at: data.age_verified_at || undefined,
         balance: data.balance || 0,
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
@@ -231,6 +233,7 @@ export class AuthProfileService {
           about: data.about,
           phone: data.phone,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+          age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
@@ -282,6 +285,8 @@ export class AuthProfileService {
   const email = this.currentSession?.user?.email;
   const metaAgeVerified = (this.currentSession?.user?.user_metadata as any)?.age_verified;
   const age_verified = typeof metaAgeVerified === 'boolean' ? metaAgeVerified : false;
+  // Set age_verified_at timestamp if age was verified during signup (for audit purposes)
+  const age_verified_at = age_verified ? new Date().toISOString() : null;
 
       // Check if profile already exists (race condition protection)
       const existing = await this.getProfileById(userId, { bypassCache: true });
@@ -303,6 +308,7 @@ export class AuthProfileService {
           email: email,
           balance: 0,
           age_verified: age_verified,
+          age_verified_at: age_verified_at,
         })
         .select()
         .single();
@@ -338,6 +344,8 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+          age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
@@ -392,6 +400,8 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+          age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
