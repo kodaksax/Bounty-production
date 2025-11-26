@@ -20,11 +20,11 @@ import {
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
-import { ROUTES } from '../lib/routes'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { messageService } from "../lib/services/message-service"
+import { navigationIntent } from '../lib/services/navigation-intent'
 import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
@@ -299,12 +299,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       // Close the modal and navigate to chat
       handleClose()
       
-      // Use the callback if provided, otherwise navigate directly
+      // Use the callback if provided, otherwise navigate to BountyApp with messenger screen active
       if (onNavigateToChat) {
         onNavigateToChat(conversation.id)
       } else {
-    // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
-  router.push(ROUTES.TABS.MESSENGER as any)
+        // Store the conversation ID for the messenger screen to pick up
+        await navigationIntent.setPendingConversationId(conversation.id)
+        // Navigate to BountyApp with the messenger (create) screen active
+        // This keeps the user within BountyApp where BottomNav is rendered
+        router.push('/tabs/bounty-app?screen=create' as any)
       }
     } catch (error) {
       console.error('Error creating conversation:', error)
