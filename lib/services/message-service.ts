@@ -150,7 +150,8 @@ export const messageService = {
           return conversation;
         } catch (supabaseErr) {
           // Log and fall back to local messaging layer
-          try { logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr }) } catch {}
+          // Ignore logging errors to prevent breaking the fallback flow
+          try { logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr }) } catch { /* ignore logging errors */ }
         }
       }
     }
