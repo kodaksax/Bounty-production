@@ -286,7 +286,8 @@ export class AuthProfileService {
   const metaAgeVerified = (this.currentSession?.user?.user_metadata as any)?.age_verified;
   const age_verified = typeof metaAgeVerified === 'boolean' ? metaAgeVerified : false;
   // Set age_verified_at timestamp if age was verified during signup (for audit purposes)
-  const age_verified_at = age_verified ? new Date().toISOString() : null;
+  // Use undefined instead of null to properly omit the field when not verified
+  const age_verified_at = age_verified ? new Date().toISOString() : undefined;
 
       // Check if profile already exists (race condition protection)
       const existing = await this.getProfileById(userId, { bypassCache: true });
@@ -299,17 +300,21 @@ export class AuthProfileService {
         return existing;
       }
 
-      // Create new minimal profile
+      // Create new minimal profile - only include age_verified_at if age is verified
+      const insertData: Record<string, any> = {
+        id: userId,
+        username: username,
+        email: email,
+        balance: 0,
+        age_verified: age_verified,
+      };
+      if (age_verified_at) {
+        insertData.age_verified_at = age_verified_at;
+      }
+      
       const { data, error } = await supabase
         .from('profiles')
-        .insert({
-          id: userId,
-          username: username,
-          email: email,
-          balance: 0,
-          age_verified: age_verified,
-          age_verified_at: age_verified_at,
-        })
+        .insert(insertData)
         .select()
         .single();
 
