@@ -16,12 +16,14 @@ export default function AdminDashboard() {
   const width = Dimensions.get('window').width;
 
   const quickLinks = [
-    { id: 'analytics', title: 'Analytics', icon: 'analytics', route: '/(admin)/analytics' },
+    { id: 'analytics', title: 'Analytics', icon: 'analytics', route: ROUTES.ADMIN.ANALYTICS },
     { id: 'bounties', title: 'Bounties', icon: 'work', route: ROUTES.ADMIN.BOUNTIES },
     { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
-    { id: 'reports', title: 'Reports', icon: 'report', route: '/(admin)/reports' },
-    { id: 'blocked', title: 'Blocked Users', icon: 'block', route: '/(admin)/blocked-users' },
+    { id: 'reports', title: 'Reports', icon: 'report', route: ROUTES.ADMIN.REPORTS },
+    { id: 'blocked', title: 'Blocked Users', icon: 'block', route: ROUTES.ADMIN.BLOCKED_USERS },
+    { id: 'settings', title: 'Settings', icon: 'settings', route: ROUTES.ADMIN.SETTINGS.INDEX },
+    { id: 'support', title: 'Support', icon: 'help', route: ROUTES.ADMIN.SUPPORT.INDEX },
   ];
 
   const renderQuickLinkItem = ({ item }: { item: typeof quickLinks[0] }) => (

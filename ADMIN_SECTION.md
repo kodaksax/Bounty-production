@@ -6,16 +6,93 @@ The Admin section provides internal/staff users with a mobile interface to manag
 
 ## Architecture
 
-### Route Structure
+### Comprehensive Route Structure
 - **Route Group**: `app/(admin)/`
 - **Gating**: Routes are protected by `AdminProvider` context - non-admin users are redirected
-- **Screens**:
-  - `/` - AdminDashboard (metrics overview)
-  - `/bounties` - AdminBountiesList (with filters)
-  - `/bounty/[id]` - AdminBountyDetail (status management)
-  - `/users` - AdminUsersList
-  - `/user/[id]` - AdminUserDetail
-  - `/transactions` - AdminTransactionsList (read-only)
+- **Centralized Routes**: All routes are defined in `lib/routes.ts` under `ROUTES.ADMIN`
+
+#### Route Hierarchy
+
+```
+/(admin)/                              # Admin route group (protected)
+├── index.tsx                          # Dashboard (metrics + quick links)
+│
+├── [User Management]
+│   ├── users.tsx                      # Users list with filters
+│   ├── user/[id].tsx                  # User detail with stats
+│   └── blocked-users.tsx              # Blocked users management
+│
+├── [Bounty Management]
+│   ├── bounties.tsx                   # Bounties list with filters
+│   └── bounty/[id].tsx                # Bounty detail + status transitions
+│
+├── [Financial]
+│   └── transactions.tsx               # Transactions list (read-only)
+│
+├── [Analytics & Reporting]
+│   ├── analytics.tsx                  # Analytics dashboard
+│   └── reports.tsx                    # Reports management
+│
+├── [Settings] - NEW
+│   ├── settings/index.tsx             # Settings hub
+│   ├── settings/general.tsx           # General preferences
+│   ├── settings/notifications.tsx     # Notification settings
+│   ├── settings/security.tsx          # Security & access control
+│   └── settings/audit-log.tsx         # Admin activity history
+│
+├── [Support] - NEW
+│   ├── support/index.tsx              # Support hub
+│   ├── support/help.tsx               # Help center with FAQs
+│   └── support/feedback.tsx           # Send feedback form
+│
+└── not-found.tsx                      # 404 fallback for invalid routes
+```
+
+### Route Constants (`lib/routes.ts`)
+
+All admin routes are centralized for maintainability:
+
+```typescript
+ROUTES.ADMIN = {
+  // Root
+  INDEX: '/(admin)',
+  
+  // User Management
+  USERS: '/(admin)/users',
+  USER_DETAIL: (id) => `/(admin)/user/${id}`,
+  BLOCKED_USERS: '/(admin)/blocked-users',
+  
+  // Bounty Management
+  BOUNTIES: '/(admin)/bounties',
+  BOUNTY_DETAIL: (id) => `/(admin)/bounty/${id}`,
+  
+  // Financial
+  TRANSACTIONS: '/(admin)/transactions',
+  
+  // Analytics
+  ANALYTICS: '/(admin)/analytics',
+  REPORTS: '/(admin)/reports',
+  
+  // Settings (nested)
+  SETTINGS: {
+    INDEX: '/(admin)/settings',
+    GENERAL: '/(admin)/settings/general',
+    NOTIFICATIONS: '/(admin)/settings/notifications',
+    SECURITY: '/(admin)/settings/security',
+    AUDIT_LOG: '/(admin)/settings/audit-log',
+  },
+  
+  // Support (nested)
+  SUPPORT: {
+    INDEX: '/(admin)/support',
+    HELP: '/(admin)/support/help',
+    FEEDBACK: '/(admin)/support/feedback',
+  },
+  
+  // Error handling
+  NOT_FOUND: '/(admin)/not-found',
+}
+```
 
 ### Context & Authentication
 - **AdminContext** (`lib/admin-context.tsx`): Manages `isAdmin` state

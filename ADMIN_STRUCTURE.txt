@@ -4,43 +4,71 @@ ADMIN SECTION FILE STRUCTURE
 app/(admin)/                           # Admin route group (protected)
 ├── _layout.tsx                        # Gating layout (redirects non-admin)
 ├── index.tsx                          # Dashboard (metrics + quick links)
-├── bounties.tsx                       # Bounties list with filters
-├── bounty/
-│   └── [id].tsx                      # Bounty detail + status transitions
+├── not-found.tsx                      # 404 fallback for invalid routes
+│
+├── [User Management]
 ├── users.tsx                          # Users list with filters
 ├── user/
-│   └── [id].tsx                      # User detail with stats
-└── transactions.tsx                   # Transactions list (read-only)
+│   └── [id].tsx                       # User detail with stats
+├── blocked-users.tsx                  # Blocked users management
+│
+├── [Bounty Management]
+├── bounties.tsx                       # Bounties list with filters
+├── bounty/
+│   └── [id].tsx                       # Bounty detail + status transitions
+│
+├── [Financial]
+├── transactions.tsx                   # Transactions list (read-only)
+│
+├── [Analytics & Reporting]
+├── analytics.tsx                      # Analytics dashboard
+├── reports.tsx                        # Reports management
+│
+├── [Settings Section - NEW]
+├── settings/
+│   ├── index.tsx                      # Settings hub
+│   ├── general.tsx                    # General preferences
+│   ├── notifications.tsx              # Notification settings
+│   ├── security.tsx                   # Security & access control
+│   └── audit-log.tsx                  # Admin activity history
+│
+└── [Support Section - NEW]
+    └── support/
+        ├── index.tsx                  # Support hub
+        ├── help.tsx                   # Help center with FAQs
+        └── feedback.tsx               # Send feedback form
 
 lib/
+├── routes.ts                          # Centralized route constants (UPDATED)
 ├── admin-context.tsx                  # AdminProvider + useAdmin hook
 ├── types-admin.ts                     # Admin-specific TypeScript types
 └── admin/
-    └── adminDataClient.ts            # Mock data + network simulation
+    └── adminDataClient.ts             # Mock data + network simulation
 
 hooks/
-├── useAdminBounties.ts               # Bounties data with status updates
-├── useAdminUsers.ts                  # Users data
-├── useAdminTransactions.ts           # Transactions data
-└── useAdminMetrics.ts                # Dashboard metrics
+├── useAdminBounties.ts                # Bounties data with status updates
+├── useAdminUsers.ts                   # Users data
+├── useAdminTransactions.ts            # Transactions data
+└── useAdminMetrics.ts                 # Dashboard metrics
 
 components/admin/
-├── AdminCard.tsx                     # Reusable card container
-├── AdminHeader.tsx                   # Header with ADMIN badge
-├── AdminStatRow.tsx                  # Key-value stat row
-└── AdminStatusBadge.tsx              # Color-coded status badges
+├── AdminCard.tsx                      # Reusable card container
+├── AdminHeader.tsx                    # Header with ADMIN badge
+├── AdminStatRow.tsx                   # Key-value stat row
+├── AdminStatusBadge.tsx               # Color-coded status badges
+└── AnalyticsMetricsCard.tsx           # Analytics metrics display
 
 Integration Points:
 -------------------
-app/_layout.tsx                       # Wraps app in AdminProvider
-app/tabs/bounty-app.tsx              # Uses useAdmin + routes to admin
-components/ui/bottom-nav.tsx         # Conditional admin tab
-components/settings-screen.tsx       # Dev toggle for admin mode
+app/_layout.tsx                        # Wraps app in AdminProvider
+app/tabs/bounty-app.tsx                # Uses useAdmin + routes to admin
+components/ui/bottom-nav.tsx           # Conditional admin tab
+components/settings-screen.tsx         # Dev toggle for admin mode
 
 Documentation:
 --------------
-ADMIN_SECTION.md                     # Complete architecture guide
-ADMIN_STRUCTURE.txt                  # This file (visual structure)
+ADMIN_SECTION.md                       # Complete architecture guide
+ADMIN_STRUCTURE.txt                    # This file (visual structure)
 
 KEY FEATURES BY SCREEN
 ======================
