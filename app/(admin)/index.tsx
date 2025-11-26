@@ -20,7 +20,8 @@ export default function AdminDashboard() {
     { id: 'bounties', title: 'Bounties', icon: 'work', route: ROUTES.ADMIN.BOUNTIES },
     { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
-    { id: 'reports', title: 'Reports', icon: 'report', route: '/(admin)/reports' },
+    { id: 'reports', title: 'Moderation', icon: 'shield', route: ROUTES.ADMIN.REPORTS },
+    { id: 'audit', title: 'Audit Logs', icon: 'history', route: ROUTES.ADMIN.AUDIT_LOGS },
     { id: 'blocked', title: 'Blocked Users', icon: 'block', route: '/(admin)/blocked-users' },
   ];
 
