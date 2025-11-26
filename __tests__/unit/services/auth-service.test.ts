@@ -20,15 +20,20 @@ jest.mock('../../../lib/supabase', () => ({
 // Mock password validation
 jest.mock('../../../lib/utils/password-validation', () => ({
   validateNewPassword: jest.fn(),
+  isValidEmail: jest.fn().mockImplementation((email: string) => {
+    // Simple email validation for testing
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }),
 }));
 
 const { supabase } = require('../../../lib/supabase');
-const { validateNewPassword } = require('../../../lib/utils/password-validation');
+const { validateNewPassword, isValidEmail } = require('../../../lib/utils/password-validation');
 
 describe('Auth Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     validateNewPassword.mockReturnValue(null); // Default to valid password
+    isValidEmail.mockImplementation((email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
   });
 
   describe('resendVerification', () => {

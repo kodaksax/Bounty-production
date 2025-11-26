@@ -10,9 +10,38 @@ import {
   validatePasswordMatch,
   getStrengthColor,
   getStrengthWidth,
+  isValidEmail,
+  EMAIL_REGEX,
 } from '../../../lib/utils/password-validation';
 
 describe('Password Validation', () => {
+  describe('isValidEmail', () => {
+    it('should return true for valid email addresses', () => {
+      expect(isValidEmail('test@example.com')).toBe(true);
+      expect(isValidEmail('user.name@domain.co.uk')).toBe(true);
+      expect(isValidEmail('user+tag@example.org')).toBe(true);
+    });
+
+    it('should return false for invalid email addresses', () => {
+      expect(isValidEmail('')).toBe(false);
+      expect(isValidEmail('invalid')).toBe(false);
+      expect(isValidEmail('invalid@')).toBe(false);
+      expect(isValidEmail('@example.com')).toBe(false);
+      expect(isValidEmail('user name@example.com')).toBe(false);
+    });
+
+    it('should trim whitespace before validation', () => {
+      expect(isValidEmail('  test@example.com  ')).toBe(true);
+    });
+  });
+
+  describe('EMAIL_REGEX', () => {
+    it('should be a valid regex pattern', () => {
+      expect(EMAIL_REGEX).toBeInstanceOf(RegExp);
+      expect(EMAIL_REGEX.test('test@example.com')).toBe(true);
+    });
+  });
+
   describe('checkPasswordRequirements', () => {
     it('should return all requirements as not met for empty password', () => {
       const requirements = checkPasswordRequirements('');

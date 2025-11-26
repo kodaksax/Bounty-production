@@ -32,6 +32,21 @@ export const PASSWORD_REQUIREMENTS = {
   specialChars: '@$!%*?&',
 };
 
+// Pre-compiled regex patterns for performance
+const SPECIAL_CHAR_REGEX = new RegExp(
+  `[${PASSWORD_REQUIREMENTS.specialChars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}]`
+);
+
+/** Pre-compiled email regex for validation */
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate email format using pre-compiled regex
+ */
+export function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email.trim());
+}
+
 /**
  * Check individual password requirements
  */
@@ -60,7 +75,7 @@ export function checkPasswordRequirements(password: string): PasswordRequirement
     {
       id: 'special',
       label: `One special character (${PASSWORD_REQUIREMENTS.specialChars})`,
-      met: new RegExp(`[${PASSWORD_REQUIREMENTS.specialChars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}]`).test(password),
+      met: SPECIAL_CHAR_REGEX.test(password),
     },
   ];
 

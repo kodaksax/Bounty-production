@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '../supabase'
-import { validateNewPassword } from '../utils/password-validation'
+import { validateNewPassword, isValidEmail } from '../utils/password-validation'
 
 /**
  * Result type for authentication operations
@@ -90,9 +90,9 @@ export async function requestPasswordReset(
   redirectTo?: string
 ): Promise<AuthResult> {
   try {
-    // Validate email format
+    // Validate email format using pre-compiled regex
     const normalizedEmail = email.trim().toLowerCase()
-    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
       return {
         success: false,
         message: 'Please enter a valid email address',

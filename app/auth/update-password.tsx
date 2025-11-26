@@ -49,7 +49,12 @@ export function UpdatePasswordScreen() {
   useEffect(() => {
     const verifyToken = async () => {
       const token = params.token
-      const type = params.type as 'recovery' | 'signup' | 'invite' | 'email' || 'recovery'
+      // Type guard to ensure valid token type with fallback to 'recovery'
+      const validTypes = ['recovery', 'signup', 'invite', 'email'] as const
+      type TokenType = typeof validTypes[number]
+      const type: TokenType = validTypes.includes(params.type as TokenType) 
+        ? (params.type as TokenType) 
+        : 'recovery'
       
       if (!token) {
         // No token provided - user may have navigated here directly
