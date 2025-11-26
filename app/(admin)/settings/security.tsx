@@ -33,6 +33,8 @@ export default function AdminSecuritySettingsScreen() {
     Alert.alert(title, 'Select an option:', buttons);
   };
 
+  // TODO: In production, integrate with actual authentication service for 2FA setup.
+  // This should validate user eligibility, generate QR codes, and verify TOTP codes.
   const handleEnable2FA = () => {
     Alert.alert(
       'Enable Two-Factor Authentication',
@@ -42,6 +44,7 @@ export default function AdminSecuritySettingsScreen() {
         { 
           text: 'Enable', 
           onPress: () => {
+            // Mock implementation - replace with actual 2FA enrollment flow
             handleToggle('twoFactorEnabled');
             Alert.alert('2FA Enabled', 'Two-factor authentication has been enabled for your account.');
           }
