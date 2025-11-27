@@ -105,24 +105,8 @@ export function SignUpForm() {
       setAgeVerified(false)
       setTermsAccepted(false)
 
-      const navigateToSignIn = () => {
-        // Small delay keeps the Alert dismissal smooth before navigation occurs
-        setTimeout(() => {
-          router.replace('/auth/sign-in-form' as Href)
-        }, 125)
-      }
-
-      Alert.alert(
-        'Confirm Your Email',
-        'Check your email to confirm your account, then sign in with your credentials.',
-        [
-          {
-            text: 'Go to Sign In',
-            onPress: navigateToSignIn,
-          },
-        ],
-        { cancelable: false }
-      )
+      // Navigate to the email confirmation screen with clear instructions
+      router.replace('/auth/email-confirmation' as Href)
     } catch (e: any) {
       setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
       console.error('[sign-up] Error:', e)

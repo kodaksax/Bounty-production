@@ -1,34 +1,49 @@
 /**
  * Phone Onboarding Screen
  * Third step: collect optional phone number (private, never displayed)
+ * Note: Phone will eventually be mandatory for verification
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUserProfile } from '../../hooks/useUserProfile';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { useUserProfile } from '../../hooks/useUserProfile';
+import { useOnboarding } from '../../lib/context/onboarding-context';
 
 export default function PhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { updateProfile } = useUserProfile();
   const { updateProfile: updateAuthProfile } = useAuthProfile();
+  const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
   
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(onboardingData.phone);
   const [saving, setSaving] = useState(false);
+
+  // Sync from context on mount
+  useEffect(() => {
+    if (onboardingData.phone && onboardingData.phone !== phone) {
+      setPhone(onboardingData.phone);
+    }
+  }, []);
+
+  // Persist phone to context when it changes
+  useEffect(() => {
+    updateOnboardingData({ phone });
+  }, [phone]);
 
   const handleNext = async () => {
     setSaving(true);
@@ -85,26 +100,34 @@ export default function PhoneScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 160 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header with Back Button and Branding */}
+        <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
-          
-          <MaterialIcons name="phone" size={64} color="#a7f3d0" />
-          <Text style={styles.title}>Phone Number</Text>
+          <View style={styles.brandingHeader}>
+            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
+            <Text style={styles.brandingText}>BOUNTY</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        {/* Content */}
+        <View style={styles.content}>
+          <MaterialIcons name="phone" size={56} color="#a7f3d0" />
+          <Text style={styles.title}>Add Your Phone</Text>
           <Text style={styles.subtitle}>
-            Optional. Used for trust and notifications only. Never displayed publicly.
+            Your phone number is private and used for account verification and important notifications only.
           </Text>
         </View>
 
         {/* Phone Input */}
         <View style={styles.inputSection}>
           <View style={styles.field}>
-            <Text style={styles.label}>Phone Number (Optional & Private)</Text>
+            <Text style={styles.label}>Phone Number</Text>
             <TextInput
               style={styles.input}
               value={getDisplayPhone()}
@@ -117,17 +140,24 @@ export default function PhoneScreen() {
             <View style={styles.privacyNote}>
               <MaterialIcons name="lock" size={16} color="#a7f3d0" />
               <Text style={styles.privacyText}>
-                Your phone number is private and will never be shown to other users
+                Never shared publicly — only used for verification
               </Text>
             </View>
           </View>
 
+          {/* Future requirement notice */}
+          <View style={styles.futureNotice}>
+            <MaterialIcons name="info-outline" size={18} color="#fbbf24" />
+            <Text style={styles.futureNoticeText}>
+              Phone verification will be required in the future to ensure trust and safety on the platform.
+            </Text>
+          </View>
+
           {/* Info box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color="#a7f3d0" />
+            <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
             <Text style={styles.infoText}>
-              We may use your phone for account verification and important notifications. 
-              You can update or remove it anytime in settings.
+              Adding your phone helps build trust with other users and enables important security features like two-factor authentication.
             </Text>
           </View>
         </View>
@@ -140,7 +170,7 @@ export default function PhoneScreen() {
             disabled={saving}
           >
             <Text style={styles.nextButtonText}>
-              {saving ? 'Saving...' : 'Next'}
+              {saving ? 'Saving...' : phone.trim() ? 'Save & Continue' : 'Continue'}
             </Text>
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
@@ -171,19 +201,33 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
   },
-  header: {
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 32,
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 16,
   },
   backButton: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
     padding: 8,
   },
+  brandingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brandingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 2,
+    marginLeft: 6,
+  },
+  content: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#ffffff',
     marginTop: 16,
@@ -191,17 +235,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
     paddingHorizontal: 16,
   },
   inputSection: {
     marginBottom: 24,
   },
   field: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     color: '#a7f3d0',
@@ -230,6 +274,23 @@ const styles = StyleSheet.create({
     color: '#a7f3d0',
     fontSize: 13,
     marginLeft: 6,
+    flex: 1,
+  },
+  futureNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(251,191,36,0.15)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.3)',
+  },
+  futureNoticeText: {
+    color: '#fef3c7',
+    fontSize: 13,
+    lineHeight: 18,
+    marginLeft: 10,
     flex: 1,
   },
   infoBox: {

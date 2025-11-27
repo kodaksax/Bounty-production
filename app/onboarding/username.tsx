@@ -1,6 +1,7 @@
 /**
  * Username Onboarding Screen
  * First step: collect unique username (required)
+ * Features: Bounty branding, state persistence via context, modal for legal docs
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -19,11 +21,16 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PRIVACY_TEXT } from '../../assets/legal/privacy';
+import { TERMS_TEXT } from '../../assets/legal/terms';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
+
+type LegalModalType = 'terms' | 'privacy' | null;
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -31,17 +38,45 @@ export default function UsernameScreen() {
   const { profile: localProfile, updateProfile } = useUserProfile();
   const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
+  const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
   
-  const [username, setUsername] = useState('');
+  // Initialize state from context
+  const [username, setUsername] = useState(onboardingData.username);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [isValid, setIsValid] = useState(false);
-  const [accepted, setAccepted] = useState(false);
+  const [accepted, setAccepted] = useState(onboardingData.accepted);
+  const [legalModal, setLegalModal] = useState<LegalModalType>(null);
 
+  // Sync from context on mount
   useEffect(() => {
-    // load prior acceptance if any
-    AsyncStorage.getItem('BE:acceptedLegal').then((v) => setAccepted(v === 'true')).catch(() => {});
+    if (onboardingData.username && onboardingData.username !== username) {
+      setUsername(onboardingData.username);
+    }
+    if (onboardingData.accepted !== accepted) {
+      setAccepted(onboardingData.accepted);
+    }
   }, []);
+
+  // Load prior acceptance
+  useEffect(() => {
+    AsyncStorage.getItem('BE:acceptedLegal').then((v) => {
+      if (v === 'true' && !accepted) {
+        setAccepted(true);
+        updateOnboardingData({ accepted: true });
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Persist username to context when it changes
+  useEffect(() => {
+    updateOnboardingData({ username });
+  }, [username]);
+
+  // Persist accepted to context when it changes
+  useEffect(() => {
+    updateOnboardingData({ accepted });
+  }, [accepted]);
 
   // Validate username on change
   useEffect(() => {
@@ -55,7 +90,6 @@ export default function UsernameScreen() {
       // Format validation
       const validation = validateUsername(username);
       if (!validation.valid) {
-        // validation.error may be undefined; setError expects string | null
         setError(validation.error ?? null);
         setIsValid(false);
         return;
@@ -65,7 +99,6 @@ export default function UsernameScreen() {
       setChecking(true);
       setError(null);
       
-      // Debounce
       const timer = setTimeout(async () => {
         const unique = await isUsernameUnique(username, 'current-user');
         if (!unique) {
@@ -90,6 +123,7 @@ export default function UsernameScreen() {
     try {
       // persist acceptance
       try { await AsyncStorage.setItem('BE:acceptedLegal', 'true'); } catch {}
+      
       // Save username to local profile service
       const result = await updateProfile({ 
         username,
@@ -105,7 +139,6 @@ export default function UsernameScreen() {
       }
 
       // Also save to Supabase profiles table via AuthProfileService
-      // First check if profile exists
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
@@ -113,10 +146,8 @@ export default function UsernameScreen() {
         .single();
 
       if (existingProfile) {
-        // Update existing profile
         await updateAuthProfile({ username });
       } else {
-        // Create new profile in Supabase
         const { error: insertError } = await supabase
           .from('profiles')
           .insert({
@@ -131,7 +162,6 @@ export default function UsernameScreen() {
           return;
         }
 
-        // Fetch the newly created profile via AuthProfileService
         await updateAuthProfile({ username });
       }
 
@@ -142,18 +172,62 @@ export default function UsernameScreen() {
     }
   };
 
+  const renderLegalModal = () => {
+    const title = legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy';
+    const content = legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT;
+    const paragraphs = content.split(/\n\n+/);
+
+    return (
+      <Modal
+        visible={!!legalModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setLegalModal(null)}
+      >
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+          <View style={styles.modalHeader}>
+            <MaterialIcons 
+              name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'} 
+              size={24} 
+              color="#a7f3d0" 
+            />
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity 
+              onPress={() => setLegalModal(null)} 
+              style={styles.modalCloseButton}
+              accessibilityLabel="Close"
+            >
+              <MaterialIcons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView 
+            style={styles.modalScroll}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+          >
+            {paragraphs.map((p, i) => (
+              <Text key={i} style={styles.modalParagraph}>{p}</Text>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 160 }]}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
+        {/* Branding Header */}
+        <View style={styles.brandingHeader}>
+          <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
+          <Text style={styles.brandingText}>BOUNTY</Text>
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="person-outline" size={64} color="#a7f3d0" />
+          <MaterialIcons name="person-outline" size={56} color="#a7f3d0" />
           <Text style={styles.title}>Choose Your Username</Text>
           <Text style={styles.subtitle}>
             This is how others will find you. Pick something unique and memorable.
@@ -208,12 +282,14 @@ export default function UsernameScreen() {
             accessibilityState={{ checked: accepted }}
           >
             <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
-            <Text style={styles.legalText}>
-              I agree to the
-            </Text>
-            <Text onPress={() => router.push('/legal/terms')} style={styles.linkText}> Terms of Service</Text>
+            <Text style={styles.legalText}>I agree to the</Text>
+            <TouchableOpacity onPress={() => setLegalModal('terms')}>
+              <Text style={styles.linkText}> Terms of Service</Text>
+            </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
-            <Text onPress={() => router.push('/legal/privacy')} style={styles.linkText}> Privacy Policy</Text>
+            <TouchableOpacity onPress={() => setLegalModal('privacy')}>
+              <Text style={styles.linkText}> Privacy Policy</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         </View>
 
@@ -236,7 +312,10 @@ export default function UsernameScreen() {
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
         </View>
-      </ScrollView>
+      </View>
+
+      {/* Legal Modal */}
+      {renderLegalModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -246,28 +325,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#059669',
   },
-  scrollContent: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     paddingHorizontal: 24,
+  },
+  brandingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  brandingText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 3,
+    marginLeft: 8,
   },
   header: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginTop: 16,
+    marginBottom: 32,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: 16,
+    marginTop: 12,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
     paddingHorizontal: 16,
   },
   legalBox: {
@@ -276,25 +369,25 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(167,243,208,0.3)',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 6,
   },
   legalText: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,
   },
   linkText: {
-    color: '#e5fffb',
+    color: '#a7f3d0',
     textDecorationLine: 'underline',
     fontSize: 13,
+    fontWeight: '600',
   },
   inputSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -334,14 +427,14 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   requirements: {
-    marginTop: 16,
+    marginTop: 12,
     paddingHorizontal: 4,
   },
   requirementTitle: {
     color: 'rgba(255,255,255,0.9)',
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   requirement: {
     color: 'rgba(255,255,255,0.7)',
@@ -355,7 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 8,
   },
   nextButtonDisabled: {
@@ -370,7 +463,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    paddingTop: 16,
+    paddingTop: 8,
   },
   progressDot: {
     width: 8,
@@ -380,5 +473,40 @@ const styles = StyleSheet.create({
   },
   progressDotActive: {
     backgroundColor: '#a7f3d0',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#059669',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(167,243,208,0.2)',
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginLeft: 12,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalScroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  modalParagraph: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
   },
 });

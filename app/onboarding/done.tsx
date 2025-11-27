@@ -1,6 +1,7 @@
 /**
  * Done Onboarding Screen
- * Final step: confirm completion and navigate to Profile
+ * Final step: confirm completion and navigate to app
+ * Shows profile summary including skills, bio, title from onboarding
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useOnboarding } from '../../lib/context/onboarding-context';
 import { supabase } from '../../lib/supabase';
 
 const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
@@ -28,7 +30,18 @@ export default function DoneScreen() {
   const { profile: localProfile } = useUserProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { userId } = useAuthProfile();
-  const displayProfile = normalized || (localProfile ? { username: localProfile.username, name: (localProfile as any).displayName || undefined, _raw: localProfile } : null as any);
+  const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
+  
+  // Use onboarding data primarily, fallback to normalized/local
+  const displayUsername = onboardingData.username || normalized?.username || (localProfile as any)?.username;
+  const displayName = onboardingData.displayName || normalized?.name || (localProfile as any)?.displayName;
+  const displayTitle = onboardingData.title || normalized?.title || (localProfile as any)?.title;
+  const displayBio = onboardingData.bio || normalized?.bio || (localProfile as any)?.bio;
+  const displayLocation = onboardingData.location || normalized?.location || (localProfile as any)?.location;
+  const displaySkills = onboardingData.skills.length > 0 
+    ? onboardingData.skills 
+    : normalized?.skills || (localProfile as any)?.skills || [];
+  const hasPhone = !!onboardingData.phone || !!(normalized?._raw && (normalized as any)._raw.phone) || !!(localProfile as any)?.phone;
   
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -75,13 +88,21 @@ export default function DoneScreen() {
     markComplete();
   }, [scaleAnim, fadeAnim, userId]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    // Clear onboarding data from context as it's now saved to profile
+    await clearOnboardingData();
     // Navigate to the Bounty app dashboard
     router.replace('/tabs/bounty-app');
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 160 }]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 100 }]}>
+      {/* Branding Header */}
+      <View style={styles.brandingHeader}>
+        <MaterialIcons name="gps-fixed" size={24} color="#a7f3d0" />
+        <Text style={styles.brandingText}>BOUNTY</Text>
+      </View>
+
       {/* Success Animation */}
       <View style={styles.content}>
         <Animated.View
@@ -92,44 +113,81 @@ export default function DoneScreen() {
             },
           ]}
         >
-          <MaterialIcons name="check" size={80} color="#052e1b" />
+          <MaterialIcons name="check" size={72} color="#052e1b" />
         </Animated.View>
 
-        <Animated.View style={{ opacity: fadeAnim, alignItems: 'center' }}>
-          <Text style={styles.title}>All Set!</Text>
+        <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
+          <Text style={styles.title}>You're All Set!</Text>
           <Text style={styles.subtitle}>
-            Welcome to Bounty, @{displayProfile?.username || 'user'}!
+            Welcome to Bounty, @{displayUsername || 'user'}!
           </Text>
           
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Your Profile</Text>
+            <Text style={styles.summaryTitle}>Your Profile Summary</Text>
             
             <View style={styles.summaryItem}>
-              <MaterialIcons name="person" size={20} color="#a7f3d0" />
-              <Text style={styles.summaryLabel}>Username:</Text>
-              <Text style={styles.summaryValue}>@{displayProfile?.username}</Text>
+              <MaterialIcons name="person" size={18} color="#a7f3d0" />
+              <Text style={styles.summaryLabel}>Username</Text>
+              <Text style={styles.summaryValue}>@{displayUsername}</Text>
             </View>
             
-            {displayProfile?.name && (
+            {displayName && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="badge" size={20} color="#a7f3d0" />
-                <Text style={styles.summaryLabel}>Display Name:</Text>
-                <Text style={styles.summaryValue}>{displayProfile?.name}</Text>
+                <MaterialIcons name="badge" size={18} color="#a7f3d0" />
+                <Text style={styles.summaryLabel}>Name</Text>
+                <Text style={styles.summaryValue}>{displayName}</Text>
+              </View>
+            )}
+
+            {displayTitle && (
+              <View style={styles.summaryItem}>
+                <MaterialIcons name="work" size={18} color="#a7f3d0" />
+                <Text style={styles.summaryLabel}>Title</Text>
+                <Text style={styles.summaryValue}>{displayTitle}</Text>
               </View>
             )}
             
-            {displayProfile?._raw?.location && (
+            {displayLocation && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="location-on" size={20} color="#a7f3d0" />
-                <Text style={styles.summaryLabel}>Location:</Text>
-                <Text style={styles.summaryValue}>{displayProfile?._raw?.location}</Text>
+                <MaterialIcons name="location-on" size={18} color="#a7f3d0" />
+                <Text style={styles.summaryLabel}>Location</Text>
+                <Text style={styles.summaryValue}>{displayLocation}</Text>
+              </View>
+            )}
+
+            {displayBio && (
+              <View style={styles.summaryItemColumn}>
+                <View style={styles.summaryItemRow}>
+                  <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+                  <Text style={styles.summaryLabel}>Bio</Text>
+                </View>
+                <Text style={styles.summaryBio}>{displayBio}</Text>
+              </View>
+            )}
+
+            {displaySkills.length > 0 && (
+              <View style={styles.summaryItemColumn}>
+                <View style={styles.summaryItemRow}>
+                  <MaterialIcons name="star" size={18} color="#a7f3d0" />
+                  <Text style={styles.summaryLabel}>Skills</Text>
+                </View>
+                <View style={styles.skillsRow}>
+                  {displaySkills.slice(0, 4).map((skill: string, index: number) => (
+                    <View key={index} style={styles.skillBadge}>
+                      <Text style={styles.skillBadgeText}>{skill}</Text>
+                    </View>
+                  ))}
+                  {displaySkills.length > 4 && (
+                    <Text style={styles.moreSkills}>+{displaySkills.length - 4} more</Text>
+                  )}
+                </View>
               </View>
             )}
             
-            {displayProfile?._raw?.phone && (
+            {hasPhone && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="phone" size={20} color="#a7f3d0" />
-                <Text style={styles.summaryLabel}>Phone:</Text>
+                <MaterialIcons name="phone" size={18} color="#a7f3d0" />
+                <Text style={styles.summaryLabel}>Phone</Text>
                 <Text style={styles.summaryValue}>✓ Added (private)</Text>
               </View>
             )}
@@ -144,7 +202,7 @@ export default function DoneScreen() {
       {/* Continue Button */}
       <Animated.View style={{ opacity: fadeAnim }}>
         <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>Continue to Bounty</Text>
+          <Text style={styles.continueButtonText}>Start Exploring</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
         </TouchableOpacity>
       </Animated.View>
@@ -165,72 +223,119 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#059669',
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
+  },
+  brandingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  brandingText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 2,
+    marginLeft: 8,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 40,
   },
   checkCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#a7f3d0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.9)',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   summaryCard: {
     backgroundColor: 'rgba(5,46,27,0.5)',
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     width: '100%',
     borderWidth: 2,
     borderColor: 'rgba(167,243,208,0.3)',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   summaryTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#a7f3d0',
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: 'center',
   },
   summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  summaryItemColumn: {
+    marginBottom: 10,
+  },
+  summaryItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   summaryLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
+    fontSize: 13,
     marginLeft: 8,
-    minWidth: 100,
+    minWidth: 70,
   },
   summaryValue: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     flex: 1,
   },
+  summaryBio: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    lineHeight: 18,
+    marginLeft: 26,
+  },
+  skillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginLeft: 26,
+  },
+  skillBadge: {
+    backgroundColor: 'rgba(167,243,208,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  skillBadgeText: {
+    color: '#a7f3d0',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  moreSkills: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    alignSelf: 'center',
+  },
   infoText: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   continueButton: {
     flexDirection: 'row',
