@@ -23,14 +23,45 @@ export const ROUTES = {
     REVIEW_AND_VERIFY: (id: string | number) => `/postings/${id}/review-and-verify` as const,
     PAYOUT: (id: string | number) => `/postings/${id}/payout` as const,
   },
-  // Admin section
+  // Admin section - Comprehensive routing architecture
   ADMIN: {
+    // Root admin dashboard
     INDEX: '/(admin)',
-    BOUNTIES: '/(admin)/bounties',
-    BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounty/${id}` as const,
+    
+    // User Management
     USERS: '/(admin)/users',
     USER_DETAIL: (id: string | number) => `/(admin)/user/${id}` as const,
+    BLOCKED_USERS: '/(admin)/blocked-users',
+    
+    // Bounty Management
+    BOUNTIES: '/(admin)/bounties',
+    BOUNTY_DETAIL: (id: string | number) => `/(admin)/bounty/${id}` as const,
+    
+    // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',
+    
+    // Analytics & Reporting
+    ANALYTICS: '/(admin)/analytics',
+    REPORTS: '/(admin)/reports',
+    
+    // Settings section
+    SETTINGS: {
+      INDEX: '/(admin)/settings',
+      GENERAL: '/(admin)/settings/general',
+      NOTIFICATIONS: '/(admin)/settings/notifications',
+      SECURITY: '/(admin)/settings/security',
+      AUDIT_LOG: '/(admin)/settings/audit-log',
+    },
+    
+    // Support section
+    SUPPORT: {
+      INDEX: '/(admin)/support',
+      HELP: '/(admin)/support/help',
+      FEEDBACK: '/(admin)/support/feedback',
+    },
+    
+    // Error/fallback routes
+    NOT_FOUND: '/(admin)/not-found',
     REPORTS: '/(admin)/reports',
     AUDIT_LOGS: '/(admin)/audit-logs',
   },

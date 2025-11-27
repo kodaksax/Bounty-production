@@ -6,6 +6,7 @@ import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
+import { ROUTES } from '../../lib/routes';
 import type { AdminUserFilters, AdminUserSummary } from '../../lib/types-admin';
 
 export default function AdminUsersScreen() {
@@ -18,7 +19,7 @@ export default function AdminUsersScreen() {
   const renderUserItem = ({ item }: { item: AdminUserSummary }) => (
     <TouchableOpacity
       style={styles.userCard}
-      onPress={() => router.push(`/(admin)/user/${item.id}` as any)}
+      onPress={() => router.push(ROUTES.ADMIN.USER_DETAIL(item.id))}
     >
       <View style={styles.userHeader}>
         <View style={styles.userInfo}>
