@@ -16,23 +16,23 @@ interface AdminHeaderProps {
 
 export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderProps) {
   const insets = useSafeAreaInsets();
-  const { setIsAdmin } = useAdmin();
+  const { setAdminTabEnabled } = useAdmin();
 
   // Removed settings navigation button per request
 
   const handleExitAdmin = useCallback(() => {
-    Alert.alert('Exit Admin Mode', 'Disable admin mode and return to app settings?', [
+    Alert.alert('Hide Admin Tab', 'Hide the admin tab and return to the main app? You can re-enable it from Settings.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Disable', style: 'destructive', onPress: async () => {
-          await setIsAdmin(false);
+        text: 'Hide', style: 'default', onPress: async () => {
+          await setAdminTabEnabled(false);
           try {
             router.replace(ROUTES.ROOT);
           } catch {}
         }
       }
     ]);
-  }, [setIsAdmin]);
+  }, [setAdminTabEnabled]);
 
   return (
     <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -51,7 +51,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
         <View style={styles.actions}>
           {actions}
           {/* Exit admin */}
-            <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Exit admin mode" accessibilityRole="button">
+            <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Hide admin tab" accessibilityRole="button">
               <MaterialIcons name="admin-panel-settings" size={22} color="#ffddb5" />
             </TouchableOpacity>
         </View>
