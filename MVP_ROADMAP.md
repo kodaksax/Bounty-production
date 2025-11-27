@@ -1,46 +1,46 @@
 # 🚀 BOUNTYExpo MVP Roadmap - App Store Release
 
-**Document Version:** 2.0  
-**Last Updated:** November 13, 2025  
-**Status:** In Development → Production Ready
+**Document Version:** 3.0  
+**Last Updated:** November 27, 2025  
+**Status:** Final Sprint → App Store Submission
 
 ---
 
 ## 📊 Executive Summary
 
 ### Current State Assessment
-BOUNTYExpo is **~88% complete** for MVP App Store release. Significant progress has been made since October with:
+BOUNTYExpo is **~92% complete** for MVP App Store release. The final sprint items have been clarified:
+
+**Already Implemented:**
 - ✅ **Core Architecture**: Expo 54, React Native 0.81, Node/Express API, PostgreSQL + Supabase
 - ✅ **Authentication**: Supabase integration with JWT + Email verification
 - ✅ **UI/UX Complete**: Emerald theme, bottom navigation, loading states, empty states, error handling
 - ✅ **Database Schema**: Complete - bounties, users, wallet transactions, escrow, notifications
 - ✅ **Advanced Features**: Notifications, analytics (Mixpanel + Sentry), onboarding, search/filtering, attachments
+- ✅ **Terms & Privacy Policy**: In-app legal section implemented in Settings
+- ✅ **18+ Age Verification**: Checkbox in sign-up flow (confirmed by user screenshot)
+- ✅ **Terms Acceptance Checkbox**: In sign-up flow with link to Terms & Privacy
 
-### Recent Progress (Oct 16 - Nov 13)
-**13 Major PRs Merged:**
-- ✅ PR #107: Onboarding carousel and profile setup wizard
-- ✅ PR #106: Analytics & error tracking (Mixpanel + Sentry)
-- ✅ PR #105: Comprehensive error handling
-- ✅ PR #104, #102: Attachments with Supabase Storage
-- ✅ PR #101: Loading & empty states across all screens
-- ✅ PR #98: Search & filtering for bounties and users
-- ✅ PR #96: Revision notification system
-- ✅ PR #94: Complete notifications system (in-app + push)
-- ✅ PR #93: Node/Express backend with Stripe integration
+### Recent Clarifications (Nov 13 - Nov 27)
+**App Store Compliance Items Reviewed:**
+- ✅ Privacy Policy & Terms: **In-app version exists** - just needs external URL for App Store Connect
+- ✅ Age Verification: **18+ checkbox implemented** - needs to persist state to user profile
+- ⚠️ Analytics/Monitoring: Mixpanel + Sentry integrated but **not exposed in admin screens**
+- ⚠️ Content Moderation: Report service exists **client-side only** - needs admin panel integration
 
 ### What's Missing for MVP
-To achieve App Store readiness, we need to complete **2-3 weeks** of focused development across:
-1. **Critical Path Items** (App Store Requirements) - 1 week
-2. **Core Functionality Gaps** (Payment flows) - 1 week  
-3. **Submission Preparation** (Store Assets & Review) - 1 week
+To achieve App Store readiness, we need to complete **1-2 weeks** of focused development:
+1. **App Store Requirements** (3-5 days) - External policy URLs, persist age verification
+2. **Admin Integration** (2-3 days) - Reports panel, moderation queue  
+3. **Submission Preparation** (2-3 days) - Store assets, final testing
 
-**Target Timeline**: 3 weeks to App Store submission (reduced from 6 weeks)
+**Target Timeline**: 1-2 weeks to App Store submission
 
 ---
 
 ## 🎯 Development Progress Matrix
 
-### ✅ Completed Features (88%)
+### ✅ Completed Features (92%)
 
 #### Infrastructure & Foundation (100%)
 - [x] Expo 54 + React Native 0.81 setup
@@ -64,7 +64,7 @@ To achieve App Store readiness, we need to complete **2-3 weeks** of focused dev
 - [x] Error handling UI components
 - [x] Pull-to-refresh on list screens
 
-#### Authentication & User Management (95%)
+#### Authentication & User Management (98%)
 - [x] Sign-up / Sign-in flow
 - [x] Email verification gate
 - [x] JWT token handling
@@ -73,6 +73,9 @@ To achieve App Store readiness, we need to complete **2-3 weeks** of focused dev
 - [x] Avatar upload functionality
 - [x] Onboarding carousel (4 screens)
 - [x] Profile setup wizard (bio, skills)
+- [x] 18+ age verification checkbox in sign-up ✅ NEW
+- [x] Terms & Privacy acceptance checkbox in sign-up ✅ NEW
+- ⚠️ Persist age_verified to user profile (needs completion)
 
 #### Profile Features (100%)
 - [x] User profile screen with bio, skills, languages
@@ -83,7 +86,7 @@ To achieve App Store readiness, we need to complete **2-3 weeks** of focused dev
 - [x] Public/private profile views
 - [x] Attachment upload (camera, photos, files)
 
-#### Bounty System (80%)
+#### Bounty System (85%)
 - [x] Create bounty multi-step form (Title, Details, Compensation, Location, Review)
 - [x] Bounty data model and types with attachments
 - [x] Postings feed screen with search/filtering
@@ -125,6 +128,24 @@ To achieve App Store readiness, we need to complete **2-3 weeks** of focused dev
 - ⚠️ Escrow creation on acceptance (needs completion)
 - ⚠️ Fund release on completion (needs completion)
 - ⚠️ Refund flow (needs completion)
+
+#### App Store Compliance (75%) ✅ UPDATED
+- [x] Privacy Policy & Terms - in-app (Legal section in Settings)
+- [x] 18+ age verification checkbox in sign-up
+- [x] Terms acceptance checkbox with link
+- ⚠️ External URL for policies (for App Store Connect field)
+- ⚠️ Persist age_verified boolean to user profile
+- ⚠️ App Store screenshots and description
+- ⚠️ App icon in required sizes
+
+#### Admin & Moderation (60%) ✅ UPDATED
+- [x] Admin panel with user management
+- [x] Admin panel with bounty management
+- [x] Admin panel with transaction history
+- [x] Report service (client-side)
+- ⚠️ Reports/moderation queue in admin panel
+- ⚠️ Analytics dashboard in admin (connect Mixpanel)
+- ⚠️ Error monitoring in admin (connect Sentry)
 
 #### Search & Filtering (100%)
 - [x] Bounty search by keywords

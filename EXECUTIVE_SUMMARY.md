@@ -1,39 +1,45 @@
 # 📊 BOUNTYExpo MVP - Executive Summary
 
 **App Store Readiness Assessment**  
-**Last Updated:** November 13, 2025
+**Last Updated:** November 27, 2025
 
 ---
 
 ## 🎯 Current Status
 
-### Overall Progress: **88% Complete** (Updated from 75%)
+### Overall Progress: **92% Complete** (Updated from 88%)
 
-BOUNTYExpo has made tremendous progress and is substantially complete. With focused effort, the app can be **App Store ready in 2-3 weeks** (reduced from 6-8 weeks).
+BOUNTYExpo is substantially complete and approaching App Store readiness. With focused effort, the app can be **App Store ready in 1-2 weeks**.
 
-**Key Milestone:** 13 major PRs merged since October 16, including analytics, onboarding, search, notifications, error handling, and attachments.
+**Key Updates Since November 13:**
+- ✅ Confirmed: Privacy Policy & Terms exist in-app (Legal section)
+- ✅ Confirmed: 18+ age verification checkbox in sign-up flow
+- ✅ Confirmed: Terms acceptance checkbox with link to policies
+- ⚠️ Clarified: Analytics/monitoring not exposed in admin screens (use Mixpanel/Sentry dashboards)
+- ⚠️ Clarified: Content moderation is client-side only (needs admin panel integration)
 
 ---
 
-## 📈 Progress Breakdown (UPDATED)
+## 📈 Progress Breakdown (UPDATED Nov 27)
 
 | Component | Completion | Status | Change |
 |-----------|------------|--------|--------|
 | **Infrastructure** | 100% | ✅ Complete | +0% |
-| **Authentication** | 95% | ✅ Mostly Complete | +5% |
-| **User Profiles** | 100% | ✅ Complete | +10% |
-| **Bounty Creation** | 80% | ✅ Mostly Complete | +0% |
-| **Bounty Acceptance** | 70% | ⚠️ In Progress | +30% |
-| **Messaging UI** | 75% | ⚠️ Partial | +15% |
-| **Payments/Escrow** | 70% | ⚠️ In Progress | +40% |
-| **Notifications** | 95% | ✅ Complete | +95% NEW |
-| **Search & Filtering** | 100% | ✅ Complete | +100% NEW |
-| **Error Handling** | 95% | ✅ Complete | +55% |
-| **Analytics** | 100% | ✅ Complete | +100% NEW |
-| **Onboarding** | 100% | ✅ Complete | +100% NEW |
-| **Loading States** | 100% | ✅ Complete | +100% NEW |
-| **App Store Compliance** | 0% | ❌ Not Started | +0% |
-| **Overall** | **88%** | **In Progress** | **+13%** |
+| **Authentication** | 98% | ✅ Mostly Complete | +3% |
+| **User Profiles** | 100% | ✅ Complete | +0% |
+| **Bounty Creation** | 85% | ✅ Mostly Complete | +5% |
+| **Bounty Acceptance** | 70% | ⚠️ In Progress | +0% |
+| **Messaging UI** | 75% | ⚠️ Partial | +0% |
+| **Payments/Escrow** | 70% | ⚠️ In Progress | +0% |
+| **Notifications** | 95% | ✅ Complete | +0% |
+| **Search & Filtering** | 100% | ✅ Complete | +0% |
+| **Error Handling** | 95% | ✅ Complete | +0% |
+| **Analytics** | 100% | ✅ Complete | +0% |
+| **Onboarding** | 100% | ✅ Complete | +0% |
+| **Loading States** | 100% | ✅ Complete | +0% |
+| **App Store Compliance** | 75% | ⚠️ In Progress | +75% NEW |
+| **Admin/Moderation** | 60% | ⚠️ In Progress | NEW |
+| **Overall** | **92%** | **Final Sprint** | **+4%** |
 
 ---
 
@@ -88,30 +94,33 @@ BOUNTYExpo has made tremendous progress and is substantially complete. With focu
 
 ---
 
-## 🚧 What's Needed for App Store (UPDATED)
+## 🚧 What's Needed for App Store (UPDATED Nov 27)
 
-### 🔴 Priority 1: App Store Requirements (1 week - was 2)
-**Status:** Not Started  
-**Blocker:** Required for submission
+### 🟡 Priority 1: App Store Requirements (3-5 days)
+**Status:** 75% Complete (was 0%)  
+**Remaining Items:**
 
-1. **Privacy Policy & Terms of Service** (1-2 days - was 3-5)
-   - Legal requirement for App Store
-   - Host publicly and link in app
-   - Acceptance flow in onboarding
+1. **Privacy Policy & Terms of Service** (0.5-1 day)
+   - ✅ In-app version exists (Legal section in Settings)
+   - ⚠️ Host same content externally (GitHub Pages or simple web URL)
+   - ⚠️ Add external URL to App Store Connect listing
 
-2. **Content Moderation System** (2-3 days - was 5-7)
-   - Report buttons on bounties, profiles, messages
-   - Admin panel for reviewing reports (extend existing)
-   - User blocking functionality
+2. **Content Moderation System** (2-3 days)
+   - ✅ Report service exists (client-side)
+   - ⚠️ Create reports table in database
+   - ⚠️ Add reports/moderation queue to admin panel
+   - ⚠️ Implement user blocking functionality
 
-3. **Age Verification** (1 day - was 2-3)
-   - 18+ checkbox during sign-up
-   - Gate payment features
+3. **Age Verification** (0.5 day)
+   - ✅ 18+ checkbox implemented in sign-up UI
+   - ⚠️ Persist `age_verified` boolean to user profile
+   - ⚠️ Add timestamp for audit purposes
 
-4. **App Store Assets** (2-3 days - was 3-4)
-   - 10+ screenshots (iPhone sizes)
-   - App description (500-1000 words)
-   - Keywords for search
+4. **App Store Assets** (2-3 days)
+   - ⚠️ 10+ screenshots (iPhone 6.5" and 5.5")
+   - ⚠️ App description (500-1000 words)
+   - ⚠️ Keywords for search
+   - ⚠️ 1024x1024 app icon for store
    - 1024x1024 app icon
 
 **Timeline:** 1 week (reduced from 2-3 weeks)  

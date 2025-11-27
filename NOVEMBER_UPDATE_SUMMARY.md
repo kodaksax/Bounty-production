@@ -1,23 +1,60 @@
 # 📊 November 2025 MVP Documentation Update
 
-**Date:** November 13, 2025  
-**Purpose:** Comprehensive update to MVP roadmap reflecting significant progress since October 16  
-**Status:** BOUNTYExpo is now 88% complete and 2-3 weeks from App Store launch
+**Date:** November 27, 2025 (Updated from November 13)  
+**Purpose:** Comprehensive update to MVP roadmap reflecting current progress and clarifications  
+**Status:** BOUNTYExpo is now **92% complete** and **1-2 weeks** from App Store launch
 
 ---
 
 ## 🎯 Executive Summary
 
-Since the initial MVP assessment in mid-October, the BOUNTYExpo team has completed **13 major feature PRs**, accelerating the project timeline by **5 weeks** and reducing remaining effort by **73%**.
+Since the November 13 update, additional clarifications have been made regarding App Store compliance items. The project is now in its **final sprint** to App Store submission.
 
 ### Key Metrics Update
 
-| Metric | October 16 | November 13 | Change |
-|--------|------------|-------------|--------|
-| **Overall Completion** | 75% | 88% | +13% |
-| **Weeks to Launch** | 6-8 | 2-3 | -5 weeks |
-| **Developer-Days Remaining** | 62-86 | 15-23 | -73% |
-| **Estimated Cost Remaining** | $48K-$103K | $12K-$28K | $30K-$75K saved |
+| Metric | October 16 | November 13 | November 27 | Change |
+|--------|------------|-------------|-------------|--------|
+| **Overall Completion** | 75% | 88% | 92% | +4% |
+| **Weeks to Launch** | 6-8 | 2-3 | 1-2 | -1 week |
+| **Developer-Days Remaining** | 62-86 | 15-23 | 8-12 | -47% |
+| **App Store Compliance** | 0% | 0% | 75% | +75% |
+
+---
+
+## 🆕 Updates Since November 13
+
+### App Store Compliance Clarifications
+
+The following items were confirmed as **already implemented** (based on user-provided screenshot and code review):
+
+1. **18+ Age Verification** ✅
+   - Checkbox exists in sign-up form: "I confirm I am 18 years or older"
+   - Must be checked before account creation
+   - **Remaining:** Persist state to user profile for compliance trail
+
+2. **Terms & Privacy Acceptance** ✅
+   - Checkbox exists in sign-up form: "I accept the Terms & Privacy"
+   - Links to Terms & Privacy Policy
+   - **Remaining:** None - UI is complete
+
+3. **Privacy Policy & Terms of Service** ✅
+   - In-app version exists in Settings → Legal section
+   - Content includes data handling, user responsibilities
+   - **Remaining:** Host externally for App Store Connect URL field
+
+### Admin Panel Clarifications
+
+Based on code review, the following was clarified:
+
+1. **Analytics/Monitoring Integration** ⚠️
+   - Mixpanel + Sentry are integrated at app level
+   - **NOT exposed in admin screens** - use external dashboards
+   - Admin dashboard shows: users, bounties, transactions metrics only
+
+2. **Content Moderation** ⚠️
+   - `report-service.ts` exists (client-side, logs to console)
+   - **NO admin panel for reviewing reports**
+   - Needs: Reports table + admin moderation queue screen
 
 ---
 

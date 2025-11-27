@@ -1,20 +1,36 @@
 # 🚀 BOUNTYExpo MVP - Quick Start Guide
 
-**For Developers Starting MVP Work Today**
+**For Developers Starting MVP Work Today**  
+**Last Updated:** November 27, 2025
 
 ---
 
 ## 📋 TL;DR - What to Do Right Now
 
-BOUNTYExpo is **75% complete** and needs **6-8 weeks** to reach App Store submission. Start with these critical items:
+BOUNTYExpo is **92% complete** and needs **1-2 weeks** to reach App Store submission. The following items are already done:
 
-### This Week (Week 1)
-1. ✍️ **Create Privacy Policy & Terms** (3 days) - App Store requirement
-2. 🛡️ **Add Content Moderation** (4 days) - Report buttons + Admin panel
+### ✅ Already Implemented
+- Privacy Policy & Terms of Service (in-app, Legal section)
+- 18+ Age Verification checkbox (sign-up form)
+- Terms acceptance checkbox (sign-up form)
+- Analytics & error tracking (Mixpanel + Sentry)
+- Onboarding carousel (4 screens)
+- Search & filtering (bounties + users)
+- Notifications (in-app + push infrastructure)
+- Loading states & error handling
 
-### Next Week (Week 2)  
-3. 🎂 **Implement Age Verification** (2 days) - 18+ checkbox
-4. 📸 **Prepare App Store Assets** (3 days) - Screenshots, descriptions, icons
+### 🎯 Remaining Tasks (1-2 weeks)
+
+**This Week (Week 1):**
+1. 🌐 **Host Privacy Policy externally** (0.5 day) - For App Store Connect URL field
+2. 💾 **Persist age_verified to profile** (0.5 day) - For compliance audit trail
+3. 🛡️ **Add moderation queue to admin** (2 days) - Reports table + admin UI
+4. 📸 **Create App Store assets** (2 days) - Screenshots, description, keywords
+
+**Next Week (Week 2):**
+5. 💰 **Complete escrow flows** (3 days) - Accept → Hold → Release/Refund
+6. 🧪 **Final testing & QA** (2 days) - Manual testing on devices
+7. 🚀 **App Store submission** (1 day)
 
 ---
 
