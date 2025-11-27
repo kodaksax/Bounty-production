@@ -591,7 +591,7 @@ function BountyAppInner() {
         <MessengerScreen
           activeScreen={activeScreen}
           onNavigate={setActiveScreen}
-          onConversationModeChange={(inConv) => setShowBottomNav(!inConv)}
+          onConversationModeChange={() => setShowBottomNav(true)}
         />
       ) : activeScreen === "admin" && showAdminTab ? (
         // admin navigation is handled by effect to avoid updating navigation during render

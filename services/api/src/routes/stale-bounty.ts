@@ -1,18 +1,8 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { staleBountyService } from '../services/stale-bounty-service';
 
-interface CancelStaleBountyRequest extends AuthenticatedRequest {
-  Params: {
-    bountyId: string;
-  };
-}
-
-interface RepostStaleBountyRequest extends AuthenticatedRequest {
-  Params: {
-    bountyId: string;
-  };
-}
+type StaleBountyRouteParams = { bountyId: string };
 
 export async function registerStaleBountyRoutes(fastify: FastifyInstance) {
   const { authMiddleware } = await import('../middleware/auth');
@@ -52,12 +42,20 @@ export async function registerStaleBountyRoutes(fastify: FastifyInstance) {
    * POST /stale-bounties/:bountyId/cancel
    * Cancel a stale bounty and process refund
    */
-  fastify.post<CancelStaleBountyRequest>('/stale-bounties/:bountyId/cancel', {
+  fastify.post<{ Params: StaleBountyRouteParams }>('/stale-bounties/:bountyId/cancel', {
     preHandler: authMiddleware,
-  }, async (request, reply) => {
+  }, async (request: AuthenticatedRequest<{ Params: StaleBountyRouteParams }>, reply: FastifyReply) => {
     try {
+      const userId = request.userId;
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Authentication required',
+        });
+      }
+
       const { bountyId } = request.params;
-      const result = await staleBountyService.cancelStaleBounty(bountyId, request.userId);
+      const result = await staleBountyService.cancelStaleBounty(bountyId, userId);
       
       if (!result.success) {
         return reply.code(400).send({
@@ -83,12 +81,20 @@ export async function registerStaleBountyRoutes(fastify: FastifyInstance) {
    * POST /stale-bounties/:bountyId/repost
    * Repost a stale bounty (reset to open status)
    */
-  fastify.post<RepostStaleBountyRequest>('/stale-bounties/:bountyId/repost', {
+  fastify.post<{ Params: StaleBountyRouteParams }>('/stale-bounties/:bountyId/repost', {
     preHandler: authMiddleware,
-  }, async (request, reply) => {
+  }, async (request: AuthenticatedRequest<{ Params: StaleBountyRouteParams }>, reply: FastifyReply) => {
     try {
+      const userId = request.userId;
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Authentication required',
+        });
+      }
+
       const { bountyId } = request.params;
-      const result = await staleBountyService.repostStaleBounty(bountyId, request.userId);
+      const result = await staleBountyService.repostStaleBounty(bountyId, userId);
       
       if (!result.success) {
         return reply.code(400).send({

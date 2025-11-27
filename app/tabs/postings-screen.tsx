@@ -1287,11 +1287,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       request={request}
                       onAccept={handleAcceptRequest}
                       onReject={handleRejectRequest}
-                      onRequestMoreInfo={(requestId) => {
-                        // Open conversation to request more info
-                        console.log('Request more info for:', requestId)
-                        setActiveScreen('create')
-                      }}
                     />
                   )}
                   ListEmptyComponent={

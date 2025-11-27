@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastify';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
 let supabase: any = null;
@@ -15,7 +15,7 @@ if (supabaseUrl && supabaseAnon) {
   console.log('⚠️  Supabase credentials not found - auth middleware will be disabled')
 }
 
-export interface AuthenticatedRequest extends FastifyRequest {
+export type AuthenticatedRequest<RouteGeneric extends RouteGenericInterface = RouteGenericInterface> = FastifyRequest<RouteGeneric> & {
   userId?: string;
   user?: any;
   isAdmin?: boolean;

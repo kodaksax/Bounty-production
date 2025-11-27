@@ -1,8 +1,8 @@
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { bounties, users, walletTransactions } from '../db/schema';
-import { eq, and, isNotNull, isNull } from 'drizzle-orm';
-import { outboxService } from './outbox-service';
+import { bounties } from '../db/schema';
 import { notificationService } from './notification-service';
+import { outboxService } from './outbox-service';
 import { walletService } from './wallet-service';
 
 export class StaleBountyService {
@@ -254,6 +254,23 @@ export class StaleBountyService {
       console.error('Error reposting stale bounty:', error);
       return { success: false, error: 'Failed to repost stale bounty' };
     }
+  }
+
+  /**
+   * Lightweight helpers exposed for shared tests/UI logic
+   */
+  isBountyStale(bounty: { is_stale?: boolean | null }): boolean {
+    return bounty?.is_stale === true;
+  }
+
+  getStaleReason(bounty: { is_stale?: boolean | null; stale_reason?: string | null }): string {
+    if (!this.isBountyStale(bounty)) return '';
+
+    if (bounty.stale_reason === 'hunter_deleted') {
+      return 'The hunter deleted their account';
+    }
+
+    return 'This bounty needs attention';
   }
 }
 

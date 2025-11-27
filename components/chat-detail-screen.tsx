@@ -8,10 +8,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import type { Conversation } from "lib/types"
 import { getCurrentUserId } from "lib/utils/data-utils"
-import { useWallet } from '../lib/wallet-context'
-import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
 import { useAuthContext } from '../hooks/use-auth-context'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { useWallet } from '../lib/wallet-context'
+import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
 
 interface Message extends ChatMessage {
   time: string
@@ -148,11 +148,10 @@ export function ChatDetailScreen({
     }, 1500) // Show typing for 1.5 seconds
   }
 
-  const handleTypingChange = (isTyping: boolean) => {
-    setIsCurrentUserTyping(isTyping)
+  const handleTypingChange = React.useCallback((isTyping: boolean) => {
     // In a real app, this would emit a typing event via WebSocket
     // e.g., websocketService.emitTyping(conversation.id, isTyping)
-  }
+  }, [conversation.id])
 
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">

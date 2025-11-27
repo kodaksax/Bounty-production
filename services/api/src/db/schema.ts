@@ -1,5 +1,5 @@
-import { pgTable, text, integer, boolean, timestamp, uuid, jsonb, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { boolean, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 // Users table as specified in requirements
 export const users = pgTable('users', {
@@ -124,10 +124,16 @@ export const messages = pgTable('messages', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   media_url: text('media_url'),
-  reply_to: uuid('reply_to').references(() => messages.id),
+  reply_to: uuid('reply_to'),
   is_pinned: boolean('is_pinned').default(false).notNull(),
   status: text('status').default('sent').notNull(), // sent, delivered, read
-});
+}, (table) => ({
+  replyToSelfReference: foreignKey({
+    name: 'messages_reply_to_fkey',
+    columns: [table.reply_to],
+    foreignColumns: [table.id],
+  }).onDelete('set null'),
+}));
 
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({

@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
-import { useHapticFeedback } from '../lib/haptic-feedback';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useHapticFeedback } from '../lib/haptic-feedback';
 
 export interface ChatMessage {
   id: string;
@@ -47,7 +47,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
   const expandedInputRef = useRef<TextInput | null>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { triggerHaptic } = useHapticFeedback()
 
 
