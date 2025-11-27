@@ -184,16 +184,14 @@ export function setupAuthStateListener(): () => void {
     async (event, session) => {
       logger.info('Auth state changed', { event });
       
-      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        if (event === 'SIGNED_OUT') {
-          // Only trigger session expiration callback if this was NOT an intentional sign-out
-          // Intentional sign-outs (user clicking "Log Out") handle their own notification
-          if (!isIntentionalSignOut && sessionExpirationCallback) {
-            sessionExpirationCallback();
-          }
-          // Clear the flag after processing
-          clearIntentionalSignOut();
+      if (event === 'SIGNED_OUT') {
+        // Only trigger session expiration callback if this was NOT an intentional sign-out
+        // Intentional sign-outs (user clicking "Log Out") handle their own notification
+        if (!isIntentionalSignOut && sessionExpirationCallback) {
+          sessionExpirationCallback();
         }
+        // Clear the flag after processing
+        clearIntentionalSignOut();
       }
       
       if (event === 'TOKEN_REFRESHED' && session) {
