@@ -31,6 +31,8 @@ export const ROUTES = {
     USERS: '/(admin)/users',
     USER_DETAIL: (id: string | number) => `/(admin)/user/${id}` as const,
     TRANSACTIONS: '/(admin)/transactions',
+    REPORTS: '/(admin)/reports',
+    AUDIT_LOGS: '/(admin)/audit-logs',
   },
 } as const;
 
