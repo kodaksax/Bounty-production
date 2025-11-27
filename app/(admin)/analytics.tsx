@@ -1,11 +1,13 @@
 // app/(admin)/analytics.tsx - Analytics dashboard for admin panel
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AnalyticsMetricsCard, AnalyticsMetrics } from '../../components/admin/AnalyticsMetricsCard';
 
 export default function AnalyticsDashboard() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [metrics, setMetrics] = React.useState<AnalyticsMetrics | null>(null);
@@ -52,7 +54,7 @@ export default function AnalyticsDashboard() {
 
   return (
     <View style={styles.container}>
-      <AdminHeader title="Analytics Dashboard" />
+      <AdminHeader title="Analytics Dashboard" onBack={() => router.back()} />
 
       <ScrollView
         style={styles.scrollView}
