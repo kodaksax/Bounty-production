@@ -127,16 +127,16 @@ export async function handleSessionExpiration(): Promise<void> {
     logger.info('Handling session expiration');
     
     // Sign out from Supabase
-    // This will trigger the SIGNED_OUT event in setupAuthStateListener,
-    // which will call sessionExpirationCallback for us (since isIntentionalSignOut is false)
+    // This will trigger the SIGNED_OUT event in setupAuthStateListener.
+    // Since handleSessionExpiration is only called by session monitoring (not user action),
+    // isIntentionalSignOut will be false, so the callback will be triggered by the listener.
     await supabase.auth.signOut();
     
     // Clear any local session data
     await AsyncStorage.removeItem(SESSION_CHECK_KEY);
     
-    // Note: We don't call sessionExpirationCallback directly here anymore.
-    // The auth state listener (setupAuthStateListener) will handle it when it
-    // receives the SIGNED_OUT event, since isIntentionalSignOut will be false.
+    // Note: We don't call sessionExpirationCallback directly here.
+    // The auth state listener handles it based on the isIntentionalSignOut flag.
   } catch (error) {
     logger.error('Error handling session expiration', { error });
   }
