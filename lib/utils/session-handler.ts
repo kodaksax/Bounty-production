@@ -120,21 +120,23 @@ export async function refreshSession(): Promise<boolean> {
 
 /**
  * Handle session expiration - sign out and notify callback
+ * This function is called by session monitoring when it detects an expired session.
  */
 export async function handleSessionExpiration(): Promise<void> {
   try {
     logger.info('Handling session expiration');
     
     // Sign out from Supabase
+    // This will trigger the SIGNED_OUT event in setupAuthStateListener,
+    // which will call sessionExpirationCallback for us (since isIntentionalSignOut is false)
     await supabase.auth.signOut();
     
     // Clear any local session data
     await AsyncStorage.removeItem(SESSION_CHECK_KEY);
     
-    // Notify callback
-    if (sessionExpirationCallback) {
-      sessionExpirationCallback();
-    }
+    // Note: We don't call sessionExpirationCallback directly here anymore.
+    // The auth state listener (setupAuthStateListener) will handle it when it
+    // receives the SIGNED_OUT event, since isIntentionalSignOut will be false.
   } catch (error) {
     logger.error('Error handling session expiration', { error });
   }
