@@ -3,7 +3,7 @@ import { Redirect, Stack } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAdmin } from '../../lib/admin-context';
-import { useScreenBackground } from '../../lib/hooks/useScreenBackground';
+import useScreenBackground from '../../lib/hooks/useScreenBackground';
 
 // Admin screen background color - darker green theme
 const ADMIN_BG_COLOR = '#1a3d2e';
