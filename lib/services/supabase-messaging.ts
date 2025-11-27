@@ -341,23 +341,78 @@ export async function sendMessage(
 export async function createConversation(
   participantIds: string[],
   isGroup: boolean = false,
-  bountyId?: string
+  bountyId?: string,
+  creatorId?: string
 ): Promise<Conversation> {
   try {
+    let resolvedCreatorId: string | undefined;
+    try {
+      const { data } = await supabase.auth.getUser();
+      resolvedCreatorId = data.user?.id ?? undefined;
+    } catch {
+      resolvedCreatorId = undefined;
+    }
+
+    if (!resolvedCreatorId) {
+      resolvedCreatorId = creatorId;
+    }
+
+    if (!resolvedCreatorId) {
+      throw new Error('Unable to determine authenticated Supabase user. Please sign in again.');
+    }
+
+    // Ensure the authenticating user is always a participant so RLS policies grant access
+    const ensureCreatorIncluded = participantIds.includes(resolvedCreatorId)
+      ? participantIds
+      : [...participantIds, resolvedCreatorId];
+
     // Create conversation
-    const { data: conversation, error: convError } = await supabase
-      .from('conversations')
-      .insert({
+    const attemptedRows = [
+      {
         is_group: isGroup,
         bounty_id: bountyId,
-      })
-      .select()
-      .single();
+        created_by: resolvedCreatorId,
+      },
+      {
+        is_group: isGroup,
+        bounty_id: bountyId,
+      },
+    ];
 
-    if (convError) throw convError;
+    let conversation: any = null;
+    let lastError: any = null;
+
+    for (const payload of attemptedRows) {
+      try {
+        const { data, error } = await supabase
+          .from('conversations')
+          .insert(payload)
+          .select()
+          .single();
+
+        if (error) throw error;
+        conversation = data;
+        break;
+      } catch (err) {
+        lastError = err;
+        const msg = String((err as any)?.message || err);
+        if (msg.includes('created_by')) {
+          // Retry without created_by if column missing in older schemas
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (!conversation) {
+      try {
+        logClientError('Supabase createConversation failed', { err: lastError, participantIds, bountyId });
+      } catch {}
+      throw lastError || new Error('Unable to create conversation');
+    }
 
     // Add participants
-    const participantRecords = participantIds.map(userId => ({
+    const participantRecords = ensureCreatorIncluded.map(userId => ({
       conversation_id: conversation.id,
       user_id: userId,
     }));
@@ -454,7 +509,7 @@ export async function getOrCreateConversation(
     }
 
     // No existing 1:1 conversation found, create new one
-    return await createConversation([userId, otherUserId], false, bountyId);
+    return await createConversation([userId, otherUserId], false, bountyId, userId);
   } catch (error) {
     console.error('Error in getOrCreateConversation:', error);
     throw error;

@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SocketStream } from '@fastify/websocket';
-import type { FastifyRequest } from 'fastify';
+
+type WebsocketConnection = {
+  socket: {
+    on: (event: string, listener: (...args: any[]) => void) => void;
+    readyState: number;
+    send: (data: string) => void;
+  };
+};
 
 // Message event payload interfaces
 export interface MessageEvent {
@@ -18,7 +24,7 @@ export interface MessageEvent {
 export interface ConversationClient {
   userId: string;
   conversationIds: Set<string>;
-  connection: SocketStream;
+  connection: WebsocketConnection;
   isAuthenticated: boolean;
   lastSeen: Date;
 }
@@ -73,7 +79,7 @@ export class WebSocketMessagingService {
   /**
    * Add authenticated client connection
    */
-  async addClient(userId: string, connection: SocketStream, conversationIds: string[] = []): Promise<void> {
+  async addClient(userId: string, connection: WebsocketConnection, conversationIds: string[] = []): Promise<void> {
     const client: ConversationClient = {
       userId,
       conversationIds: new Set(conversationIds),

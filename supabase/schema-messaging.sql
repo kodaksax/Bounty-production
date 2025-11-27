@@ -123,10 +123,12 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 -- Users can view conversations they're participants in (and haven't deleted)
 DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
+DROP POLICY IF EXISTS "conversations_select_if_participant" ON conversations;
 CREATE POLICY "Users can view their conversations"
   ON conversations FOR SELECT
   USING (
-    EXISTS (
+    conversations.created_by = auth.uid()
+    OR EXISTS (
       SELECT 1 FROM conversation_participants
       WHERE conversation_participants.conversation_id = conversations.id
         AND conversation_participants.user_id = auth.uid()
@@ -145,7 +147,8 @@ DROP POLICY IF EXISTS "Participants can update conversations" ON conversations;
 CREATE POLICY "Participants can update conversations"
   ON conversations FOR UPDATE
   USING (
-    EXISTS (
+    conversations.created_by = auth.uid()
+    OR EXISTS (
       SELECT 1 FROM conversation_participants
       WHERE conversation_participants.conversation_id = conversations.id
         AND conversation_participants.user_id = auth.uid()
@@ -171,6 +174,30 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Helper function: determine if the current auth user can manage a conversation (creator or active participant)
+CREATE OR REPLACE FUNCTION can_manage_conversation(p_conv_id uuid)
+RETURNS boolean AS $$
+DECLARE
+  current_user uuid := auth.uid();
+BEGIN
+  IF current_user IS NULL THEN
+    RETURN false;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM conversations
+    WHERE id = p_conv_id
+      AND created_by = current_user
+  )
+  OR EXISTS (
+    SELECT 1 FROM conversation_participants
+    WHERE conversation_id = p_conv_id
+      AND user_id = current_user
+      AND deleted_at IS NULL
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Users can view participants of conversations they're in
 DROP POLICY IF EXISTS "Users can view conversation participants" ON conversation_participants;
 CREATE POLICY "Users can view conversation participants"
@@ -182,9 +209,12 @@ CREATE POLICY "Users can view conversation participants"
 
 -- Users can add participants when creating/joining conversations
 DROP POLICY IF EXISTS "Users can add conversation participants" ON conversation_participants;
-CREATE POLICY "Users can add conversation participants"
+CREATE POLICY "Participants and owners can add conversation participants"
   ON conversation_participants FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (
+    user_id = auth.uid()
+    OR can_manage_conversation(conversation_id)
+  );
 
 -- Users can only update their own participant record (for soft delete, last_read_at)
 DROP POLICY IF EXISTS "Users can update their own participant record" ON conversation_participants;

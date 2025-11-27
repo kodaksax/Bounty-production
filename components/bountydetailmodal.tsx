@@ -4,27 +4,25 @@ import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
-import { ROUTES } from '../lib/routes'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
-import { messageService } from "../lib/services/message-service"
 import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
@@ -73,7 +71,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [isClosing, setIsClosing] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
-  const [isCreatingChat, setIsCreatingChat] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
@@ -269,49 +266,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     setTimeout(() => {
       onClose()
     }, 300)
-  }
-
-  // Handle message poster button
-  const handleMessagePoster = async () => {
-    triggerHaptic('medium') // Medium haptic for message action
-    if (!bounty.user_id || !currentUserId) {
-      Alert.alert('Error', 'Unable to start conversation.')
-      return
-    }
-
-    // Check if trying to message yourself
-    if (bounty.user_id === currentUserId) {
-      Alert.alert('Cannot Message', 'You cannot message yourself.')
-      return
-    }
-
-    setIsCreatingChat(true)
-    try {
-      // Create or get existing conversation
-      const conversation = await messageService.getOrCreateConversation(
-        [bounty.user_id],
-        displayUsername,
-        bounty.id.toString()
-      )
-
-      console.log('✅ Conversation created/retrieved:', conversation.id)
-      
-      // Close the modal and navigate to chat
-      handleClose()
-      
-      // Use the callback if provided, otherwise navigate directly
-      if (onNavigateToChat) {
-        onNavigateToChat(conversation.id)
-      } else {
-    // Fallback: navigate to messenger (the parent will need to handle showing the conversation)
-  router.push(ROUTES.TABS.MESSENGER as any)
-      }
-    } catch (error) {
-      console.error('Error creating conversation:', error)
-      Alert.alert('Error', 'Failed to start conversation. Please try again.')
-    } finally {
-      setIsCreatingChat(false)
-    }
   }
 
   // Check if user has already applied
@@ -622,26 +576,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             </View>
           </View>
 
-          {/* Contact Section */}
-          {posterId && posterId !== currentUserId && (
-            <View style={styles.contactContainer}>
-              <Text style={styles.sectionHeader}>Contact</Text>
-              <TouchableOpacity 
-                style={styles.messageButton}
-                onPress={handleMessagePoster}
-                disabled={isCreatingChat}
-              >
-                {isCreatingChat ? (
-                  <ActivityIndicator size="small" color="#065f46" />
-                ) : (
-                  <>
-                    <MaterialIcons name="chat" size={20} color="#065f46" />
-                    <Text style={styles.messageButtonText}>Message {displayUsername}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
 
         {/* Accept Bounty Button - With safe area inset */}
@@ -796,6 +730,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  onlineText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#065f46', // emerald-800
+  },
   priceContainer: {
     backgroundColor: '#064e3b80', // emerald-900/50
     paddingHorizontal: 12,
@@ -818,11 +757,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
-  },
-  onlineText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#065f46', // emerald-800
   },
   descriptionContainer: {
     marginBottom: 16,
@@ -899,24 +833,6 @@ const styles = StyleSheet.create({
   },
   downloadButton: {
     padding: 8,
-  },
-  contactContainer: {
-    marginBottom: 16,
-  },
-  messageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0', // emerald-200
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  messageButtonText: {
-    color: '#065f46', // emerald-800
-    fontSize: 16,
-    fontWeight: '600',
   },
   actionContainer: {
     padding: 16,

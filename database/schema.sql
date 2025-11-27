@@ -61,6 +61,8 @@ CREATE TABLE profiles (
     balance numeric(10,2) NOT NULL DEFAULT 0.00,
     withdrawal_count integer DEFAULT 0,
     cancellation_count integer DEFAULT 0,
+    age_verified boolean DEFAULT false,
+    age_verified_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW()
 );

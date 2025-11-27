@@ -1,5 +1,4 @@
 import NetInfo from '@react-native-community/netinfo';
-import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
 import * as messagingService from './messaging';
@@ -119,53 +118,45 @@ export const messageService = {
     const allParticipants = participantIds.includes(userId) 
       ? participantIds 
       : [...participantIds, userId];
-    
-    let isNewConversation = false;
 
-    // Try to create via Supabase RPC if available (preferred) so the canonical
-    // backend stores the conversation and other clients can see it.
-    try {
-      // Convert to array of uuids (strings)
-      const pids = allParticipants.map(String)
-  const { data, error } = await supabase.rpc('rpc_create_conversation', { p_participant_ids: pids, p_bounty_id: bountyId ? String(bountyId) : null, p_name: name })
-      if (error) {
-        throw error
-      }
-
-      const convId = (data as any) ?? null
-      if (convId) {
-        isNewConversation = true;
-
-        // Refresh conversations from Supabase and return the created one
+    // For 1:1 conversations, use Supabase's getOrCreateConversation which properly
+    // checks for existing conversations before creating new ones
+    if (allParticipants.length === 2) {
+      const otherUserId = allParticipants.find(id => id !== userId);
+      if (otherUserId) {
         try {
-          const list = await supabaseMessaging.fetchConversations(userId)
-          const found = list.find(c => String(c.id) === String(convId))
-          if (found) {
-            logClientInfo('Created conversation via RPC', { convId, participantIds: pids })
+          // Use supabaseMessaging.getOrCreateConversation which checks for existing
+          // 1:1 conversations before creating a new one
+          const conversation = await supabaseMessaging.getOrCreateConversation(
+            userId,
+            otherUserId,
+            bountyId
+          );
+          
+          logClientInfo('Got/created 1:1 conversation via Supabase', { 
+            conversationId: conversation.id, 
+            otherUserId,
+            bountyId 
+          });
 
-            // Track conversation started event
-            if (isNewConversation) {
-              await analyticsService.trackEvent('conversation_started', {
-                conversationId: found.id,
-                participantCount: allParticipants.length,
-                isGroup: allParticipants.length > 2,
-                hasBounty: !!bountyId,
-              });
-            }
+          // Track conversation started event
+          await analyticsService.trackEvent('conversation_started', {
+            conversationId: conversation.id,
+            participantCount: 2,
+            isGroup: false,
+            hasBounty: !!bountyId,
+          });
 
-            return found
-          }
-          } catch (fetchErr) {
-          // Fall through to local fallback
-          logClientError('Created conversation but failed to fetch from supabase', { err: fetchErr, convId })
+          return conversation;
+        } catch (supabaseErr) {
+          // Log and fall back to local messaging layer
+          // Ignore logging errors to prevent breaking the fallback flow
+          try { logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr }) } catch { /* ignore logging errors */ }
         }
       }
-    } catch (rpcErr) {
-      // Log and fall back to local messaging layer
-      try { logClientError('rpc_create_conversation failed', { err: rpcErr }) } catch {}
     }
 
-    // Fallback: create in local persistent layer
+    // Fallback: create in local persistent layer (also handles group conversations)
     const conversation = await messagingService.getOrCreateConversation(allParticipants, name, bountyId);
 
     // Track conversation started event (may be a new or existing conversation)

@@ -1,10 +1,10 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { db } from '../db/connection';
-import { conversations, conversationParticipants, messages, users } from '../db/schema';
+import { conversationParticipants, conversations, messages, users } from '../db/schema';
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import { wsMessagingService } from '../services/websocket-messaging-service';
 import { notificationService } from '../services/notification-service';
+import { wsMessagingService } from '../services/websocket-messaging-service';
 
 interface GetMessagesParams {
   conversationId: string;
@@ -43,7 +43,8 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
     { preHandler: authMiddleware },
     async (request: AuthenticatedRequest, reply: FastifyReply) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
@@ -63,7 +64,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           )
           .where(
             and(
-              eq(conversationParticipants.user_id, request.userId),
+              eq(conversationParticipants.user_id, userId),
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           )
@@ -104,7 +105,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
               .where(
                 and(
                   eq(conversationParticipants.conversation_id, conv.id),
-                  eq(conversationParticipants.user_id, request.userId)
+                  eq(conversationParticipants.user_id, userId)
                 )
               )
               .limit(1);
@@ -158,15 +159,20 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: GetMessagesParams; Querystring: GetMessagesQuery }>(
     '/api/conversations/:conversationId/messages',
     { preHandler: authMiddleware },
-    async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    async (
+      request: AuthenticatedRequest<{ Params: GetMessagesParams; Querystring: GetMessagesQuery }>,
+      reply: FastifyReply
+    ) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
         const { conversationId } = request.params;
-        const page = parseInt(request.query.page || '1', 10);
-        const limit = parseInt(request.query.limit || '50', 10);
+        const { page: pageRaw = '1', limit: limitRaw = '50' } = request.query || {};
+        const page = Number.parseInt(pageRaw, 10);
+        const limit = Number.parseInt(limitRaw, 10);
         const offset = (page - 1) * limit;
 
         // Verify user is a participant
@@ -176,7 +182,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .where(
             and(
               eq(conversationParticipants.conversation_id, conversationId),
-              eq(conversationParticipants.user_id, request.userId),
+              eq(conversationParticipants.user_id, userId),
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           )
@@ -235,9 +241,13 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: SendMessageParams; Body: SendMessageBody }>(
     '/api/conversations/:conversationId/messages',
     { preHandler: authMiddleware },
-    async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    async (
+      request: AuthenticatedRequest<{ Params: SendMessageParams; Body: SendMessageBody }>,
+      reply: FastifyReply
+    ) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
@@ -255,7 +265,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .where(
             and(
               eq(conversationParticipants.conversation_id, conversationId),
-              eq(conversationParticipants.user_id, request.userId),
+              eq(conversationParticipants.user_id, userId),
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           )
@@ -270,7 +280,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .insert(messages)
           .values({
             conversation_id: conversationId,
-            sender_id: request.userId,
+            sender_id: userId,
             text: text.trim(),
             reply_to: replyTo || null,
             media_url: mediaUrl || null,
@@ -278,7 +288,10 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           })
           .returning();
 
-        const newMessage = newMessages[0];
+        const newMessage = (newMessages as typeof messages.$inferSelect[])[0];
+        if (!newMessage) {
+          return reply.code(500).send({ error: 'Failed to persist message' });
+        }
 
         // Update conversation timestamp
         await db
@@ -290,7 +303,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
         wsMessagingService.handleNewMessage(
           conversationId,
           newMessage.id,
-          request.userId,
+          userId,
           text.trim()
         );
 
@@ -301,7 +314,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .where(
             and(
               eq(conversationParticipants.conversation_id, conversationId),
-              sql`${conversationParticipants.user_id} != ${request.userId}`,
+              sql`${conversationParticipants.user_id} != ${userId}`,
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           );
@@ -313,7 +326,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
             // User is offline, send push notification
             await notificationService.sendMessageNotification(
               participant.user_id,
-              request.userId,
+              userId,
               conversationId,
               text.trim()
             );
@@ -332,9 +345,13 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: CreateConversationBody }>(
     '/api/conversations',
     { preHandler: authMiddleware },
-    async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    async (
+      request: AuthenticatedRequest<{ Body: CreateConversationBody }>,
+      reply: FastifyReply
+    ) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
@@ -345,9 +362,9 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
         }
 
         // Ensure current user is in participants
-        const allParticipants = participantIds.includes(request.userId)
+        const allParticipants = participantIds.includes(userId)
           ? participantIds
-          : [...participantIds, request.userId];
+          : [...participantIds, userId];
 
         // For 1:1 conversations, check if one already exists
         if (!isGroup && allParticipants.length === 2) {
@@ -372,7 +389,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
                 )
               );
 
-            const participantUserIds = convParticipants.map((p) => p.user_id);
+              const participantUserIds = convParticipants.map((p) => p.user_id);
             if (
               participantUserIds.length === 2 &&
               allParticipants.every((id) => participantUserIds.includes(id))
@@ -414,9 +431,13 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: GetMessagesParams; Body: UpdateMessageStatusBody }>(
     '/api/conversations/:conversationId/messages/status',
     { preHandler: authMiddleware },
-    async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    async (
+      request: AuthenticatedRequest<{ Params: GetMessagesParams; Body: UpdateMessageStatusBody }>,
+      reply: FastifyReply
+    ) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
@@ -438,7 +459,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .where(
             and(
               eq(conversationParticipants.conversation_id, conversationId),
-              eq(conversationParticipants.user_id, request.userId),
+              eq(conversationParticipants.user_id, userId),
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           )
@@ -467,7 +488,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
             .where(
               and(
                 eq(conversationParticipants.conversation_id, conversationId),
-                eq(conversationParticipants.user_id, request.userId)
+                eq(conversationParticipants.user_id, userId)
               )
             );
         }
@@ -475,9 +496,9 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
         // Broadcast status update via WebSocket
         for (const messageId of messageIds) {
           if (status === 'delivered') {
-            wsMessagingService.handleMessageDelivered(conversationId, messageId, request.userId);
+            wsMessagingService.handleMessageDelivered(conversationId, messageId, userId);
           } else {
-            wsMessagingService.handleMessageRead(conversationId, messageId, request.userId);
+            wsMessagingService.handleMessageRead(conversationId, messageId, userId);
           }
         }
 
@@ -493,9 +514,13 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: GetMessagesParams; Body: { isTyping: boolean } }>(
     '/api/conversations/:conversationId/typing',
     { preHandler: authMiddleware },
-    async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    async (
+      request: AuthenticatedRequest<{ Params: GetMessagesParams; Body: { isTyping: boolean } }>,
+      reply: FastifyReply
+    ) => {
       try {
-        if (!request.userId) {
+        const userId = request.userId;
+        if (!userId) {
           return reply.code(401).send({ error: 'User ID not found' });
         }
 
@@ -509,7 +534,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
           .where(
             and(
               eq(conversationParticipants.conversation_id, conversationId),
-              eq(conversationParticipants.user_id, request.userId),
+              eq(conversationParticipants.user_id, userId),
               sql`${conversationParticipants.deleted_at} IS NULL`
             )
           )
@@ -520,7 +545,7 @@ export async function registerMessagingRoutes(fastify: FastifyInstance) {
         }
 
         // Broadcast typing indicator
-        wsMessagingService.handleTyping(conversationId, request.userId, isTyping);
+        wsMessagingService.handleTyping(conversationId, userId, isTyping);
 
         return { success: true };
       } catch (error) {
