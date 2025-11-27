@@ -56,8 +56,17 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       try {
         const stored = await AsyncStorage.getItem(ONBOARDING_STATE_KEY);
         if (stored) {
-          const parsed = JSON.parse(stored);
-          setData({ ...defaultOnboardingData, ...parsed });
+          try {
+            const parsed = JSON.parse(stored);
+            // Validate the parsed data has the expected structure
+            if (parsed && typeof parsed === 'object') {
+              setData({ ...defaultOnboardingData, ...parsed });
+            }
+          } catch (parseError) {
+            console.error('[OnboardingContext] Error parsing stored state:', parseError);
+            // Clear corrupted data
+            await AsyncStorage.removeItem(ONBOARDING_STATE_KEY);
+          }
         }
       } catch (error) {
         console.error('[OnboardingContext] Error loading state:', error);

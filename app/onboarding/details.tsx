@@ -306,7 +306,7 @@ export default function DetailsScreen() {
           {/* Skills */}
           <View style={styles.field}>
             <Text style={styles.label}>Skills</Text>
-            <Text style={[styles.hint, { marginBottom: 8 }]}>
+            <Text style={styles.hintWithMargin}>
               What can you help with?
             </Text>
             
@@ -532,6 +532,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 12,
     marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  hintWithMargin: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    marginTop: 6,
+    marginBottom: 8,
     paddingHorizontal: 4,
   },
   skillsContainer: {

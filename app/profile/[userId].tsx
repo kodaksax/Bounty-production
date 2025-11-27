@@ -122,12 +122,15 @@ export default function UserProfileScreen() {
         const raw = (profile as any)?._raw || null;
         const rawSkills = profile.skills || (raw && raw.skills) || [];
         if (Array.isArray(rawSkills) && rawSkills.length > 0) {
-          rawSkills.slice(0, 4).forEach((skill: string, index: number) => {
-            profileSkills.push({ 
-              id: `skill-${index}`, 
-              icon: 'star', 
-              text: skill 
-            });
+          rawSkills.slice(0, 4).forEach((skill, index: number) => {
+            // Validate skill is a string
+            if (typeof skill === 'string' && skill.trim()) {
+              profileSkills.push({ 
+                id: `skill-${index}`, 
+                icon: 'star', 
+                text: skill.trim()
+              });
+            }
           });
         }
         

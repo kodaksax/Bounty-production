@@ -280,14 +280,23 @@ export default function UsernameScreen() {
             onPress={() => setAccepted(!accepted)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: accepted }}
+            accessibilityLabel="Accept terms and privacy policy"
           >
             <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
             <Text style={styles.legalText}>I agree to the</Text>
-            <TouchableOpacity onPress={() => setLegalModal('terms')}>
+            <TouchableOpacity 
+              onPress={() => setLegalModal('terms')}
+              accessibilityRole="link"
+              accessibilityLabel="View Terms of Service"
+            >
               <Text style={styles.linkText}> Terms of Service</Text>
             </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
-            <TouchableOpacity onPress={() => setLegalModal('privacy')}>
+            <TouchableOpacity 
+              onPress={() => setLegalModal('privacy')}
+              accessibilityRole="link"
+              accessibilityLabel="View Privacy Policy"
+            >
               <Text style={styles.linkText}> Privacy Policy</Text>
             </TouchableOpacity>
           </TouchableOpacity>

@@ -76,6 +76,12 @@ export default function PhoneScreen() {
     router.back();
   };
 
+  const getButtonText = (): string => {
+    if (saving) return 'Saving...';
+    if (phone.trim()) return 'Save & Continue';
+    return 'Continue';
+  };
+
   const formatPhoneDisplay = (text: string) => {
     // Remove all non-digit characters for clean storage
     const digits = text.replace(/\D/g, '');
@@ -170,7 +176,7 @@ export default function PhoneScreen() {
             disabled={saving}
           >
             <Text style={styles.nextButtonText}>
-              {saving ? 'Saving...' : phone.trim() ? 'Save & Continue' : 'Continue'}
+              {getButtonText()}
             </Text>
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
