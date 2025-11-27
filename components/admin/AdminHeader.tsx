@@ -18,13 +18,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
   const insets = useSafeAreaInsets();
   const { setIsAdmin } = useAdmin();
 
-  const handleGoSettings = useCallback(() => {
-    try {
-      router.push(ROUTES.TABS.PROFILE);
-    } catch (e) {
-      console.warn('[AdminHeader] settings nav failed', e);
-    }
-  }, []);
+  // Removed settings navigation button per request
 
   const handleExitAdmin = useCallback(() => {
     Alert.alert('Exit Admin Mode', 'Disable admin mode and return to app settings?', [
@@ -56,10 +50,6 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
         </View>
         <View style={styles.actions}>
           {actions}
-          {/* Settings icon */}
-          <TouchableOpacity onPress={handleGoSettings} style={styles.iconButton} accessibilityLabel="Settings" accessibilityRole="button">
-            <MaterialIcons name="settings" size={22} color="#c8ffe0" />
-          </TouchableOpacity>
           {/* Exit admin */}
             <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Exit admin mode" accessibilityRole="button">
               <MaterialIcons name="admin-panel-settings" size={22} color="#ffddb5" />

@@ -1,7 +1,7 @@
 // lib/admin-context.tsx - Admin authentication and role management context
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { isSupabaseConfigured, supabase } from './supabase';
 
 interface AdminContextValue {
   isAdmin: boolean;
@@ -65,12 +65,16 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadAdminStatus = async () => {
       try {
+        // Always reset the admin tab toggle on fresh mounts so the nav defaults to the profile tab
+        try {
+          await AsyncStorage.setItem(ADMIN_TAB_ENABLED_KEY, 'false');
+        } catch (error) {
+          console.error('[AdminContext] Error resetting admin tab preference:', error);
+        }
+        setIsAdminTabEnabledState(false);
+
         const stored = await AsyncStorage.getItem(ADMIN_KEY);
         const verifiedAt = await AsyncStorage.getItem(ADMIN_VERIFIED_AT_KEY);
-        const adminTabEnabled = await AsyncStorage.getItem(ADMIN_TAB_ENABLED_KEY);
-        
-        // Load admin tab enabled preference (defaults to false on initial login)
-        setIsAdminTabEnabledState(adminTabEnabled === 'true');
         
         if (stored === 'true' && verifiedAt) {
           const verifiedTime = parseInt(verifiedAt, 10);
@@ -108,7 +112,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         // Reset admin tab visibility preference on sign out for all users.
         // This ensures the admin tab is hidden on the next sign in (initial login behavior).
         await setAdminTabEnabled(false);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      } else if (event === 'SIGNED_IN') {
+        await setAdminTabEnabled(false);
+        await verifyAdminStatus();
+      } else if (event === 'TOKEN_REFRESHED') {
         await verifyAdminStatus();
       }
     });
