@@ -181,9 +181,15 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Auth profile service to clear drafts
               // eslint-disable-next-line @typescript-eslint/no-var-requires
               const { authProfileService } = require('../lib/services/auth-profile-service');
+              // Session handler to mark intentional sign-out
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const { markIntentionalSignOut } = require('../lib/utils/session-handler');
 
               // Get current user ID before signing out
               const currentUserId = authProfile?.id;
+
+              // Mark this as an intentional sign-out to prevent "Session Expired" alert
+              markIntentionalSignOut();
 
               // Sign out from Supabase
               const { error } = await supabase.auth.signOut();
@@ -257,6 +263,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                     const { authProfileService } = require('../lib/services/auth-profile-service');
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
                     const { deleteUserAccount } = require('../lib/services/account-deletion-service');
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const { markIntentionalSignOut } = require('../lib/utils/session-handler');
 
                     // Get current user ID before deleting
                     const currentUserId = authProfile?.id;
@@ -280,6 +288,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                           style: 'destructive',
                           onPress: async () => {
                             try {
+                              // Mark this as an intentional sign-out to prevent "Session Expired" alert
+                              markIntentionalSignOut();
+
                               // Delete user account and associated data
                               const result = await deleteUserAccount();
                               

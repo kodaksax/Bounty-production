@@ -19,6 +19,36 @@ export interface SessionState {
 let sessionExpirationCallback: (() => void) | null = null;
 
 /**
+ * Flag to indicate if the current sign-out is intentional (user-initiated).
+ * This prevents showing "Session Expired" alert when user explicitly logs out.
+ */
+let isIntentionalSignOut = false;
+
+/**
+ * Mark the upcoming sign-out as intentional (user-initiated).
+ * This should be called before calling supabase.auth.signOut() from user actions.
+ * The flag is automatically cleared after the SIGNED_OUT event is processed.
+ */
+export function markIntentionalSignOut(): void {
+  isIntentionalSignOut = true;
+  logger.info('Marked sign-out as intentional');
+}
+
+/**
+ * Clear the intentional sign-out flag.
+ */
+export function clearIntentionalSignOut(): void {
+  isIntentionalSignOut = false;
+}
+
+/**
+ * Check if the current sign-out is intentional.
+ */
+export function isSignOutIntentional(): boolean {
+  return isIntentionalSignOut;
+}
+
+/**
  * Register callback for when session expires
  */
 export function onSessionExpiration(callback: () => void) {
@@ -155,8 +185,14 @@ export function setupAuthStateListener(): () => void {
       logger.info('Auth state changed', { event });
       
       if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        if (event === 'SIGNED_OUT' && sessionExpirationCallback) {
-          sessionExpirationCallback();
+        if (event === 'SIGNED_OUT') {
+          // Only trigger session expiration callback if this was NOT an intentional sign-out
+          // Intentional sign-outs (user clicking "Log Out") handle their own notification
+          if (!isIntentionalSignOut && sessionExpirationCallback) {
+            sessionExpirationCallback();
+          }
+          // Clear the flag after processing
+          clearIntentionalSignOut();
         }
       }
       
