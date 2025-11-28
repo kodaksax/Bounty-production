@@ -3,9 +3,16 @@ import { Redirect, Stack } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAdmin } from '../../lib/admin-context';
+import useScreenBackground from '../../lib/hooks/useScreenBackground';
+
+// Admin screen background color - darker green theme
+const ADMIN_BG_COLOR = '#1a3d2e';
 
 export default function AdminLayout() {
   const { isAdmin, isLoading } = useAdmin();
+  
+  // Set safe area background color to match screen background
+  useScreenBackground(ADMIN_BG_COLOR);
 
   // Show loading while checking admin status
   if (isLoading) {
@@ -27,7 +34,7 @@ export default function AdminLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#1a3d2e' },
+        contentStyle: { backgroundColor: ADMIN_BG_COLOR },
       }}
     />
   );
@@ -36,7 +43,7 @@ export default function AdminLayout() {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: ADMIN_BG_COLOR,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
