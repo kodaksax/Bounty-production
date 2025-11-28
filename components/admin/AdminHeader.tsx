@@ -27,7 +27,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
         text: 'Hide', style: 'default', onPress: async () => {
           await setAdminTabEnabled(false);
           try {
-            router.replace(ROUTES.ROOT);
+            router.replace(ROUTES.TABS.BOUNTY_APP);
           } catch {}
         }
       }
