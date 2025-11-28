@@ -115,26 +115,45 @@ export default function UserProfileScreen() {
           }
         }
         
-        // Generate default skills from profile data
-        const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = [];
+        // Generate skills from profile data
+        const profileSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = [];
         
+        // Add actual skills from profile first
         const raw = (profile as any)?._raw || null;
-        if (raw && raw.phone) {
-          defaultSkills.push({ id: '2', icon: 'verified-user', text: 'Verified contact' });
-        }
-
-        if (raw && raw.location) {
-          defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` });
+        const rawSkills = profile.skills || (raw && raw.skills) || [];
+        if (Array.isArray(rawSkills) && rawSkills.length > 0) {
+          rawSkills.slice(0, 4).forEach((skill, index: number) => {
+            // Validate skill is a string
+            if (typeof skill === 'string' && skill.trim()) {
+              profileSkills.push({ 
+                id: `skill-${index}`, 
+                icon: 'star', 
+                text: skill.trim()
+              });
+            }
+          });
         }
         
+        // Add location if available
+        const location = profile.location || (raw && raw.location);
+        if (location) {
+          profileSkills.push({ id: 'location', icon: 'location-on', text: `Based in ${location}` });
+        }
+        
+        // Add verified contact if phone is set
+        if (raw && raw.phone) {
+          profileSkills.push({ id: 'verified', icon: 'verified-user', text: 'Verified contact' });
+        }
+        
+        // Add join date
         if (profile.joinDate) {
           const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-          defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` });
+          profileSkills.push({ id: 'joined', icon: 'favorite', text: `Joined ${joinDate}` });
         } else {
-          defaultSkills.push({ id: '3', icon: 'favorite', text: 'Member since 2024' });
+          profileSkills.push({ id: 'joined', icon: 'favorite', text: 'Member since 2024' });
         }
         
-        setSkills(defaultSkills);
+        setSkills(profileSkills);
       } catch (error) {
         console.error('Error loading skills:', error);
       }

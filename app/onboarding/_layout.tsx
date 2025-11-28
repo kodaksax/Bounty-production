@@ -5,22 +5,25 @@
 
 import { Stack } from 'expo-router';
 import React from 'react';
+import { OnboardingProvider } from '../../lib/context/onboarding-context';
 
 export default function OnboardingLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: '#059669' },
-        animation: 'slide_from_right',
-      }}
-    >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="carousel" />
-      <Stack.Screen name="username" />
-      <Stack.Screen name="details" />
-      <Stack.Screen name="phone" />
-      <Stack.Screen name="done" />
-    </Stack>
+    <OnboardingProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#059669' },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="carousel" />
+        <Stack.Screen name="username" />
+        <Stack.Screen name="details" />
+        <Stack.Screen name="phone" />
+        <Stack.Screen name="done" />
+      </Stack>
+    </OnboardingProvider>
   );
 }

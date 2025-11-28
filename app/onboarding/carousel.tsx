@@ -1,6 +1,7 @@
 /**
  * Onboarding Carousel
  * Shows 4 screens explaining app features on first launch
+ * Includes value statement and Bounty branding
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -33,30 +34,30 @@ type SlideData = {
 const slides: SlideData[] = [
   {
     id: '1',
-    icon: 'work-outline',
-    title: 'Post Tasks & Earn',
-    description: 'Create bounties for tasks you need done, or complete bounties to earn money and build your reputation.',
+    icon: 'gps-fixed',
+    title: 'Welcome to Bounty',
+    description: 'A marketplace where you can post tasks, find help, and get things done safely. Post a bounty or become a hunter — it\'s that simple.',
     color: '#a7f3d0',
   },
   {
     id: '2',
-    icon: 'people-outline',
-    title: 'Connect with Locals',
-    description: 'Find trusted people nearby to help with tasks, or offer your skills to your local community.',
+    icon: 'work-outline',
+    title: 'Post Tasks & Earn',
+    description: 'Create bounties for tasks you need done, or complete bounties posted by others to earn money and build your reputation.',
     color: '#6ee7b7',
   },
   {
     id: '3',
     icon: 'chat-bubble-outline',
-    title: 'Real-time Chat',
-    description: 'Coordinate details through built-in messaging. Keep all communication in one place.',
+    title: 'Coordinate with Ease',
+    description: 'Chat directly with your match to discuss details, share updates, and coordinate — all within the app.',
     color: '#34d399',
   },
   {
     id: '4',
     icon: 'verified-user',
-    title: 'Safe & Secure',
-    description: 'Payments held in escrow until work is complete. Your money is protected every step of the way.',
+    title: 'Safe & Secure Payments',
+    description: 'Funds are held in escrow until work is complete. Your money is protected every step of the way, ensuring trust for everyone.',
     color: '#10b981',
   },
 ];
@@ -175,6 +176,12 @@ export default function OnboardingCarousel() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {/* Branding Header */}
+      <View style={styles.brandingHeader}>
+        <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
+        <Text style={styles.brandingText}>BOUNTY</Text>
+      </View>
+
       {/* Skip button */}
       <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
         <Text style={styles.skipText}>Skip</Text>
@@ -223,6 +230,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#059669',
+  },
+  brandingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  brandingText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 3,
+    marginLeft: 8,
   },
   skipButton: {
     position: 'absolute',

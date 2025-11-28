@@ -1,12 +1,13 @@
 /**
  * Details Onboarding Screen
- * Second step: collect optional display name, avatar, location
+ * Second step: collect optional display name, avatar, location, title, bio, skills
+ * Features: State persistence, profile picture prominence, branding
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Image,
@@ -23,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useOnboarding } from '../../lib/context/onboarding-context';
 import { attachmentService } from '../../lib/services/attachment-service';
 
 const COMMON_SKILLS = [
@@ -36,26 +38,59 @@ export default function DetailsScreen() {
   const { profile: localProfile, updateProfile } = useUserProfile();
   const { updateProfile: updateAuthProfile } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
+  const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
+  // Initialize from context, then fallback to profile data
   const [displayName, setDisplayName] = useState<string>(
-    (normalized as any)?.name || (localProfile as any)?.displayName || ''
+    onboardingData.displayName || (normalized as any)?.name || (localProfile as any)?.displayName || ''
   );
   const [title, setTitle] = useState<string>(
-    ((normalized as any)?._raw && (normalized as any)._raw.title) || (localProfile as any)?.title || ''
+    onboardingData.title || ((normalized as any)?._raw && (normalized as any)._raw.title) || (localProfile as any)?.title || ''
   );
   const [bio, setBio] = useState<string>(
-    ((normalized as any)?._raw && (normalized as any)._raw.bio) || (localProfile as any)?.bio || ''
+    onboardingData.bio || ((normalized as any)?._raw && (normalized as any)._raw.bio) || (localProfile as any)?.bio || ''
   );
   const [location, setLocation] = useState<string>(
-    ((normalized as any)?._raw && (normalized as any)._raw.location) || (localProfile as any)?.location || ''
+    onboardingData.location || ((normalized as any)?._raw && (normalized as any)._raw.location) || (localProfile as any)?.location || ''
   );
   const [skills, setSkills] = useState<string[]>(
-    ((normalized as any)?._raw && (normalized as any)._raw.skills) || (localProfile as any)?.skills || []
+    onboardingData.skills.length > 0 
+      ? onboardingData.skills 
+      : ((normalized as any)?._raw && (normalized as any)._raw.skills) || (localProfile as any)?.skills || []
   );
   const [customSkill, setCustomSkill] = useState('');
   const [saving, setSaving] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(
+    onboardingData.avatarUri || undefined
+  );
   const [uploading, setUploading] = useState(false);
+
+  // Sync state changes to context
+  useEffect(() => {
+    updateOnboardingData({ displayName });
+  }, [displayName]);
+
+  useEffect(() => {
+    updateOnboardingData({ title });
+  }, [title]);
+
+  useEffect(() => {
+    updateOnboardingData({ bio });
+  }, [bio]);
+
+  useEffect(() => {
+    updateOnboardingData({ location });
+  }, [location]);
+
+  useEffect(() => {
+    updateOnboardingData({ skills });
+  }, [skills]);
+
+  useEffect(() => {
+    if (avatarUri) {
+      updateOnboardingData({ avatarUri });
+    }
+  }, [avatarUri]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -121,15 +156,11 @@ export default function DetailsScreen() {
   const handleNext = async () => {
     setSaving(true);
     
-    // Save to local storage
+    // Save to local storage with all fields
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
-      // Use flexible typing for optional fields
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       title: (title.trim() || undefined) as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       bio: (bio.trim() || undefined) as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       location: (location.trim() || undefined) as any,
       skills: skills.length > 0 ? skills : undefined,
       avatar: avatarUri || undefined,
@@ -165,19 +196,50 @@ export default function DetailsScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 160 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header with Back Button and Branding */}
+        <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
-          
-          <MaterialIcons name="info-outline" size={64} color="#a7f3d0" />
+          <View style={styles.brandingHeader}>
+            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
+            <Text style={styles.brandingText}>BOUNTY</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        {/* Avatar picker - Prominent placement at top */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} disabled={uploading}>
+            {avatarUri ? (
+              <View style={styles.avatarImageWrapper}>
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
+              </View>
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.4)" />
+              </View>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <MaterialIcons name="camera-alt" size={18} color="#052e1b" />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>
+            {uploading ? 'Uploading…' : 'Tap to add a profile photo'}
+          </Text>
+          <Text style={styles.avatarSubhint}>
+            A profile photo helps others recognize you
+          </Text>
+        </View>
+
+        {/* Title */}
+        <View style={styles.header}>
           <Text style={styles.title}>Tell Us About Yourself</Text>
           <Text style={styles.subtitle}>
-            Help others recognize you with a display name and location. These are optional.
+            These details help others learn more about you. All fields are optional.
           </Text>
         </View>
 
@@ -185,7 +247,7 @@ export default function DetailsScreen() {
         <View style={styles.inputSection}>
           {/* Display Name */}
           <View style={styles.field}>
-            <Text style={styles.label}>Display Name (Optional)</Text>
+            <Text style={styles.label}>Display Name</Text>
             <TextInput
               style={styles.input}
               value={displayName}
@@ -199,12 +261,12 @@ export default function DetailsScreen() {
 
           {/* Title/Profession */}
           <View style={styles.field}>
-            <Text style={styles.label}>Title/Profession (Optional)</Text>
+            <Text style={styles.label}>Title/Profession</Text>
             <TextInput
               style={styles.input}
               value={title}
               onChangeText={setTitle}
-              placeholder="e.g., Full Stack Developer, Designer"
+              placeholder="e.g., Full Stack Developer"
               placeholderTextColor="rgba(255,255,255,0.4)"
               autoCapitalize="words"
             />
@@ -213,7 +275,7 @@ export default function DetailsScreen() {
 
           {/* Bio */}
           <View style={styles.field}>
-            <Text style={styles.label}>Bio (Optional)</Text>
+            <Text style={styles.label}>Bio</Text>
             <TextInput
               style={[styles.input, styles.bioInput]}
               value={bio}
@@ -229,7 +291,7 @@ export default function DetailsScreen() {
 
           {/* Location */}
           <View style={styles.field}>
-            <Text style={styles.label}>Location (Optional)</Text>
+            <Text style={styles.label}>Location</Text>
             <TextInput
               style={styles.input}
               value={location}
@@ -243,8 +305,8 @@ export default function DetailsScreen() {
 
           {/* Skills */}
           <View style={styles.field}>
-            <Text style={styles.label}>Skills (Optional)</Text>
-            <Text style={[styles.hint, { marginBottom: 8 }]}>
+            <Text style={styles.label}>Skills</Text>
+            <Text style={styles.hintWithMargin}>
               What can you help with?
             </Text>
             
@@ -306,23 +368,6 @@ export default function DetailsScreen() {
               )}
             </View>
           </View>
-
-            {/* Avatar picker */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Profile Picture</Text>
-              <TouchableOpacity style={styles.avatarPlaceholder} onPress={pickAvatar} disabled={uploading}>
-                {avatarUri ? (
-                  <View style={{ width: 96, height: 96, borderRadius: 48, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(167,243,208,0.6)' }}>
-                    <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                  </View>
-                ) : (
-                  <>
-                    <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.3)" />
-                    <Text style={styles.avatarText}>{uploading ? 'Uploading…' : 'Tap to select a photo'}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
         </View>
 
         {/* Action Buttons */}
@@ -364,37 +409,103 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
   },
-  header: {
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 32,
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 16,
   },
   backButton: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
     padding: 8,
   },
-  title: {
-    fontSize: 28,
+  brandingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brandingText: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: 16,
+    letterSpacing: 2,
+    marginLeft: 6,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarImageWrapper: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#a7f3d0',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(5,46,27,0.5)',
+    borderWidth: 3,
+    borderColor: 'rgba(167,243,208,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#a7f3d0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#059669',
+  },
+  avatarHint: {
+    color: '#a7f3d0',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  avatarSubhint: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
     paddingHorizontal: 16,
   },
   inputSection: {
     marginBottom: 24,
   },
   field: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     color: '#a7f3d0',
@@ -406,7 +517,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5,46,27,0.5)',
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     fontSize: 16,
     color: '#ffffff',
     borderWidth: 2,
@@ -415,12 +526,19 @@ const styles = StyleSheet.create({
   bioInput: {
     minHeight: 80,
     textAlignVertical: 'top',
-    paddingTop: 14,
+    paddingTop: 12,
   },
   hint: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 12,
     marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  hintWithMargin: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    marginTop: 6,
+    marginBottom: 8,
     paddingHorizontal: 4,
   },
   skillsContainer: {
@@ -485,19 +603,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatarPlaceholder: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    paddingVertical: 24,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  avatarText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    marginTop: 8,
   },
   actions: {
     marginBottom: 24,
