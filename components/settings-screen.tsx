@@ -7,6 +7,7 @@ import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-n
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
+import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -185,6 +186,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Get current user ID before signing out
               const currentUserId = authProfile?.id;
 
+              // Mark this as an intentional sign-out to prevent "Session Expired" alert
+              markIntentionalSignOut();
+
               // Sign out from Supabase
               const { error } = await supabase.auth.signOut();
               if (error) {
@@ -280,6 +284,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                           style: 'destructive',
                           onPress: async () => {
                             try {
+                              // Mark this as an intentional sign-out to prevent "Session Expired" alert
+                              markIntentionalSignOut();
+
                               // Delete user account and associated data
                               const result = await deleteUserAccount();
                               

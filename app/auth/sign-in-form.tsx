@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { Checkbox } from '../../components/ui/checkbox'
+import { AnimatedScreen } from '../../components/ui/animated-screen'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
@@ -253,26 +254,27 @@ export function SignInForm() {
   
   
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
-          <View className="flex-row items-center justify-center mb-10">
-            <MaterialIcons name="gps-fixed" size={40} color="#fff" />
-            <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
-          </View>
-          <View className="gap-5">
-            {authError && (() => {
-              const friendlyError = getUserFriendlyError(authError);
-              return (
-                <ErrorBanner
-                  error={friendlyError}
-                  onDismiss={resetError}
-                  onAction={friendlyError.retryable ? () => handleSubmit() : undefined}
-                />
-              );
-            })()}
+    <AnimatedScreen animationType="fade" duration={400}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+          <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+            <View className="flex-row items-center justify-center mb-10">
+              <MaterialIcons name="gps-fixed" size={40} color="#fff" />
+              <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
+            </View>
+            <View className="gap-5">
+              {authError && (() => {
+                const friendlyError = getUserFriendlyError(authError);
+                return (
+                  <ErrorBanner
+                    error={friendlyError}
+                    onDismiss={resetError}
+                    onAction={friendlyError.retryable ? () => handleSubmit() : undefined}
+                  />
+                );
+              })()}
 
-            <View>
+              <View>
               <Text className="text-sm text-white/80 mb-1">Email</Text>
               <TextInput
                 nativeID="identifier"
@@ -423,5 +425,6 @@ export function SignInForm() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </AnimatedScreen>
   )
 }
