@@ -66,16 +66,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           console.warn('Failed to deduct funds from wallet after bounty creation');
         }
         
-        // Log the bounty_posted transaction
-        await logTransaction({
-          type: 'bounty_posted',
-          amount: -draft.amount,
-          details: {
-            title: draft.title,
-            bounty_id: result.id.toString(),
-            status: 'completed'
-          }
-        });
+        // No need to log a separate bounty_posted transaction; withdraw() already logs the transaction.
       }
 
       // Clear draft on success
