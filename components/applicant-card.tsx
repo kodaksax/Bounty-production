@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
-import { getValidAvatarUrl } from '../lib/utils/avatar-utils';
+import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
 
@@ -28,10 +28,19 @@ export function ApplicantCard({
   
   // Track component mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
+  // Track navigation timeout for cleanup
+  const navigationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Brief loading indicator timeout for visual feedback during navigation transition
+  const NAVIGATION_LOADING_TIMEOUT_MS = 400;
   
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      // Clear navigation timeout on unmount to prevent memory leaks
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -67,17 +76,17 @@ export function ApplicantCard({
     }
   };
 
-  // Brief loading indicator timeout for visual feedback during navigation transition
-  // Using a short timeout provides immediate visual feedback while navigation occurs
-  const NAVIGATION_LOADING_TIMEOUT_MS = 400;
-
   const handleProfilePress = useCallback(() => {
     const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
       setIsNavigatingToProfile(true);
       router.push(`/profile/${id}`);
-      // Reset state after navigation transition - check if component is still mounted
-      setTimeout(() => {
+      // Clear any existing timeout before setting a new one
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+      // Reset state after navigation transition - stored in ref for cleanup
+      navigationTimeoutRef.current = setTimeout(() => {
         if (isMountedRef.current) {
           setIsNavigatingToProfile(false);
         }
@@ -115,7 +124,7 @@ export function ApplicantCard({
               />
               <AvatarFallback style={styles.avatarFallback}>
                 <Text style={styles.avatarText}>
-                  {(request.profile?.username || 'U').substring(0, 2).toUpperCase()}
+                  {getAvatarInitials(request.profile?.username)}
                 </Text>
               </AvatarFallback>
             </Avatar>
