@@ -62,8 +62,15 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         });
         
         if (!withdrawSuccess) {
-          // Log warning but don't fail - bounty is already created
-          console.warn('Failed to deduct funds from wallet after bounty creation');
+          // Attempt to roll back: delete the bounty since funds could not be escrowed
+          try {
+            await bountyService.deleteBounty(result.id);
+            console.warn('Bounty creation rolled back due to failed fund deduction.');
+          } catch (deleteErr) {
+            console.error('Failed to delete bounty after withdrawal failure:', deleteErr);
+            throw new Error('Failed to deduct funds and could not roll back bounty. Please contact support.');
+          }
+          throw new Error('Failed to deduct funds from wallet. Your bounty was not posted.');
         }
         
         // No need to log a separate bounty_posted transaction; withdraw() already logs the transaction.
