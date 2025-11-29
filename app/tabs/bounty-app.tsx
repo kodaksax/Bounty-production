@@ -143,7 +143,7 @@ function BountyAppInner() {
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
     
-    // Filter out bounties the user has applied to or been rejected from
+    // Filter out bounties the user has applied to (pending, accepted, or rejected)
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
