@@ -15,7 +15,7 @@ export function getValidAvatarUrl(url: string | undefined | null): string | unde
   if (!url) return undefined;
   
   // Filter out web placeholder URLs that don't work in React Native
-  if (url.includes('/placeholder') || url.startsWith('/')) {
+  if (url.includes('/placeholder.svg') || url.startsWith('/')) {
     return undefined;
   }
   
