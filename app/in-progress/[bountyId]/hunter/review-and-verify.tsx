@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
@@ -358,16 +359,15 @@ export default function HunterReviewAndVerifyScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+        <HunterDashboardSkeleton />
       </View>
     );
   }
 
   if (error || !bounty || !request) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
         <TouchableOpacity
@@ -531,13 +531,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     backgroundColor: '#1a3d2e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 14,
   },
   errorContainer: {
     flex: 1,

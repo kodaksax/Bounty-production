@@ -1,7 +1,9 @@
 // app/in-progress/[bountyId]/hunter/index.tsx - Hunter flow entry point
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
@@ -11,6 +13,7 @@ export default function HunterFlowIndex() {
   const router = useRouter();
   const currentUserId = getCurrentUserId();
   const [isLoading, setIsLoading] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const routeBountyId = React.useMemo(() => {
     const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
@@ -87,9 +90,8 @@ export default function HunterFlowIndex() {
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <HunterDashboardSkeleton />
       </View>
     );
   }
@@ -101,12 +103,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a3d2e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 14,
   },
 });
