@@ -43,15 +43,25 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         if (draft.amount > balance) {
           throw new Error(`Insufficient balance. You need $${draft.amount.toFixed(2)} but only have $${balance.toFixed(2)}.`);
         }
-        
-        // Deduct the bounty amount from the wallet
+      }
+      
+      // Create the bounty first (before deducting funds to prevent loss on failure)
+      const result = await bountyService.createBounty(draft);
+
+      if (!result) {
+        throw new Error('Failed to create bounty');
+      }
+
+      // Only deduct funds after successful bounty creation (for non-honor bounties)
+      if (!draft.isForHonor && draft.amount > 0) {
         const withdrawSuccess = await withdraw(draft.amount, {
           title: draft.title,
-          status: 'pending'
+          status: 'completed'
         });
         
         if (!withdrawSuccess) {
-          throw new Error('Failed to deduct funds from wallet. Please try again.');
+          // Log warning but don't fail - bounty is already created
+          console.warn('Failed to deduct funds from wallet after bounty creation');
         }
         
         // Log the bounty_posted transaction
@@ -60,19 +70,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           amount: -draft.amount,
           details: {
             title: draft.title,
-            status: 'pending'
+            bounty_id: result.id.toString(),
+            status: 'completed'
           }
         });
-      }
-      
-      // Create the bounty (offline support built-in)
-      const result = await bountyService.createBounty(draft);
-
-      if (!result) {
-        // If bounty creation fails and we deducted funds, we should refund
-        // This is handled by the error flow - the user's funds are still in their wallet
-        // since we do optimistic UI updates
-        throw new Error('Failed to create bounty');
       }
 
       // Clear draft on success

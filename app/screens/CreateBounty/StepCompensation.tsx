@@ -28,7 +28,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     if (draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount)) {
       setCustomAmount(draft.amount.toString());
     }
-  }, []);
+  }, [draft.amount]);
 
   const validateAmount = (amount: number, isForHonor: boolean): string | null => {
     if (isForHonor) {
@@ -40,9 +40,13 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     return null;
   };
 
-  // Check if amount exceeds balance
-  const isAmountOverBalance = (amount: number): boolean => {
-    return !draft.isForHonor && amount > balance;
+  // Shared validation for balance check
+  const validateBalanceForAmount = (amount: number, isForHonor: boolean): boolean => {
+    // Honor bounties don't need balance validation
+    if (isForHonor) {
+      return true;
+    }
+    return amount <= balance;
   };
 
   const showInsufficientBalanceAlert = (amount: number) => {
@@ -64,8 +68,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   };
 
   const handlePresetSelect = (preset: number) => {
-    // Check if preset amount exceeds balance
-    if (preset > balance) {
+    // Check if preset amount exceeds balance (honor bounties skip this check)
+    if (!draft.isForHonor && !validateBalanceForAmount(preset, false)) {
       showInsufficientBalanceAlert(preset);
       return;
     }
@@ -98,8 +102,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
       return;
     }
 
-    // Block navigation if amount exceeds balance (for non-honor bounties)
-    if (!draft.isForHonor && draft.amount > balance) {
+    // Block navigation if amount exceeds balance (using shared validation)
+    if (!validateBalanceForAmount(draft.amount, draft.isForHonor)) {
       showInsufficientBalanceAlert(draft.amount);
       return;
     }
@@ -107,10 +111,10 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     onNext();
   };
 
-  // Update isValid to also check balance
-  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && draft.amount <= balance);
+  // Update isValid to also check balance (using shared validation)
+  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && validateBalanceForAmount(draft.amount, draft.isForHonor));
   const isCustomSelected = !draft.isForHonor && draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount);
-  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && draft.amount > balance;
+  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalanceForAmount(draft.amount, false);
 
   const scrollRef = useRef<any>(null)
   useEffect(() => {

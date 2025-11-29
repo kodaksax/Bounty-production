@@ -180,6 +180,48 @@ test('validateAmount: accepts minimum valid amount', () => {
   assertNull(error);
 });
 
+// Balance validation tests
+
+/**
+ * Validation function for balance check
+ */
+function validateBalanceCheck(amount: number, balance: number, isForHonor: boolean): string | null {
+  if (isForHonor) {
+    return null; // Honor bounties don't need balance validation
+  }
+  if (amount > balance) {
+    return 'Insufficient balance';
+  }
+  return null;
+}
+
+test('validateBalanceCheck: accepts amount within balance', () => {
+  const error = validateBalanceCheck(50, 100, false);
+  assertNull(error);
+});
+
+test('validateBalanceCheck: rejects amount exceeding balance', () => {
+  const error = validateBalanceCheck(150, 100, false);
+  assertNotNull(error);
+  assertEqual(error, 'Insufficient balance');
+});
+
+test('validateBalanceCheck: accepts any amount for honor bounty', () => {
+  const error = validateBalanceCheck(150, 0, true);
+  assertNull(error);
+});
+
+test('validateBalanceCheck: accepts exact balance amount', () => {
+  const error = validateBalanceCheck(100, 100, false);
+  assertNull(error);
+});
+
+test('validateBalanceCheck: rejects when balance is zero for paid bounty', () => {
+  const error = validateBalanceCheck(50, 0, false);
+  assertNotNull(error);
+  assertEqual(error, 'Insufficient balance');
+});
+
 // Location validation tests
 test('validateLocation: requires location for in-person work', () => {
   const error = validateLocation('', 'in_person');
