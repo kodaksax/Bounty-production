@@ -211,7 +211,8 @@ export function BountyCard({
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
-            {onDelete && bounty.status === 'open' && (
+            {/* Show Delete only for open bounties without an accepted hunter (defensive check for race conditions) */}
+            {onDelete && bounty.status === 'open' && !bounty.accepted_by && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
@@ -223,7 +224,7 @@ export function BountyCard({
                 <Text style={styles.actionButtonText}>Delete</Text>
               </TouchableOpacity>
             )}
-            {onCancel && (bounty.status === 'open' || bounty.status === 'in_progress') && (
+            {onCancel && bounty.status === 'in_progress' && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.cancelButton]}
                 onPress={(e) => {
