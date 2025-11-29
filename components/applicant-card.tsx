@@ -1,9 +1,10 @@
 // components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
+import { getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
 
@@ -12,26 +13,6 @@ interface ApplicantCardProps {
   onAccept: (requestId: number) => Promise<void>;
   onReject: (requestId: number) => Promise<void>;
   onRequestMoreInfo?: (requestId: number) => void;
-}
-
-/**
- * Validates if the provided URL is a valid image URL for React Native.
- * Returns the URL if valid, or undefined if invalid (e.g., placeholder or malformed).
- */
-function getValidAvatarUrl(url: string | undefined | null): string | undefined {
-  if (!url) return undefined;
-  
-  // Filter out web placeholder URLs that don't work in React Native
-  if (url.includes('/placeholder') || url.startsWith('/')) {
-    return undefined;
-  }
-  
-  // Ensure the URL starts with http:// or https://
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return undefined;
-  }
-  
-  return url;
 }
 
 export function ApplicantCard({
@@ -44,6 +25,16 @@ export function ApplicantCard({
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
   const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
   const router = useRouter();
+  
+  // Track component mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleAccept = async () => {
     setIsProcessing(true);
@@ -77,17 +68,21 @@ export function ApplicantCard({
     }
   };
 
-  const handleProfilePress = () => {
-    const id = (request as any).hunter_id || (request as any).user_id
+  const handleProfilePress = useCallback(() => {
+    const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
       setIsNavigatingToProfile(true);
       router.push(`/profile/${id}`);
-      // Reset state after navigation (small delay to allow transition to start)
-      setTimeout(() => setIsNavigatingToProfile(false), 500);
+      // Reset state after navigation - check if component is still mounted
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          setIsNavigatingToProfile(false);
+        }
+      }, 500);
     }
-  };
+  }, [request, router]);
 
-  const profileId = (request as any).hunter_id || (request as any).user_id
+  const profileId = (request as any).hunter_id || (request as any).user_id;
   
   // Get a valid avatar URL, filtering out placeholder URLs
   const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar_url);

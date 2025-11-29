@@ -2,6 +2,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { getValidAvatarUrl } from "lib/utils/avatar-utils"
 import React from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 
@@ -18,26 +19,6 @@ interface BountyRequestItemProps {
   status: "pending" | "accepted" | "rejected";
   workType?: 'online' | 'in_person'
   deadline?: string
-}
-
-/**
- * Validates if the provided URL is a valid image URL for React Native.
- * Returns the URL if valid, or undefined if invalid (e.g., placeholder or malformed).
- */
-function getValidAvatarUrl(url: string | undefined | null): string | undefined {
-  if (!url) return undefined;
-  
-  // Filter out web placeholder URLs that don't work in React Native
-  if (url.includes('/placeholder') || url.startsWith('/')) {
-    return undefined;
-  }
-  
-  // Ensure the URL starts with http:// or https://
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return undefined;
-  }
-  
-  return url;
 }
 
 export function BountyRequestItem({
