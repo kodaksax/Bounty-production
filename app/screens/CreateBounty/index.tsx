@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBanner } from 'components/error-banner';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { useFormSubmission } from 'hooks/useFormSubmission';
+import { useWallet } from 'lib/wallet-context';
+import { validateBalance, getInsufficientBalanceMessage } from 'lib/utils/bounty-validation';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -32,15 +34,46 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const [currentStep, setCurrentStep] = useState(1);
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft();
   const insets = useSafeAreaInsets();
+  const { balance, logTransaction, withdraw } = useWallet();
   
   // Use form submission hook with debouncing
   const { submit, isSubmitting, error: submitError, reset } = useFormSubmission(
     async () => {
-      // Create the bounty (offline support built-in)
+      // Check balance before posting using shared validation (for non-honor bounties)
+      // This pre-check provides immediate user feedback before attempting creation
+      if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
+        throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
+      }
+      
+      // Create the bounty first (before deducting funds to prevent loss on failure)
       const result = await bountyService.createBounty(draft);
 
       if (!result) {
         throw new Error('Failed to create bounty');
+      }
+
+      // Only deduct funds after successful bounty creation (for non-honor bounties)
+      if (!draft.isForHonor && draft.amount > 0) {
+        const withdrawSuccess = await withdraw(draft.amount, {
+          method: 'bounty_posted',
+          title: draft.title,
+          bounty_id: result.id.toString(),
+          status: 'completed'
+        });
+        
+        if (!withdrawSuccess) {
+          // Attempt to roll back: delete the bounty since funds could not be escrowed
+          try {
+            await bountyService.deleteBounty(result.id);
+            console.warn('Bounty creation rolled back due to failed fund deduction.');
+          } catch (deleteErr) {
+            console.error('Failed to delete bounty after withdrawal failure:', deleteErr);
+            throw new Error('Failed to deduct funds and could not roll back bounty. Please contact support.');
+          }
+          throw new Error('Failed to deduct funds from wallet. Your bounty was not posted.');
+        }
+        
+        // No need to log a separate bounty_posted transaction; withdraw() already logs the transaction.
       }
 
       // Clear draft on success

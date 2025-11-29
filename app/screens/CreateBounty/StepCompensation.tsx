@@ -2,8 +2,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useWallet } from '../../../lib/wallet-context';
+import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../../../lib/utils/bounty-validation';
 
 interface StepCompensationProps {
   draft: BountyDraft;
@@ -20,15 +22,26 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   const [customAmount, setCustomAmount] = useState('');
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
+  const { balance } = useWallet();
 
-  const validateAmount = (amount: number, isForHonor: boolean): string | null => {
-    if (isForHonor) {
-      return null; // Honor bounties don't need amount validation
+  // Initialize customAmount from draft if it's a custom value
+  useEffect(() => {
+    if (draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount)) {
+      const newValue = draft.amount.toString();
+      if (newValue !== customAmount) {
+        setCustomAmount(newValue);
+      }
     }
-    if (!amount || amount < 1) {
-      return 'Amount must be at least $1';
-    }
-    return null;
+  }, [draft.amount, customAmount]);
+
+  const showInsufficientBalanceAlert = (amount: number) => {
+    Alert.alert(
+      'Insufficient Balance',
+      getInsufficientBalanceMessage(amount, balance),
+      [
+        { text: 'OK', style: 'default' }
+      ]
+    );
   };
 
   const handleHonorToggle = (value: boolean) => {
@@ -40,6 +53,11 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   };
 
   const handlePresetSelect = (preset: number) => {
+    // Check if preset amount exceeds balance using shared validation
+    if (!validateBalance(preset, balance, draft.isForHonor)) {
+      showInsufficientBalanceAlert(preset);
+      return;
+    }
     onUpdate({ amount: preset, isForHonor: false });
     setCustomAmount('');
     setErrors({});
@@ -69,11 +87,19 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
       return;
     }
 
+    // Block navigation if amount exceeds balance using shared validation
+    if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
+      showInsufficientBalanceAlert(draft.amount);
+      return;
+    }
+
     onNext();
   };
 
-  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1);
+  // Update isValid to also check balance using shared validation
+  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && validateBalance(draft.amount, balance, draft.isForHonor));
   const isCustomSelected = !draft.isForHonor && draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount);
+  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, draft.isForHonor);
 
   const scrollRef = useRef<any>(null)
   useEffect(() => {
@@ -89,8 +115,24 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
         removeClippedSubviews={false}
+        scrollEnabled={true}
+        bounces={true}
+        showsVerticalScrollIndicator={true}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
+        {/* Wallet Balance Display */}
+        <View className="mb-4 bg-emerald-700/30 rounded-lg p-3 flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <MaterialIcons name="account-balance-wallet" size={20} color="#6ee7b7" />
+            <Text className="text-emerald-100 text-sm font-medium ml-2">
+              Available Balance:
+            </Text>
+          </View>
+          <Text className="text-emerald-300 text-lg font-bold">
+            ${balance.toFixed(2)}
+          </Text>
+        </View>
+
         {/* Honor Toggle */}
         <View className="mb-6 bg-emerald-700/30 rounded-lg p-4">
           <View className="flex-row items-center justify-between mb-2">
@@ -122,20 +164,29 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
               <View className="flex-row flex-wrap gap-2 mb-3">
                 {AMOUNT_PRESETS.map((preset) => {
                   const isSelected = draft.amount === preset;
+                  const isOverBalance = preset > balance;
                   return (
                     <TouchableOpacity
                       key={preset}
                       onPress={() => handlePresetSelect(preset)}
                       className={`px-6 py-3 rounded-lg ${
-                        isSelected ? 'bg-emerald-400' : 'bg-emerald-700/50'
+                        isOverBalance
+                          ? 'bg-emerald-800/30 border border-red-500/50'
+                          : isSelected 
+                          ? 'bg-emerald-400' 
+                          : 'bg-emerald-700/50'
                       }`}
-                      accessibilityLabel={`Select $${preset}`}
+                      accessibilityLabel={`Select $${preset}${isOverBalance ? ' (exceeds balance)' : ''}`}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isSelected }}
                     >
                       <Text
                         className={`font-semibold text-lg ${
-                          isSelected ? 'text-emerald-900' : 'text-white'
+                          isOverBalance
+                            ? 'text-red-300/70'
+                            : isSelected 
+                            ? 'text-emerald-900' 
+                            : 'text-white'
                         }`}
                       >
                         ${preset}
@@ -176,7 +227,9 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
 
               {/* Custom Amount Input */}
               <View className="mt-3">
-                <View className="flex-row items-center bg-emerald-700/50 rounded-lg px-4 py-3">
+                <View className={`flex-row items-center rounded-lg px-4 py-3 ${
+                  showBalanceWarning ? 'bg-red-500/20 border border-red-500/50' : 'bg-emerald-700/50'
+                }`}>
                   <Text className="text-white text-lg font-semibold mr-2">$</Text>
                   <TextInput
                     value={customAmount}
@@ -190,6 +243,20 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                 </View>
                 {touched.amount && errors.amount && (
                   <ValidationMessage message={errors.amount} />
+                )}
+                {/* Balance Warning */}
+                {showBalanceWarning && (
+                  <View className="mt-2 bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex-row items-start">
+                    <MaterialIcons name="warning" size={18} color="#fca5a5" style={{ marginRight: 8, marginTop: 2 }} />
+                    <View className="flex-1">
+                      <Text className="text-red-200 text-sm font-semibold">
+                        Insufficient Balance
+                      </Text>
+                      <Text className="text-red-200/80 text-xs mt-1">
+                        Amount (${draft.amount}) exceeds your balance (${balance.toFixed(2)}). Please add funds or choose a lower amount.
+                      </Text>
+                    </View>
+                  </View>
                 )}
               </View>
             </View>

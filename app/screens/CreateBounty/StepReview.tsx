@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import type { Attachment } from '../../../lib/types';
 
 interface StepReviewProps {
   draft: BountyDraft;
@@ -15,8 +17,20 @@ interface StepReviewProps {
 export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReviewProps) {
   const { isEmailVerified } = useAuthContext();
   const [showEscrowModal, setShowEscrowModal] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
+
+  const handleViewAttachment = (attachment: Attachment) => {
+    setSelectedAttachment(attachment);
+    setViewerVisible(true);
+  };
+
+  const handleCloseViewer = () => {
+    setViewerVisible(false);
+    setSelectedAttachment(null);
+  };
 
   const handleSubmit = async () => {
     // Email verification gate: Block submitting if email is not verified
@@ -60,16 +74,19 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         data={useMemo(() => {
           const sections: string[] = ['header', 'title', 'description', 'compensation', 'location'];
           if (draft.timeline || draft.skills) sections.push('optional');
+          if (draft.attachments && draft.attachments.length > 0) sections.push('attachments');
           if (!draft.isForHonor) sections.push('escrow');
           return sections;
         }, [draft])}
         keyExtractor={(item) => item}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
+        scrollEnabled={true}
+        bounces={true}
         // Ensure contentContainer expands so the bottom action bar doesn't overlap small content
         removeClippedSubviews={false}
-        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 100 }}
         renderItem={({ item }) => {
           switch (item) {
             case 'header':
@@ -124,6 +141,47 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Additional Details</Text>
                   {draft.timeline && <View className="mb-2"><Text className="text-emerald-300 text-sm">Timeline:</Text><Text className="text-white text-base">{draft.timeline}</Text></View>}
                   {draft.skills && <View><Text className="text-emerald-300 text-sm">Skills:</Text><Text className="text-white text-base">{draft.skills}</Text></View>}
+                </View>
+              );
+            case 'attachments':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Attachments</Text>
+                  <View style={{ gap: 12 }}>
+                    {draft.attachments?.map((attachment) => (
+                      <TouchableOpacity
+                        key={attachment.id}
+                        onPress={() => handleViewAttachment(attachment)}
+                        className="bg-emerald-700/30 rounded-lg p-3 flex-row items-center"
+                        accessibilityLabel={`View ${attachment.name}`}
+                        accessibilityRole="button"
+                        accessibilityHint="Tap to preview attachment"
+                      >
+                        <MaterialIcons
+                          name={
+                            attachment.mimeType?.startsWith('image/')
+                              ? 'image'
+                              : attachment.mimeType?.startsWith('video/')
+                              ? 'videocam'
+                              : attachment.mimeType?.includes('pdf')
+                              ? 'picture-as-pdf'
+                              : 'insert-drive-file'
+                          }
+                          size={24}
+                          color="#6ee7b7"
+                        />
+                        <View className="ml-3 flex-1">
+                          <Text className="text-white text-sm" numberOfLines={1}>
+                            {attachment.name}
+                          </Text>
+                          <Text className="text-emerald-300/60 text-xs">
+                            Tap to preview
+                          </Text>
+                        </View>
+                        <MaterialIcons name="visibility" size={20} color="rgba(110, 231, 183, 0.6)" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               );
             case 'escrow':
@@ -352,6 +410,13 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
           </View>
         </View>
       </Modal>
+
+      {/* Attachment Viewer Modal */}
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={selectedAttachment}
+        onClose={handleCloseViewer}
+      />
     </View>
   );
 }

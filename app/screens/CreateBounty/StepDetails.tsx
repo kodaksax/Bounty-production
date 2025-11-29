@@ -5,6 +5,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
+import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import type { Attachment } from '../../../lib/types';
 
 interface StepDetailsProps {
   draft: BountyDraft;
@@ -16,6 +18,8 @@ interface StepDetailsProps {
 export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
 
@@ -43,6 +47,16 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
     const currentAttachments = draft.attachments || [];
     const updated = currentAttachments.filter((a) => a.id !== attachmentId);
     onUpdate({ attachments: updated });
+  };
+
+  const handleViewAttachment = (attachment: Attachment) => {
+    setSelectedAttachment(attachment);
+    setViewerVisible(true);
+  };
+
+  const handleCloseViewer = () => {
+    setViewerVisible(false);
+    setSelectedAttachment(null);
   };
 
   const validateDescription = (value: string): string | null => {
@@ -97,6 +111,9 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
         removeClippedSubviews={false}
+        scrollEnabled={true}
+        bounces={true}
+        showsVerticalScrollIndicator={true}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Description Input */}
@@ -203,13 +220,17 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
             </View>
           )}
 
-          {/* Attachment List */}
+          {/* Attachment List with increased spacing */}
           {draft.attachments && draft.attachments.length > 0 && (
-            <View className="space-y-2">
+            <View style={{ gap: 12 }}>
               {draft.attachments.map((attachment) => (
-                <View
+                <TouchableOpacity
                   key={attachment.id}
+                  onPress={() => handleViewAttachment(attachment)}
                   className="bg-emerald-700/30 rounded-lg p-3 flex-row items-center"
+                  accessibilityLabel={`View ${attachment.name}`}
+                  accessibilityRole="button"
+                  accessibilityHint="Tap to view attachment"
                 >
                   <View className="flex-1 flex-row items-center">
                     <MaterialIcons
@@ -234,17 +255,23 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
                           {(attachment.size / 1024).toFixed(1)} KB
                         </Text>
                       )}
+                      <Text className="text-emerald-400/60 text-xs mt-0.5">
+                        Tap to preview
+                      </Text>
                     </View>
                   </View>
                   <TouchableOpacity
-                    onPress={() => handleRemoveAttachment(attachment.id)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleRemoveAttachment(attachment.id);
+                    }}
                     className="p-2"
                     accessibilityLabel="Remove attachment"
                     accessibilityRole="button"
                   >
                     <MaterialIcons name="close" size={20} color="#fca5a5" />
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -291,6 +318,13 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Attachment Viewer Modal */}
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={selectedAttachment}
+        onClose={handleCloseViewer}
+      />
     </View>
   );
 }

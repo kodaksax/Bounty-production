@@ -1,4 +1,6 @@
 // Unit tests for Create Bounty validation logic
+// Import the shared validation utilities
+import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../lib/utils/bounty-validation';
 
 /**
  * Validation function for title
@@ -178,6 +180,57 @@ test('validateAmount: rejects negative amount', () => {
 test('validateAmount: accepts minimum valid amount', () => {
   const error = validateAmount(1, false);
   assertNull(error);
+});
+
+// Balance validation tests using shared validateBalance function
+
+test('validateBalance: accepts amount within balance', () => {
+  const result = validateBalance(50, 100, false);
+  assertEqual(result, true);
+});
+
+test('validateBalance: rejects amount exceeding balance', () => {
+  const result = validateBalance(150, 100, false);
+  assertEqual(result, false);
+});
+
+test('validateBalance: accepts any amount for honor bounty', () => {
+  const result = validateBalance(150, 0, true);
+  assertEqual(result, true);
+});
+
+test('validateBalance: accepts exact balance amount', () => {
+  const result = validateBalance(100, 100, false);
+  assertEqual(result, true);
+});
+
+test('validateBalance: rejects when balance is zero for paid bounty', () => {
+  const result = validateBalance(50, 0, false);
+  assertEqual(result, false);
+});
+
+// Test validateAmount from shared utility
+test('validateAmount (shared): accepts valid amount for paid bounty', () => {
+  const error = validateAmount(50, false);
+  assertNull(error);
+});
+
+test('validateAmount (shared): rejects zero amount for paid bounty', () => {
+  const error = validateAmount(0, false);
+  assertNotNull(error);
+  assertEqual(error, 'Amount must be at least $1');
+});
+
+test('validateAmount (shared): accepts any amount for honor bounty', () => {
+  const error = validateAmount(0, true);
+  assertNull(error);
+});
+
+// Test getInsufficientBalanceMessage
+test('getInsufficientBalanceMessage: returns correct message', () => {
+  const message = getInsufficientBalanceMessage(150, 100);
+  assertEqual(message.includes('$150'), true);
+  assertEqual(message.includes('$100.00'), true);
 });
 
 // Location validation tests
