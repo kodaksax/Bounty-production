@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardEventListener, Platform } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Keyboard, KeyboardEventListener, Platform, TextInput } from 'react-native';
 
 interface KeyboardInfo {
   isVisible: boolean;
@@ -45,27 +45,57 @@ export function useKeyboard(): KeyboardInfo {
   return keyboardInfo;
 }
 
-// Hook for managing focus between form fields
+// Hook for managing focus between form fields with enhanced keyboard handling
 export function useFocusChain(fieldCount: number) {
-  const refs = useRef<any[]>(Array(fieldCount).fill(null));
+  const refs = useRef<Array<TextInput | null>>(Array(fieldCount).fill(null));
 
-  const focusNext = (currentIndex: number) => {
+  const focusNext = useCallback((currentIndex: number) => {
     if (currentIndex < fieldCount - 1) {
       refs.current[currentIndex + 1]?.focus();
+    } else {
+      // Last field - dismiss keyboard
+      Keyboard.dismiss();
     }
-  };
+  }, [fieldCount]);
 
-  const focusPrevious = (currentIndex: number) => {
+  const focusPrevious = useCallback((currentIndex: number) => {
     if (currentIndex > 0) {
       refs.current[currentIndex - 1]?.focus();
     }
-  };
+  }, []);
 
-  const setRef = (index: number, ref: any) => {
+  const setRef = useCallback((index: number, ref: TextInput | null) => {
     refs.current[index] = ref;
-  };
+  }, []);
 
-  return { refs: refs.current, focusNext, focusPrevious, setRef };
+  // Get return key type based on position
+  const getReturnKeyType = useCallback((index: number): 'next' | 'done' | 'go' => {
+    if (index < fieldCount - 1) {
+      return 'next';
+    }
+    return 'done';
+  }, [fieldCount]);
+
+  // Handle submit editing - focuses next or submits
+  const getSubmitHandler = useCallback((index: number, onSubmit?: () => void) => {
+    return () => {
+      if (index < fieldCount - 1) {
+        focusNext(index);
+      } else {
+        Keyboard.dismiss();
+        onSubmit?.();
+      }
+    };
+  }, [fieldCount, focusNext]);
+
+  return { 
+    refs: refs.current, 
+    focusNext, 
+    focusPrevious, 
+    setRef, 
+    getReturnKeyType,
+    getSubmitHandler,
+  };
 }
 
 // Hook for keyboard avoiding behavior
@@ -84,24 +114,45 @@ export function useKeyboardAvoiding() {
 }
 
 // Utility for handling reduced motion preferences
+// Uses native AccessibilityInfo for accurate system setting detection
 export function useReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
-    // Check for reduced motion preference
-    // This would typically check system settings
-    // For now, we'll just set it to false as a fallback
-    setPrefersReducedMotion(false);
+    // Check initial reduced motion preference
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setPrefersReducedMotion)
+      .catch(() => setPrefersReducedMotion(false));
+
+    // Subscribe to changes
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      (isEnabled) => {
+        setPrefersReducedMotion(isEnabled);
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
-  const getAnimationConfig = (duration: number = 200) => ({
+  const getAnimationConfig = useCallback((duration: number = 200) => ({
     duration: prefersReducedMotion ? 0 : duration,
     useNativeDriver: true,
-  });
+  }), [prefersReducedMotion]);
+
+  // Get spring animation config that respects reduced motion
+  const getSpringConfig = useCallback((tension = 80, friction = 12) => ({
+    tension: prefersReducedMotion ? 1000 : tension,
+    friction: prefersReducedMotion ? 1000 : friction,
+    useNativeDriver: true,
+  }), [prefersReducedMotion]);
 
   return {
     prefersReducedMotion,
     getAnimationConfig,
+    getSpringConfig,
   };
 }
 
@@ -109,18 +160,44 @@ export function useReducedMotion() {
 export function useScreenReaderAnnouncements() {
   const [announcement, setAnnouncement] = useState<string>('');
 
-  const announce = (message: string, delay: number = 100) => {
+  const announce = useCallback((message: string, delay: number = 100) => {
     setTimeout(() => {
       setAnnouncement(message);
+      // Also announce through the native accessibility API
+      AccessibilityInfo.announceForAccessibility(message);
       // Clear after announcement
       setTimeout(() => setAnnouncement(''), 1000);
     }, delay);
-  };
+  }, []);
 
   return {
     announcement,
     announce,
   };
+}
+
+// Hook for checking if screen reader is enabled
+export function useScreenReader() {
+  const [isScreenReaderEnabled, setIsScreenReaderEnabled] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isScreenReaderEnabled()
+      .then(setIsScreenReaderEnabled)
+      .catch(() => setIsScreenReaderEnabled(false));
+
+    const subscription = AccessibilityInfo.addEventListener(
+      'screenReaderChanged',
+      (isEnabled) => {
+        setIsScreenReaderEnabled(isEnabled);
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  return isScreenReaderEnabled;
 }
 
 // Focus trap utility for modals/dialogs
@@ -153,5 +230,29 @@ export function useFocusTrap(isActive: boolean) {
     lastFocusableRef,
     handleFirstElementKeyDown,
     handleLastElementKeyDown,
+  };
+}
+
+// Helper to generate accessibility props for touch targets
+export function getTouchTargetProps(minSize = 44) {
+  return {
+    hitSlop: {
+      top: Math.max(0, (minSize - 24) / 2),
+      bottom: Math.max(0, (minSize - 24) / 2),
+      left: Math.max(0, (minSize - 24) / 2),
+      right: Math.max(0, (minSize - 24) / 2),
+    },
+  };
+}
+
+// Utility to check if element meets minimum touch target size
+export function ensureMinTouchTarget(
+  width: number,
+  height: number,
+  minSize = 44
+): { width: number; height: number } {
+  return {
+    width: Math.max(width, minSize),
+    height: Math.max(height, minSize),
   };
 }
