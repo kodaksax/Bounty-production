@@ -53,6 +53,8 @@ export default function BountyDetailRouter() {
       }
 
       // Check if user is the poster
+      // Note: bounty.poster_id is the canonical field, user_id is a backwards-compatible alias
+      // Both are checked for compatibility with older code paths
       if (bounty.user_id === currentUserId || bounty.poster_id === currentUserId) {
         // Redirect to poster's dashboard view
         router.replace({
