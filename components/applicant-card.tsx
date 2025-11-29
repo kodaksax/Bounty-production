@@ -30,7 +30,6 @@ export function ApplicantCard({
   const isMountedRef = useRef(true);
   
   useEffect(() => {
-    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
@@ -68,17 +67,21 @@ export function ApplicantCard({
     }
   };
 
+  // Brief loading indicator timeout for visual feedback during navigation transition
+  // Using a short timeout provides immediate visual feedback while navigation occurs
+  const NAVIGATION_LOADING_TIMEOUT_MS = 400;
+
   const handleProfilePress = useCallback(() => {
     const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
       setIsNavigatingToProfile(true);
       router.push(`/profile/${id}`);
-      // Reset state after navigation - check if component is still mounted
+      // Reset state after navigation transition - check if component is still mounted
       setTimeout(() => {
         if (isMountedRef.current) {
           setIsNavigatingToProfile(false);
         }
-      }, 500);
+      }, NAVIGATION_LOADING_TIMEOUT_MS);
     }
   }, [request, router]);
 
