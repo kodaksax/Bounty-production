@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { reportService } from '../lib/services/report-service';
 
@@ -137,9 +137,16 @@ export function ReportModal({
   contentId,
   contentTitle,
 }: ReportModalProps) {
+  // Track if dialog has been shown for current visibility state to prevent
+  // multiple Alert shows when parent re-renders with unstable onClose reference
+  const shownRef = useRef(false);
+
   useEffect(() => {
-    if (visible) {
+    if (visible && !shownRef.current) {
+      shownRef.current = true;
       showMainReportDialog(contentType, contentId, contentTitle, onClose);
+    } else if (!visible) {
+      shownRef.current = false;
     }
   }, [visible, contentType, contentId, contentTitle, onClose]);
 

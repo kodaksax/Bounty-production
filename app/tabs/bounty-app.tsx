@@ -53,8 +53,10 @@ function BountyAppInner() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
-  // Track bounty IDs the user has applied to or been rejected from
+  // Track bounty IDs the user has applied to (pending, accepted, or rejected)
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
+  // Track whether user applications have been loaded (prevents flash of unfiltered content)
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false)
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
   const insets = useSafeAreaInsets()
@@ -199,7 +201,10 @@ function BountyAppInner() {
 
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
-    if (!currentUserId) return
+    if (!currentUserId) {
+      setApplicationsLoaded(true)
+      return
+    }
     try {
       // Get all bounty requests for the current user (pending, accepted, or rejected)
       const requests = await bountyRequestService.getAll({ userId: currentUserId })
@@ -213,6 +218,8 @@ function BountyAppInner() {
     } catch (error) {
       console.error('Error loading user applications:', error)
       // Don't block the UI if this fails - just show all bounties
+    } finally {
+      setApplicationsLoaded(true)
     }
   }, [currentUserId])
 
@@ -384,7 +391,7 @@ function BountyAppInner() {
 
   const EmptyListComponent = useCallback(() => (
     <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-      {isLoadingBounties ? (
+      {isLoadingBounties || !applicationsLoaded ? (
         <View style={{ width: '100%' }}>
           <PostingsListSkeleton count={5} />
         </View>
@@ -397,7 +404,7 @@ function BountyAppInner() {
         </>
       )}
     </View>
-  ), [isLoadingBounties]);
+  ), [isLoadingBounties, applicationsLoaded]);
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
