@@ -60,16 +60,19 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         data={useMemo(() => {
           const sections: string[] = ['header', 'title', 'description', 'compensation', 'location'];
           if (draft.timeline || draft.skills) sections.push('optional');
+          if (draft.attachments && draft.attachments.length > 0) sections.push('attachments');
           if (!draft.isForHonor) sections.push('escrow');
           return sections;
         }, [draft])}
         keyExtractor={(item) => item}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
+        scrollEnabled={true}
+        bounces={true}
         // Ensure contentContainer expands so the bottom action bar doesn't overlap small content
         removeClippedSubviews={false}
-        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 100 }}
         renderItem={({ item }) => {
           switch (item) {
             case 'header':
@@ -124,6 +127,34 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Additional Details</Text>
                   {draft.timeline && <View className="mb-2"><Text className="text-emerald-300 text-sm">Timeline:</Text><Text className="text-white text-base">{draft.timeline}</Text></View>}
                   {draft.skills && <View><Text className="text-emerald-300 text-sm">Skills:</Text><Text className="text-white text-base">{draft.skills}</Text></View>}
+                </View>
+              );
+            case 'attachments':
+              return (
+                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Attachments</Text>
+                  <View style={{ gap: 8 }}>
+                    {draft.attachments?.map((attachment) => (
+                      <View key={attachment.id} className="flex-row items-center">
+                        <MaterialIcons
+                          name={
+                            attachment.mimeType?.startsWith('image/')
+                              ? 'image'
+                              : attachment.mimeType?.startsWith('video/')
+                              ? 'videocam'
+                              : attachment.mimeType?.includes('pdf')
+                              ? 'picture-as-pdf'
+                              : 'insert-drive-file'
+                          }
+                          size={18}
+                          color="#6ee7b7"
+                        />
+                        <Text className="text-white text-sm ml-2 flex-1" numberOfLines={1}>
+                          {attachment.name}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
               );
             case 'escrow':

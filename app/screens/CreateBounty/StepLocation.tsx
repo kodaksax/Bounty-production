@@ -106,6 +106,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
         removeClippedSubviews={false}
+        scrollEnabled={true}
+        bounces={true}
+        showsVerticalScrollIndicator={true}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Work Type Selection */}
