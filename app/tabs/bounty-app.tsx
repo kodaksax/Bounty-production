@@ -314,7 +314,9 @@ function BountyAppInner() {
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
-        loadUserApplications()
+        loadUserApplications().catch(err => {
+          console.warn('Failed to refresh user applications:', err);
+        })
       ])
     } catch (error) {
       console.error('Error refreshing bounties:', error)
