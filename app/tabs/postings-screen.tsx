@@ -1277,6 +1277,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   onScrollEndDrag={() => setTimeout(() => setIsListScrolling(false), 50)}
                   onMomentumScrollEnd={() => setIsListScrolling(false)}
                   scrollEventThrottle={16}
+                  // Performance optimizations
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={8}
+                  windowSize={5}
+                  initialNumToRender={6}
+                  updateCellsBatchingPeriod={50}
                 />
               ) : activeTab === "requests" ? (
                 <FlatList
@@ -1322,6 +1328,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
                   scrollEventThrottle={16}
+                  // Performance optimizations
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={8}
+                  windowSize={5}
+                  initialNumToRender={6}
+                  updateCellsBatchingPeriod={50}
                 />
               ) : activeTab === "myPostings" ? (
                 <FlatList
@@ -1401,6 +1413,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     else if (y <= 2 && showShadow) setShowShadow(false)
                   }}
                   scrollEventThrottle={16}
+                  // Performance optimizations
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={8}
+                  windowSize={5}
+                  initialNumToRender={6}
+                  updateCellsBatchingPeriod={50}
                 />
               ) : (
                 <View className="flex items-center justify-center h-full">

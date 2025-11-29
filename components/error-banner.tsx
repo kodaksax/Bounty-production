@@ -102,9 +102,20 @@ export function ErrorBanner({
   if (!isVisible) return null;
 
   const backgroundColor = error.type === 'validation' ? '#f59e0b' : '#dc2626';
-  const iconName = error.type === 'validation' ? 'warning' : 
-                   error.type === 'network' ? 'wifi-off' :
-                   error.type === 'authentication' ? 'lock' : 'error-outline';
+  
+  // Map error types to appropriate icons
+  const iconMap: Record<string, keyof typeof MaterialIcons.glyphMap> = {
+    validation: 'warning',
+    network: 'wifi-off',
+    authentication: 'lock',
+    authorization: 'lock',
+    rate_limit: 'schedule',
+    not_found: 'search-off',
+    payment: 'credit-card-off',
+    server: 'cloud-off',
+    unknown: 'error-outline',
+  };
+  const iconName = iconMap[error.type] || 'error-outline';
   
   return (
     <Animated.View 

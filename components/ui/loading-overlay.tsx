@@ -263,6 +263,6 @@ const styles = StyleSheet.create({
   },
   // Placeholder styles
   placeholder: {
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+    backgroundColor: COLORS.BORDER_LIGHT,
   },
 });

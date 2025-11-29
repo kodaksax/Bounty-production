@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Animated, Dimensions, ViewProps, View, StyleSheet } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { cn } from "lib/utils"
@@ -11,8 +11,6 @@ interface SkeletonProps extends ViewProps {
   /** Shimmer animation duration in ms (default: 1500) */
   shimmerDuration?: number
 }
-
-const SCREEN_WIDTH = Dimensions.get('window').width
 
 /**
  * Skeleton loading placeholder with optional shimmer effect
@@ -27,10 +25,20 @@ const Skeleton = React.memo(function Skeleton({
 }: SkeletonProps) {
   const { prefersReducedMotion } = useReducedMotion()
   
+  // Handle screen dimensions for orientation changes
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width)
+  
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenWidth(window.width)
+    })
+    return () => subscription?.remove()
+  }, [])
+  
   // Animated pulse effect using opacity (fallback for non-shimmer or reduced motion)
   const pulseAnim = useRef(new Animated.Value(0.4)).current
   // Shimmer translation animation
-  const shimmerAnim = useRef(new Animated.Value(-SCREEN_WIDTH)).current
+  const shimmerAnim = useRef(new Animated.Value(-screenWidth)).current
 
   useEffect(() => {
     // If user prefers reduced motion, use simpler animation
@@ -75,7 +83,7 @@ const Skeleton = React.memo(function Skeleton({
     if (shimmer && !prefersReducedMotion) {
       const shimmerLoop = Animated.loop(
         Animated.timing(shimmerAnim, {
-          toValue: SCREEN_WIDTH,
+          toValue: screenWidth,
           duration: shimmerDuration,
           useNativeDriver: true,
         })
@@ -138,7 +146,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    width: SCREEN_WIDTH,
+    width: '200%', // Wide enough to cover the entire element during animation
   },
   shimmerGradient: {
     flex: 1,

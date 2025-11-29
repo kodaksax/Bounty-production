@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { getUserFriendlyError, type UserFriendlyError } from '../lib/utils/error-messages';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 
@@ -69,6 +69,14 @@ export function useAsyncOperation<T = any>(options: AsyncOperationOptions = {}) 
   const lastOperationRef = useRef<(() => Promise<T>) | null>(null);
   const retryCountRef = useRef(0);
   const mountedRef = useRef(true);
+
+  // Clean up mounted ref on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Track component mount state
   const setStateIfMounted = useCallback((newState: Partial<AsyncOperationState<T>>) => {
