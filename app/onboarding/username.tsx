@@ -165,6 +165,11 @@ export default function UsernameScreen() {
           .eq('id', userId);
         
         if (updateError) {
+          // Handle unique constraint violation (username already taken)
+          if (updateError.code === '23505') {
+            setError('This username is already taken. Please choose another.');
+            return;
+          }
           console.error('[onboarding] Error updating profile:', updateError);
           setError('Failed to update profile. Please try again.');
           return;
