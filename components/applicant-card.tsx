@@ -1,9 +1,10 @@
 // components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
+import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
 
@@ -22,7 +23,26 @@ export function ApplicantCard({
 }: ApplicantCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
+  const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
   const router = useRouter();
+  
+  // Track component mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  // Track navigation timeout for cleanup
+  const navigationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Brief loading indicator timeout for visual feedback during navigation transition
+  const NAVIGATION_LOADING_TIMEOUT_MS = 400;
+  
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      // Clear navigation timeout on unmount to prevent memory leaks
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleAccept = async () => {
     setIsProcessing(true);
@@ -56,31 +76,60 @@ export function ApplicantCard({
     }
   };
 
-  const handleProfilePress = () => {
-    const id = (request as any).hunter_id || (request as any).user_id
+  const handleProfilePress = useCallback(() => {
+    const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
+      setIsNavigatingToProfile(true);
       router.push(`/profile/${id}`);
+      // Clear any existing timeout before setting a new one
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+      // Reset state after navigation transition - stored in ref for cleanup
+      navigationTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setIsNavigatingToProfile(false);
+        }
+      }, NAVIGATION_LOADING_TIMEOUT_MS);
     }
-  };
+  }, [request, router]);
 
-  const profileId = (request as any).hunter_id || (request as any).user_id
+  const profileId = (request as any).hunter_id || (request as any).user_id;
+  
+  // Get a valid avatar URL, filtering out placeholder URLs
+  const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar_url);
 
   return (
     <TextGuard>
       <View style={styles.card}>
       {/* Header with avatar and applicant info - Clickable to navigate to profile */}
-      <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!profileId}>
-        <Avatar style={styles.avatar}>
-          <AvatarImage 
-            src={request.profile?.avatar_url || '/placeholder.svg?height=48&width=48'} 
-            alt={request.profile?.username || 'Applicant'} 
-          />
-          <AvatarFallback style={styles.avatarFallback}>
-            <Text style={styles.avatarText}>
-              {(request.profile?.username || 'U').substring(0, 2).toUpperCase()}
-            </Text>
-          </AvatarFallback>
-        </Avatar>{/* avoid whitespace text node */}
+      <TouchableOpacity 
+        style={styles.header} 
+        onPress={handleProfilePress} 
+        disabled={!profileId || isNavigatingToProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
+        accessibilityHint="Opens the applicant's profile page"
+      >
+        <View style={styles.avatarContainer}>
+          {isNavigatingToProfile ? (
+            <View style={[styles.avatar, styles.avatarLoading]}>
+              <ActivityIndicator size="small" color="#a7f3d0" />
+            </View>
+          ) : (
+            <Avatar style={styles.avatar}>
+              <AvatarImage 
+                src={validAvatarUrl} 
+                alt={request.profile?.username || 'Applicant'} 
+              />
+              <AvatarFallback style={styles.avatarFallback}>
+                <Text style={styles.avatarText}>
+                  {getAvatarInitials(request.profile?.username)}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </View>
 
         <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
           <Text style={styles.applicantName}>
@@ -191,11 +240,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
   avatar: {
     width: 48,
     height: 48,
     borderWidth: 2,
     borderColor: '#6ee7b7', // emerald-400
+    borderRadius: 24,
+  },
+  avatarLoading: {
+    backgroundColor: '#064e3b', // emerald-900
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarFallback: {
     backgroundColor: '#064e3b', // emerald-900

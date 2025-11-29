@@ -2,6 +2,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { getAvatarInitials, getValidAvatarUrl } from "lib/utils/avatar-utils"
 import React from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 
@@ -31,15 +32,18 @@ export function BountyRequestItem({
   workType,
   deadline,
 }: BountyRequestItemProps) {
+  // Validate avatar URL
+  const validAvatarUrl = getValidAvatarUrl(avatarSrc);
+  
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
       <View className="p-3">
         <View className="flex items-center gap-3">
           <View className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400/30">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={avatarSrc || "/placeholder.svg?height=32&width=32"} alt={username} />
+              <AvatarImage src={validAvatarUrl} alt={username} />
               <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
-                {username.substring(1, 3).toUpperCase()}
+                {getAvatarInitials(username)}
               </AvatarFallback>
             </Avatar>
           </View>
