@@ -1,6 +1,6 @@
 // Unit tests for Create Bounty validation logic
 // Import the shared validation utilities
-import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../lib/utils/bounty-validation';
+import { validateBalance, validateAmount as validateAmountShared, getInsufficientBalanceMessage } from '../lib/utils/bounty-validation';
 
 /**
  * Validation function for title
@@ -209,20 +209,20 @@ test('validateBalance: rejects when balance is zero for paid bounty', () => {
   assertEqual(result, false);
 });
 
-// Test validateAmount from shared utility
+// Test validateAmount from shared utility (using renamed import)
 test('validateAmount (shared): accepts valid amount for paid bounty', () => {
-  const error = validateAmount(50, false);
+  const error = validateAmountShared(50, false);
   assertNull(error);
 });
 
 test('validateAmount (shared): rejects zero amount for paid bounty', () => {
-  const error = validateAmount(0, false);
+  const error = validateAmountShared(0, false);
   assertNotNull(error);
   assertEqual(error, 'Amount must be at least $1');
 });
 
 test('validateAmount (shared): accepts any amount for honor bounty', () => {
-  const error = validateAmount(0, true);
+  const error = validateAmountShared(0, true);
   assertNull(error);
 });
 

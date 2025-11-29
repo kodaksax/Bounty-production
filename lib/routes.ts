@@ -62,7 +62,6 @@ export const ROUTES = {
     
     // Error/fallback routes
     NOT_FOUND: '/(admin)/not-found',
-    REPORTS: '/(admin)/reports',
     AUDIT_LOGS: '/(admin)/audit-logs',
   },
 } as const;
