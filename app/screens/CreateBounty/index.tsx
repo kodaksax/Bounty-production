@@ -55,7 +55,9 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       // Only deduct funds after successful bounty creation (for non-honor bounties)
       if (!draft.isForHonor && draft.amount > 0) {
         const withdrawSuccess = await withdraw(draft.amount, {
+          method: 'bounty_posted',
           title: draft.title,
+          bounty_id: result.id.toString(),
           status: 'completed'
         });
         
