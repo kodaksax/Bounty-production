@@ -21,6 +21,19 @@ export interface CreateBountyPayload {
 
 export const bountyService = {
   /**
+   * Delete a bounty by ID
+   * This is used for rollback when fund deduction fails after bounty creation
+   */
+  async deleteBounty(id: number | string): Promise<boolean> {
+    try {
+      return await baseBountyService.delete(typeof id === 'string' ? parseInt(id, 10) : id);
+    } catch (error) {
+      console.error('Error deleting bounty:', error);
+      return false;
+    }
+  },
+
+  /**
    * Create a bounty from draft data
    */
   async createBounty(draft: BountyDraft): Promise<Bounty | null> {
