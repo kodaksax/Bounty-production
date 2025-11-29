@@ -99,7 +99,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   // Update isValid to also check balance using shared validation
   const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && validateBalance(draft.amount, balance, draft.isForHonor));
   const isCustomSelected = !draft.isForHonor && draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount);
-  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, false);
+  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, draft.isForHonor);
 
   const scrollRef = useRef<any>(null)
   useEffect(() => {
