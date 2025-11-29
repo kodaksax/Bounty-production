@@ -14,6 +14,26 @@ interface ApplicantCardProps {
   onRequestMoreInfo?: (requestId: number) => void;
 }
 
+/**
+ * Validates if the provided URL is a valid image URL for React Native.
+ * Returns the URL if valid, or undefined if invalid (e.g., placeholder or malformed).
+ */
+function getValidAvatarUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  
+  // Filter out web placeholder URLs that don't work in React Native
+  if (url.includes('/placeholder') || url.startsWith('/')) {
+    return undefined;
+  }
+  
+  // Ensure the URL starts with http:// or https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return undefined;
+  }
+  
+  return url;
+}
+
 export function ApplicantCard({
   request,
   onAccept,
@@ -22,6 +42,7 @@ export function ApplicantCard({
 }: ApplicantCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
+  const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
   const router = useRouter();
 
   const handleAccept = async () => {
@@ -59,28 +80,49 @@ export function ApplicantCard({
   const handleProfilePress = () => {
     const id = (request as any).hunter_id || (request as any).user_id
     if (id) {
+      setIsNavigatingToProfile(true);
       router.push(`/profile/${id}`);
+      // Reset state after navigation (small delay to allow transition to start)
+      setTimeout(() => setIsNavigatingToProfile(false), 500);
     }
   };
 
   const profileId = (request as any).hunter_id || (request as any).user_id
+  
+  // Get a valid avatar URL, filtering out placeholder URLs
+  const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar_url);
 
   return (
     <TextGuard>
       <View style={styles.card}>
       {/* Header with avatar and applicant info - Clickable to navigate to profile */}
-      <TouchableOpacity style={styles.header} onPress={handleProfilePress} disabled={!profileId}>
-        <Avatar style={styles.avatar}>
-          <AvatarImage 
-            src={request.profile?.avatar_url || '/placeholder.svg?height=48&width=48'} 
-            alt={request.profile?.username || 'Applicant'} 
-          />
-          <AvatarFallback style={styles.avatarFallback}>
-            <Text style={styles.avatarText}>
-              {(request.profile?.username || 'U').substring(0, 2).toUpperCase()}
-            </Text>
-          </AvatarFallback>
-        </Avatar>{/* avoid whitespace text node */}
+      <TouchableOpacity 
+        style={styles.header} 
+        onPress={handleProfilePress} 
+        disabled={!profileId || isNavigatingToProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
+        accessibilityHint="Opens the applicant's profile page"
+      >
+        <View style={styles.avatarContainer}>
+          {isNavigatingToProfile ? (
+            <View style={[styles.avatar, styles.avatarLoading]}>
+              <ActivityIndicator size="small" color="#a7f3d0" />
+            </View>
+          ) : (
+            <Avatar style={styles.avatar}>
+              <AvatarImage 
+                src={validAvatarUrl} 
+                alt={request.profile?.username || 'Applicant'} 
+              />
+              <AvatarFallback style={styles.avatarFallback}>
+                <Text style={styles.avatarText}>
+                  {(request.profile?.username || 'U').substring(0, 2).toUpperCase()}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </View>
 
         <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
           <Text style={styles.applicantName}>
@@ -191,11 +233,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
   avatar: {
     width: 48,
     height: 48,
     borderWidth: 2,
     borderColor: '#6ee7b7', // emerald-400
+    borderRadius: 24,
+  },
+  avatarLoading: {
+    backgroundColor: '#064e3b', // emerald-900
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarFallback: {
     backgroundColor: '#064e3b', // emerald-900

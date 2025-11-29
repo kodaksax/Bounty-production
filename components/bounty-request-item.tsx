@@ -20,6 +20,26 @@ interface BountyRequestItemProps {
   deadline?: string
 }
 
+/**
+ * Validates if the provided URL is a valid image URL for React Native.
+ * Returns the URL if valid, or undefined if invalid (e.g., placeholder or malformed).
+ */
+function getValidAvatarUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  
+  // Filter out web placeholder URLs that don't work in React Native
+  if (url.includes('/placeholder') || url.startsWith('/')) {
+    return undefined;
+  }
+  
+  // Ensure the URL starts with http:// or https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return undefined;
+  }
+  
+  return url;
+}
+
 export function BountyRequestItem({
   username,
   title,
@@ -31,15 +51,18 @@ export function BountyRequestItem({
   workType,
   deadline,
 }: BountyRequestItemProps) {
+  // Validate avatar URL
+  const validAvatarUrl = getValidAvatarUrl(avatarSrc);
+  
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
       <View className="p-3">
         <View className="flex items-center gap-3">
           <View className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400/30">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={avatarSrc || "/placeholder.svg?height=32&width=32"} alt={username} />
+              <AvatarImage src={validAvatarUrl} alt={username} />
               <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
-                {username.substring(1, 3).toUpperCase()}
+                {username.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           </View>
