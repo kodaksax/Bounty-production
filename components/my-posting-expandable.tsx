@@ -649,7 +649,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         // Trigger parent refresh to update list
                         if (onRefresh) onRefresh()
                       } else {
-                        alert('Failed to mark Ready. Please try again.')
+                        Alert.alert('Error', 'Failed to mark Ready. Please try again.')
                       }
                     }}
                     disabled={readyToSubmitPressed || !!readyRecord}
@@ -861,8 +861,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             </AnimatedSection>
           )}
 
-          {/* Conversation hint */}
-          {!conversation && bounty.status === 'in_progress' && (
+          {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
+          {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
               <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
               <Text style={styles.infoText}>{isOwner ? 'Conversation will appear after acceptance.' : 'A chat with the poster will appear once you’re accepted.'}</Text>
@@ -918,8 +918,8 @@ const styles = StyleSheet.create({
   bubbleActive: { backgroundColor: '#10b981' },
   bubbleCompleted: { backgroundColor: '#059669' },
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
-  infoBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
-  infoText: { color: '#d1fae5', fontSize: 12 },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
+  infoText: { color: '#d1fae5', fontSize: 12, flex: 1, flexShrink: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },
