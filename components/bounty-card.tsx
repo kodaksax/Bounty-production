@@ -211,6 +211,7 @@ export function BountyCard({
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
+            {/* Show Delete only for open bounties without an accepted hunter (defensive check for race conditions) */}
             {onDelete && bounty.status === 'open' && !bounty.accepted_by && (
               <TouchableOpacity
                 style={styles.actionButton}

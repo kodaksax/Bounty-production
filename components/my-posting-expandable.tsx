@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
   bubbleCompleted: { backgroundColor: '#059669' },
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
-  infoText: { color: '#d1fae5', fontSize: 12, flex: 1, flexShrink: 1 },
+  infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },
