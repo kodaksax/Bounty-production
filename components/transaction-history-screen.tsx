@@ -4,10 +4,13 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { useWallet } from "lib/wallet-context"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FlatList, RefreshControl, Text, TouchableOpacity, View, ScrollView, StyleSheet } from "react-native"
+import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
+
+// Constants for transaction display
+const DEFAULT_TITLE = 'Transaction'
 
 export interface Transaction {
   id: string
@@ -116,23 +119,24 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   // Get transaction title based on type
   const getTransactionTitle = (transaction: Transaction) => {
+    const title = transaction.details.title || DEFAULT_TITLE
     switch (transaction.type) {
       case "deposit":
         return `Deposit via ${transaction.details.method || "Card"}`
       case "withdrawal":
         return `Withdrawal to ${transaction.details.method || "Bank Account"}`
       case "bounty_posted":
-        return `Posted Bounty: ${transaction.details.title || "Bounty"}`
+        return `Posted Bounty: ${title}`
       case "bounty_completed":
-        return `Completed Bounty: ${transaction.details.title || "Bounty"}`
+        return `Completed Bounty: ${title}`
       case "bounty_received":
-        return `Received Payment: ${transaction.details.title || "Bounty"}`
+        return `Received Payment: ${title}`
       case "escrow":
-        return `Escrow Hold: ${transaction.details.title || "Bounty"}`
+        return `Escrow Hold: ${title}`
       case "release":
-        return `Escrow Released: ${transaction.details.title || "Bounty"}`
+        return `Escrow Released: ${title}`
       case "refund":
-        return `Refund: ${transaction.details.title || "Bounty"}`
+        return `Refund: ${title}`
     }
   }
 

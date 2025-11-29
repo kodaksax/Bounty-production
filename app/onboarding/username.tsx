@@ -169,7 +169,13 @@ export default function UsernameScreen() {
           setError('Failed to update profile. Please try again.');
           return;
         }
-        await updateAuthProfile({ username });
+        
+        try {
+          await updateAuthProfile({ username });
+        } catch (authError) {
+          console.error('[onboarding] Error updating auth profile:', authError);
+          // Don't block navigation since Supabase profile was updated
+        }
       } else {
         const { error: insertError } = await supabase
           .from('profiles')
@@ -190,7 +196,12 @@ export default function UsernameScreen() {
           return;
         }
 
-        await updateAuthProfile({ username });
+        try {
+          await updateAuthProfile({ username });
+        } catch (authError) {
+          console.error('[onboarding] Error updating auth profile:', authError);
+          // Don't block navigation since Supabase profile was created
+        }
       }
 
       router.push('/onboarding/details');
