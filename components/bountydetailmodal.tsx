@@ -435,6 +435,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     router.push(`/profile/${posterId}`)
                   }
                 }}
+                // Disable when no poster ID (can't navigate) or while profile is loading (prevents duplicate taps)
                 disabled={!posterId || profileLoading}
               >
                 {profileLoading ? (
