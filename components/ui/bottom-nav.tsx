@@ -10,18 +10,26 @@ interface BottomNavProps {
   activeScreen: string;
   onNavigate: (screen: ScreenKey) => void;
   showAdmin?: boolean;
+  onBountyTabRepress?: () => void; // Called when bounty tab is pressed while already active
 }
 
 // Navigation icon size constants for visual hierarchy
 const NAV_ICON_SIZE = 26;        // Standard nav icons
 const CENTER_ICON_SIZE = 32;     // Larger center GPS icon for emphasis
 
-export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: BottomNavProps) {
+export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
+    // If tapping the bounty button while already on bounty screen, trigger scroll-to-top + refresh
+    if (screen === "bounty" && activeScreen === "bounty") {
+      triggerHaptic('light'); // Light haptic for scroll-to-top action
+      onBountyTabRepress?.();
+      return;
+    }
+    
     if (screen === activeScreen) return;
     
     // Trigger haptic feedback - different types for different screens
@@ -32,7 +40,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false }: Botto
     }
     
     onNavigate(screen);
-  }, [activeScreen, onNavigate, triggerHaptic]);
+  }, [activeScreen, onNavigate, triggerHaptic, onBountyTabRepress]);
 
   // Animate center button when active screen changes (using standardized durations)
   useEffect(() => {

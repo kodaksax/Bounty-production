@@ -16,10 +16,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
+import { bountyRequestService } from '../../lib/services/bounty-request-service'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
@@ -34,6 +36,9 @@ function BountyAppInner() {
   const router = useRouter()
   const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
+  // Get current user ID from auth context (reactive to auth state changes)
+  const { session } = useAuthContext()
+  const currentUserId = session?.user?.id
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
@@ -48,10 +53,16 @@ function BountyAppInner() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
+  // Track bounty IDs the user has applied to (pending, accepted, or rejected)
+  const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
+  // Track whether user applications have been loaded (prevents flash of unfiltered content)
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false)
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
   const insets = useSafeAreaInsets()
   const scrollY = useRef(new Animated.Value(0)).current
+  // Reference to the FlatList for scroll-to-top functionality
+  const bountyListRef = useRef<FlatList>(null)
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
@@ -133,6 +144,12 @@ function BountyAppInner() {
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
+    
+    // Filter out bounties the user has applied to (pending, accepted, or rejected)
+    if (appliedBountyIds.size > 0) {
+      list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
+    }
+    
     if (activeCategory !== "all") {
       if (activeCategory === 'forkids') {
         // For Honor chip should show bounties marked as for-honor
@@ -180,7 +197,31 @@ function BountyAppInner() {
       })
     }
     return list
-  }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance])
+  }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance, appliedBountyIds])
+
+  // Load user's bounty applications (to filter out applied/rejected bounties from feed)
+  const loadUserApplications = useCallback(async () => {
+    if (!currentUserId) {
+      setApplicationsLoaded(true)
+      return
+    }
+    try {
+      // Get all bounty requests for the current user (pending, accepted, or rejected)
+      const requests = await bountyRequestService.getAll({ userId: currentUserId })
+      // Build a Set of bounty IDs the user has applied to
+      const ids = new Set<string>(
+        requests
+          .filter(r => r.bounty_id != null)
+          .map(r => String(r.bounty_id))
+      )
+      setAppliedBountyIds(ids)
+    } catch (error) {
+      console.error('Error loading user applications:', error)
+      // Don't block the UI if this fails - just show all bounties
+    } finally {
+      setApplicationsLoaded(true)
+    }
+  }, [currentUserId])
 
   // Load bounties from backend
   const PAGE_SIZE = 20
@@ -212,6 +253,11 @@ function BountyAppInner() {
     }
   }, [offset])
 
+  // Load user applications when component mounts or user changes
+  useEffect(() => {
+    loadUserApplications()
+  }, [loadUserApplications])
+
   useEffect(() => {
     loadBounties({ reset: true })
   }, [loadBounties])
@@ -219,10 +265,11 @@ function BountyAppInner() {
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === "bounty") {
-      // Refresh when returning to the bounty tab
+      // Refresh when returning to the bounty tab - also refresh applications
       loadBounties({ reset: true })
+      loadUserApplications()
     }
-  }, [activeScreen, loadBounties])
+  }, [activeScreen, loadBounties, loadUserApplications])
 
   // Check if onboarding is needed and redirect
   useEffect(() => {
@@ -269,16 +316,29 @@ function BountyAppInner() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      // Reset pagination and reload first page
+      // Reset pagination and reload first page, also refresh applications
       setOffset(0)
       setHasMore(true)
-      await loadBounties({ reset: true })
+      await Promise.all([
+        loadBounties({ reset: true }),
+        loadUserApplications().catch(err => {
+          console.warn('Failed to refresh user applications:', err);
+        })
+      ])
     } catch (error) {
       console.error('Error refreshing bounties:', error)
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties])
+  }, [loadBounties, loadUserApplications])
+
+  // Handler for when bounty tab is pressed while already active - scroll to top and refresh
+  const handleBountyTabRepress = useCallback(() => {
+    // Scroll to top
+    bountyListRef.current?.scrollToOffset({ offset: 0, animated: true })
+    // Trigger refresh
+    onRefresh()
+  }, [onRefresh])
 
   // Ensure activeCategory matches available filters
   useEffect(() => {
@@ -331,7 +391,7 @@ function BountyAppInner() {
 
   const EmptyListComponent = useCallback(() => (
     <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-      {isLoadingBounties ? (
+      {isLoadingBounties || !applicationsLoaded ? (
         <View style={{ width: '100%' }}>
           <PostingsListSkeleton count={5} />
         </View>
@@ -344,7 +404,7 @@ function BountyAppInner() {
         </>
       )}
     </View>
-  ), [isLoadingBounties]);
+  ), [isLoadingBounties, applicationsLoaded]);
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
@@ -534,6 +594,7 @@ function BountyAppInner() {
 
       {/* Bounty List with scroll listener (content extends under BottomNav) */}
       <Animated.FlatList
+        ref={bountyListRef}
         data={filteredBounties}
         keyExtractor={keyExtractor}
         contentContainerStyle={{
@@ -598,7 +659,7 @@ function BountyAppInner() {
         null
       ) : null}
 
-      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} />}
+      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} />}
     </View>
   )
 }
