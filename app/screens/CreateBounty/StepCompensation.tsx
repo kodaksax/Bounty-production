@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWallet } from '../../../lib/wallet-context';
+import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../../../lib/utils/bounty-validation';
 
 interface StepCompensationProps {
   draft: BountyDraft;
@@ -31,31 +32,12 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         setCustomAmount(newValue);
       }
     }
-  }, [draft.amount, AMOUNT_PRESETS, customAmount]);
-
-  const validateAmount = (amount: number, isForHonor: boolean): string | null => {
-    if (isForHonor) {
-      return null; // Honor bounties don't need amount validation
-    }
-    if (!amount || amount < 1) {
-      return 'Amount must be at least $1';
-    }
-    return null;
-  };
-
-  // Shared validation for balance check
-  const validateBalanceForAmount = (amount: number, isForHonor: boolean): boolean => {
-    // Honor bounties don't need balance validation
-    if (isForHonor) {
-      return true;
-    }
-    return amount <= balance;
-  };
+  }, [draft.amount, customAmount]);
 
   const showInsufficientBalanceAlert = (amount: number) => {
     Alert.alert(
       'Insufficient Balance',
-      `The amount ($${amount}) exceeds your current balance ($${balance.toFixed(2)}). Please add funds to your wallet or choose a lower amount.`,
+      getInsufficientBalanceMessage(amount, balance),
       [
         { text: 'OK', style: 'default' }
       ]
@@ -71,8 +53,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   };
 
   const handlePresetSelect = (preset: number) => {
-    // Check if preset amount exceeds balance (honor bounties skip this check)
-    if (!draft.isForHonor && !validateBalanceForAmount(preset, false)) {
+    // Check if preset amount exceeds balance using shared validation
+    if (!validateBalance(preset, balance, draft.isForHonor)) {
       showInsufficientBalanceAlert(preset);
       return;
     }
@@ -105,8 +87,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
       return;
     }
 
-    // Block navigation if amount exceeds balance (using shared validation)
-    if (!validateBalanceForAmount(draft.amount, draft.isForHonor)) {
+    // Block navigation if amount exceeds balance using shared validation
+    if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
       showInsufficientBalanceAlert(draft.amount);
       return;
     }
@@ -114,10 +96,10 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     onNext();
   };
 
-  // Update isValid to also check balance (using shared validation)
-  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && validateBalanceForAmount(draft.amount, draft.isForHonor));
+  // Update isValid to also check balance using shared validation
+  const isValid = draft.isForHonor || (!validateAmount(draft.amount, false) && draft.amount >= 1 && validateBalance(draft.amount, balance, draft.isForHonor));
   const isCustomSelected = !draft.isForHonor && draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount);
-  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalanceForAmount(draft.amount, false);
+  const showBalanceWarning = !draft.isForHonor && draft.amount > 0 && !validateBalance(draft.amount, balance, false);
 
   const scrollRef = useRef<any>(null)
   useEffect(() => {

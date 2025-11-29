@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import type { Attachment } from '../../../lib/types';
 
 interface StepReviewProps {
   draft: BountyDraft;
@@ -15,8 +17,20 @@ interface StepReviewProps {
 export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReviewProps) {
   const { isEmailVerified } = useAuthContext();
   const [showEscrowModal, setShowEscrowModal] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
+
+  const handleViewAttachment = (attachment: Attachment) => {
+    setSelectedAttachment(attachment);
+    setViewerVisible(true);
+  };
+
+  const handleCloseViewer = () => {
+    setViewerVisible(false);
+    setSelectedAttachment(null);
+  };
 
   const handleSubmit = async () => {
     // Email verification gate: Block submitting if email is not verified
@@ -133,9 +147,16 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               return (
                 <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
                   <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Attachments</Text>
-                  <View style={{ gap: 8 }}>
+                  <View style={{ gap: 12 }}>
                     {draft.attachments?.map((attachment) => (
-                      <View key={attachment.id} className="flex-row items-center">
+                      <TouchableOpacity
+                        key={attachment.id}
+                        onPress={() => handleViewAttachment(attachment)}
+                        className="bg-emerald-700/30 rounded-lg p-3 flex-row items-center"
+                        accessibilityLabel={`View ${attachment.name}`}
+                        accessibilityRole="button"
+                        accessibilityHint="Tap to preview attachment"
+                      >
                         <MaterialIcons
                           name={
                             attachment.mimeType?.startsWith('image/')
@@ -146,13 +167,19 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                               ? 'picture-as-pdf'
                               : 'insert-drive-file'
                           }
-                          size={18}
+                          size={24}
                           color="#6ee7b7"
                         />
-                        <Text className="text-white text-sm ml-2 flex-1" numberOfLines={1}>
-                          {attachment.name}
-                        </Text>
-                      </View>
+                        <View className="ml-3 flex-1">
+                          <Text className="text-white text-sm" numberOfLines={1}>
+                            {attachment.name}
+                          </Text>
+                          <Text className="text-emerald-300/60 text-xs">
+                            Tap to preview
+                          </Text>
+                        </View>
+                        <MaterialIcons name="visibility" size={20} color="rgba(110, 231, 183, 0.6)" />
+                      </TouchableOpacity>
                     ))}
                   </View>
                 </View>
@@ -383,6 +410,13 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
           </View>
         </View>
       </Modal>
+
+      {/* Attachment Viewer Modal */}
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={selectedAttachment}
+        onClose={handleCloseViewer}
+      />
     </View>
   );
 }

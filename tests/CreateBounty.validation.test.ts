@@ -1,4 +1,6 @@
 // Unit tests for Create Bounty validation logic
+// Import the shared validation utilities
+import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../lib/utils/bounty-validation';
 
 /**
  * Validation function for title
@@ -180,46 +182,55 @@ test('validateAmount: accepts minimum valid amount', () => {
   assertNull(error);
 });
 
-// Balance validation tests
+// Balance validation tests using shared validateBalance function
 
-/**
- * Validation function for balance check
- */
-function validateBalanceCheck(amount: number, balance: number, isForHonor: boolean): string | null {
-  if (isForHonor) {
-    return null; // Honor bounties don't need balance validation
-  }
-  if (amount > balance) {
-    return 'Insufficient balance';
-  }
-  return null;
-}
+test('validateBalance: accepts amount within balance', () => {
+  const result = validateBalance(50, 100, false);
+  assertEqual(result, true);
+});
 
-test('validateBalanceCheck: accepts amount within balance', () => {
-  const error = validateBalanceCheck(50, 100, false);
+test('validateBalance: rejects amount exceeding balance', () => {
+  const result = validateBalance(150, 100, false);
+  assertEqual(result, false);
+});
+
+test('validateBalance: accepts any amount for honor bounty', () => {
+  const result = validateBalance(150, 0, true);
+  assertEqual(result, true);
+});
+
+test('validateBalance: accepts exact balance amount', () => {
+  const result = validateBalance(100, 100, false);
+  assertEqual(result, true);
+});
+
+test('validateBalance: rejects when balance is zero for paid bounty', () => {
+  const result = validateBalance(50, 0, false);
+  assertEqual(result, false);
+});
+
+// Test validateAmount from shared utility
+test('validateAmount (shared): accepts valid amount for paid bounty', () => {
+  const error = validateAmount(50, false);
   assertNull(error);
 });
 
-test('validateBalanceCheck: rejects amount exceeding balance', () => {
-  const error = validateBalanceCheck(150, 100, false);
+test('validateAmount (shared): rejects zero amount for paid bounty', () => {
+  const error = validateAmount(0, false);
   assertNotNull(error);
-  assertEqual(error, 'Insufficient balance');
+  assertEqual(error, 'Amount must be at least $1');
 });
 
-test('validateBalanceCheck: accepts any amount for honor bounty', () => {
-  const error = validateBalanceCheck(150, 0, true);
+test('validateAmount (shared): accepts any amount for honor bounty', () => {
+  const error = validateAmount(0, true);
   assertNull(error);
 });
 
-test('validateBalanceCheck: accepts exact balance amount', () => {
-  const error = validateBalanceCheck(100, 100, false);
-  assertNull(error);
-});
-
-test('validateBalanceCheck: rejects when balance is zero for paid bounty', () => {
-  const error = validateBalanceCheck(50, 0, false);
-  assertNotNull(error);
-  assertEqual(error, 'Insufficient balance');
+// Test getInsufficientBalanceMessage
+test('getInsufficientBalanceMessage: returns correct message', () => {
+  const message = getInsufficientBalanceMessage(150, 100);
+  assertEqual(message.includes('$150'), true);
+  assertEqual(message.includes('$100.00'), true);
 });
 
 // Location validation tests

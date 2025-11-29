@@ -13,6 +13,7 @@ import { ErrorBanner } from 'components/error-banner';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { useFormSubmission } from 'hooks/useFormSubmission';
 import { useWallet } from 'lib/wallet-context';
+import { validateBalance, getInsufficientBalanceMessage } from 'lib/utils/bounty-validation';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -38,11 +39,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   // Use form submission hook with debouncing
   const { submit, isSubmitting, error: submitError, reset } = useFormSubmission(
     async () => {
-      // Check balance before posting (for non-honor bounties)
-      if (!draft.isForHonor && draft.amount > 0) {
-        if (draft.amount > balance) {
-          throw new Error(`Insufficient balance. You need $${draft.amount.toFixed(2)} but only have $${balance.toFixed(2)}.`);
-        }
+      // Check balance before posting using shared validation (for non-honor bounties)
+      // This pre-check provides immediate user feedback before attempting creation
+      if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
+        throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
       
       // Create the bounty first (before deducting funds to prevent loss on failure)
