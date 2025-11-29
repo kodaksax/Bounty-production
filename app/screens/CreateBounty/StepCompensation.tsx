@@ -26,9 +26,12 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   // Initialize customAmount from draft if it's a custom value
   useEffect(() => {
     if (draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount)) {
-      setCustomAmount(draft.amount.toString());
+      const newValue = draft.amount.toString();
+      if (newValue !== customAmount) {
+        setCustomAmount(newValue);
+      }
     }
-  }, [draft.amount]);
+  }, [draft.amount, AMOUNT_PRESETS, customAmount]);
 
   const validateAmount = (amount: number, isForHonor: boolean): string | null => {
     if (isForHonor) {
