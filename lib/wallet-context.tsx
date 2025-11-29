@@ -41,7 +41,8 @@ const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'wallet:balance:v1';
 const TX_STORAGE_KEY = 'wallet:transactions:v1';
-const INITIAL_BALANCE = 40; // starting placeholder
+// Start with 0 balance for production readiness - balance comes from API or deposits
+const INITIAL_BALANCE = 0;
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);

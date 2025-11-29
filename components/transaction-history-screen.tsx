@@ -2,13 +2,15 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
-// import { transactionService } from "lib/services/transaction-service"
-import { cn } from "lib/utils"
 import { useWallet } from "lib/wallet-context"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { Text, TouchableOpacity, View, ScrollView } from "react-native"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
+
+// Constants for transaction display
+const DEFAULT_TITLE = 'Transaction'
 
 export interface Transaction {
   id: string
@@ -28,63 +30,49 @@ export interface Transaction {
 }
 
 export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   // Local view of transactions (sourced from wallet context for now)
-  const { transactions: walletTransactions } = useWallet()
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const { transactions: walletTransactions, refresh, isLoading: walletLoading } = useWallet()
   const [isLoading, setIsLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeFilter, setActiveFilter] = useState<"all" | "deposits" | "withdrawals" | "bounties">("all")
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const loadingRef = useRef<any>(null)
 
-  // Use intersection observer for infinite scrolling
+  // Filter and sort transactions
+  const filteredTransactions = useMemo(() => {
+    let filtered = walletTransactions as Transaction[]
+    if (activeFilter === 'deposits') filtered = filtered.filter(t => t.type === 'deposit')
+    else if (activeFilter === 'withdrawals') filtered = filtered.filter(t => t.type === 'withdrawal')
+    else if (activeFilter === 'bounties') filtered = filtered.filter(t => t.type.startsWith('bounty_') || t.type === 'escrow' || t.type === 'release' || t.type === 'refund')
+
+    // Sort newest first
+    return [...filtered].sort((a, b) => b.date.getTime() - a.date.getTime())
+  }, [walletTransactions, activeFilter])
+
+  // Set loading state based on wallet loading
   useEffect(() => {
-    if (!loadingRef.current || !hasMore) return
+    setIsLoading(walletLoading)
+  }, [walletLoading])
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isLoading && hasMore) {
-          setCurrentPage((prev) => prev + 1)
-        }
-      },
-      { threshold: 0.5 },
-    )
-
-    observer.observe(loadingRef.current)
-    return () => observer.disconnect()
-  }, [isLoading, hasMore])
-
-  // Fetch transactions when page or filter changes
-  useEffect(() => {
-    // Simulate pagination on in-memory list
-    setIsLoading(true)
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    setError(null)
     try {
-      let filtered = walletTransactions as Transaction[]
-      if (activeFilter === 'deposits') filtered = filtered.filter(t => t.type === 'deposit')
-      else if (activeFilter === 'withdrawals') filtered = filtered.filter(t => t.type === 'withdrawal')
-      else if (activeFilter === 'bounties') filtered = filtered.filter(t => t.type.startsWith('bounty_') || t.type === 'escrow' || t.type === 'release' || t.type === 'refund')
-
-      // Sort newest first
-      filtered = [...filtered].sort((a,b) => b.date.getTime() - a.date.getTime())
-      const pageSize = 10
-      const slice = filtered.slice(0, currentPage * pageSize)
-      setTransactions(slice)
-      setHasMore(slice.length < filtered.length)
-      setError(null)
+      await refresh()
     } catch (e) {
-      setError('Failed to load transactions.')
+      setError('Failed to refresh transactions.')
     } finally {
-      setIsLoading(false)
+      setIsRefreshing(false)
     }
-  }, [walletTransactions, activeFilter, currentPage])
+  }, [refresh])
 
-  // Group transactions by date
+  // Group transactions by date for section list rendering
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: Transaction[] } = {}
 
-    transactions.forEach((transaction) => {
+    filteredTransactions.forEach((transaction) => {
       const dateKey = format(transaction.date, "yyyy-MM-dd")
       if (!groups[dateKey]) {
         groups[dateKey] = []
@@ -99,15 +87,12 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         date: new Date(date),
         transactions: txs,
       }))
-  }, [transactions])
+  }, [filteredTransactions])
 
   // Handle filter change
   const handleFilterChange = (filter: "all" | "deposits" | "withdrawals" | "bounties") => {
     if (filter === activeFilter) return
     setActiveFilter(filter)
-    setTransactions([])
-    setCurrentPage(1)
-    setHasMore(true)
   }
 
   // Get transaction icon based on type
@@ -134,25 +119,120 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   // Get transaction title based on type
   const getTransactionTitle = (transaction: Transaction) => {
+    const title = transaction.details.title || DEFAULT_TITLE
     switch (transaction.type) {
       case "deposit":
-        return `Deposit via ${transaction.details.method || "Unknown"}`
+        return `Deposit via ${transaction.details.method || "Card"}`
       case "withdrawal":
-        return `Withdrawal to ${transaction.details.method || "Unknown"}`
+        return `Withdrawal to ${transaction.details.method || "Bank Account"}`
       case "bounty_posted":
-        return `Posted Bounty: ${transaction.details.title || "Unknown"}`
+        return `Posted Bounty: ${title}`
       case "bounty_completed":
-        return `Completed Bounty: ${transaction.details.title || "Unknown"}`
+        return `Completed Bounty: ${title}`
       case "bounty_received":
-        return `Received Bounty Payment: ${transaction.details.title || "Unknown"}`
+        return `Received Payment: ${title}`
       case "escrow":
-        return `Escrow Hold: ${transaction.details.title || "Unknown"}`
+        return `Escrow Hold: ${title}`
       case "release":
-        return `Escrow Released: ${transaction.details.title || "Unknown"}`
+        return `Escrow Released: ${title}`
       case "refund":
-        return `Refund: ${transaction.details.title || "Unknown"}`
+        return `Refund: ${title}`
     }
   }
+
+  // Render a single transaction item
+  const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => (
+    <TouchableOpacity
+      key={transaction.id}
+      style={styles.transactionCard}
+      onPress={() => setSelectedTransaction(transaction)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.transactionRow}>
+        <View style={styles.iconContainer}>
+          {getTransactionIcon(transaction.type)}
+        </View>
+
+        <View style={styles.transactionDetails}>
+          <View style={styles.transactionHeader}>
+            <Text style={styles.transactionTitle} numberOfLines={2}>
+              {getTransactionTitle(transaction)}
+            </Text>
+            <Text
+              style={[
+                styles.transactionAmount,
+                { color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5' }
+              ]}
+            >
+              {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
+            </Text>
+          </View>
+          <View style={styles.transactionMeta}>
+            <View style={styles.metaRow}>
+              <Text style={styles.timeText}>{format(transaction.date, "h:mm a")}</Text>
+              {transaction.escrowStatus && (
+                <View style={styles.escrowBadge}>
+                  <MaterialIcons name="lock" size={10} color="#fff" />
+                  <Text style={styles.badgeText}>{transaction.escrowStatus.toUpperCase()}</Text>
+                </View>
+              )}
+              {transaction.disputeStatus === "pending" && (
+                <View style={styles.disputeBadge}>
+                  <MaterialIcons name="warning" size={10} color="#fff" />
+                  <Text style={styles.badgeText}>DISPUTE</Text>
+                </View>
+              )}
+            </View>
+            {transaction.details.status && (
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: transaction.details.status === "Completed" ? '#6ee7b7' : '#fde68a' }
+                ]}
+              >
+                {transaction.details.status}
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  ), [])
+
+  // Render date header for a group
+  const renderDateHeader = useCallback((date: Date) => (
+    <View style={styles.dateHeader}>
+      <Text style={styles.dateText}>{format(date, "EEEE, MMMM d, yyyy")}</Text>
+    </View>
+  ), [])
+
+  // Flatten grouped transactions for FlatList with section headers
+  const flatListData = useMemo(() => {
+    const data: Array<{ type: 'header'; date: Date } | { type: 'transaction'; transaction: Transaction }> = []
+    groupedTransactions.forEach(group => {
+      data.push({ type: 'header', date: group.date })
+      group.transactions.forEach(tx => {
+        data.push({ type: 'transaction', transaction: tx })
+      })
+    })
+    return data
+  }, [groupedTransactions])
+
+  // Render FlatList item
+  const renderItem = useCallback(({ item }: { item: typeof flatListData[0] }) => {
+    if (item.type === 'header') {
+      return renderDateHeader(item.date)
+    }
+    return renderTransactionItem({ item: item.transaction })
+  }, [renderDateHeader, renderTransactionItem])
+
+  // Key extractor for FlatList
+  const keyExtractor = useCallback((item: typeof flatListData[0], index: number) => {
+    if (item.type === 'header') {
+      return `header-${item.date.toISOString()}`
+    }
+    return item.transaction.id
+  }, [])
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -278,135 +358,51 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         </View>
       )}
 
-      {/* Transaction list */}
-      <View className="flex-1 px-4 pb-safe overflow-y-auto ios-scroll">
-        {isLoading && currentPage === 1 ? (
-          <View className="py-6">
+      {/* Transaction list - Using FlatList for better scroll performance */}
+      <View style={[styles.listContainer, { paddingBottom: insets.bottom }]}>
+        {isLoading && filteredTransactions.length === 0 ? (
+          <View style={styles.loadingContainer}>
             <TransactionsListSkeleton count={5} />
           </View>
-        ) : transactions.length === 0 ? (
-          <View className="flex flex-col items-center justify-center py-10 text-center">
-            <View className="h-16 w-16 rounded-full bg-emerald-700/50 flex items-center justify-center mb-4">
-              <MaterialIcons name="credit-card" size={32} color="#86efac" />
+        ) : filteredTransactions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <MaterialIcons name="receipt-long" size={32} color="#86efac" />
             </View>
-            <Text className="text-emerald-200 mb-2">No transactions found</Text>
-            <Text className="text-sm text-emerald-300">
+            <Text style={styles.emptyTitle}>No transactions found</Text>
+            <Text style={styles.emptySubtitle}>
               {activeFilter === "all"
-                ? "Your transaction history will appear here"
+                ? "Your transaction history will appear here when you make deposits, withdrawals, or complete bounties."
                 : `No ${activeFilter.slice(0, -1)} transactions found`}
             </Text>
           </View>
         ) : (
-          <>
-            {groupedTransactions.map((group) => (
-              <View key={group.date.toISOString()} className="mb-6">
-                <View className="sticky top-0 bg-emerald-600 py-2 z-10">
-                  <Text className="text-sm font-medium text-emerald-300">{format(group.date, "EEEE, MMMM d, yyyy")}</Text>
-                </View>
-
-                <View className="space-y-3">
-                  {group.transactions.map((transaction) => (
-                    <TouchableOpacity
-                      key={transaction.id}
-                      style={{
-                        backgroundColor: 'rgba(4,120,87,0.4)',
-                        borderRadius: 14,
-                        padding: 16,
-                        marginBottom: 12,
-                        minHeight: 80, // Comfortable touch target
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 2,
-                        elevation: 2
-                      }}
-                      onPress={() => setSelectedTransaction(transaction)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{
-                          height: 44,
-                          width: 44,
-                          borderRadius: 22,
-                          backgroundColor: 'rgba(5,150,105,0.5)',
-                          justifyContent: 'center',
-                          alignItems: 'center'
-                        }}>
-                          {getTransactionIcon(transaction.type)}
-                        </View>
-
-                        <View style={{ flex: 1, marginLeft: 14 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                            <Text style={{
-                              fontSize: 15,
-                              fontWeight: '600',
-                              color: '#ffffff',
-                              flex: 1,
-                              marginRight: 8
-                            }} numberOfLines={2}>
-                              {getTransactionTitle(transaction)}
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 16,
-                                fontWeight: '700',
-                                color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5',
-                                letterSpacing: 0.3
-                              }}
-                            >
-                              {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-                            </Text>
-                          </View>
-                          <View className="flex justify-between items-center mt-1">
-                            <View className="flex-row items-center gap-2">
-                              <Text className="text-xs text-emerald-300">{format(transaction.date, "h:mm a")}</Text>
-                              {(transaction as any).escrowStatus && (
-                                <View className="flex-row items-center bg-amber-500/80 px-2 py-0.5 rounded-full">
-                                  <MaterialIcons name="lock" size={10} color="#fff" />
-                                  <Text className="text-[10px] text-white font-bold ml-1">{(transaction as any).escrowStatus.toUpperCase()}</Text>
-                                </View>
-                              )}
-                              {(transaction as any).disputeStatus === "pending" && (
-                                <View className="flex-row items-center bg-red-500/80 px-2 py-0.5 rounded-full">
-                                  <MaterialIcons name="warning" size={10} color="#fff" />
-                                  <Text className="text-[10px] text-white font-bold ml-1">DISPUTE</Text>
-                                </View>
-                              )}
-                            </View>
-                            {transaction.details.status && (
-                              <Text
-                                className={cn(
-                                  "text-xs",
-                                  transaction.details.status === "Completed" ? "text-emerald-300" : "text-yellow-300",
-                                )}
-                              >
-                                {transaction.details.status}
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+          <FlatList
+            data={flatListData}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.flatListContent}
+            showsVerticalScrollIndicator={true}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#6ee7b7"
+                colors={['#6ee7b7']}
+              />
+            }
+            ListFooterComponent={
+              <View style={styles.listFooter}>
+                <Text style={styles.footerText}>
+                  {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
+                </Text>
               </View>
-            ))}
-
-            {/* Loading indicator for infinite scroll */}
-            {hasMore && (
-              <View ref={loadingRef} className="py-4 flex justify-center">
-                {isLoading && (
-                  <View className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin"></View>
-                )}
-              </View>
-            )}
-
-            {!hasMore && (
-              <View className="py-4 text-center">
-                <Text style={{ color: '#bbf7d0' }}>{transactions.length > 0 ? 'No more transactions' : 'No transactions found'}</Text>
-              </View>
-            )}
-          </>
+            }
+          />
         )}
       </View>
 
@@ -417,3 +413,148 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  listContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  loadingContainer: {
+    paddingVertical: 24,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyIcon: {
+    height: 64,
+    width: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(4,120,87,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: '#d1fae5',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: '#a7f3d0',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  flatListContent: {
+    paddingBottom: 20,
+  },
+  dateHeader: {
+    backgroundColor: '#059669',
+    paddingVertical: 8,
+  },
+  dateText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#a7f3d0',
+  },
+  transactionCard: {
+    backgroundColor: 'rgba(4,120,87,0.4)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    minHeight: 80,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    height: 44,
+    width: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(5,150,105,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  transactionDetails: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  transactionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+    marginRight: 8,
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  transactionMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#a7f3d0',
+  },
+  escrowBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245,158,11,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  disputeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239,68,68,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  statusText: {
+    fontSize: 12,
+  },
+  listFooter: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#a7f3d0',
+    fontSize: 13,
+  },
+})

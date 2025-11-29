@@ -9,21 +9,24 @@ import { useWallet } from '../lib/wallet-context';
 
 interface WithdrawScreenProps {
   onBack?: () => void;
-  balance: number;
+  balance?: number; // Optional - will use wallet balance if not provided
 }
 
-export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
+export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenProps) {
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [customAmount, setCustomAmount] = useState<string>("");
   const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
   const [connectedAccountId, setConnectedAccountId] = useState<string>("");
   const [isOnboarding, setIsOnboarding] = useState(false);
   
-  const { withdraw } = useWallet();
+  // Use wallet context for balance - this ensures balance is always in sync
+  const { withdraw, balance: walletBalance, refresh } = useWallet();
   const { paymentMethods, isLoading } = useStripe();
   const { session } = useAuthContext();
+  
+  // Use prop balance if provided, otherwise use wallet context balance
+  const balance = propBalance ?? walletBalance;
   
   // Set default selected method when payment methods load
   useEffect(() => {
@@ -182,8 +185,10 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
 
         const { transferId, transactionId, estimatedArrival, message } = await response.json();
         
-        // The backend already created the transaction and updated balance
-        // Just show success message
+        // Refresh wallet to get updated balance from API
+        await refresh();
+        
+        // Show success message
         Alert.alert(
           'Withdrawal Initiated',
           message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
@@ -194,7 +199,7 @@ export function WithdrawScreen({ onBack, balance = 40 }: WithdrawScreenProps) {
         const success = await withdraw(withdrawalAmount, {
           method: paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
           title: 'Withdrawal to Payment Method',
-          status: 'pending'
+          status: 'completed'
         });
 
         if (success) {

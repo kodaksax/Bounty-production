@@ -118,7 +118,14 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    if (!isValid || checking || !userId || !accepted) return;
+    // Validate prerequisites
+    if (!isValid || checking || !accepted) return;
+
+    // Check if user is authenticated
+    if (!userId) {
+      setError('Please sign in to continue. Your session may have expired.');
+      return;
+    }
 
     try {
       // persist acceptance
@@ -139,14 +146,41 @@ export default function UsernameScreen() {
       }
 
       // Also save to Supabase profiles table via AuthProfileService
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
         .select('id')
         .eq('id', userId)
         .single();
 
+      // Handle case where profile doesn't exist (not an error)
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('[onboarding] Error fetching profile:', fetchError);
+        // Continue anyway - we'll try to create it
+      }
+
       if (existingProfile) {
-        await updateAuthProfile({ username });
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ username })
+          .eq('id', userId);
+        
+        if (updateError) {
+          // Handle unique constraint violation (username already taken)
+          if (updateError.code === '23505') {
+            setError('This username is already taken. Please choose another.');
+            return;
+          }
+          console.error('[onboarding] Error updating profile:', updateError);
+          setError('Failed to update profile. Please try again.');
+          return;
+        }
+        
+        try {
+          await updateAuthProfile({ username });
+        } catch (authError) {
+          console.error('[onboarding] Error updating auth profile:', authError);
+          // Don't block navigation since Supabase profile was updated
+        }
       } else {
         const { error: insertError } = await supabase
           .from('profiles')
@@ -157,12 +191,22 @@ export default function UsernameScreen() {
           });
 
         if (insertError) {
+          // Handle unique constraint violation (username already taken)
+          if (insertError.code === '23505') {
+            setError('This username is already taken. Please choose another.');
+            return;
+          }
           console.error('[onboarding] Error creating profile:', insertError);
           setError('Failed to save profile. Please try again.');
           return;
         }
 
-        await updateAuthProfile({ username });
+        try {
+          await updateAuthProfile({ username });
+        } catch (authError) {
+          console.error('[onboarding] Error updating auth profile:', authError);
+          // Don't block navigation since Supabase profile was created
+        }
       }
 
       router.push('/onboarding/details');
