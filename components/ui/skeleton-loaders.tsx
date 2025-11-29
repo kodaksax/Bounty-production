@@ -384,6 +384,64 @@ export function TransactionsListSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
+/**
+ * Skeleton loader for hunter dashboard screens
+ * Used in apply, work-in-progress, review-and-verify, and payout screens
+ */
+export function HunterDashboardSkeleton() {
+  return (
+    <View style={styles.hunterDashboard}>
+      {/* Header skeleton */}
+      <View style={styles.hunterHeader}>
+        <Skeleton className="h-8 w-8 rounded-lg bg-emerald-700/40" />
+        <Skeleton className="h-6 w-40 bg-emerald-700/40" />
+      </View>
+
+      {/* Bounty card skeleton */}
+      <View style={styles.hunterBountyCard}>
+        <View style={styles.hunterBountyHeader}>
+          <Skeleton className="h-12 w-12 rounded-full bg-emerald-700/40" />
+          <View style={styles.hunterBountyInfo}>
+            <Skeleton className="h-5 w-48 bg-emerald-700/40" />
+            <Skeleton className="h-3 w-24 bg-emerald-700/40" />
+          </View>
+        </View>
+        <Skeleton className="h-7 w-20 self-end bg-emerald-700/40" />
+      </View>
+
+      {/* Timeline skeleton */}
+      <View style={styles.hunterTimeline}>
+        <Skeleton className="h-4 w-32 bg-emerald-700/40" />
+        <View style={styles.hunterTimelineScroll}>
+          {[1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.hunterStageItem}>
+              <Skeleton className="h-12 w-12 rounded-full bg-emerald-700/40" />
+              <Skeleton className="h-3 w-20 bg-emerald-700/40" />
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Status panel skeleton */}
+      <View style={styles.hunterPanel}>
+        <Skeleton className="h-8 w-8 rounded-full bg-emerald-700/40" />
+        <Skeleton className="h-5 w-44 bg-emerald-700/40" />
+        <Skeleton className="h-3 w-64 bg-emerald-700/40" />
+        <Skeleton className="h-3 w-56 bg-emerald-700/40" />
+        <Skeleton className="h-6 w-36 rounded-full bg-emerald-700/40" />
+      </View>
+
+      {/* Details card skeleton */}
+      <View style={styles.hunterDetailsCard}>
+        <Skeleton className="h-4 w-28 bg-emerald-700/40" />
+        <Skeleton className="h-3 w-full bg-emerald-700/40" />
+        <Skeleton className="h-3 w-4/5 bg-emerald-700/40" />
+        <Skeleton className="h-3 w-3/5 bg-emerald-700/40" />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   postingCard: {
     backgroundColor: 'rgba(4, 120, 87, 0.3)',
@@ -602,5 +660,67 @@ const styles = StyleSheet.create({
   skillsetsItems: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  // Hunter dashboard skeleton styles
+  hunterDashboard: {
+    flex: 1,
+    backgroundColor: '#1a3d2e',
+    padding: 16,
+  },
+  hunterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  hunterBountyCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.3)',
+  },
+  hunterBountyHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  hunterBountyInfo: {
+    flex: 1,
+    gap: 8,
+  },
+  hunterTimeline: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  hunterTimelineScroll: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingVertical: 8,
+  },
+  hunterStageItem: {
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    minWidth: 120,
+    gap: 8,
+  },
+  hunterPanel: {
+    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  hunterDetailsCard: {
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
   },
 });
