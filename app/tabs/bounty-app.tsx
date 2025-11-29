@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { useUserProfile } from '../../hooks/useUserProfile'
 import { useAdmin } from '../../lib/admin-context'
@@ -24,7 +25,6 @@ import { bountyRequestService } from '../../lib/services/bounty-request-service'
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
-import { getCurrentUserId } from '../../lib/utils/data-utils'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
@@ -36,6 +36,9 @@ function BountyAppInner() {
   const router = useRouter()
   const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
+  // Get current user ID from auth context (reactive to auth state changes)
+  const { session } = useAuthContext()
+  const currentUserId = session?.user?.id
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
@@ -50,8 +53,6 @@ function BountyAppInner() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
-  // Current user ID for filtering applied bounties
-  const currentUserId = getCurrentUserId()
   // Track bounty IDs the user has applied to or been rejected from
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // removed unused error state
