@@ -160,10 +160,14 @@ The app is configured with deep linking support in `app.json`:
 
 ### Supported Deep Link Patterns
 
-- `bountyexpo-workspace://` - App scheme
-- Bounty links: `bountyexpo://bounties/{id}`
-- Profile links: Profile navigation via `/profile/{userId}`
+- `bountyexpo-workspace://` - App scheme (configured in app.json)
+- Bounty links: `bountyexpo-workspace://bounty/{id}`
+- Profile links: `bountyexpo-workspace://profile/{userId}`
+- Postings: `bountyexpo-workspace://postings/{bountyId}`
 - Notification deep links handled in `components/notifications-bell.tsx`
+
+**Note**: The app also references `bountyexpo://bounties/{id}` in share functionality (bountydetailmodal.tsx), 
+which should be updated to use the configured scheme `bountyexpo-workspace://`.
 
 ## Navigation Patterns Used
 

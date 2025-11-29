@@ -79,8 +79,9 @@ export default function BountyDetailRouter() {
         return;
       }
 
-      // User has no relationship to this bounty - show bounty detail
-      // Redirect to postings view which handles the display for viewers
+      // User has no relationship to this bounty as poster or hunter
+      // The postings/[bountyId] view handles access control and shows the bounty detail
+      // Non-posters will see a read-only view with option to apply
       router.replace({
         pathname: '/postings/[bountyId]',
         params: { bountyId },
