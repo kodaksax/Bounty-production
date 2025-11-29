@@ -435,22 +435,31 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     router.push(`/profile/${posterId}`)
                   }
                 }}
-                disabled={!posterId}
+                disabled={!posterId || profileLoading}
               >
-                <Avatar style={styles.avatar}>
-                  <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
-                  <AvatarFallback style={styles.avatarFallback}>
-                    <Text style={styles.avatarText}>
-                      {displayUsername.substring(0, 2).toUpperCase()}
-                    </Text>
-                  </AvatarFallback>
-                </Avatar>
-                <View style={styles.userTextInfo}>
-                  <Text style={styles.username}>{displayUsername}</Text>
-                  <Text style={styles.postTime}>Posted 2h ago</Text>
-                </View>
-                {posterId && (
-                  <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                {profileLoading ? (
+                  <View style={styles.profileLoadingContainer}>
+                    <ActivityIndicator size="small" color="#a7f3d0" />
+                    <Text style={styles.loadingText}>Loading profile...</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Avatar style={styles.avatar}>
+                      <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
+                      <AvatarFallback style={styles.avatarFallback}>
+                        <Text style={styles.avatarText}>
+                          {displayUsername.substring(0, 2).toUpperCase()}
+                        </Text>
+                      </AvatarFallback>
+                    </Avatar>
+                    <View style={styles.userTextInfo}>
+                      <Text style={styles.username}>{displayUsername}</Text>
+                      <Text style={styles.postTime}>Posted 2h ago</Text>
+                    </View>
+                    {posterId && (
+                      <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                    )}
+                  </>
                 )}
               </TouchableOpacity>
 
@@ -532,7 +541,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 <View style={styles.attachmentsSection}>
                   <Text style={styles.sectionHeader}>Attachments</Text>
                   {isLoadingAttachments ? (
-                    <ActivityIndicator size="small" color="#a7f3d0" />
+                    <View style={styles.attachmentsLoadingContainer}>
+                      <ActivityIndicator size="small" color="#a7f3d0" />
+                      <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
+                    </View>
                   ) : (
                     <View style={styles.attachmentsContainer}>
                       {actualAttachments.map((attachment) => {
@@ -692,6 +704,17 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  profileLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  loadingText: {
+    color: '#a7f3d0', // emerald-300
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
   userTextInfo: {
     flex: 1,
   },
@@ -803,6 +826,20 @@ const styles = StyleSheet.create({
   },
   attachmentsContainer: {
     gap: 8,
+  },
+  attachmentsLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#05543280', // emerald-800/50
+    borderRadius: 8,
+    gap: 12,
+  },
+  attachmentsLoadingText: {
+    color: '#a7f3d0', // emerald-300
+    fontSize: 14,
+    fontStyle: 'italic',
   },
   attachmentItem: {
     flexDirection: 'row',
