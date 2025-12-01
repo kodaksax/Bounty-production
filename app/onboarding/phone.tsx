@@ -7,8 +7,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
+import { Image, Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,8 +15,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-} from 'react-native';
+  View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';

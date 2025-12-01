@@ -8,8 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
+import { Image, ActivityIndicator,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -18,8 +17,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-} from 'react-native';
+    View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';

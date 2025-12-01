@@ -11,16 +11,14 @@ import {
   type PasswordStrengthResult 
 } from 'lib/utils/password-validation'
 import React, { useEffect, useState } from 'react'
-import { 
-  ActivityIndicator, 
+import { Image, ActivityIndicator, 
   KeyboardAvoidingView, 
   Platform, 
   ScrollView, 
   Text, 
   TextInput, 
   TouchableOpacity, 
-  View 
-} from 'react-native'
+  View } from 'react-native'
 
 export default function UpdatePasswordRoute() { 
   return <UpdatePasswordScreen /> 
