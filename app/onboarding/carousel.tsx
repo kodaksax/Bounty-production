@@ -16,6 +16,7 @@ import { Image, Animated,
   TouchableOpacity,
   View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -176,8 +177,7 @@ export default function OnboardingCarousel() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
-        <Text style={styles.brandingText}>BOUNTY</Text>
+        <BrandingLogo size="medium" />
       </View>
 
       {/* Skip button */}

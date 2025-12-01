@@ -1,5 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef, useState } from "react"
@@ -403,8 +404,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         {/* Header - iPhone optimized */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <MaterialIcons name="place" size={20} color="white" />
-            <Text style={styles.headerTitle}>BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">

@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as DocumentPicker from 'expo-document-picker'
 import { useEffect, useState } from "react"
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { BrandingLogo } from "components/ui/branding-logo"
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -118,8 +119,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       {/* Standard Header */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity onPress={handleSave} className="p-2">
           <MaterialIcons name="close" size={24} color="#000000" />

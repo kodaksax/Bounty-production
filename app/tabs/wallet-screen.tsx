@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
+import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawScreen } from "../../components/withdraw-screen";
@@ -97,18 +98,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons 
-            name="gps-fixed" 
-            size={24} 
-            color="#fff" 
-            accessibilityElementsHidden={true}
-          />
-          <Text 
-            style={styles.headerTitle}
-            accessibilityRole="header"
-          >
-            BOUNTY
-          </Text>
+          <BrandingLogo size="small" />
         </View>
       </View>
   

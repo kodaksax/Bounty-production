@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { BrandingLogo } from './ui/branding-logo';
 import { useHapticFeedback } from "../lib/haptic-feedback";
 
 interface TransactionConfirmationProps {
@@ -31,8 +32,7 @@ export function TransactionConfirmation({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
       </View>
 

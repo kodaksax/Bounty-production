@@ -17,6 +17,7 @@ import { Image, Alert,
   TouchableOpacity,
   View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
@@ -113,8 +114,7 @@ export default function PhoneScreen() {
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
-            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
-            <Text style={styles.brandingText}>BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={{ width: 40 }} />
         </View>

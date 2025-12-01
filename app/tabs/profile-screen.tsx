@@ -5,6 +5,7 @@ import { AchievementsGrid } from "components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
+import { BrandingLogo } from "components/ui/branding-logo";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
@@ -259,19 +260,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   {/* Header — left: BOUNTY brand, right: back + settings */}
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
         <View className="flex-row items-center gap-2">
-          <MaterialIcons 
-            name="gps-fixed" 
-            size={24} 
-            color="#ffffff" 
-            accessibilityElementsHidden={true}
-          />
-          <Text
-            style={{ fontSize: 20, fontWeight: '700', letterSpacing: 1 }}
-            className="text-white"
-            accessibilityRole="header"
-          >
-            BOUNTY
-          </Text>
+          <BrandingLogo size="small" />
         </View>
         <View className="flex-row items-center">
           <TouchableOpacity 

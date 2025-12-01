@@ -5,6 +5,7 @@ import { Text, TouchableOpacity, View } from "react-native"
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
 import type { Conversation } from "lib/types"
 import { getCurrentUserId } from "lib/utils/data-utils"
@@ -159,8 +160,7 @@ export function ChatDetailScreen({
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center">
-            <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-            <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
         </View>

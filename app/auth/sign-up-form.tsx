@@ -4,6 +4,7 @@ import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
@@ -120,8 +121,7 @@ export function SignUpForm() {
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
           <View className="flex-row items-center justify-center mb-10">
-            <MaterialIcons name="gps-fixed" size={40} color="#fff" />
-            <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
+            <BrandingLogo size="large" />
           </View>
           <View className="gap-5">
             {authError ? (

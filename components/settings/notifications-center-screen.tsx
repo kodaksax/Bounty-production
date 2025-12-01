@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../ui/branding-logo';
 import { API_BASE_URL } from '../../lib/config/api';
 import { supabase } from '../../lib/supabase';
 
@@ -179,8 +180,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     >
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#fff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <View className="flex-row items-center">
           {syncing && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}

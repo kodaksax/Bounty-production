@@ -1,6 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { cn } from "lib/utils"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
@@ -244,8 +245,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             <MaterialIcons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View className="flex-row items-center gap-2">
-            <MaterialIcons name="gps-fixed" size={22} color="#ffffff" />
-            <Text className="text-white font-bold tracking-wider">BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={{ width: 40 }} />
         </View>

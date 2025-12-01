@@ -9,6 +9,7 @@ import { BountyListItem } from 'components/bounty-list-item'
 import { NotificationsBell } from 'components/notifications-bell'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
+import { BrandingLogo } from 'components/ui/branding-logo'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -421,18 +422,7 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <MaterialIcons 
-              name="gps-fixed" 
-              size={HEADER_LAYOUT.iconSize} 
-              color="#ffffff"
-              accessibilityElementsHidden={true}
-            />
-            <Animated.Text 
-              style={[styles.headerTitle, { transform: [{ scale: titleScale }] }]}
-              accessibilityRole="header"
-            >
-              BOUNTY
-            </Animated.Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <NotificationsBell />

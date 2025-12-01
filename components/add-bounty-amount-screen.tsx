@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { useHapticFeedback } from '../lib/haptic-feedback'
 
 interface AddBountyAmountScreenProps {
@@ -289,8 +290,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <MaterialIcons name="gps-fixed" size={24} color="#000000" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <View style={{ width: 24 }} /> {/* Empty view for spacing */}
       </View>
