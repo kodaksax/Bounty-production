@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { useRouter } from 'expo-router'
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { COLORS, RADIUS, SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
@@ -23,7 +23,11 @@ export interface BountyListItemProps {
   poster_avatar?: string
 }
 
-export function BountyListItem({ id, title, username, price, distance, description, isForHonor, user_id, work_type, poster_avatar }: BountyListItemProps) {
+/**
+ * Optimized bounty list item with React.memo for preventing unnecessary re-renders.
+ * Uses stable callbacks and careful state management.
+ */
+function BountyListItemComponent({ id, title, username, price, distance, description, isForHonor, user_id, work_type, poster_avatar }: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
@@ -56,19 +60,26 @@ export function BountyListItem({ id, title, username, price, distance, descripti
   }, [username, posterProfile?.username, profileLoading])
 
 
-
-  const handleAvatarPress = (e: any) => {
+  // Stable callbacks to prevent child re-renders
+  const handleAvatarPress = useCallback((e: any) => {
     e.stopPropagation()
     triggerHaptic('light') // Light haptic for avatar tap
     if (user_id) {
       router.push(`/profile/${user_id}`)
     }
-  }
+  }, [user_id, router, triggerHaptic])
 
-  const handleBountyPress = () => {
+  const handleBountyPress = useCallback(() => {
     triggerHaptic('light') // Light haptic for bounty tap
     setShowDetail(true)
-  }
+  }, [triggerHaptic])
+
+  const handleCloseDetail = useCallback(() => {
+    setShowDetail(false)
+  }, [])
+
+  // Build accessibility label once
+  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`
 
   return (
     <>
@@ -77,7 +88,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
         style={styles.row}
         onPress={handleBountyPress}
         accessibilityRole="button"
-        accessibilityLabel={`Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`}
+        accessibilityLabel={accessibilityLabel}
         accessibilityHint="Tap to view bounty details and apply"
       >
         {/* Leading avatar - clickable to view profile */}
@@ -135,12 +146,32 @@ export function BountyListItem({ id, title, username, price, distance, descripti
       {showDetail && (
         <BountyDetailModal
           bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar }}
-          onClose={() => setShowDetail(false)}
+          onClose={handleCloseDetail}
         />
       )}
     </>
   )
 }
+
+/**
+ * Memoized BountyListItem that only re-renders when relevant props change.
+ * This prevents expensive re-renders when parent lists update unrelated items.
+ */
+export const BountyListItem = React.memo(BountyListItemComponent, (prevProps, nextProps) => {
+  // Only re-render if these specific props change
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.title === nextProps.title &&
+    prevProps.username === nextProps.username &&
+    prevProps.price === nextProps.price &&
+    prevProps.distance === nextProps.distance &&
+    prevProps.description === nextProps.description &&
+    prevProps.isForHonor === nextProps.isForHonor &&
+    prevProps.user_id === nextProps.user_id &&
+    prevProps.work_type === nextProps.work_type &&
+    prevProps.poster_avatar === nextProps.poster_avatar
+  )
+})
 
 const styles = StyleSheet.create({
   row: {

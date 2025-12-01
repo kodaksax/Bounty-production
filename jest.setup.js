@@ -11,6 +11,65 @@ process.env.NODE_ENV = 'test';
 // Global test timeout
 jest.setTimeout(10000);
 
+// Mock React Native modules that aren't available in Node.js test environment
+jest.mock('react-native', () => ({
+  AccessibilityInfo: {
+    isReduceMotionEnabled: jest.fn().mockResolvedValue(false),
+    addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  },
+  Platform: {
+    OS: 'ios',
+    select: jest.fn((obj) => obj.ios || obj.default),
+  },
+  StyleSheet: {
+    create: (styles) => styles,
+    flatten: (style) => style,
+  },
+  Animated: {
+    Value: jest.fn().mockImplementation((value) => ({ 
+      _value: value,
+      setValue: jest.fn(),
+      interpolate: jest.fn().mockReturnValue(value),
+    })),
+    timing: jest.fn().mockReturnValue({ start: jest.fn() }),
+    spring: jest.fn().mockReturnValue({ start: jest.fn() }),
+    loop: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
+    sequence: jest.fn().mockReturnValue({ start: jest.fn() }),
+    parallel: jest.fn().mockReturnValue({ start: jest.fn() }),
+    createAnimatedComponent: jest.fn((component) => component),
+    View: 'Animated.View',
+  },
+  Dimensions: {
+    get: jest.fn().mockReturnValue({ width: 375, height: 812 }),
+  },
+  View: 'View',
+  Text: 'Text',
+  TouchableOpacity: 'TouchableOpacity',
+  TextInput: 'TextInput',
+  ScrollView: 'ScrollView',
+  FlatList: 'FlatList',
+  ActivityIndicator: 'ActivityIndicator',
+}));
+
+// Mock expo-haptics
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  selectionAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'Light',
+    Medium: 'Medium',
+    Heavy: 'Heavy',
+    Soft: 'Soft',
+    Rigid: 'Rigid',
+  },
+  NotificationFeedbackType: {
+    Success: 'Success',
+    Warning: 'Warning',
+    Error: 'Error',
+  },
+}));
+
 // Mock console methods to reduce noise in tests, but preserve critical errors
 const originalError = console.error;
 global.console = {
