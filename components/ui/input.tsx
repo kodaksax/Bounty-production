@@ -7,6 +7,7 @@ import {
   Text, 
   Animated,
   AccessibilityInfo,
+  TouchableOpacity,
 } from "react-native"
 import { MaterialIcons } from '@expo/vector-icons'
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
@@ -175,14 +176,28 @@ const Input = React.forwardRef<TextInput, InputProps>(
             {...props}
           />
           
-          {rightIcon && (
+          {rightIcon && onRightIconPress && (
+            <TouchableOpacity 
+              onPress={onRightIconPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${rightIcon} action`}
+              style={inputStyles.rightIconButton}
+            >
+              <MaterialIcons 
+                name={rightIcon} 
+                size={20} 
+                color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+              />
+            </TouchableOpacity>
+          )}
+          
+          {rightIcon && !onRightIconPress && (
             <MaterialIcons 
               name={rightIcon} 
               size={20} 
               color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
               style={inputStyles.rightIcon}
-              onPress={onRightIconPress}
-              accessibilityRole={onRightIconPress ? "button" : undefined}
+              accessibilityElementsHidden={true}
             />
           )}
           
@@ -289,6 +304,14 @@ const inputStyles = StyleSheet.create({
   },
   rightIcon: {
     marginRight: SPACING.ELEMENT_GAP,
+  },
+  rightIconButton: {
+    padding: SPACING.COMPACT_GAP,
+    marginRight: SPACING.COMPACT_GAP,
+    minWidth: SIZING.MIN_TOUCH_TARGET,
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorContainer: {
     flexDirection: 'row',

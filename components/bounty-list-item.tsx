@@ -165,6 +165,7 @@ export const BountyListItem = React.memo(BountyListItemComponent, (prevProps, ne
     prevProps.username === nextProps.username &&
     prevProps.price === nextProps.price &&
     prevProps.distance === nextProps.distance &&
+    prevProps.description === nextProps.description &&
     prevProps.isForHonor === nextProps.isForHonor &&
     prevProps.user_id === nextProps.user_id &&
     prevProps.work_type === nextProps.work_type &&

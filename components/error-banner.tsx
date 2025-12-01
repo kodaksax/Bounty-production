@@ -69,7 +69,7 @@ export function ErrorBanner({
   React.useEffect(() => {
     if (autoDismissMs > 0 && onDismiss) {
       const timer = setTimeout(() => {
-        handleDismiss();
+        onDismiss();
       }, autoDismissMs);
       return () => clearTimeout(timer);
     }

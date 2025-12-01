@@ -1,25 +1,9 @@
 import * as Haptics from 'expo-haptics';
-import { AccessibilityInfo } from 'react-native';
-
-// Track reduced motion preference
-let reducedMotionEnabled = false;
-
-// Initialize preference check
-AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-  reducedMotionEnabled = enabled;
-}).catch(() => {
-  reducedMotionEnabled = false;
-});
-
-// Listen for preference changes
-AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
-  reducedMotionEnabled = enabled;
-});
 
 /**
  * Haptic feedback utilities with safety checks.
- * Respects reduced motion preferences - haptics are still triggered
- * as they provide important feedback for accessibility.
+ * Haptics are always triggered as they provide important feedback for accessibility,
+ * independent of reduced motion preferences (which apply to visual animations).
  */
 export const hapticFeedback = {
   // Light feedback for button presses and minor interactions
@@ -132,9 +116,9 @@ export function useHapticFeedback() {
   };
 
   /**
-   * Get haptic for action type (convenience method)
+   * Map common UI actions to their appropriate haptic feedback types
    */
-  const getHapticForAction = (action: 'tap' | 'success' | 'error' | 'delete' | 'toggle' | 'drag'): HapticType => {
+  const mapActionToHaptic = (action: 'tap' | 'success' | 'error' | 'delete' | 'toggle' | 'drag'): HapticType => {
     switch (action) {
       case 'tap':
         return 'light';
@@ -155,7 +139,7 @@ export function useHapticFeedback() {
 
   return { 
     triggerHaptic,
-    getHapticForAction,
+    mapActionToHaptic,
     hapticFeedback,
   };
 }

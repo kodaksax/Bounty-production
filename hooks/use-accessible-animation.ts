@@ -227,10 +227,10 @@ export function useFadeSlideAnimation(
     return new Promise<void>((resolve) => {
       Animated.parallel([
         createTiming(fadeValue, 0, duration),
-        createTiming(slideValue, direction === 'up' ? -distance : distance, duration),
+        createTiming(slideValue, distance, duration),
       ]).start(() => resolve());
     });
-  }, [fadeValue, slideValue, createTiming, distance, direction, prefersReducedMotion]);
+  }, [fadeValue, slideValue, createTiming, distance, prefersReducedMotion]);
 
   return {
     fadeValue,
