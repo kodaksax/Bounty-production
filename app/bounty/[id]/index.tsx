@@ -48,7 +48,6 @@ export default function BountyDetailRouter() {
       const bounty = await bountyService.getById(bountyId);
       if (!bounty) {
         setError('Bounty not found');
-        setIsLoading(false);
         return;
       }
 
