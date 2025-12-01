@@ -168,7 +168,7 @@ export function useSlideAnimation(
     return new Promise<void>((resolve) => {
       createTiming(slideValue, distance, duration).start(() => resolve());
     });
-  }, [slideValue, createTiming, distance, prefersReducedMotion]);
+  }, [slideValue, createTiming, distance, direction, prefersReducedMotion]);
 
   const getTransformStyle = useCallback(() => {
     switch (direction) {
