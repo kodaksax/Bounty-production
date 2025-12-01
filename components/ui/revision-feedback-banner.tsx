@@ -85,11 +85,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   feedbackBox: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    // Using brand secondary with transparency for feedback box background
+    backgroundColor: 'rgba(0, 117, 35, 0.2)', // brand-600/20
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(128, 199, 149, 0.2)', // accent-3/20
   },
   feedbackText: {
     color: '#fff',

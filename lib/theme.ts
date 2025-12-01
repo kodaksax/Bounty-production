@@ -134,15 +134,10 @@ export const shadows = {
     shadowRadius: 12,
     elevation: 6,
   },
-  // Keep emerald as alias for backward compatibility
-  emerald: {
-    shadowColor: '#008e2a', // Brand primary
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
 } as const;
+
+// @deprecated Use 'brand' shadow instead. Will be removed in a future version.
+export const emeraldShadow = shadows.brand;
 
 // Glass morphism effects
 export const glassMorphism = {
