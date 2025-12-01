@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 interface Achievement {
   id: string;
   name: string;
+  description: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   isEarned: boolean;
 }
@@ -13,21 +14,29 @@ interface AchievementsGridProps {
   badgesEarned: number;
 }
 
+// Define real achievement milestones that users can earn
+const ACHIEVEMENT_DEFINITIONS: Array<{ name: string; description: string; icon: keyof typeof MaterialIcons.glyphMap }> = [
+  { name: "First Bounty", description: "Posted your first bounty", icon: "flag" },
+  { name: "Task Complete", description: "Completed a bounty", icon: "check-circle" },
+  { name: "Trusted Member", description: "Earned community trust", icon: "verified-user" },
+  { name: "Top Contributor", description: "High activity level", icon: "star" },
+  { name: "Quick Responder", description: "Fast response time", icon: "bolt" },
+  { name: "Community Builder", description: "Helped grow the community", icon: "groups" },
+];
+
 /**
  * Responsive grid display for user achievements/badges
  * Shows a 3-column grid with badge status (earned vs locked)
  */
 export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
-  // Generate achievement placeholders based on stats
-  const achievements: Achievement[] = Array.from({ length: 6 }).map((_, i) => {
-    const isEarned = i < badgesEarned;
-    return {
-      id: `achievement-${i}`,
-      name: i % 3 === 0 ? "Sharpshooter" : i % 3 === 1 ? "Helper" : "Explorer",
-      icon: (i % 3 === 0 ? "gps-fixed" : i % 3 === 1 ? "favorite" : "public") as keyof typeof MaterialIcons.glyphMap,
-      isEarned,
-    };
-  });
+  // Build achievements based on definitions and earned count
+  const achievements: Achievement[] = ACHIEVEMENT_DEFINITIONS.map((def, i) => ({
+    id: `achievement-${i}`,
+    name: def.name,
+    description: def.description,
+    icon: def.icon,
+    isEarned: i < badgesEarned,
+  }));
 
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>

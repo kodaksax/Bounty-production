@@ -27,7 +27,7 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
   if (!skills || skills.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No skillsets added yet</Text>
+        <Text style={styles.emptyText}>No skills added yet. Tap "Edit Profile" to add your expertise.</Text>
       </View>
     );
   }

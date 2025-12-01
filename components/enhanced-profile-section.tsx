@@ -283,7 +283,9 @@ export function EnhancedProfileSection({
         ) : items.length === 0 ? (
           <View className="bg-emerald-700/20 p-4 rounded-lg">
             <Text className="text-center text-white text-sm">
-              {isOwnProfile ? 'Add your first portfolio item' : 'No portfolio items yet'}
+              {isOwnProfile 
+                ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.' 
+                : 'This user hasn\'t added portfolio items yet.'}
             </Text>
           </View>
         ) : (
@@ -459,7 +461,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
         <PortfolioSkeleton count={3} />
       ) : items.length === 0 ? (
         <View className="bg-emerald-700/20 p-4 rounded-lg">
-          <Text className="text-center text-white text-sm">{isOwnProfile ? 'Add your first portfolio item' : 'No portfolio items yet'}</Text>
+          <Text className="text-center text-white text-sm">{isOwnProfile ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.' : 'This user hasn\'t added portfolio items yet.'}</Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>

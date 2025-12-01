@@ -90,7 +90,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   
 
   useEffect(() => {
-    // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Unknown Poster'
+    // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Anonymous'
     // Never fall back to the current user's profile
     if (bounty.username) {
       setDisplayUsername(bounty.username)
@@ -102,13 +102,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       return
     }
 
-    // Show 'Unknown Poster' only if we're done loading and still no username
+    // Show 'Anonymous' if we're done loading and still no username
     if (!profileLoading) {
       // Debug: log when we can't resolve a username
       if (posterId) {
         console.log('[BountyDetailModal] Could not resolve username for poster_id:', posterId, 'Profile:', normalizedPoster)
       }
-      setDisplayUsername('Unknown Poster')
+      setDisplayUsername('Anonymous')
     } else {
       setDisplayUsername('Loading...')
     }
