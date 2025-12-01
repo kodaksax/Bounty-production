@@ -47,7 +47,7 @@ export default function EmailConfirmationScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={32} color="#a7f3d0" />
+        <MaterialIcons name="gps-fixed" size={32} color="#aad9b8" />
         <Text style={styles.brandingText}>BOUNTY</Text>
       </View>
 
@@ -111,7 +111,7 @@ export default function EmailConfirmationScreen() {
 
         {/* Info box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+          <MaterialIcons name="info-outline" size={18} color="#aad9b8" />
           <Text style={styles.infoText}>
             Can't find the email? Check your spam folder or request a new confirmation email.
           </Text>
@@ -132,7 +132,7 @@ export default function EmailConfirmationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,

@@ -158,10 +158,10 @@ export default function AdminBountyDetailScreen() {
                 disabled={isUpdating}
               >
                 {isUpdating ? (
-                  <ActivityIndicator size="small" color="#fffef5" />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <>
-                    <MaterialIcons name={action.icon as any} size={24} color="#fffef5" />
+                    <MaterialIcons name={action.icon as any} size={24} color="#ffffff" />
                     <Text style={styles.actionButtonText}>{action.label}</Text>
                   </>
                 )}
@@ -185,7 +185,7 @@ function formatDate(dateString: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
   },
   scrollView: {
     flex: 1,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fffef5',
+    color: '#ffffff',
     marginTop: 16,
   },
   errorText: {
@@ -217,14 +217,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#00912C',
+    backgroundColor: '#008e2a',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 24,
   },
   retryButtonText: {
-    color: '#fffef5',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -256,13 +256,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: '#ffffff',
     marginBottom: 12,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fffef5',
+    color: '#ffffff',
     marginBottom: 12,
   },
   description: {
@@ -278,17 +278,17 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#00912C',
+    backgroundColor: '#008e2a',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.4)',
+    borderColor: 'rgba(0,142,42,0.4)',
   },
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffef5',
+    color: '#ffffff',
   },
 });

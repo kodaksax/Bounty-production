@@ -210,7 +210,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
           )}
         >
 
-          <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
+          <MaterialIcons name="search" size={16} color="#80c795" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
           <TextInput
             ref={inputRef}
             value={searchQuery}
@@ -219,12 +219,12 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             onBlur={() => setIsInputFocused(false)}
             placeholder="Search bounties or users..."
             className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-emerald-300/70 focus:outline-none"
-            placeholderTextColor="#6ee7b7"
+            placeholderTextColor="#80c795"
             style={{ paddingLeft: 40, paddingRight: 40 }}
           />
           {searchQuery && (
             <TouchableOpacity onPress={() => setSearchQuery("")} style={{ position: 'absolute', right: 12 }}>
-              <MaterialIcons name="close" size={16} color="#6ee7b7" />
+              <MaterialIcons name="close" size={16} color="#80c795" />
             </TouchableOpacity>
           )}
         </View>
@@ -249,7 +249,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             )}
             {isLoading && (
               <View className="flex items-center justify-center mb-4">
-                <ActivityIndicator color="#6ee7b7" />
+                <ActivityIndicator color="#80c795" />
               </View>
             )}
             {recentSearches.length > 0 && (
@@ -268,7 +268,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                       className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                     >
                       <View className="flex items-center">
-                        <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
+                        <MaterialIcons name="search" size={16} color="#80c795" style={{ marginRight: 12 }} />
                         <Text className="text-white">{search}</Text>
                       </View>
                       <TouchableOpacity
@@ -278,7 +278,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                           setRecentSearches((prev) => prev.filter((_, i) => i !== index))
                         }}
                       >
-                        <MaterialIcons name="close" size={16} color="#6ee7b7" />
+                        <MaterialIcons name="close" size={16} color="#80c795" />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
@@ -292,14 +292,14 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                   onPress={() => handleSearch("@Jon_Doe")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
-                  <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
+                  <MaterialIcons name="search" size={16} color="#80c795" style={{ marginRight: 12 }} />
                   <Text className="text-white">@Jon_Doe</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleSearch("package")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
-                  <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
+                  <MaterialIcons name="search" size={16} color="#80c795" style={{ marginRight: 12 }} />
                   <Text className="text-white">package delivery</Text>
                 </TouchableOpacity>
               </View>
@@ -307,7 +307,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
           </>
         ) : isSearching ? (
           <View className="flex flex-col items-center justify-center mt-12">
-            <ActivityIndicator color="#6ee7b7" />
+            <ActivityIndicator color="#80c795" />
             <Text className="mt-3 text-emerald-100">Searching...</Text>
           </View>
         ) : searchError ? (

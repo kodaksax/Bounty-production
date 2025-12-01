@@ -351,7 +351,7 @@ export default function UserProfileScreen() {
           <View style={styles.moreMenuBackdrop} />
           <View style={[styles.moreMenuContainer, { top: 48 }]}>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-              <MaterialIcons name="share" size={20} color="#a7f3d0" />
+              <MaterialIcons name="share" size={20} color="#aad9b8" />
               <Text style={styles.moreMenuText}>Share Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
@@ -396,7 +396,7 @@ export default function UserProfileScreen() {
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
-              <MaterialIcons name="edit" size={18} color="#065f46" />
+              <MaterialIcons name="edit" size={18} color="#005c1c" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
@@ -407,10 +407,10 @@ export default function UserProfileScreen() {
                 disabled={isCreatingChat}
               >
                 {isCreatingChat ? (
-                  <ActivityIndicator size="small" color="#065f46" />
+                  <ActivityIndicator size="small" color="#005c1c" />
                 ) : (
                   <>
-                    <MaterialIcons name="message" size={18} color="#065f46" />
+                    <MaterialIcons name="message" size={18} color="#005c1c" />
                     <Text style={styles.primaryButtonText}>Send Message</Text>
                   </>
                 )}
@@ -422,13 +422,13 @@ export default function UserProfileScreen() {
                   disabled={followLoading}
                 >
                   {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
+                    <ActivityIndicator size="small" color={isFollowing ? "#008e2a" : "#ffffff"} />
                   ) : (
                     <>
                       <MaterialIcons
                         name={isFollowing ? "person-remove" : "person-add"}
                         size={18}
-                        color={isFollowing ? "#10b981" : "#ffffff"}
+                        color={isFollowing ? "#008e2a" : "#ffffff"}
                       />
                       <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                         {isFollowing ? "Following" : "Follow"}
@@ -487,7 +487,7 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: "#008e2a", // emerald-600
   },
   header: {
     flexDirection: "row",
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: "#008e2a", // emerald-600
   },
   headerCenter: {
     flexDirection: "row",
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 60,
     right: 16,
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#007523", // emerald-700
     borderRadius: 8,
     padding: 8,
     shadowColor: "#000",
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: "#a7f3d0", // emerald-200
+    color: "#aad9b8", // emerald-200
   },
   errorContainer: {
     flex: 1,
@@ -581,12 +581,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: "#a7f3d0", // emerald-200
+    color: "#aad9b8", // emerald-200
     textAlign: "center",
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: "#10b981", // emerald-500
+    backgroundColor: "#008e2a", // emerald-500
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#a7f3d0", // emerald-200
+    backgroundColor: "#aad9b8", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
     gap: 6,
@@ -638,7 +638,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryButtonText: {
-    color: "#065f46", // emerald-800
+    color: "#005c1c", // emerald-800
     fontSize: 16,
     fontWeight: "600",
   },
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#a7f3d0", // emerald-200
+    borderColor: "#aad9b8", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
     gap: 6,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(167, 243, 208, 0.1)",
   },
   followingButtonText: {
-    color: "#10b981",
+    color: "#008e2a",
   },
   statsContainer: {
     flexDirection: "row",
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#007523", // emerald-700
   },
   statValue: {
     fontSize: 24,
@@ -689,7 +689,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    color: "#a7f3d0", // emerald-200
+    color: "#aad9b8", // emerald-200
   },
   section: {
     marginBottom: 16,

@@ -145,7 +145,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
   const renderEmptyAddresses = useCallback(
     () => (
       <View className="items-center justify-center py-12">
-        <MaterialIcons name="place" size={64} color="rgba(110, 231, 183, 0.3)" />
+        <MaterialIcons name="place" size={64} color="rgba(128, 199, 149, 0.3)" />
         <Text className="text-emerald-200/60 text-base mt-4 text-center">
           No addresses saved yet
         </Text>
@@ -190,7 +190,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
         <View className="px-4 mb-6">
           <View className="bg-emerald-700/30 rounded-lg p-4 border border-emerald-500/30">
             <View className="flex-row items-center mb-3">
-              <MaterialIcons name="my-location" size={24} color="#6ee7b7" />
+              <MaterialIcons name="my-location" size={24} color="#80c795" />
               <Text className="text-white text-lg font-semibold ml-2">
                 Location Permissions
               </Text>
@@ -208,7 +208,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                   <MaterialIcons
                     name={permission.granted ? 'check-circle' : 'cancel'}
                     size={20}
-                    color={permission.granted ? '#6ee7b7' : '#f87171'}
+                    color={permission.granted ? '#80c795' : '#f87171'}
                   />
                   <Text className="text-emerald-200 ml-2">
                     Status:{' '}
@@ -245,7 +245,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 )}
               </View>
             ) : (
-              <ActivityIndicator color="#6ee7b7" />
+              <ActivityIndicator color="#80c795" />
             )}
 
             <Text className="text-emerald-200/60 text-xs mt-3">
@@ -290,7 +290,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 value={formLabel}
                 onChangeText={setFormLabel}
                 placeholder="e.g., Home, Office, Studio"
-                placeholderTextColor="rgba(110, 231, 183, 0.4)"
+                placeholderTextColor="rgba(128, 199, 149, 0.4)"
                 className="bg-emerald-800/50 text-white px-4 py-3 rounded-lg mb-3"
               />
 
@@ -299,7 +299,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 value={formAddress}
                 onChangeText={setFormAddress}
                 placeholder="Full address (e.g., 123 Main St, City, State)"
-                placeholderTextColor="rgba(110, 231, 183, 0.4)"
+                placeholderTextColor="rgba(128, 199, 149, 0.4)"
                 className="bg-emerald-800/50 text-white px-4 py-3 rounded-lg mb-3"
                 multiline
                 numberOfLines={2}
@@ -331,7 +331,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
           {/* Address List */}
           {addressesLoading ? (
             <View className="py-8">
-              <ActivityIndicator size="large" color="#6ee7b7" />
+              <ActivityIndicator size="large" color="#80c795" />
             </View>
           ) : (
             <FlatList

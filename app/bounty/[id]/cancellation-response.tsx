@@ -163,7 +163,7 @@ export default function CancellationResponseScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color="#008e2a" />
       </View>
     );
   }

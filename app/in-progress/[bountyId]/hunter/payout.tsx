@@ -298,7 +298,7 @@ export default function HunterPayoutScreen() {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      color={isActive || isCompleted ? '#fff' : '#80c795'}
                     />
                   </View>
                   <Text style={styles.stageLabel}>{stage.label}</Text>
@@ -326,7 +326,7 @@ export default function HunterPayoutScreen() {
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <MaterialIcons name="check-circle" size={48} color="#008e2a" />
               <Text style={styles.successTitle}>Payout Released!</Text>
               <Text style={styles.successText}>
                 Congratulations! The poster has approved your work and released the payment.
@@ -361,7 +361,7 @@ export default function HunterPayoutScreen() {
             {!bounty.is_for_honor && (
               <View style={styles.receiptCard}>
                 <View style={styles.receiptHeader}>
-                  <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                  <MaterialIcons name="receipt" size={24} color="#80c795" />
                   <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                 </View>
                 <View style={styles.receiptDivider} />
@@ -380,7 +380,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                    <MaterialIcons name="check-circle" size={16} color="#008e2a" />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -416,15 +416,15 @@ export default function HunterPayoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#008e2a',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 16,
   },
   header: {
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
+    borderBottomColor: 'rgba(128, 199, 149, 0.1)',
   },
   backIcon: {
     padding: 4,
@@ -478,11 +478,11 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 117, 35, 0.2)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
+    borderColor: 'rgba(128, 199, 149, 0.3)',
     gap: 8,
   },
   bountyTitle: {
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: '#008e2a',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -513,19 +513,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 117, 35, 0.1)',
     borderWidth: 1,
     borderColor: 'transparent',
     minWidth: 120,
   },
   stageItemActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    borderColor: '#008e2a',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: '#008e2a',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -534,19 +534,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(0, 117, 35, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#008e2a',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   stageLabel: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 12,
     textAlign: 'center',
   },
@@ -586,13 +586,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   successPanel: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(0, 142, 42, 0.15)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(0, 142, 42, 0.3)',
   },
   successTitle: {
     color: '#fff',
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 117, 35, 0.2)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -615,13 +615,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   payoutLabel: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: '#008e2a',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -649,20 +649,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   balanceCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 117, 35, 0.1)',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     gap: 8,
   },
   balanceLabel: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#10b981',
+    color: '#008e2a',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   archiveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   deleteButton: {
     backgroundColor: '#ef4444',
@@ -691,12 +691,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   receiptCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(0, 117, 35, 0.1)',
     borderRadius: 12,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(128, 199, 149, 0.2)',
   },
   receiptHeader: {
     flexDirection: 'row',
@@ -704,13 +704,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   receiptTitle: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 16,
     fontWeight: '600',
   },
   receiptDivider: {
     height: 1,
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+    backgroundColor: 'rgba(128, 199, 149, 0.2)',
   },
   receiptRow: {
     flexDirection: 'row',
@@ -732,13 +732,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: '#008e2a',
     fontSize: 12,
     fontWeight: '600',
   },

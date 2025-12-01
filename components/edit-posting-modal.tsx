@@ -110,7 +110,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
                 style={styles.closeButton}
               >
-                <MaterialIcons name="close" size={24} color="#d1fae5" />
+                <MaterialIcons name="close" size={24} color="#d5ecdc" />
               </TouchableOpacity>
             </View>
 
@@ -129,7 +129,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter title"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="#80c79580"
                   value={formData.title}
                   onChangeText={(text) =>
                     setFormData({ ...formData, title: text })
@@ -145,7 +145,7 @@ export function EditPostingModal({
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Describe what you need"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="#80c79580"
                   value={formData.description}
                   onChangeText={(text) =>
                     setFormData({ ...formData, description: text })
@@ -166,7 +166,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
               >
                 <View style={styles.toggleLeft}>
-                  <MaterialIcons name="favorite" size={20} color="#10b981" />
+                  <MaterialIcons name="favorite" size={20} color="#008e2a" />
                   <Text style={styles.toggleLabel}>For Honor</Text>
                 </View>
                 <View
@@ -191,7 +191,7 @@ export function EditPostingModal({
                   <TextInput
                     style={styles.input}
                     placeholder="0"
-                    placeholderTextColor="#6ee7b780"
+                    placeholderTextColor="#80c79580"
                     value={String(formData.amount || "")}
                     onChangeText={(text) => {
                       const num = parseFloat(text) || 0;
@@ -209,7 +209,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter location"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="#80c79580"
                   value={formData.location}
                   onChangeText={(text) =>
                     setFormData({ ...formData, location: text })
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modal: {
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#007523", // emerald-700
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     // Use a fixed relative height so content gets layout below the header
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#059669",
+    borderBottomColor: "#008e2a",
   },
   title: {
     fontSize: 20,
@@ -301,17 +301,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#d1fae5",
+    color: "#d5ecdc",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: "#065f46",
+    backgroundColor: "#005c1c",
     borderRadius: 12,
     padding: 12,
     color: "#fff",
     fontSize: 16,
     borderWidth: 1,
-    borderColor: "#059669",
+    borderColor: "#008e2a",
   },
   textArea: {
     minHeight: 100,
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#065f46",
+    backgroundColor: "#005c1c",
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toggleActive: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#008e2a",
   },
   toggleThumb: {
     width: 24,
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   saveButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#008e2a",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cancelButtonText: {
-    color: "#a7f3d0",
+    color: "#aad9b8",
     fontSize: 14,
   },
 });

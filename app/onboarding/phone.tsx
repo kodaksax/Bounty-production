@@ -112,10 +112,10 @@ export default function PhoneScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#aad9b8" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
-            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
+            <MaterialIcons name="gps-fixed" size={20} color="#aad9b8" />
             <Text style={styles.brandingText}>BOUNTY</Text>
           </View>
           <View style={{ width: 40 }} />
@@ -123,7 +123,7 @@ export default function PhoneScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          <MaterialIcons name="phone" size={56} color="#a7f3d0" />
+          <MaterialIcons name="phone" size={56} color="#aad9b8" />
           <Text style={styles.title}>Add Your Phone</Text>
           <Text style={styles.subtitle}>
             Your phone number is private and used for account verification and important notifications only.
@@ -144,7 +144,7 @@ export default function PhoneScreen() {
               maxLength={20}
             />
             <View style={styles.privacyNote}>
-              <MaterialIcons name="lock" size={16} color="#a7f3d0" />
+              <MaterialIcons name="lock" size={16} color="#aad9b8" />
               <Text style={styles.privacyText}>
                 Never shared publicly — only used for verification
               </Text>
@@ -161,7 +161,7 @@ export default function PhoneScreen() {
 
           {/* Info box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
+            <MaterialIcons name="verified-user" size={20} color="#aad9b8" />
             <Text style={styles.infoText}>
               Adding your phone helps build trust with other users and enables important security features like two-factor authentication.
             </Text>
@@ -201,7 +201,7 @@ export default function PhoneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   scrollContent: {
     flexGrow: 1,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   privacyText: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 13,
     marginLeft: 6,
     flex: 1,
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 12,
@@ -353,6 +353,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
   },
 });

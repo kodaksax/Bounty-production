@@ -155,7 +155,7 @@ export default function DisputeScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color="#008e2a" />
       </View>
     );
   }
@@ -210,7 +210,7 @@ export default function DisputeScreen() {
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
-                    color={dispute.status === 'resolved' ? '#059669' : '#f59e0b'} 
+                    color={dispute.status === 'resolved' ? '#008e2a' : '#f59e0b'} 
                   />
                   <View className="flex-1 ml-3">
                     <Text className={`font-semibold mb-1 ${

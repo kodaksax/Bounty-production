@@ -263,7 +263,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
             setWithdrawalAmount(Math.min(balance, Math.max(0, isNaN(val) ? 0 : val)));
           }}
           placeholder="Enter amount to withdraw"
-          placeholderTextColor="#6ee7b7"
+          placeholderTextColor="#80c795"
         />
       </View>
       <ScrollView style={styles.scrollArea} contentContainerStyle={{ paddingBottom: 120 }}>
@@ -305,13 +305,13 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               {isOnboarding ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <MaterialIcons name="arrow-forward" size={20} color="#6ee7b7" />
+                <MaterialIcons name="arrow-forward" size={20} color="#80c795" />
               )}
             </TouchableOpacity>
           )}
           
           {/* Divider */}
-          <View style={{ height: 1, backgroundColor: '#047857', marginVertical: 12 }} />
+          <View style={{ height: 1, backgroundColor: '#007523', marginVertical: 12 }} />
           
           {/* Payment Methods */}
           {isLoading ? (
@@ -404,14 +404,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   backButton: {
     marginRight: 12,
@@ -447,16 +447,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balanceLabel: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 14,
   },
   balanceSubLabel: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 12,
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 4,
@@ -471,13 +471,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   amountLabel: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 14,
     marginBottom: 4,
   },
   amountInput: {
-    backgroundColor: '#047857',
-    borderColor: '#10b981',
+    backgroundColor: '#007523',
+    borderColor: '#008e2a',
     borderWidth: 1,
     borderRadius: 8,
     color: '#fff',
@@ -507,16 +507,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   methodRowActive: {
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
   },
   methodRowInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: '#00752399',
   },
   methodIconCircle: {
     height: 32,
     width: 32,
     borderRadius: 16,
-    backgroundColor: '#065f46',
+    backgroundColor: '#005c1c',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   methodDetails: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 12,
   },
   methodCheckCircle: {
@@ -545,9 +545,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
     borderTopWidth: 1,
-    borderTopColor: '#10b981',
+    borderTopColor: '#008e2a',
     elevation: 10,
   },
   bottomButton: {
@@ -557,10 +557,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomButtonActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#008e2a',
   },
   bottomButtonInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: '#00752399',
   },
   bottomButtonText: {
     color: '#fff',

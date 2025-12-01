@@ -201,7 +201,7 @@ export default function EnhancedSearchScreen() {
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>{item.username}</Text>
         {item.verificationStatus === 'verified' && (
-          <MaterialIcons name="verified" size={16} color="#6ee7b7" />
+          <MaterialIcons name="verified" size={16} color="#80c795" />
         )}
       </View>
       {item.bio && (
@@ -227,7 +227,7 @@ export default function EnhancedSearchScreen() {
         style={styles.recentSearchContent}
         onPress={() => handleRecentSearchClick(item)}
       >
-        <MaterialIcons name="history" size={18} color="#6ee7b7" />
+        <MaterialIcons name="history" size={18} color="#80c795" />
         <Text style={styles.recentSearchText}>{item.query}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => handleRemoveRecentSearch(item.id)}>
@@ -275,7 +275,7 @@ export default function EnhancedSearchScreen() {
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} />
+        <MaterialIcons name="search" size={20} color="#80c795" style={{ marginHorizontal: 8 }} />
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
@@ -286,13 +286,13 @@ export default function EnhancedSearchScreen() {
         />
         {!!query && !isSearching && (
           <TouchableOpacity onPress={() => setQuery('')} style={{ padding: 4 }}>
-            <MaterialIcons name="close" size={18} color="#6ee7b7" />
+            <MaterialIcons name="close" size={18} color="#80c795" />
           </TouchableOpacity>
         )}
-        {isSearching && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} />}
+        {isSearching && <ActivityIndicator color="#80c795" size="small" style={{ marginRight: 8 }} />}
         {activeTab === 'bounties' && (
           <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterBtn}>
-            <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} />
+            <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#80c795'} />
             {hasActiveFilters && <View style={styles.filterDot} />}
           </TouchableOpacity>
         )}
@@ -529,7 +529,7 @@ function timeAgo(ts?: string) {
 
 // Styles
 const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
+  container: { flex: 1, backgroundColor: '#008e2a' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -553,7 +553,7 @@ const styles = {
     borderRadius: 8,
   },
   tabActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  tabText: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
+  tabText: { color: '#d5ecdc', fontSize: 14, fontWeight: '600' },
   tabTextActive: { color: '#fff' },
   searchRow: {
     flexDirection: 'row',
@@ -583,29 +583,29 @@ const styles = {
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   cardTitle: { color: '#fff', fontSize: 15, fontWeight: '600', flex: 1 },
-  cardDesc: { color: '#d1fae5', fontSize: 13, marginBottom: 6 },
+  cardDesc: { color: '#d5ecdc', fontSize: 13, marginBottom: 6 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  amount: { color: '#6ee7b7', fontWeight: '700', fontSize: 13 },
-  location: { color: '#a7f3d0', fontSize: 11, flex: 1 },
-  time: { color: '#a7f3d0', fontSize: 11 },
+  amount: { color: '#80c795', fontWeight: '700', fontSize: 13 },
+  location: { color: '#aad9b8', fontSize: 11, flex: 1 },
+  time: { color: '#aad9b8', fontSize: 11 },
   honorBadge: { backgroundColor: '#fcd34d', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  honorText: { color: '#065f46', fontSize: 10, fontWeight: '700' },
+  honorText: { color: '#005c1c', fontSize: 10, fontWeight: '700' },
   statusBadge: { marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4 },
-  statusText: { color: '#d1fae5', fontSize: 10, textTransform: 'capitalize' },
+  statusText: { color: '#d5ecdc', fontSize: 10, textTransform: 'capitalize' },
   skillsRow: { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  skillChip: { backgroundColor: 'rgba(110,231,183,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  skillText: { color: '#6ee7b7', fontSize: 11 },
+  skillChip: { backgroundColor: 'rgba(128,199,149,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  skillText: { color: '#80c795', fontSize: 11 },
   recentSection: { paddingHorizontal: 12, paddingVertical: 8 },
   recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  recentTitle: { color: '#d1fae5', fontSize: 13, fontWeight: '600' },
-  clearText: { color: '#6ee7b7', fontSize: 12 },
+  recentTitle: { color: '#d5ecdc', fontSize: 13, fontWeight: '600' },
+  clearText: { color: '#80c795', fontSize: 12 },
   recentSearchItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
   recentSearchContent: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   recentSearchText: { color: '#ecfdf5', fontSize: 14 },
   errorBox: { backgroundColor: 'rgba(220,38,38,0.15)', margin: 12, padding: 10, borderRadius: 8 },
   errorText: { color: '#fee2e2', marginBottom: 6, fontSize: 13 },
   retryBtn: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#005c1c',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -618,7 +618,7 @@ const styles = {
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -633,7 +633,7 @@ const styles = {
   },
   modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   filterScroll: { padding: 16 },
-  filterLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 12 },
+  filterLabel: { color: '#d5ecdc', fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 12 },
   filterGroup: { gap: 8 },
   filterOption: {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -641,9 +641,9 @@ const styles = {
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  filterOptionActive: { backgroundColor: '#6ee7b7' },
+  filterOptionActive: { backgroundColor: '#80c795' },
   filterOptionText: { color: '#ecfdf5', fontSize: 14 },
-  filterOptionTextActive: { color: '#065f46', fontWeight: '600' },
+  filterOptionTextActive: { color: '#005c1c', fontWeight: '600' },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   amountInput: {
     flex: 1,
@@ -654,7 +654,7 @@ const styles = {
     borderRadius: 8,
     fontSize: 14,
   },
-  amountSeparator: { color: '#d1fae5', fontSize: 16 },
+  amountSeparator: { color: '#d5ecdc', fontSize: 16 },
   modalFooter: {
     flexDirection: 'row',
     padding: 16,
@@ -674,8 +674,8 @@ const styles = {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#6ee7b7',
+    backgroundColor: '#80c795',
     borderRadius: 8,
   },
-  applyFiltersBtnText: { color: '#065f46', fontSize: 14, fontWeight: '700' },
+  applyFiltersBtnText: { color: '#005c1c', fontSize: 14, fontWeight: '700' },
 } as const;

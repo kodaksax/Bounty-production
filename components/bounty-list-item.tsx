@@ -107,7 +107,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
             <View style={styles.dot} />
             {work_type === 'online' ? (
               <View style={styles.onlineBadge}>
-                <MaterialIcons name="wifi" size={10} color="#10b981" />
+                <MaterialIcons name="wifi" size={10} color="#008e2a" />
                 <Text style={styles.onlineText}>Online</Text>
               </View>
             ) : distance === null ? (
@@ -128,7 +128,7 @@ export function BountyListItem({ id, title, username, price, distance, descripti
           ) : (
             <Text style={styles.price}>${price}</Text>
           )}
-          <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
+          <MaterialIcons name="chevron-right" size={20} color="#d5ecdc" />
         </View>
       </TouchableOpacity>
 
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
+    backgroundColor: 'rgba(0, 67, 21, 0.55)', // brand-800/55 overlay
     borderRadius: SPACING.ELEMENT_GAP,
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
@@ -161,10 +161,10 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/50
+    borderColor: 'rgba(128, 199, 149, 0.5)', // accent-3/50
   },
   avatarFallback: {
-    backgroundColor: '#064e3b', // dark emerald
+    backgroundColor: '#005c1c', // brand-700
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#a7f3d0',
+    color: '#aad9b8', // accent-2
     fontSize: 12,
     fontWeight: '700',
   },
@@ -194,25 +194,25 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   username: {
-    color: '#a7f3d0', // emerald-200
+    color: '#aad9b8', // accent-2
     fontSize: TYPOGRAPHY.SIZE_XSMALL,
   },
   dot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     marginHorizontal: 6,
     opacity: 0.9,
   },
   distance: {
-    color: '#d1fae5', // emerald-100
+    color: '#d5ecdc', // accent-1
     fontSize: TYPOGRAPHY.SIZE_XSMALL,
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#d1fae5', // emerald-100
+    backgroundColor: '#d5ecdc', // accent-1
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: SPACING.COMPACT_GAP,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   onlineText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#065f46', // emerald-800
+    color: '#004315', // brand-800
   },
   trailing: {
     alignItems: 'flex-end',
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   honorText: {
-    color: '#052e1b',
+    color: '#004315',
     fontWeight: '800',
     fontSize: 12,
     marginLeft: 4,

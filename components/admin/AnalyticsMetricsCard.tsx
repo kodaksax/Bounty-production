@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fffef5',
+    color: '#ffffff',
     marginBottom: 12,
   },
   loadingContainer: {

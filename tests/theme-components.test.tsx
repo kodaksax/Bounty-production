@@ -31,7 +31,7 @@ describe('Theme System', () => {
   });
 
   test('theme has emerald color palette', () => {
-    expect(theme.colors.primary[500]).toBe('#00912C');
+    expect(theme.colors.primary[500]).toBe('#008e2a');
     expect(theme.colors.primary[600]).toBe('#007423');
     expect(theme.colors.primary[700]).toBe('#00571a');
     expect(theme.colors.primary[800]).toBe('#003a12');

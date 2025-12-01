@@ -104,7 +104,7 @@ export default function SimpleBountySearchScreen() {
         <Text style={styles.headerTitle}>Search Bounties</Text>
       </View>
       <View style={styles.searchRow}>
-        <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} />
+        <MaterialIcons name="search" size={20} color="#80c795" style={{ marginHorizontal: 8 }} />
         <TextInput
           value={query}
             placeholder="Search title or description..."
@@ -116,10 +116,10 @@ export default function SimpleBountySearchScreen() {
         />
         {!!query && !isSearching && (
           <TouchableOpacity onPress={() => setQuery('')} style={{ padding: 4 }}>
-            <MaterialIcons name="close" size={18} color="#6ee7b7" />
+            <MaterialIcons name="close" size={18} color="#80c795" />
           </TouchableOpacity>
         )}
-        {isSearching && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} />}
+        {isSearching && <ActivityIndicator color="#80c795" size="small" style={{ marginRight: 8 }} />}
       </View>
       {error && (
         <View style={styles.errorBox}>
@@ -131,7 +131,7 @@ export default function SimpleBountySearchScreen() {
       )}
       {(!query && initial.length === 0 && !isSearching && !error) && (
         <View style={{ padding: 16 }}>
-          <Text style={{ color: '#d1fae5', fontSize: 14 }}>No bounties loaded yet.</Text>
+          <Text style={{ color: '#d5ecdc', fontSize: 14 }}>No bounties loaded yet.</Text>
           <TouchableOpacity onPress={() => performSearch('')} style={[styles.retryBtn,{marginTop:8}]}> 
             <Text style={styles.retryText}>Refresh</Text>
           </TouchableOpacity>
@@ -187,7 +187,7 @@ function highlight(text: string, q: string) {
 
 // Basic inline styles (avoid tailwind complexity for this recovery implementation)
 const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
+  container: { flex: 1, backgroundColor: '#008e2a' },
   header: { flexDirection: 'row', alignItems: 'center', paddingTop: 54, paddingHorizontal: 12, paddingBottom: 12 },
   backBtn: { padding: 8, marginRight: 4 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: 4 },
@@ -195,12 +195,12 @@ const styles = {
   input: { flex: 1, color: 'white', paddingVertical: 4, fontSize: 15 },
   card: { backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 12, padding: 12, marginBottom: 10 },
   cardTitle: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 4 },
-  cardDesc: { color: '#d1fae5', fontSize: 13, marginBottom: 6 },
+  cardDesc: { color: '#d5ecdc', fontSize: 13, marginBottom: 6 },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  amount: { color: '#6ee7b7', fontWeight: '700', fontSize: 13 },
-  time: { color: '#a7f3d0', fontSize: 11 },
+  amount: { color: '#80c795', fontWeight: '700', fontSize: 13 },
+  time: { color: '#aad9b8', fontSize: 11 },
   errorBox: { backgroundColor: 'rgba(220,38,38,0.15)', margin: 12, padding: 10, borderRadius: 8 },
   errorText: { color: '#fee2e2', marginBottom: 6, fontSize: 13 },
-  retryBtn: { backgroundColor: '#065f46', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start' },
+  retryBtn: { backgroundColor: '#005c1c', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start' },
   retryText: { color: 'white', fontSize: 12, fontWeight: '600' },
 } as const

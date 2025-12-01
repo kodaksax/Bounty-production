@@ -46,10 +46,10 @@ export function EscrowStatusCard({ status, amount, bountyTitle }: EscrowStatusCa
       case 'released':
         return {
           icon: 'lock-open' as const,
-          iconColor: '#10b981',
-          backgroundColor: '#d1fae5',
-          borderColor: '#10b981',
-          textColor: '#065f46',
+          iconColor: '#008e2a',
+          backgroundColor: '#d5ecdc',
+          borderColor: '#008e2a',
+          textColor: '#005c1c',
           title: 'Funds Released',
           description: `$${amount.toFixed(2)} has been released to the hunter.`,
         };

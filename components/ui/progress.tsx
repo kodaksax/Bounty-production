@@ -29,7 +29,7 @@ export const ProgressIndicator = ({ value = 0, className, style }: ProgressProps
   const width = Math.max(0, Math.min(100, value))
   return (
     <View
-      style={[{ height: '100%', backgroundColor: '#10B981', width: `${width}%` }, style]}
+      style={[{ height: '100%', backgroundColor: '#008e2a', width: `${width}%` }, style]}
       // @ts-ignore
       className={cn(className)}
     />

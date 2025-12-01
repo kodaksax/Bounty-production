@@ -102,36 +102,36 @@ export const TYPOGRAPHY = {
 export const COLORS = {
   // Emerald theme
   EMERALD_50: '#ecfdf5',
-  EMERALD_100: '#d1fae5',
-  EMERALD_200: '#a7f3d0',
-  EMERALD_300: '#6ee7b7',      // Light text on dark bg (7.4:1 contrast)
+  EMERALD_100: '#d5ecdc',
+  EMERALD_200: '#aad9b8',
+  EMERALD_300: '#80c795',      // Light text on dark bg (7.4:1 contrast)
   EMERALD_400: '#34d399',
-  EMERALD_500: '#10b981',      // Primary green (3.1:1 on white)
-  EMERALD_600: '#059669',      // Darker green (4.6:1 on white)
-  EMERALD_700: '#047857',      // AA compliant on white (6.4:1)
-  EMERALD_800: '#065f46',
-  EMERALD_900: '#064e3b',
+  EMERALD_500: '#008e2a',      // Primary green (3.1:1 on white)
+  EMERALD_600: '#008e2a',      // Darker green (4.6:1 on white)
+  EMERALD_700: '#007523',      // AA compliant on white (6.4:1)
+  EMERALD_800: '#005c1c',
+  EMERALD_900: '#004315',
   
   // Background colors
   BG_DARK: '#0a1f14',          // Dark emerald background
-  BG_DARK_SECONDARY: '#1a3d2e', // Slightly lighter bg
-  BG_CARD: 'rgba(5, 150, 105, 0.1)', // Card background
+  BG_DARK_SECONDARY: '#008e2a', // Slightly lighter bg
+  BG_CARD: 'rgba(0, 117, 35, 0.1)', // Card background
   
   // Text colors (all AA compliant on dark backgrounds)
-  TEXT_PRIMARY: '#fffef5',     // Off-white (>15:1 contrast on dark)
+  TEXT_PRIMARY: '#ffffff',     // Off-white (>15:1 contrast on dark)
   TEXT_SECONDARY: '#d1d5db',   // Gray-300 (>10:1 contrast)
   TEXT_MUTED: '#9ca3af',       // Gray-400 (>6:1 contrast)
-  TEXT_EMERALD: '#6ee7b7',     // Emerald-300 (7.4:1 contrast)
+  TEXT_EMERALD: '#80c795',     // Emerald-300 (7.4:1 contrast)
   
   // Status colors
   ERROR: '#dc2626',            // Red-600
   WARNING: '#f59e0b',          // Amber-500
-  SUCCESS: '#10b981',          // Emerald-500
+  SUCCESS: '#008e2a',          // Emerald-500
   INFO: '#3b82f6',             // Blue-500
   
   // Border colors
   BORDER_DEFAULT: '#374151',   // Gray-700
-  BORDER_LIGHT: 'rgba(110, 231, 183, 0.2)', // Emerald with opacity
+  BORDER_LIGHT: 'rgba(128, 199, 149, 0.2)', // Emerald with opacity
 } as const;
 
 // ============================================================================

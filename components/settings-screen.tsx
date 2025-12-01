@@ -148,7 +148,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               <Switch
                 value={isAdminTabEnabled}
                 onValueChange={handleAdminTabToggle}
-                trackColor={{ false: '#374151', true: '#10b981' }}
+                trackColor={{ false: '#374151', true: '#008e2a' }}
                 thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
                 accessibilityLabel="Toggle admin tab visibility"
                 accessibilityHint={isAdminTabEnabled ? 'Disable to hide admin tab' : 'Enable to show admin tab in navigation'}

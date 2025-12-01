@@ -22,7 +22,7 @@ function getStatusColors(status: string, type: string) {
   if (type === 'bounty') {
     switch (status) {
       case 'open':
-        return { bg: 'rgba(0,145,44,0.15)', border: 'rgba(0,145,44,0.4)', text: '#00dc50' };
+        return { bg: 'rgba(0,142,42,0.15)', border: 'rgba(0,142,42,0.4)', text: '#00dc50' };
       case 'in_progress':
         return { bg: 'rgba(255,193,7,0.15)', border: 'rgba(255,193,7,0.4)', text: '#ffc107' };
       case 'completed':
@@ -30,7 +30,7 @@ function getStatusColors(status: string, type: string) {
       case 'archived':
         return { bg: 'rgba(158,158,158,0.15)', border: 'rgba(158,158,158,0.4)', text: '#9e9e9e' };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#ffffff' };
     }
   }
 
@@ -44,7 +44,7 @@ function getStatusColors(status: string, type: string) {
       case 'banned':
         return { bg: 'rgba(244,67,54,0.15)', border: 'rgba(244,67,54,0.4)', text: '#f44336' };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#ffffff' };
     }
   }
 
@@ -58,11 +58,11 @@ function getStatusColors(status: string, type: string) {
       case 'failed':
         return { bg: 'rgba(244,67,54,0.15)', border: 'rgba(244,67,54,0.4)', text: '#f44336' };
       default:
-        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+        return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#ffffff' };
     }
   }
 
-  return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#fffef5' };
+  return { bg: 'rgba(255,255,255,0.1)', border: 'rgba(255,255,255,0.2)', text: '#ffffff' };
 }
 
 const styles = StyleSheet.create({
