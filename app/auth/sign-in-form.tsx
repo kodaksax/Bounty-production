@@ -7,10 +7,10 @@ import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
 import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
-import { Checkbox } from '../../components/ui/checkbox'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
+import { Checkbox } from '../../components/ui/checkbox'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
@@ -37,7 +37,7 @@ export function SignInForm() {
   const [rememberMe, setRememberMe] = useState(false)
   const [socialAuthLoading, setSocialAuthLoading] = useState(false)
   const [socialAuthError, setSocialAuthError] = useState<any>(null)
-  
+
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
     async () => {
@@ -50,7 +50,7 @@ export function SignInForm() {
       if (!validateForm()) {
         throw new Error('Please fix the form errors')
       }
-      
+
       if (!isSupabaseConfigured) {
         throw new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
       }
@@ -61,19 +61,19 @@ export function SignInForm() {
         email: identifier.trim().toLowerCase(), // Normalize email
         password,
       })
-      
+
       if (error) {
         // Track failed login attempts
         const newAttempts = loginAttempts + 1
         setLoginAttempts(newAttempts)
-        
+
         // Lock out after 5 failed attempts for 5 minutes
         if (newAttempts >= 5) {
           const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
           setLockoutUntil(lockout)
           throw new Error('Too many failed attempts. Please try again in 5 minutes.')
         }
-        
+
         // Handle specific error cases with user-friendly messages
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid email or password. Please try again.')
@@ -83,11 +83,11 @@ export function SignInForm() {
           throw error
         }
       }
-      
+
       // Reset login attempts on success
       setLoginAttempts(0)
       setLockoutUntil(null)
-      
+
       // Handle remember me preference
       try {
         if (rememberMe) {
@@ -98,7 +98,7 @@ export function SignInForm() {
       } catch (error) {
         console.error('[sign-in] Failed to save remember me preference:', error)
       }
-      
+
       if (data.session) {
         // Ensure Mixpanel initialized and identify user (safe no-op if SDK not initialized)
         try {
@@ -107,7 +107,7 @@ export function SignInForm() {
             $email: data.session.user.email,
             $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
           })
-          try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) {}
+          try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) { }
         } catch (e) {
           // swallow analytics errors
         }
@@ -118,7 +118,7 @@ export function SignInForm() {
           .select('username')
           .eq('id', data.session.user.id)
           .single()
-        
+
         if (!profile || !profile.username) {
           // User needs to complete onboarding
           router.replace('/onboarding/username')
@@ -181,7 +181,7 @@ export function SignInForm() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
-    
+
     if (!identifier || identifier.trim().length === 0) {
       errors.identifier = 'Email is required'
     } else {
@@ -191,13 +191,13 @@ export function SignInForm() {
         errors.identifier = 'Please enter a valid email address'
       }
     }
-    
+
     if (!password) {
       errors.password = 'Password is required'
     } else if (password.length < 6) {
       errors.password = 'Password must be at least 6 characters'
     }
-    
+
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -230,7 +230,7 @@ export function SignInForm() {
             .select('username')
             .eq('id', data.session.user.id)
             .single()
-          
+
           if (!profile || !profile.username) {
             // User needs to complete onboarding
             router.replace('/onboarding/username')
@@ -251,16 +251,19 @@ export function SignInForm() {
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [response])
-  
-  
+
+
   return (
     <AnimatedScreen animationType="fade" duration={400}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
             <View className="flex-row items-center justify-center mb-10">
-              <MaterialIcons name="gps-fixed" size={40} color="#fff" />
-              <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
+              <Image
+                source={require('../../assets/images/bounty-logo.png')}
+                style={{ width: 220, height: 60 }}
+                resizeMode="contain"
+              />
             </View>
             <View className="gap-5">
               {authError && (() => {
@@ -275,156 +278,156 @@ export function SignInForm() {
               })()}
 
               <View>
-              <Text className="text-sm text-white/80 mb-1">Email</Text>
-              <TextInput
-                nativeID="identifier"
-                value={identifier}
-                onChangeText={(text) => {
-                  setIdentifier(text)
-                  if (fieldErrors.identifier) {
-                    setFieldErrors(prev => ({ ...prev, identifier: '' }))
-                  }
-                }}
-                placeholder="you@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                editable={!isSubmitting}
-                className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
-                placeholderTextColor="rgba(255,255,255,0.4)"
-              />
-              {getFieldError('identifier') && <Text className="text-xs text-red-400 mt-1">{getFieldError('identifier')}</Text>}
-            </View>
-
-            <View>
-              <View className="flex-row items-center justify-between mb-1">
-                <Text className="text-sm text-white/80">Password</Text>
-                <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
-                  <Text className="text-[11px] text-emerald-200">Forgot?</Text>
-                </TouchableOpacity>
-              </View>
-              <View className="relative">
+                <Text className="text-sm text-white/80 mb-1">Email</Text>
                 <TextInput
-                  nativeID="password"
-                  value={password}
+                  nativeID="identifier"
+                  value={identifier}
                   onChangeText={(text) => {
-                    setPassword(text)
-                    if (fieldErrors.password) {
-                      setFieldErrors(prev => ({ ...prev, password: '' }))
+                    setIdentifier(text)
+                    if (fieldErrors.identifier) {
+                      setFieldErrors(prev => ({ ...prev, identifier: '' }))
                     }
                   }}
-                  placeholder="Password"
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
+                  placeholder="you@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
                   editable={!isSubmitting}
-                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                  className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                 />
+                {getFieldError('identifier') && <Text className="text-xs text-red-400 mt-1">{getFieldError('identifier')}</Text>}
+              </View>
+
+              <View>
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-sm text-white/80">Password</Text>
+                  <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
+                    <Text className="text-[11px] text-emerald-200">Forgot?</Text>
+                  </TouchableOpacity>
+                </View>
+                <View className="relative">
+                  <TextInput
+                    nativeID="password"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text)
+                      if (fieldErrors.password) {
+                        setFieldErrors(prev => ({ ...prev, password: '' }))
+                      }
+                    }}
+                    placeholder="Password"
+                    secureTextEntry={!showPassword}
+                    autoComplete="password"
+                    editable={!isSubmitting}
+                    className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                {getFieldError('password') && <Text className="text-xs text-red-400 mt-1">{getFieldError('password')}</Text>}
+              </View>
+
+              <View className="flex-row items-center">
+                <Checkbox
+                  checked={rememberMe}
+                  onCheckedChange={setRememberMe}
+                  disabled={isSubmitting}
+                />
                 <TouchableOpacity
-                  onPress={() => setShowPassword(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
+                  disabled={isSubmitting}
                 >
-                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
+                  <Text className="text-white/80 text-sm ml-2">Remember me</Text>
                 </TouchableOpacity>
               </View>
-              {getFieldError('password') && <Text className="text-xs text-red-400 mt-1">{getFieldError('password')}</Text>}
-            </View>
 
-            <View className="flex-row items-center">
-              <Checkbox 
-                checked={rememberMe} 
-                onCheckedChange={setRememberMe}
-                disabled={isSubmitting}
-              />
-              <TouchableOpacity 
-                onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
-                disabled={isSubmitting}
-              >
-                <Text className="text-white/80 text-sm ml-2">Remember me</Text>
+              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+                {isSubmitting ? (
+                  <>
+                    <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+                  </>
+                ) : (
+                  <Text className="text-white font-medium">Sign In</Text>
+                )}
               </TouchableOpacity>
-            </View>
 
-            <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
-              {isSubmitting ? (
-                <>
-                  <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                </>
-              ) : (
-                <Text className="text-white font-medium">Sign In</Text>
-              )}
-            </TouchableOpacity>
+              {Platform.OS === 'ios' && (
+                <View style={{ marginTop: 12 }}>
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    cornerRadius={8}
+                    style={{ width: '100%', height: 44 }}
+                    onPress={async () => {
+                      try {
+                        const credential = await AppleAuthentication.signInAsync({
+                          requestedScopes: [
+                            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                          ],
+                        })
+                        if (!credential.identityToken) {
+                          setSocialAuthError('No Apple identity token')
+                          return
+                        }
+                        if (!isSupabaseConfigured) {
+                          setSocialAuthError('Supabase is not configured.')
+                          return
+                        }
+                        const { data, error } = await supabase.auth.signInWithIdToken({
+                          provider: 'apple',
+                          token: credential.identityToken,
+                        })
+                        if (error) throw error
+                        if (data.session) {
+                          // Check if user has completed onboarding
+                          const { data: profile } = await supabase
+                            .from('profiles')
+                            .select('username')
+                            .eq('id', data.session.user.id)
+                            .single()
 
-            {Platform.OS === 'ios' && (
-              <View style={{ marginTop: 12 }}>
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={8}
-                  style={{ width: '100%', height: 44 }}
-                  onPress={async () => {
-                    try {
-                      const credential = await AppleAuthentication.signInAsync({
-                        requestedScopes: [
-                          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-                          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                        ],
-                      })
-                      if (!credential.identityToken) {
-                        setSocialAuthError('No Apple identity token')
-                        return
-                      }
-                      if (!isSupabaseConfigured) {
-                        setSocialAuthError('Supabase is not configured.')
-                        return
-                      }
-                      const { data, error } = await supabase.auth.signInWithIdToken({
-                        provider: 'apple',
-                        token: credential.identityToken,
-                      })
-                      if (error) throw error
-                      if (data.session) {
-                        // Check if user has completed onboarding
-                        const { data: profile } = await supabase
-                          .from('profiles')
-                          .select('username')
-                          .eq('id', data.session.user.id)
-                          .single()
-                        
-                        if (!profile || !profile.username) {
-                          router.replace('/onboarding/username')
-                        } else {
-                          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                          if (!profile || !profile.username) {
+                            router.replace('/onboarding/username')
+                          } else {
+                            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                          }
+                        }
+                      } catch (e: any) {
+                        if (e?.code !== 'ERR_REQUEST_CANCELED') {
+                          setSocialAuthError('Apple sign-in failed')
+                          console.error(e)
                         }
                       }
-                    } catch (e: any) {
-                      if (e?.code !== 'ERR_REQUEST_CANCELED') {
-                        setSocialAuthError('Apple sign-in failed')
-                        console.error(e)
-                      }
-                    }
-                  }}
-                />
-              </View>
-            )}
+                    }}
+                  />
+                </View>
+              )}
 
-            <TouchableOpacity
-              disabled={!isGoogleConfigured || isSubmitting || !request}
-              onPress={() => promptAsync()}
-              className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
-            >
-              <Text className="text-black font-medium">
-                {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!isGoogleConfigured || isSubmitting || !request}
+                onPress={() => promptAsync()}
+                className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
+              >
+                <Text className="text-black font-medium">
+                  {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
-              <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
+                <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AnimatedScreen>
   )
 }

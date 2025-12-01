@@ -1,6 +1,6 @@
 import * as ExpoSplash from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
-import { Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 // Centralized helpers: RootLayout (and any other callers) should use these
@@ -28,8 +28,8 @@ export interface BrandedSplashProps {
 }
 
 export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
-		// Ensure safe area/status bar color matches branded splash
-		useScreenBackground('#15803d');
+	// Ensure safe area/status bar color matches branded splash
+	useScreenBackground('#15803d');
 
 	const [devHealthOk, setDevHealthOk] = useState<boolean | null>(null)
 	const [devHealthMsg, setDevHealthMsg] = useState<string | null>(null)
@@ -70,41 +70,41 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 		return () => { cancelled = true }
 	}, [])
 
-		const [devBannerDismissed, setDevBannerDismissed] = useState(false)
+	const [devBannerDismissed, setDevBannerDismissed] = useState(false)
 
-		const handleRetry = async () => {
-			setDevHealthOk(null)
-			setDevHealthMsg(null)
-			try {
-				const controller = new AbortController()
-				const timeout = setTimeout(() => controller.abort(), 3000)
-				const res = await fetch(`${API_BASE_URL}/health`, { signal: controller.signal })
-				clearTimeout(timeout)
-				if (res && res.ok) {
-					setDevHealthOk(true)
-					setDevHealthMsg(null)
-					setDevBannerDismissed(true)
-				} else {
-					setDevHealthOk(false)
-					setDevHealthMsg(`Server responded ${res?.status || 'unknown'}`)
-				}
-			} catch (err: any) {
+	const handleRetry = async () => {
+		setDevHealthOk(null)
+		setDevHealthMsg(null)
+		try {
+			const controller = new AbortController()
+			const timeout = setTimeout(() => controller.abort(), 3000)
+			const res = await fetch(`${API_BASE_URL}/health`, { signal: controller.signal })
+			clearTimeout(timeout)
+			if (res && res.ok) {
+				setDevHealthOk(true)
+				setDevHealthMsg(null)
+				setDevBannerDismissed(true)
+			} else {
 				setDevHealthOk(false)
-				setDevHealthMsg(err?.message || String(err))
+				setDevHealthMsg(`Server responded ${res?.status || 'unknown'}`)
 			}
+		} catch (err: any) {
+			setDevHealthOk(false)
+			setDevHealthMsg(err?.message || String(err))
 		}
+	}
 
 	return (
 		<View style={styles.container}>
 			<StatusBar barStyle="light-content" translucent backgroundColor="rgba(0,0,0,0)" />
-			<View style={styles.content}>        
+			<View style={styles.content}>
 				<View style={styles.logoRow}>
-					<View style={styles.targetCircleOuter}>
-						<View style={styles.targetCircleInner} />
-						<View style={styles.crosshairHorizontal} />
-						<View style={styles.crosshairVertical} />
-					</View>
-								<Text accessibilityRole="header" style={styles.wordmark}>BOUNTY</Text>
+					<Image
+						source={require('../../assets/images/bounty-logo.png')}
+						style={styles.logoImage}
+						resizeMode="contain"
+						accessibilityLabel="BOUNTY Logo"
+					/>
 				</View>
 			</View>
 			{__DEV__ && devHealthOk === false && !devBannerDismissed ? (
@@ -139,44 +139,12 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 	},
 	logoRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 14,
-	},
-	targetCircleOuter: {
-		width: 70,
-		height: 70,
-		borderRadius: 35,
-		borderWidth: 5,
-		borderColor: '#ffffff',
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	targetCircleInner: {
-		width: 22,
-		height: 22,
-		borderRadius: 11,
-		borderWidth: 4,
-		borderColor: '#ffffff',
-	},
-	crosshairHorizontal: {
-		position: 'absolute',
-		height: 5,
-		width: 60,
-		backgroundColor: '#ffffff',
-	},
-	crosshairVertical: {
-		position: 'absolute',
-		width: 5,
-		height: 60,
-		backgroundColor: '#ffffff',
-	},
-	wordmark: {
-		fontSize: 46,
-		color: '#ffffff',
-		fontWeight: '900',
-		letterSpacing: 2,
-		fontFamily: Platform.select({ ios: 'System', android: 'sans-serif-black', default: 'System' }),
+	logoImage: {
+		width: 280,
+		height: 80,
 	},
 	versionText: {
 		position: 'absolute',
