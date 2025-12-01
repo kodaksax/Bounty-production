@@ -8,7 +8,7 @@ import {
   AccessibilityInfo,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
+import { COLORS, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 
 interface LoadingOverlayProps {
   /**
@@ -100,11 +100,11 @@ export function LoadingOverlay({
           <MaterialIcons 
             name={icon} 
             size={40} 
-            color="#10b981" 
+            color={COLORS.EMERALD_500}
             accessibilityElementsHidden={true}
           />
         ) : (
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color={COLORS.EMERALD_500} />
         )}
         
         {message && (
@@ -144,7 +144,7 @@ interface InlineLoadingProps {
   size?: 'small' | 'large';
   /**
    * Color of the indicator
-   * @default "#10b981"
+   * @default emerald-500
    */
   color?: string;
 }
@@ -152,7 +152,7 @@ interface InlineLoadingProps {
 export function InlineLoading({
   text,
   size = 'small',
-  color = '#10b981',
+  color = COLORS.EMERALD_500,
 }: InlineLoadingProps) {
   return (
     <View 
@@ -236,17 +236,17 @@ const styles = StyleSheet.create({
   progressTrack: {
     width: '100%',
     height: 6,
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
+    backgroundColor: COLORS.EMERALD_300 + '33', // emerald-300 with ~20% opacity
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#10b981',
+    backgroundColor: COLORS.EMERALD_500,
     borderRadius: 3,
   },
   progressText: {
-    color: '#6ee7b7',
+    color: COLORS.EMERALD_300,
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '600',
   },
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   dots: {
-    color: '#10b981',
+    color: COLORS.EMERALD_500,
     fontSize: TYPOGRAPHY.SIZE_LARGE,
     fontWeight: 'bold',
     width: 24,

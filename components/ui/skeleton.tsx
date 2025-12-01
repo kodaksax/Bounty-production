@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react"
 import { Animated, ViewProps, StyleSheet, View, Dimensions, AccessibilityInfo } from "react-native"
 import { LinearGradient } from 'expo-linear-gradient'
 import { cn } from "lib/utils"
+import { COLORS } from "../../lib/constants/accessibility"
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
@@ -154,7 +155,7 @@ const Skeleton = React.memo(function Skeleton({
 
 const styles = StyleSheet.create({
   base: {
-    backgroundColor: 'rgba(4, 120, 87, 0.4)', // emerald-700 with opacity
+    backgroundColor: COLORS.EMERALD_700 + '66', // emerald-700 with ~40% opacity (0x66 = 102/255 ≈ 40%)
   },
   shimmerContainer: {
     position: 'absolute',

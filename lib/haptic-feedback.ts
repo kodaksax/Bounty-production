@@ -91,7 +91,11 @@ export const hapticFeedback = {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
     } catch {
       // Fallback to light if soft not supported
-      hapticFeedback.light();
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch {
+        // Silently fail if not supported
+      }
     }
   },
 
@@ -100,7 +104,11 @@ export const hapticFeedback = {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
     } catch {
       // Fallback to heavy if rigid not supported
-      hapticFeedback.heavy();
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      } catch {
+        // Silently fail if not supported
+      }
     }
   },
 };
