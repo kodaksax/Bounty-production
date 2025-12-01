@@ -5,7 +5,6 @@ import { Text, View } from "react-native";
 interface Achievement {
   id: string;
   name: string;
-  description: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   isEarned: boolean;
 }
@@ -15,13 +14,13 @@ interface AchievementsGridProps {
 }
 
 // Define real achievement milestones that users can earn
-const ACHIEVEMENT_DEFINITIONS: Array<{ name: string; description: string; icon: keyof typeof MaterialIcons.glyphMap }> = [
-  { name: "First Bounty", description: "Posted your first bounty", icon: "flag" },
-  { name: "Task Complete", description: "Completed a bounty", icon: "check-circle" },
-  { name: "Trusted Member", description: "Earned community trust", icon: "verified-user" },
-  { name: "Top Contributor", description: "High activity level", icon: "star" },
-  { name: "Quick Responder", description: "Fast response time", icon: "bolt" },
-  { name: "Community Builder", description: "Helped grow the community", icon: "groups" },
+const ACHIEVEMENT_DEFINITIONS = [
+  { name: "First Bounty", icon: "flag" as keyof typeof MaterialIcons.glyphMap },
+  { name: "Task Complete", icon: "check-circle" as keyof typeof MaterialIcons.glyphMap },
+  { name: "Trusted Member", icon: "verified-user" as keyof typeof MaterialIcons.glyphMap },
+  { name: "Top Contributor", icon: "star" as keyof typeof MaterialIcons.glyphMap },
+  { name: "Quick Responder", icon: "bolt" as keyof typeof MaterialIcons.glyphMap },
+  { name: "Community Builder", icon: "groups" as keyof typeof MaterialIcons.glyphMap },
 ];
 
 /**
@@ -33,7 +32,6 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
   const achievements: Achievement[] = ACHIEVEMENT_DEFINITIONS.map((def, i) => ({
     id: `achievement-${i}`,
     name: def.name,
-    description: def.description,
     icon: def.icon,
     isEarned: i < badgesEarned,
   }));
