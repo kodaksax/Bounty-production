@@ -2,7 +2,7 @@
 // This screen determines the user's role (poster or hunter) and redirects appropriately
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     StyleSheet,
@@ -30,16 +30,7 @@ export default function BountyDetailRouter() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [id]);
 
-  useEffect(() => {
-    if (!routeBountyId) {
-      setError('Invalid bounty ID');
-      setIsLoading(false);
-      return;
-    }
-    determineBountyRole(routeBountyId);
-  }, [routeBountyId]);
-
-  const determineBountyRole = async (bountyId: string) => {
+  const determineBountyRole = useCallback(async (bountyId: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -91,7 +82,16 @@ export default function BountyDetailRouter() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUserId, router]);
+
+  useEffect(() => {
+    if (!routeBountyId) {
+      setError('Invalid bounty ID');
+      setIsLoading(false);
+      return;
+    }
+    determineBountyRole(routeBountyId);
+  }, [routeBountyId, determineBountyRole]);
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
