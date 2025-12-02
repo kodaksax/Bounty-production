@@ -36,7 +36,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
   if (!attachments || attachments.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <MaterialIcons name="attach-file" size={24} color="rgba(128,199,149,0.4)" />
+        <MaterialIcons name="attach-file" size={24} color="rgba(110,231,183,0.4)" />
         <Text style={styles.emptyText}>No attachments</Text>
       </View>
     );
@@ -71,7 +71,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
         accessibilityLabel={`Attachment: ${item.name}, ${sizeText}`}
       >
         <View style={styles.iconContainer}>
-          <MaterialIcons name={icon as any} size={24} color="#008e2a" />
+          <MaterialIcons name={icon as any} size={24} color="#10b981" />
         </View>
         <View style={styles.attachmentInfo}>
           <Text style={styles.attachmentName} numberOfLines={1}>
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -131,14 +131,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 16,
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.1)',
+    borderColor: 'rgba(110, 231, 183, 0.1)',
     borderStyle: 'dashed',
   },
   emptyText: {
-    color: 'rgba(128,199,149,0.6)',
+    color: 'rgba(110,231,183,0.6)',
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -147,16 +147,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -169,18 +169,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   attachmentSize: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     marginTop: 2,
   },
   statusContainer: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     borderRadius: 4,
   },
   statusText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 10,
     fontWeight: '600',
   },

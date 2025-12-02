@@ -555,7 +555,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="hourglass-empty" size={18} color="#80c795" />
+              <MaterialIcons name="hourglass-empty" size={18} color="#6ee7b7" />
               {isOwner ? (
                 <Text style={styles.infoText}>Awaiting a hunter. Review requests in the Requests tab.</Text>
               ) : (
@@ -624,7 +624,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   )}
                   
                   <View style={styles.infoBox}>
-                    <MaterialIcons name="info-outline" size={18} color="#80c795" />
+                    <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
                       Begin work on the bounty; once complete press the next button.
                     </Text>
@@ -671,7 +671,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             >
               <View style={{ gap: 16 }}>
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="rate-review" size={18} color="#80c795" />
+                  <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
                   <Text style={styles.infoText}>
                     The hunter has submitted their work for review. Review the submission and approve or request changes.
                   </Text>
@@ -691,7 +691,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {/* Navigate to full review screen option */}
                 {onGoToReview && (
                   <TouchableOpacity
-                    style={[styles.primaryBtn, { backgroundColor: 'rgba(0, 142, 42, 0.3)' }]}
+                    style={[styles.primaryBtn, { backgroundColor: 'rgba(16, 185, 129, 0.3)' }]}
                     onPress={() => onGoToReview(String(bounty.id))}
                   >
                     <Text style={styles.primaryText}>Open Review Screen</Text>
@@ -719,7 +719,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {/* If a submission is pending, show waiting state */}
                 {(submissionPending || hasSubmission) ? (
                   <View style={styles.infoBox}>
-                    <MaterialIcons name="hourglass-top" size={18} color="#80c795" />
+                    <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>Waiting for poster to review your submission.</Text>
                   </View>
                 ) : (
@@ -749,7 +749,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
                               size={24}
-                              color="#80c795"
+                              color="#6ee7b7"
                             />
                           </View>
                           <View style={styles.proofInfo}>
@@ -766,7 +766,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         onPress={handleAddProof}
                         disabled={!(readyToSubmitPressed || !!readyRecord)}
                       >
-                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#008e2a" />
+                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#10b981" />
                         <Text style={styles.addFileText}>{(readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}</Text>
                       </TouchableOpacity>
                     </View>
@@ -799,7 +799,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#008e2a" />
+                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner 
@@ -832,7 +832,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {!bounty.is_for_honor && (
                   <View style={styles.receiptCard}>
                     <View style={styles.receiptHeader}>
-                      <MaterialIcons name="receipt" size={24} color="#80c795" />
+                      <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
                       <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                     </View>
                     <View style={styles.receiptDivider} />
@@ -851,7 +851,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#008e2a" />
+                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -864,7 +864,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="chat-bubble-outline" size={18} color="#80c795" />
+              <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
               <Text style={styles.infoText}>{isOwner ? 'Conversation will appear after acceptance.' : 'A chat with the poster will appear once you’re accepted.'}</Text>
             </View>
           )}
@@ -895,11 +895,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: 'rgba(0, 117, 35, 0.25)',
+    backgroundColor: 'rgba(5, 150, 105, 0.25)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginTop: -8,
     marginBottom: 12,
   },
@@ -914,17 +914,17 @@ const styles = StyleSheet.create({
   timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   timelineItem: { flexDirection: 'row', alignItems: 'center' },
   bubble: { width: 12, height: 12, borderRadius: 6 },
-  bubbleIdle: { backgroundColor: 'rgba(128,199,149,0.3)' },
-  bubbleActive: { backgroundColor: '#008e2a' },
-  bubbleCompleted: { backgroundColor: '#008e2a' },
-  connector: { width: 18, height: 2, backgroundColor: 'rgba(128,199,149,0.35)', marginHorizontal: 6 },
+  bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
+  bubbleActive: { backgroundColor: '#10b981' },
+  bubbleCompleted: { backgroundColor: '#059669' },
+  connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
-  infoText: { color: '#d5ecdc', fontSize: 12, flex: 1 },
+  infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#008e2a', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },
-  muted: { color: '#aad9b8', fontSize: 12 },
-  honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#aad9b8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
+  muted: { color: '#a7f3d0', fontSize: 12 },
+  honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
   honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
   reviewSubmissionBtn: {
     flexDirection: 'row',
@@ -961,11 +961,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
     gap: 8,
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
   },
   timerLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -980,31 +980,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   messageTextArea: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
     fontSize: 14,
     minHeight: 100,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
     marginBottom: 8,
   },
   proofIcon: {
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1018,11 +1018,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   proofSize: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
   },
   sectionTitle: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
@@ -1032,15 +1032,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#008e2a',
+    borderColor: '#10b981',
     borderStyle: 'dashed',
   },
   addFileText: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1048,13 +1048,13 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   successPanel: {
-    backgroundColor: 'rgba(0, 142, 42, 0.1)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   successTitle: {
     color: '#fff',
@@ -1068,7 +1068,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -1077,13 +1077,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   payoutLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -1111,12 +1111,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   receiptCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   receiptHeader: {
     flexDirection: 'row',
@@ -1124,13 +1124,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   receiptTitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 16,
     fontWeight: '600',
   },
   receiptDivider: {
     height: 1,
-    backgroundColor: 'rgba(128, 199, 149, 0.2)',
+    backgroundColor: 'rgba(110, 231, 183, 0.2)',
   },
   receiptRow: {
     flexDirection: 'row',
@@ -1152,18 +1152,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 12,
     fontWeight: '600',
   },
   readyBadge: {
-    backgroundColor: '#d5ecdc',
+    backgroundColor: '#d1fae5',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,

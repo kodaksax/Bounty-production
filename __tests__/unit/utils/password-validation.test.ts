@@ -200,7 +200,7 @@ describe('Password Validation', () => {
       expect(getStrengthColor('weak')).toBe('#f97316');
       expect(getStrengthColor('fair')).toBe('#eab308');
       expect(getStrengthColor('strong')).toBe('#22c55e');
-      expect(getStrengthColor('very-strong')).toBe('#008e2a');
+      expect(getStrengthColor('very-strong')).toBe('#059669');
     });
   });
 

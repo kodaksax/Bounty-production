@@ -149,7 +149,7 @@ export default function AdminSupportScreen() {
             style={styles.emergencyButton}
             onPress={() => Linking.openURL('tel:+1-555-BOUNTY')}
           >
-            <MaterialIcons name="phone" size={20} color="#ffffff" />
+            <MaterialIcons name="phone" size={20} color="#fffef5" />
           </TouchableOpacity>
         </View>
 
@@ -163,7 +163,7 @@ export default function AdminSupportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -188,17 +188,17 @@ const styles = StyleSheet.create({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     gap: 16,
   },
   linkIcon: {
     width: 48,
     height: 48,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(0,145,44,0.15)',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   linkTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 4,
   },
   linkDescription: {
@@ -223,26 +223,26 @@ const styles = StyleSheet.create({
   },
   resourceCard: {
     width: '48%',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     alignItems: 'center',
     gap: 8,
   },
   resourceTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#ffffff',
+    color: '#fffef5',
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     gap: 12,
   },
   infoRow: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 14,
-    color: '#ffffff',
+    color: '#fffef5',
     fontWeight: '500',
   },
   statusBadge: {

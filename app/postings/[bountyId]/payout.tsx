@@ -228,7 +228,7 @@ export default function PayoutScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008e2a" />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Loading payout...</Text>
       </View>
     );
@@ -281,13 +281,13 @@ export default function PayoutScreen() {
         {/* Payout Amount Card */}
         <View style={styles.payoutCard}>
           <View style={styles.payoutHeader}>
-            <MaterialIcons name="account-balance-wallet" size={32} color="#008e2a" />
+            <MaterialIcons name="account-balance-wallet" size={32} color="#10b981" />
             <Text style={styles.payoutTitle}>Payout Amount</Text>
           </View>
 
           {bounty.is_for_honor ? (
             <View style={styles.honorContainer}>
-              <MaterialIcons name="favorite" size={48} color="#008e2a" />
+              <MaterialIcons name="favorite" size={48} color="#10b981" />
               <Text style={styles.honorLabel}>For Honor</Text>
               <Text style={styles.honorSubtext}>
                 This bounty was created for honor, no payout amount.
@@ -317,7 +317,7 @@ export default function PayoutScreen() {
               <Switch
                 value={confirmRelease}
                 onValueChange={setConfirmRelease}
-                trackColor={{ false: '#6b7280', true: '#008e2a' }}
+                trackColor={{ false: '#6b7280', true: '#10b981' }}
                 thumbColor={confirmRelease ? '#fff' : '#f4f4f5'}
               />
             </View>
@@ -328,7 +328,7 @@ export default function PayoutScreen() {
         {bounty.status === 'completed' && (
           <>
             <View style={styles.completedCard}>
-              <MaterialIcons name="check-circle" size={48} color="#008e2a" />
+              <MaterialIcons name="check-circle" size={48} color="#10b981" />
               <Text style={styles.completedTitle}>Bounty Completed</Text>
               <Text style={styles.completedSubtext}>
                 This bounty has already been completed and archived.
@@ -346,7 +346,7 @@ export default function PayoutScreen() {
                 );
               }}
             >
-              <MaterialIcons name="receipt" size={20} color="#008e2a" />
+              <MaterialIcons name="receipt" size={20} color="#10b981" />
               <Text style={styles.receiptButtonText}>Download Receipt</Text>
             </TouchableOpacity>
           </>
@@ -406,7 +406,7 @@ export default function PayoutScreen() {
 
         {/* Info Section */}
         <View style={styles.infoCard}>
-          <MaterialIcons name="info-outline" size={24} color="#80c795" />
+          <MaterialIcons name="info-outline" size={24} color="#6ee7b7" />
           <Text style={styles.infoText}>
             {bounty.status === 'completed'
               ? 'This bounty has been archived and is accessible in your bounty history.'
@@ -421,11 +421,11 @@ export default function PayoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -473,9 +473,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 142, 42, 0.2)',
+    borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
   backIcon: {
     padding: 8,
@@ -494,15 +494,15 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   summaryCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   summaryTitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   summaryLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
   },
   summaryValue: {
@@ -529,11 +529,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   payoutCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
     alignItems: 'center',
   },
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   payoutAmount: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 48,
     fontWeight: '700',
     marginBottom: 12,
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   balanceLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
   },
   balanceAmount: {
@@ -573,23 +573,23 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   honorLabel: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 24,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 8,
   },
   honorSubtext: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     textAlign: 'center',
   },
   confirmationCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   confirmationTitle: {
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   confirmationSubtext: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 16,
@@ -616,28 +616,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completedCard: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#008e2a',
+    borderColor: '#10b981',
     marginBottom: 16,
     alignItems: 'center',
   },
   completedTitle: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 20,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 8,
   },
   completedSubtext: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     textAlign: 'center',
   },
   receiptButton: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -646,10 +646,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#008e2a',
+    borderColor: '#10b981',
   },
   receiptButtonText: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   releaseButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completeButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -704,16 +704,16 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     gap: 12,
   },
   infoText: {
     flex: 1,
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 13,
     lineHeight: 18,
   },

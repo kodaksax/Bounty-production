@@ -85,7 +85,7 @@ export default function FollowersScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Followers</Text>
       </View>
@@ -101,7 +101,7 @@ export default function FollowersScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#008e2a" />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : (
         <FlatList
@@ -122,14 +122,14 @@ export default function FollowersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#008e2a",
+    backgroundColor: "#1a3d2e",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#008e2a",
+    backgroundColor: "#1a3d2e",
   },
   backButton: {
     marginRight: 12,
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#fffef5",
     letterSpacing: 1,
   },
   loadingContainer: {
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#008e2a",
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#fffef5",
   },
   followerInfo: {
     flex: 1,
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   followerName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#ffffff",
+    color: "#fffef5",
     marginBottom: 2,
   },
   followerUsername: {
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   },
   followerTitle: {
     fontSize: 13,
-    color: "#008e2a",
+    color: "#10b981",
   },
   emptyState: {
     alignItems: "center",
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#ffffff",
+    color: "#fffef5",
     marginTop: 16,
     marginBottom: 8,
   },

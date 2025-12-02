@@ -217,7 +217,7 @@ export function SignUpForm() {
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: ageVerified }}
               >
-                <MaterialIcons name={ageVerified ? 'check-box' : 'check-box-outline-blank'} size={22} color={ageVerified ? '#008e2a' : '#fff'} />
+                <MaterialIcons name={ageVerified ? 'check-box' : 'check-box-outline-blank'} size={22} color={ageVerified ? '#10b981' : '#fff'} />
               </TouchableOpacity>
               <Text className="text-white/90">I confirm I am 18 years or older</Text>
             </View>
@@ -230,7 +230,7 @@ export function SignUpForm() {
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: termsAccepted }}
               >
-                <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? '#008e2a' : '#fff'} />
+                <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? '#10b981' : '#fff'} />
               </TouchableOpacity>
               <Text className="text-white/90">I accept the </Text>
               <TouchableOpacity onPress={() => router.push('/legal/terms')}>

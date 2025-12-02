@@ -58,7 +58,7 @@ export function BountyCard({
     if (submittedForReview) return '#38bdf8'
     switch (bounty.status) {
       case "open":
-        return "#008e2a"; // emerald-500
+        return "#10b981"; // emerald-500
       case "in_progress":
         return "#fbbf24"; // amber-400
       case "completed":
@@ -70,7 +70,7 @@ export function BountyCard({
       case "cancellation_requested":
         return "#f97316"; // orange-500
       default:
-        return "#008e2a";
+        return "#10b981";
     }
   };
 
@@ -148,7 +148,7 @@ export function BountyCard({
       <View style={styles.metaRow}>
         {bounty.location && (
           <View style={styles.metaItem}>
-            <MaterialIcons name="place" size={14} color="#80c795" />
+            <MaterialIcons name="place" size={14} color="#6ee7b7" />
             <Text style={styles.metaText} numberOfLines={1}>
               {bounty.location}
             </Text>
@@ -159,7 +159,7 @@ export function BountyCard({
             <MaterialIcons
               name={bounty.work_type === "online" ? "computer" : "person-pin"}
               size={14}
-              color="#80c795"
+              color="#6ee7b7"
             />
             <Text style={styles.metaText}>
               {bounty.work_type === "online" ? "Online" : "In Person"}
@@ -207,7 +207,7 @@ export function BountyCard({
                   onEdit();
                 }}
               >
-                <MaterialIcons name="edit" size={16} color="#008e2a" />
+                <MaterialIcons name="edit" size={16} color="#10b981" />
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
@@ -267,7 +267,7 @@ export function BountyCard({
                 handleShare();
               }}
             >
-              <MaterialIcons name="share" size={16} color="#80c795" />
+              <MaterialIcons name="share" size={16} color="#6ee7b7" />
               <Text style={styles.actionButtonText}>Share</Text>
             </TouchableOpacity>
           </View>
@@ -279,12 +279,12 @@ export function BountyCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(0, 117, 35, 0.3)", // emerald-600/30
+    backgroundColor: "rgba(5, 150, 105, 0.3)", // emerald-600/30
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(0, 142, 42, 0.2)", // emerald-500/20
+    borderColor: "rgba(16, 185, 129, 0.2)", // emerald-500/20
     // Elevated shadow
     shadowColor: "#000",
     shadowOffset: {
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -351,14 +351,14 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: "#aad9b8",
+    color: "#a7f3d0",
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(0, 142, 42, 0.2)",
+    borderTopColor: "rgba(16, 185, 129, 0.2)",
   },
   ratingChip: {
     flexDirection: "row",
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   },
   ratingCountText: {
     fontSize: 11,
-    color: "#aad9b8",
+    color: "#a7f3d0",
   },
   amount: {
     fontSize: 20,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#aad9b8",
+    backgroundColor: "#a7f3d0",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -447,11 +447,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(0, 142, 42, 0.2)",
+    borderTopColor: "rgba(16, 185, 129, 0.2)",
   },
   ownerLabel: {
     fontSize: 11,
-    color: "#80c795",
+    color: "#6ee7b7",
     fontWeight: "600",
     marginBottom: 8,
     textTransform: "uppercase",
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#d5ecdc",
+    color: "#d1fae5",
   },
   cancelButton: {
     backgroundColor: "rgba(249, 115, 22, 0.2)",

@@ -126,7 +126,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
             onChangeText={handleDescriptionChange}
             onBlur={handleDescriptionBlur}
             placeholder="Provide details about the task, requirements, expectations, etc."
-            placeholderTextColor="rgba(128, 199, 149, 0.4)"
+            placeholderTextColor="rgba(110, 231, 183, 0.4)"
             className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
             multiline
             numberOfLines={6}
@@ -151,7 +151,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
             value={draft.timeline || ''}
             onChangeText={(value) => onUpdate({ timeline: value })}
             placeholder="e.g., Within 2 days, This weekend, ASAP..."
-            placeholderTextColor="rgba(128, 199, 149, 0.4)"
+            placeholderTextColor="rgba(110, 231, 183, 0.4)"
             className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
             accessibilityLabel="Timeline input"
           />
@@ -166,7 +166,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
             value={draft.skills || ''}
             onChangeText={(value) => onUpdate({ skills: value })}
             placeholder="e.g., Moving truck, Design tools, Programming..."
-            placeholderTextColor="rgba(128, 199, 149, 0.4)"
+            placeholderTextColor="rgba(110, 231, 183, 0.4)"
             className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
             accessibilityLabel="Required skills input"
           />
@@ -188,21 +188,21 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           >
             {isUploading ? (
               <>
-                <ActivityIndicator size="large" color="rgba(128, 199, 149, 0.6)" />
+                <ActivityIndicator size="large" color="rgba(110, 231, 183, 0.6)" />
                 <Text className="text-emerald-300/60 mt-2 text-sm">
                   Uploading... {Math.round(progress * 100)}%
                 </Text>
               </>
             ) : isPicking ? (
               <>
-                <ActivityIndicator size="large" color="rgba(128, 199, 149, 0.6)" />
+                <ActivityIndicator size="large" color="rgba(110, 231, 183, 0.6)" />
                 <Text className="text-emerald-300/60 mt-2 text-sm">
                   Selecting...
                 </Text>
               </>
             ) : (
               <>
-                <MaterialIcons name="cloud-upload" size={32} color="rgba(128, 199, 149, 0.6)" />
+                <MaterialIcons name="cloud-upload" size={32} color="rgba(110, 231, 183, 0.6)" />
                 <Text className="text-emerald-300/60 mt-2 text-sm">
                   Add photos, documents, or take a photo
                 </Text>
@@ -244,7 +244,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
                           : 'insert-drive-file'
                       }
                       size={24}
-                      color="#80c795"
+                      color="#6ee7b7"
                     />
                     <View className="ml-3 flex-1">
                       <Text className="text-white text-sm" numberOfLines={1}>
@@ -313,7 +313,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(128, 199, 149, 0.4)'}
+              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
             />
           </TouchableOpacity>
         </View>

@@ -145,7 +145,7 @@ export default function AuditLogsScreen() {
       case 'user':
         return { icon: 'person', color: '#3b82f6', label: 'User' };
       case 'bounty':
-        return { icon: 'work', color: '#008e2a', label: 'Bounty' };
+        return { icon: 'work', color: '#10b981', label: 'Bounty' };
       case 'payment':
         return { icon: 'account-balance-wallet', color: '#8b5cf6', label: 'Payment' };
       case 'moderation':
@@ -155,7 +155,7 @@ export default function AuditLogsScreen() {
       case 'security':
         return { icon: 'security', color: '#ef4444', label: 'Security' };
       default:
-        return { icon: 'info', color: '#aad9b8', label: category };
+        return { icon: 'info', color: '#a7f3d0', label: category };
     }
   };
 
@@ -168,7 +168,7 @@ export default function AuditLogsScreen() {
         return { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
       case 'info':
       default:
-        return { color: '#008e2a', bg: 'rgba(0,142,42,0.15)', label: 'Info' };
+        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: 'Info' };
     }
   };
 
@@ -240,7 +240,7 @@ export default function AuditLogsScreen() {
             <MaterialIcons
               name={cat.icon as any}
               size={14}
-              color={categoryFilter === cat.id ? '#008e2a' : '#aad9b8'}
+              color={categoryFilter === cat.id ? '#1a3d2e' : '#a7f3d0'}
             />
             <Text
               style={[
@@ -263,7 +263,7 @@ export default function AuditLogsScreen() {
       {(['all', 'info', 'warning', 'critical'] as SeverityFilter[]).map((sev) => {
         const config =
           sev === 'all'
-            ? { color: '#aad9b8', bg: 'transparent', label: 'All' }
+            ? { color: '#a7f3d0', bg: 'transparent', label: 'All' }
             : getSeverityConfig(sev);
         return (
           <TouchableOpacity
@@ -325,7 +325,7 @@ export default function AuditLogsScreen() {
           <Text style={styles.statLabel}>Warnings</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#008e2a' }]}>
+          <Text style={[styles.statValue, { color: '#10b981' }]}>
             {stats.bySeverity?.info ?? 0}
           </Text>
           <Text style={styles.statLabel}>Info</Text>
@@ -362,7 +362,7 @@ export default function AuditLogsScreen() {
         onPress={handleExport}
         accessibilityLabel="Export logs"
       >
-        <MaterialIcons name="file-download" size={20} color="#aad9b8" />
+        <MaterialIcons name="file-download" size={20} color="#a7f3d0" />
       </TouchableOpacity>
     </View>
   );
@@ -475,7 +475,7 @@ export default function AuditLogsScreen() {
               onPress={() => setShowDetailModal(false)}
               style={styles.modalCloseButton}
             >
-              <MaterialIcons name="close" size={24} color="#ffffff" />
+              <MaterialIcons name="close" size={24} color="#fffef5" />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Log Details</Text>
             <View style={{ width: 36 }} />
@@ -537,7 +537,7 @@ export default function AuditLogsScreen() {
                 <Text style={styles.detailLabel}>Actor</Text>
                 <View style={styles.detailActorRow}>
                   <View style={styles.detailActorIcon}>
-                    <MaterialIcons name="person" size={16} color="#aad9b8" />
+                    <MaterialIcons name="person" size={16} color="#a7f3d0" />
                   </View>
                   <View>
                     <Text style={styles.detailValue}>{selectedLog.actorName}</Text>
@@ -622,7 +622,7 @@ export default function AuditLogsScreen() {
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcons name="history" size={64} color="#008e2a" />
+        <MaterialIcons name="history" size={64} color="#10b981" />
       </View>
       <Text style={styles.emptyTitle}>No Logs Found</Text>
       <Text style={styles.emptySubtitle}>
@@ -703,8 +703,8 @@ export default function AuditLogsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchLogs}
-            tintColor="#008e2a"
-            colors={['#008e2a']}
+            tintColor="#10b981"
+            colors={['#10b981']}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -723,7 +723,7 @@ export default function AuditLogsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   headerAction: {
     padding: 6,
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   headerActionActive: {
-    backgroundColor: 'rgba(0,142,42,0.3)',
+    backgroundColor: 'rgba(0,145,44,0.3)',
   },
   statsContainer: {
     paddingHorizontal: 16,
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   statLabel: {
     fontSize: 11,
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#ffffff',
+    color: '#fffef5',
   },
   exportButton: {
     padding: 10,
@@ -808,15 +808,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   filterChipActive: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
   },
   filterChipText: {
     fontSize: 12,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontWeight: '500',
   },
   filterChipTextActive: {
-    color: '#008e2a',
+    color: '#1a3d2e',
     fontWeight: '600',
   },
   severityFiltersRow: {
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
   logAction: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     textTransform: 'capitalize',
   },
   logTime: {
@@ -931,7 +931,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(16,185,129,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -939,7 +939,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 8,
   },
   emptySubtitle: {
@@ -957,7 +957,7 @@ const styles = StyleSheet.create({
   },
   clearFiltersText: {
     fontSize: 14,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontWeight: '500',
   },
   errorContainer: {
@@ -975,19 +975,19 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     borderRadius: 10,
     marginTop: 8,
   },
   retryButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,142,42,0.2)',
+    borderBottomColor: 'rgba(0,145,44,0.2)',
   },
   modalCloseButton: {
     padding: 6,
@@ -1004,7 +1004,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   modalContent: {
     flex: 1,
@@ -1049,12 +1049,12 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 16,
-    color: '#ffffff',
+    color: '#fffef5',
     fontWeight: '500',
   },
   detailDescription: {
     fontSize: 15,
-    color: '#ffffff',
+    color: '#fffef5',
     lineHeight: 22,
   },
   detailSubtext: {
@@ -1070,7 +1070,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,142,42,0.2)',
+    backgroundColor: 'rgba(0,145,44,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1092,6 +1092,6 @@ const styles = StyleSheet.create({
   metadataValue: {
     flex: 1,
     fontSize: 13,
-    color: '#ffffff',
+    color: '#fffef5',
   },
 });

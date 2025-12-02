@@ -262,7 +262,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
                     value={prefs.reminderLeadMinutes} 
                     onChangeText={v => /^(\d{0,3})$/.test(v) && persist({ reminderLeadMinutes: v })} 
                     placeholder="30" 
-                    placeholderTextColor="#aad9b8" 
+                    placeholderTextColor="#a7f3d0" 
                     className="bg-black/40 rounded-md px-3 py-2 text-white w-24" 
                   />
                 </View>
@@ -288,7 +288,7 @@ const NotifToggle = ({ label, subtitle, icon, value, onChange, extra }: { label:
     <View className="flex-row items-start justify-between">
       <View className="flex-1 pr-3">
         <View className="flex-row items-center mb-1">
-          <MaterialIcons name={icon} size={18} color="#aad9b8" />
+          <MaterialIcons name={icon} size={18} color="#a7f3d0" />
           <Text className="ml-2 text-white font-medium text-sm" numberOfLines={1}>{label}</Text>
         </View>
         <Text className="text-emerald-100 text-[11px] leading-4">{subtitle}</Text>

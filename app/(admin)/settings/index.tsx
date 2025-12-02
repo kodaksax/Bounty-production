@@ -91,7 +91,7 @@ export default function AdminSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -111,17 +111,17 @@ const styles = StyleSheet.create({
   sectionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     gap: 16,
   },
   sectionIcon: {
     width: 48,
     height: 48,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(0,145,44,0.15)',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 4,
   },
   sectionDescription: {

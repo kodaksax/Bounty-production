@@ -145,7 +145,7 @@ function formatDate(dateString: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginTop: 16,
   },
   errorText: {
@@ -177,14 +177,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 24,
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -217,13 +217,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 12,
   },
   username: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 8,
   },
   email: {
@@ -236,13 +236,13 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
   },
   statCardValue: {
     fontSize: 24,

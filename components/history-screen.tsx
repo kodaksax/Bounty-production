@@ -151,7 +151,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#008e2a" />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : (
         <FlatList
@@ -163,12 +163,12 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#008e2a"
+              tintColor="#10b981"
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="history" size={64} color="#80c79580" />
+              <MaterialIcons name="history" size={64} color="#6ee7b780" />
               <Text style={styles.emptyTitle}>No History Yet</Text>
               <Text style={styles.emptyText}>
                 Your completed, archived, and deleted bounties will appear here
@@ -184,7 +184,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#008e2a", // emerald-600
+    backgroundColor: "#059669", // emerald-600
   },
   header: {
     flexDirection: "row",
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 142, 42, 0.3)",
+    borderBottomColor: "rgba(16, 185, 129, 0.3)",
   },
   backButton: {
     padding: 4,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(0, 142, 42, 0.2)",
+    borderColor: "rgba(16, 185, 129, 0.2)",
   },
   itemHeader: {
     flexDirection: "row",
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: "#aad9b8",
+    color: "#a7f3d0",
   },
   itemTitle: {
     fontSize: 16,
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
   itemDescription: {
     fontSize: 14,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#aad9b8",
+    backgroundColor: "#a7f3d0",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -279,14 +279,14 @@ const styles = StyleSheet.create({
   transactionType: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#d5ecdc",
+    color: "#d1fae5",
   },
   transactionAmount: {
     fontSize: 18,
     fontWeight: "800",
   },
   positiveAmount: {
-    color: "#008e2a",
+    color: "#10b981",
   },
   negativeAmount: {
     color: "#ef4444",
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#aad9b8",
+    color: "#a7f3d0",
     textAlign: "center",
     paddingHorizontal: 32,
   },

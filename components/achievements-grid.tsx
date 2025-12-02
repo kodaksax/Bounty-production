@@ -54,7 +54,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
               height: 40,
               width: 40,
               borderRadius: 20,
-              backgroundColor: achievement.isEarned ? "#008e2a" : "#004315",
+              backgroundColor: achievement.isEarned ? "#059669" : "#064e3b",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 8,
@@ -69,7 +69,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
           <Text
             style={{
               fontSize: 12,
-              color: "#d5ecdc",
+              color: "#d1fae5",
               textAlign: "center",
             }}
             numberOfLines={2}

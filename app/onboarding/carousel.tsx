@@ -35,14 +35,14 @@ const slides: SlideData[] = [
     icon: 'gps-fixed',
     title: 'Welcome to Bounty',
     description: 'A marketplace where you can post tasks, find help, and get things done safely. Post a bounty or become a hunter — it\'s that simple.',
-    color: '#aad9b8',
+    color: '#a7f3d0',
   },
   {
     id: '2',
     icon: 'work-outline',
     title: 'Post Tasks & Earn',
     description: 'Create bounties for tasks you need done, or complete bounties posted by others to earn money and build your reputation.',
-    color: '#80c795',
+    color: '#6ee7b7',
   },
   {
     id: '3',
@@ -56,7 +56,7 @@ const slides: SlideData[] = [
     icon: 'verified-user',
     title: 'Safe & Secure Payments',
     description: 'Funds are held in escrow until work is complete. Your money is protected every step of the way, ensuring trust for everyone.',
-    color: '#008e2a',
+    color: '#10b981',
   },
 ];
 
@@ -176,7 +176,7 @@ export default function OnboardingCarousel() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={28} color="#aad9b8" />
+        <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
         <Text style={styles.brandingText}>BOUNTY</Text>
       </View>
 
@@ -227,7 +227,7 @@ export default function OnboardingCarousel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
   },
   brandingHeader: {
     flexDirection: 'row',
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     marginHorizontal: 4,
   },
   actionContainer: {
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,

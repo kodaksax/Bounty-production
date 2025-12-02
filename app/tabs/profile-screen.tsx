@@ -313,7 +313,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#008e2a']}
+            colors={['#10b981']}
           />
         }
       >
@@ -375,10 +375,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             }}
           >
             <View className="flex-row items-center">
-              <MaterialIcons name="history" size={20} color="#aad9b8" />
+              <MaterialIcons name="history" size={20} color="#a7f3d0" />
               <Text className="text-sm font-medium text-white ml-2">View History</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={20} color="#aad9b8" />
+            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -412,11 +412,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#008e2a",
+    borderColor: "#10b981",
     borderRadius: 4,
   },
   editButtonText: {
     fontSize: 12,
-    color: "#80c795",
+    color: "#6ee7b7",
   },
 });

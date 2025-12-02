@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   hint: {
-    color: 'rgba(128,199,149,0.7)',
+    color: 'rgba(110,231,183,0.7)',
     fontSize: 11,
     marginTop: -4,
   },

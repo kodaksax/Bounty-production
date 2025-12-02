@@ -164,7 +164,7 @@ export default function BountyDashboard() {
   const getStatusBadgeColor = (status?: string) => {
     switch (status) {
       case 'open':
-        return '#008e2a'; // emerald-500
+        return '#10b981'; // emerald-500
       case 'in_progress':
         return '#fbbf24'; // amber-400
       case 'completed':
@@ -172,7 +172,7 @@ export default function BountyDashboard() {
       case 'archived':
         return '#6b7280'; // gray-500
       default:
-        return '#008e2a';
+        return '#10b981';
     }
   };
 
@@ -207,7 +207,7 @@ export default function BountyDashboard() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008e2a" />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Loading bounty...</Text>
       </View>
     );
@@ -295,7 +295,7 @@ export default function BountyDashboard() {
         {/* Timeline */}
         {bounty.status === 'open' && (
           <View style={styles.preAcceptancePanel}>
-            <MaterialIcons name="hourglass-empty" size={24} color="#80c795" />
+            <MaterialIcons name="hourglass-empty" size={24} color="#6ee7b7" />
             <Text style={styles.preAcceptanceTitle}>Awaiting a hunter</Text>
             <Text style={styles.preAcceptanceText}>
               This posting is visible in the feed. You’ll receive requests from hunters and can review them from the Postings screen.
@@ -340,7 +340,7 @@ export default function BountyDashboard() {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={24}
-                      color={isActive || isCompleted ? '#fff' : '#80c795'}
+                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
                     />
                   </View>
                   <Text
@@ -355,7 +355,7 @@ export default function BountyDashboard() {
                   </Text>
                   {isCompleted && (
                     <View style={styles.completedCheckmark}>
-                      <MaterialIcons name="check-circle" size={16} color="#008e2a" />
+                      <MaterialIcons name="check-circle" size={16} color="#10b981" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -372,7 +372,7 @@ export default function BountyDashboard() {
               <TextInput
                 style={styles.messageInput}
                 placeholder="Type a message to the hunter..."
-                placeholderTextColor="rgba(128, 199, 149, 0.4)"
+                placeholderTextColor="rgba(110, 231, 183, 0.4)"
                 value={messageText}
                 onChangeText={setMessageText}
                 multiline
@@ -392,7 +392,7 @@ export default function BountyDashboard() {
             </View>
           ) : (
             <View style={styles.noConversation}>
-              <MaterialIcons name="chat-bubble-outline" size={32} color="#80c795" />
+              <MaterialIcons name="chat-bubble-outline" size={32} color="#6ee7b7" />
               <Text style={styles.noConversationText}>No active conversation yet</Text>
               <Text style={styles.noConversationSubtext}>
                 A conversation will be created when a hunter accepts this bounty
@@ -418,7 +418,7 @@ export default function BountyDashboard() {
               <MaterialIcons
                 name={descriptionExpanded ? 'expand-less' : 'expand-more'}
                 size={16}
-                color="#80c795"
+                color="#6ee7b7"
               />
             </TouchableOpacity>
           )}
@@ -426,19 +426,19 @@ export default function BountyDashboard() {
           {/* Additional info */}
           {bounty.location && (
             <View style={styles.infoRow}>
-              <MaterialIcons name="place" size={16} color="#80c795" />
+              <MaterialIcons name="place" size={16} color="#6ee7b7" />
               <Text style={styles.infoText}>{bounty.location}</Text>
             </View>
           )}
           {bounty.timeline && (
             <View style={styles.infoRow}>
-              <MaterialIcons name="schedule" size={16} color="#80c795" />
+              <MaterialIcons name="schedule" size={16} color="#6ee7b7" />
               <Text style={styles.infoText}>{bounty.timeline}</Text>
             </View>
           )}
           {bounty.skills_required && (
             <View style={styles.infoRow}>
-              <MaterialIcons name="build" size={16} color="#80c795" />
+              <MaterialIcons name="build" size={16} color="#6ee7b7" />
               <Text style={styles.infoText}>{bounty.skills_required}</Text>
             </View>
           )}
@@ -471,11 +471,11 @@ export default function BountyDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -523,9 +523,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 142, 42, 0.2)',
+    borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
   backIcon: {
     padding: 8,
@@ -544,11 +544,11 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   bountyHeader: {
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   bountyAge: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
   },
   bountyMeta: {
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -630,18 +630,18 @@ const styles = StyleSheet.create({
     width: 100,
     padding: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   stageItemActive: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
-    borderColor: '#008e2a',
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#10b981',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
-    borderColor: '#008e2a',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#10b981',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -650,19 +650,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
   },
   stageLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     textAlign: 'center',
   },
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   stageLabelCompleted: {
-    color: '#80c795',
+    color: '#6ee7b7',
   },
   completedCheckmark: {
     position: 'absolute',
@@ -688,18 +688,18 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     minHeight: 80,
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -707,15 +707,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
   },
   noConversation: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   noConversationText: {
     color: '#fff',
@@ -725,16 +725,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   noConversationSubtext: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     textAlign: 'center',
   },
   contextPanel: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   description: {
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   expandButtonText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -762,11 +762,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   infoText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 13,
   },
   nextButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -781,11 +781,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   preAcceptancePanel: {
-    backgroundColor: 'rgba(0, 117, 35, 0.25)',
+    backgroundColor: 'rgba(5, 150, 105, 0.25)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   preAcceptanceTitle: {
@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   preAcceptanceText: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 13,
   },
   secondaryBtn: {
@@ -805,10 +805,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(128,199,149,0.5)',
+    borderColor: 'rgba(110,231,183,0.5)',
   },
   secondaryBtnText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 13,
     fontWeight: '600',
   },

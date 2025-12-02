@@ -59,7 +59,7 @@ function ButtonShowcase() {
 
   return (
     <View style={{ gap: spacing.md }}>
-      <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
+      <Text style={{ color: '#fffef5', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
         Button Variants
       </Text>
       
@@ -99,13 +99,13 @@ function CardShowcase() {
 
   return (
     <View style={{ gap: spacing.lg }}>
-      <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
+      <Text style={{ color: '#fffef5', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
         Animated Cards
       </Text>
 
       {/* Basic card */}
       <AnimatedCard>
-        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+        <Text style={{ color: '#fffef5', fontSize: 16, fontWeight: '600' }}>
           Basic Card
         </Text>
         <Text style={{ color: 'rgba(255, 254, 245, 0.8)', marginTop: 8 }}>
@@ -119,7 +119,7 @@ function CardShowcase() {
         pressable 
         onPress={() => console.log('Card pressed')}
       >
-        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+        <Text style={{ color: '#fffef5', fontSize: 16, fontWeight: '600' }}>
           Pressable Elevated Card
         </Text>
         <Text style={{ color: 'rgba(255, 254, 245, 0.8)', marginTop: 8 }}>
@@ -133,7 +133,7 @@ function CardShowcase() {
         expanded={expanded}
         onToggle={() => setExpanded(!expanded)}
       >
-        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+        <Text style={{ color: '#fffef5', fontSize: 16, fontWeight: '600' }}>
           Expandable Card {expanded ? '▼' : '▶'}
         </Text>
         {expanded && (
@@ -155,7 +155,7 @@ function EmptyStateShowcase() {
 
   return (
     <View style={{ gap: spacing.lg }}>
-      <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
+      <Text style={{ color: '#fffef5', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
         Empty States
       </Text>
 
@@ -216,7 +216,7 @@ function ScreenTransitionShowcase() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
+      <Text style={{ color: '#fffef5', fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
         Screen Transitions
       </Text>
 
@@ -248,7 +248,7 @@ function ScreenTransitionShowcase() {
       {/* Animated content */}
       <AnimatedScreen key={key} animationType={animationType} duration={400}>
         <AnimatedCard variant="elevated">
-          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+          <Text style={{ color: '#fffef5', fontSize: 16, fontWeight: '600' }}>
             Current Animation: {animationType}
           </Text>
           <Text style={{ color: 'rgba(255, 254, 245, 0.8)', marginTop: 8 }}>

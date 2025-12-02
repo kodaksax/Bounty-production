@@ -130,32 +130,32 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
           <Text style={styles.detailHeading}>Details</Text>
           <View style={styles.detailList}>
             <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="info" size={16} color="#80c795" /></View>
+              <View style={styles.detailIcon}><MaterialIcons name="info" size={16} color="#6ee7b7" /></View>
               <View style={styles.detailContent}><Text style={styles.detailLabel}>Transaction ID</Text><Text style={styles.detailValue}>{transaction.id}</Text></View>
             </View>
             <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="calendar-today" size={16} color="#80c795" /></View>
+              <View style={styles.detailIcon}><MaterialIcons name="calendar-today" size={16} color="#6ee7b7" /></View>
               <View style={styles.detailContent}><Text style={styles.detailLabel}>Date</Text><Text style={styles.detailValue}>{format(transaction.date,'MMMM d, yyyy')}</Text></View>
             </View>
             <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="schedule" size={16} color="#80c795" /></View>
+              <View style={styles.detailIcon}><MaterialIcons name="schedule" size={16} color="#6ee7b7" /></View>
               <View style={styles.detailContent}><Text style={styles.detailLabel}>Time</Text><Text style={styles.detailValue}>{format(transaction.date,'h:mm:ss a')}</Text></View>
             </View>
             {transaction.details.status && (
               <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="check-circle" size={16} color="#80c795" /></View>
+                <View style={styles.detailIcon}><MaterialIcons name="check-circle" size={16} color="#6ee7b7" /></View>
                 <View style={styles.detailContent}><Text style={styles.detailLabel}>Status</Text><Text style={styles.detailValue}>{transaction.details.status}</Text></View>
               </View>
             )}
             {transaction.details.method && (
               <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="credit-card" size={16} color="#80c795" /></View>
+                <View style={styles.detailIcon}><MaterialIcons name="credit-card" size={16} color="#6ee7b7" /></View>
                 <View style={styles.detailContent}><Text style={styles.detailLabel}>Method</Text><Text style={styles.detailValue}>{transaction.details.method}</Text></View>
               </View>
             )}
             {transaction.details.counterparty && (
               <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="gps-fixed" size={16} color="#80c795" /></View>
+                <View style={styles.detailIcon}><MaterialIcons name="gps-fixed" size={16} color="#6ee7b7" /></View>
                 <View style={styles.detailContent}><Text style={styles.detailLabel}>{transaction.type === 'bounty_completed' ? 'Paid to' : 'From'}</Text><Text style={styles.detailValue}>{transaction.details.counterparty}</Text></View>
               </View>
             )}
@@ -165,7 +165,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         {(transaction as any).escrowStatus && (
           <View style={styles.escrowBlock}>
             <View style={styles.escrowHeaderRow}>
-              <MaterialIcons name="lock" size={18} color="#008e2a" />
+              <MaterialIcons name="lock" size={18} color="#10b981" />
               <Text style={styles.escrowTitle}>Escrow Information</Text>
             </View>
             <Text style={styles.escrowText}>
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   sheet: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
@@ -233,30 +233,30 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
   summarySection: { paddingHorizontal: 24, paddingBottom: 20 },
   summaryHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  summaryIcon: { height: 48, width: 48, borderRadius: 24, backgroundColor: 'rgba(0,92,28,0.4)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  summaryIcon: { height: 48, width: 48, borderRadius: 24, backgroundColor: 'rgba(4,120,87,0.4)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   summaryTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  summaryMeta: { color: '#d5ecdc', fontSize: 13 },
-  amountPill: { backgroundColor: 'rgba(0,92,28,0.55)', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
+  summaryMeta: { color: '#d1fae5', fontSize: 13 },
+  amountPill: { backgroundColor: 'rgba(4,120,87,0.55)', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
   amountText: { fontSize: 24, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 },
-  amountPositive: { color: '#80c795' },
+  amountPositive: { color: '#6ee7b7' },
   amountNegative: { color: '#fca5a5' },
   descriptionText: { color: '#ecfdf5', fontSize: 13, lineHeight: 18 },
   detailSection: { paddingHorizontal: 24, paddingBottom: 8 },
-  detailHeading: { color: '#80c795', fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  detailHeading: { color: '#6ee7b7', fontSize: 13, fontWeight: '600', marginBottom: 12 },
   detailList: { gap: 14 },
   detailRow: { flexDirection: 'row', alignItems: 'center' },
-  detailIcon: { height: 32, width: 32, borderRadius: 16, backgroundColor: 'rgba(0,92,28,0.5)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  detailIcon: { height: 32, width: 32, borderRadius: 16, backgroundColor: 'rgba(4,120,87,0.5)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   detailContent: { flex: 1 },
-  detailLabel: { color: '#80c795', fontSize: 11, marginBottom: 2 },
+  detailLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 2 },
   detailValue: { color: '#fff', fontSize: 14, fontWeight: '500' },
-  escrowBlock: { marginHorizontal: 24, marginTop: 12, marginBottom: 8, backgroundColor: 'rgba(0,92,28,0.5)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#007523' },
+  escrowBlock: { marginHorizontal: 24, marginTop: 12, marginBottom: 8, backgroundColor: 'rgba(4,120,87,0.5)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#047857' },
   escrowHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
   escrowTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 },
-  escrowText: { color: '#d5ecdc', fontSize: 12, lineHeight: 18 },
+  escrowText: { color: '#d1fae5', fontSize: 12, lineHeight: 18 },
   actionsSection: { paddingHorizontal: 24, paddingTop: 10, gap: 12 },
-  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#005c1c', paddingVertical: 14, borderRadius: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
+  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#065f46', paddingVertical: 14, borderRadius: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
   actionPrimaryDisabled: { opacity: 0.6 },
   actionPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
-  actionSecondary: { backgroundColor: '#007523', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  actionSecondary: { backgroundColor: '#047857', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   actionSecondaryText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

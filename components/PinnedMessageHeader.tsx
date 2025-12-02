@@ -35,7 +35,7 @@ export function PinnedMessageHeader({ text, onPress, onDismiss }: PinnedMessageH
             onDismiss();
           }}
         >
-          <MaterialIcons name="close" size={20} color="#d5ecdc" />
+          <MaterialIcons name="close" size={20} color="#d1fae5" />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    color: '#d5ecdc',
+    color: '#d1fae5',
   },
   dismissButton: {
     padding: 4,

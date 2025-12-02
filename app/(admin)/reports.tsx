@@ -327,9 +327,9 @@ export default function AdminReportsScreen() {
       case 'medium':
         return { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', icon: 'info' };
       case 'low':
-        return { color: '#008e2a', bg: 'rgba(0,142,42,0.15)', icon: 'check-circle' };
+        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
       default:
-        return { color: '#aad9b8', bg: 'rgba(167,243,208,0.15)', icon: 'help' };
+        return { color: '#a7f3d0', bg: 'rgba(167,243,208,0.15)', icon: 'help' };
     }
   };
 
@@ -344,7 +344,7 @@ export default function AdminReportsScreen() {
       case 'spam':
         return { color: '#fbbf24', label: 'Spam' };
       default:
-        return { color: '#aad9b8', label: reason };
+        return { color: '#a7f3d0', label: reason };
     }
   };
 
@@ -422,9 +422,9 @@ export default function AdminReportsScreen() {
             </Text>
           </View>
         )}
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(0,142,42,0.15)' }]}>
-          <MaterialIcons name="pending" size={14} color="#008e2a" />
-          <Text style={[styles.statBadgeText, { color: '#008e2a' }]}>
+        <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+          <MaterialIcons name="pending" size={14} color="#10b981" />
+          <Text style={[styles.statBadgeText, { color: '#10b981' }]}>
             {stats.pending} Pending
           </Text>
         </View>
@@ -468,7 +468,7 @@ export default function AdminReportsScreen() {
         }}
         accessibilityLabel={`Sort by ${sortBy}`}
       >
-        <MaterialIcons name="sort" size={20} color="#aad9b8" />
+        <MaterialIcons name="sort" size={20} color="#a7f3d0" />
         <Text style={styles.sortButtonText}>
           {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
         </Text>
@@ -507,7 +507,7 @@ export default function AdminReportsScreen() {
                 <View
                   style={[
                     styles.contentTypeIcon,
-                    { backgroundColor: 'rgba(0,142,42,0.2)' },
+                    { backgroundColor: 'rgba(0,145,44,0.2)' },
                   ]}
                 >
                   <MaterialIcons
@@ -582,7 +582,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'resolved')}
                   accessibilityLabel="Resolve report"
                 >
-                  <MaterialIcons name="check-circle" size={16} color="#008e2a" />
+                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
                   <Text style={styles.resolveActionText}>Resolve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -599,7 +599,7 @@ export default function AdminReportsScreen() {
             {/* Resolution info for resolved reports */}
             {report.status === 'resolved' && report.resolution_notes && (
               <View style={styles.resolutionInfo}>
-                <MaterialIcons name="check-circle" size={14} color="#008e2a" />
+                <MaterialIcons name="check-circle" size={14} color="#10b981" />
                 <Text style={styles.resolutionText}>{report.resolution_notes}</Text>
               </View>
             )}
@@ -616,7 +616,7 @@ export default function AdminReportsScreen() {
         <MaterialIcons
           name={statusFilter === 'pending' ? 'check-circle' : 'inbox'}
           size={64}
-          color="#008e2a"
+          color="#10b981"
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -691,8 +691,8 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchReports}
-            tintColor="#008e2a"
-            colors={['#008e2a']}
+            tintColor="#10b981"
+            colors={['#10b981']}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -708,7 +708,7 @@ export default function AdminReportsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   headerAction: {
     padding: 6,
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   segmentButtonActive: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
   },
   segmentButtonText: {
     fontSize: 13,
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.6)',
   },
   segmentButtonTextActive: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontWeight: '600',
   },
   badgeContainer: {
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#ffffff',
+    color: '#fffef5',
   },
   sortButton: {
     flexDirection: 'row',
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
   },
   sortButtonText: {
     fontSize: 13,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontWeight: '500',
   },
   listContent: {
@@ -855,7 +855,7 @@ const styles = StyleSheet.create({
   reportContentType: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   reportTime: {
     fontSize: 12,
@@ -926,12 +926,12 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
   },
   resolveAction: {
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(16,185,129,0.15)',
   },
   resolveActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
   },
   dismissAction: {
     backgroundColor: 'rgba(239,68,68,0.15)',
@@ -945,14 +945,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
-    backgroundColor: 'rgba(0,142,42,0.1)',
+    backgroundColor: 'rgba(16,185,129,0.1)',
     padding: 10,
     borderRadius: 8,
   },
   resolutionText: {
     flex: 1,
     fontSize: 13,
-    color: '#008e2a',
+    color: '#10b981',
     lineHeight: 18,
   },
   emptyContainer: {
@@ -966,7 +966,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(16,185,129,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -974,7 +974,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 8,
   },
   emptySubtitle: {
@@ -987,13 +987,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     borderRadius: 10,
   },
   viewAllButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   errorContainer: {
     flex: 1,
@@ -1010,13 +1010,13 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     borderRadius: 10,
     marginTop: 8,
   },
   retryButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
 });

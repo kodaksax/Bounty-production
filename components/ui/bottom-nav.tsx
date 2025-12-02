@@ -93,7 +93,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
           >
             <MaterialIcons 
               name="chat" 
-              color={activeScreen === "create" ? "#ffffff" : "#9ca3af"} 
+              color={activeScreen === "create" ? "#fffef5" : "#9ca3af"} 
               size={NAV_ICON_SIZE} 
             />
           </TouchableOpacity>
@@ -107,7 +107,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
           >
             <MaterialIcons 
               name="account-balance-wallet" 
-              color={activeScreen === "wallet" ? "#ffffff" : "#9ca3af"} 
+              color={activeScreen === "wallet" ? "#fffef5" : "#9ca3af"} 
               size={NAV_ICON_SIZE} 
             />
           </TouchableOpacity>
@@ -137,7 +137,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons 
                 name="gps-fixed" 
-                color={activeScreen === "bounty" ? "#ffffff" : "#d5ecdc"} 
+                color={activeScreen === "bounty" ? "#fffef5" : "#d1fae5"} 
                 size={CENTER_ICON_SIZE} 
               />
             </TouchableOpacity>
@@ -156,7 +156,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
           >
             <MaterialIcons 
               name="edit-note" 
-              color={activeScreen === "postings" ? "#ffffff" : "#9ca3af"} 
+              color={activeScreen === "postings" ? "#fffef5" : "#9ca3af"} 
               size={NAV_ICON_SIZE} 
             />
           </TouchableOpacity>
@@ -186,7 +186,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons 
                 name="person" 
-                color={activeScreen === "profile" ? "#ffffff" : "#9ca3af"} 
+                color={activeScreen === "profile" ? "#fffef5" : "#9ca3af"} 
                 size={NAV_ICON_SIZE} 
               />
             </TouchableOpacity>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center", // Center the three sections
     height: 110, // Slightly reduced for cleaner mobile look
-    backgroundColor: "#008e2a", // Primary background
+    backgroundColor: "#1a3d2e", // Primary background
     paddingHorizontal: 16, // Reduced padding for more icon space
     paddingBottom: 12,
     borderTopLeftRadius: 28, // Increased radius for modern look
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     elevation: 20,
     // Enhanced glass-morphism effect
     borderWidth: 1,
-    borderColor: "rgba(0, 142, 42, 0.25)", // Company specified primary green
+    borderColor: "rgba(0, 145, 44, 0.25)", // Company specified primary green
     // Add sophisticated shadow
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: -8 },
@@ -251,9 +251,9 @@ const styles = StyleSheet.create({
   centerButton: {
     height: 68, // Slightly larger for emphasis
     width: 68,
-    backgroundColor: "rgba(0, 142, 42, 0.15)", // Slightly more visible background
+    backgroundColor: "rgba(0, 145, 44, 0.15)", // Slightly more visible background
     borderWidth: 2.5, // Thicker border for emphasis
-    borderColor: "#008e2a", // Company specified primary green base
+    borderColor: "#00912C", // Company specified primary green base
     borderRadius: 34,
     alignItems: "center",
     justifyContent: "center",
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     minWidth: SIZING.MIN_TOUCH_TARGET + 24, // Larger touch target
     minHeight: SIZING.MIN_TOUCH_TARGET + 24,
     // Enhanced glow effect for emphasis
-    shadowColor: "#008e2a",
+    shadowColor: "#00912C",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 24,

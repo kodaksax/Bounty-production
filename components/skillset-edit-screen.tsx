@@ -176,13 +176,13 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                   <View className="flex-row flex-wrap -m-1 mb-3">
                     {ICON_LIBRARY.map(ic => (
                       <TouchableOpacity key={ic} onPress={() => changeIcon(skill.id, ic)} className={`m-1 h-9 w-9 rounded-lg items-center justify-center ${skill.icon === ic ? 'bg-emerald-500' : 'bg-emerald-800/60'}`}> 
-                        <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#052e1b' : '#d5ecdc'} />
+                        <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#052e1b' : '#d1fae5'} />
                       </TouchableOpacity>
                     ))}
                   </View>
                   <View className="flex-row">
                     <TouchableOpacity onPress={() => attachCredential(skill.id)} className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 bg-emerald-800/60 rounded-lg flex-row items-center justify-center`}>
-                      <MaterialIcons name="attach-file" size={18} color="#d5ecdc" />
+                      <MaterialIcons name="attach-file" size={18} color="#d1fae5" />
                       <Text className="text-emerald-100 text-sm ml-1">{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
                     </TouchableOpacity>
                     {skill.credentialUrl && (

@@ -126,17 +126,17 @@ export default function AdminBlockedUsersScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor="#008e2a" />
+          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor="#10b981" />
         }
       >
         {isLoading && blocks.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#008e2a" />
+            <ActivityIndicator size="large" color="#10b981" />
             <Text style={styles.loadingText}>Loading blocked users...</Text>
           </View>
         ) : blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="check-circle" size={64} color="#008e2a" />
+            <MaterialIcons name="check-circle" size={64} color="#10b981" />
             <Text style={styles.emptyText}>No Blocked Users</Text>
             <Text style={styles.emptySubtext}>
               There are currently no active block relationships in the system.
@@ -150,7 +150,7 @@ export default function AdminBlockedUsersScreen() {
                 <View style={styles.userSection}>
                   <Text style={styles.sectionLabel}>Blocker</Text>
                   <View style={styles.userInfo}>
-                    <MaterialIcons name="person" size={20} color="#aad9b8" />
+                    <MaterialIcons name="person" size={20} color="#a7f3d0" />
                     <Text style={styles.username}>
                       {block.blocker?.username || 'Unknown User'}
                     </Text>
@@ -166,7 +166,7 @@ export default function AdminBlockedUsersScreen() {
                 <View style={styles.userSection}>
                   <Text style={styles.sectionLabel}>Blocked</Text>
                   <View style={styles.userInfo}>
-                    <MaterialIcons name="person" size={20} color="#aad9b8" />
+                    <MaterialIcons name="person" size={20} color="#a7f3d0" />
                     <Text style={styles.username}>
                       {block.blocked?.username || 'Unknown User'}
                     </Text>
@@ -187,7 +187,7 @@ export default function AdminBlockedUsersScreen() {
                   style={styles.unblockButton}
                   onPress={() => handleUnblock(block.id)}
                 >
-                  <MaterialIcons name="check" size={16} color="#008e2a" />
+                  <MaterialIcons name="check" size={16} color="#10b981" />
                   <Text style={styles.unblockButtonText}>Remove Block</Text>
                 </TouchableOpacity>
               </View>
@@ -202,7 +202,7 @@ export default function AdminBlockedUsersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a', // emerald-600
+    backgroundColor: '#059669', // emerald-600
   },
   scrollView: {
     flex: 1,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#aad9b8',
+    color: '#a7f3d0',
   },
   errorContainer: {
     flex: 1,
@@ -238,13 +238,13 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     borderRadius: 8,
   },
   retryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#005c1c',
+    color: '#065f46',
   },
   emptyContainer: {
     flex: 1,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 32,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 12,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontWeight: '500',
     textTransform: 'uppercase',
   },
@@ -295,11 +295,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#007523',
+    borderTopColor: '#047857',
   },
   dateLabel: {
     fontSize: 12,
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontWeight: '500',
   },
   dateValue: {
@@ -312,13 +312,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    backgroundColor: '#008e2a20',
+    backgroundColor: '#10b98120',
     borderRadius: 8,
     marginTop: 8,
   },
   unblockButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
   },
 });

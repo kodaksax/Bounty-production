@@ -114,7 +114,7 @@ export function ApplicantCard({
         <View style={styles.avatarContainer}>
           {isNavigatingToProfile ? (
             <View style={[styles.avatar, styles.avatarLoading]}>
-              <ActivityIndicator size="small" color="#aad9b8" />
+              <ActivityIndicator size="small" color="#a7f3d0" />
             </View>
           ) : (
             <Avatar style={styles.avatar}>
@@ -145,7 +145,7 @@ export function ApplicantCard({
         </View>{/* avoid whitespace text node */}
 
         {profileId ? (
-          <MaterialIcons name="chevron-right" size={20} color="#aad9b8" style={{ marginLeft: 'auto' }} />
+          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
         ) : null}
       </TouchableOpacity>
 
@@ -189,7 +189,7 @@ export function ApplicantCard({
             onPress={handleRequestInfo}
             disabled={isProcessing || request.status !== 'pending'}
           >
-            <MaterialIcons name="chat" size={18} color="#008e2a" />
+            <MaterialIcons name="chat" size={18} color="#10b981" />
             <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
           </TouchableOpacity>
         )}
@@ -228,12 +228,12 @@ export function ApplicantCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#007523', // emerald-700
+    backgroundColor: '#047857', // emerald-700
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   header: {
     flexDirection: 'row',
@@ -247,21 +247,21 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderWidth: 2,
-    borderColor: '#80c795', // emerald-400
+    borderColor: '#6ee7b7', // emerald-400
     borderRadius: 24,
   },
   avatarLoading: {
-    backgroundColor: '#004315', // emerald-900
+    backgroundColor: '#064e3b', // emerald-900
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarFallback: {
-    backgroundColor: '#004315', // emerald-900
+    backgroundColor: '#064e3b', // emerald-900
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#aad9b8', // emerald-200
+    color: '#a7f3d0', // emerald-200
     fontSize: 16,
     fontWeight: '600',
   },
@@ -281,17 +281,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   ratingText: {
-    color: '#aad9b8', // emerald-200
+    color: '#a7f3d0', // emerald-200
     fontSize: 13,
   },
   bountySection: {
     marginBottom: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 199, 149, 0.2)',
+    borderTopColor: 'rgba(110, 231, 183, 0.2)',
   },
   sectionLabel: {
-    color: '#aad9b8', // emerald-200
+    color: '#a7f3d0', // emerald-200
     fontSize: 12,
     marginBottom: 4,
   },
@@ -302,14 +302,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   amountBadge: {
-    backgroundColor: '#004315', // emerald-900
+    backgroundColor: '#064e3b', // emerald-900
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     alignSelf: 'flex-start',
   },
   amountText: {
-    color: '#80c795', // emerald-400
+    color: '#6ee7b7', // emerald-400
     fontWeight: '600',
     fontSize: 14,
   },
@@ -345,12 +345,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#dc2626', // red-600
   },
   infoButton: {
-    backgroundColor: '#007523', // emerald-700
+    backgroundColor: '#047857', // emerald-700
     borderWidth: 1,
-    borderColor: '#008e2a', // emerald-500
+    borderColor: '#10b981', // emerald-500
   },
   acceptButton: {
-    backgroundColor: '#008e2a', // emerald-500
+    backgroundColor: '#10b981', // emerald-500
   },
   buttonText: {
     color: '#fff',
@@ -358,13 +358,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   infoButtonText: {
-    color: '#008e2a', // emerald-500
+    color: '#10b981', // emerald-500
   },
   statusBadge: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 199, 149, 0.2)',
+    borderTopColor: 'rgba(110, 231, 183, 0.2)',
   },
   statusText: {
     textAlign: 'center',
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   statusAccepted: {
-    color: '#008e2a', // emerald-500
+    color: '#10b981', // emerald-500
   },
   statusRejected: {
     color: '#dc2626', // red-600

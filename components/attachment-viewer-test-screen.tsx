@@ -112,13 +112,13 @@ export function AttachmentViewerTestScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="attach-file" size={24} color="#008e2a" />
+          <MaterialIcons name="attach-file" size={24} color="#10b981" />
           <Text style={styles.headerTitle}>Attachment Viewer Test</Text>
         </View>
 
         {/* Info Banner */}
         <View style={styles.infoBanner}>
-          <MaterialIcons name="info-outline" size={20} color="#80c795" />
+          <MaterialIcons name="info-outline" size={20} color="#6ee7b7" />
           <Text style={styles.infoText}>
             Tap any attachment below to test the viewer modal. Try downloading images and documents!
           </Text>
@@ -139,7 +139,7 @@ export function AttachmentViewerTestScreen() {
                 <MaterialIcons
                   name={getFileIcon(attachment.mimeType || '') as any}
                   size={32}
-                  color="#008e2a"
+                  color="#10b981"
                 />
               </View>
               <View style={styles.attachmentInfo}>
@@ -151,7 +151,7 @@ export function AttachmentViewerTestScreen() {
                   {formatFileSize(attachment.size || 0)}
                 </Text>
               </View>
-              <MaterialIcons name="chevron-right" size={24} color="#80c795" />
+              <MaterialIcons name="chevron-right" size={24} color="#6ee7b7" />
             </TouchableOpacity>
           ))}
 
@@ -185,27 +185,27 @@ export function AttachmentViewerTestScreen() {
           <View style={styles.featuresCard}>
             <Text style={styles.featuresTitle}>Features to Test</Text>
             <View style={styles.featureItem}>
-              <MaterialIcons name="image" size={18} color="#008e2a" />
+              <MaterialIcons name="image" size={18} color="#10b981" />
               <Text style={styles.featureText}>Image viewing with zoom</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="videocam" size={18} color="#008e2a" />
+              <MaterialIcons name="videocam" size={18} color="#10b981" />
               <Text style={styles.featureText}>Video playback</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="file-download" size={18} color="#008e2a" />
+              <MaterialIcons name="file-download" size={18} color="#10b981" />
               <Text style={styles.featureText}>Download & save</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="share" size={18} color="#008e2a" />
+              <MaterialIcons name="share" size={18} color="#10b981" />
               <Text style={styles.featureText}>Share functionality</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="security" size={18} color="#008e2a" />
+              <MaterialIcons name="security" size={18} color="#10b981" />
               <Text style={styles.featureText}>Security validations</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="accessibility" size={18} color="#008e2a" />
+              <MaterialIcons name="accessibility" size={18} color="#10b981" />
               <Text style={styles.featureText}>Accessibility support</Text>
             </View>
           </View>
@@ -225,11 +225,11 @@ export function AttachmentViewerTestScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#004315', // emerald-800
+    backgroundColor: '#064e3b', // emerald-800
   },
   container: {
     flex: 1,
-    backgroundColor: '#004315',
+    backgroundColor: '#064e3b',
   },
   header: {
     flexDirection: 'row',
@@ -237,9 +237,9 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#007523', // emerald-700
+    backgroundColor: '#047857', // emerald-700
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 199, 149, 0.2)',
+    borderBottomColor: 'rgba(110, 231, 183, 0.2)',
   },
   headerTitle: {
     fontSize: 20,
@@ -252,14 +252,14 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     margin: 16,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.3)',
+    borderColor: 'rgba(110, 231, 183, 0.3)',
   },
   infoText: {
     flex: 1,
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 13,
     lineHeight: 18,
   },
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -284,16 +284,16 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     marginBottom: 8,
-    backgroundColor: '#007523',
+    backgroundColor: '#047857',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -307,28 +307,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   attachmentMeta: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 12,
   },
   instructionsCard: {
     marginTop: 24,
     padding: 16,
-    backgroundColor: '#007523',
+    backgroundColor: '#047857',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   instructionsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
     marginBottom: 12,
   },
   checklistItem: {
     paddingVertical: 6,
   },
   checklistText: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -336,15 +336,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 24,
     padding: 16,
-    backgroundColor: '#007523',
+    backgroundColor: '#047857',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   featuresTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
     marginBottom: 12,
   },
   featureItem: {
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   featureText: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 14,
   },
 });

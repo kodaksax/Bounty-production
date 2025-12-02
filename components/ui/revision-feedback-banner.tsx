@@ -38,7 +38,7 @@ export function RevisionFeedbackBanner({
       </View>
       
       <View style={styles.actionHint}>
-        <MaterialIcons name="info-outline" size={16} color="#80c795" />
+        <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
         <Text style={styles.actionHintText}>
           Address the feedback and resubmit your work when ready.
         </Text>
@@ -78,19 +78,18 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   feedbackLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   feedbackBox: {
-    // Using brand secondary with transparency for feedback box background
-    backgroundColor: 'rgba(0, 117, 35, 0.2)', // brand-600/20
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)', // accent-3/20
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   feedbackText: {
     color: '#fff',
@@ -101,13 +100,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: 'rgba(0, 117, 35, 0.15)',
+    backgroundColor: 'rgba(5, 150, 105, 0.15)',
     padding: 10,
     borderRadius: 8,
   },
   actionHintText: {
     flex: 1,
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 12,
     lineHeight: 18,
   },

@@ -95,7 +95,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
       <View
         ref={modalRef}
         style={{
-          backgroundColor: '#008e2a', // brand-500
+          backgroundColor: '#059669', // emerald-600
           width: '100%',
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
@@ -166,7 +166,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               style={{ 
                 flexDirection: 'row', 
                 alignItems: 'center', 
-                backgroundColor: '#007523', 
+                backgroundColor: '#047857', 
                 borderRadius: 14,
                 padding: 18,
                 marginBottom: 20,
@@ -214,7 +214,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                   <View style={{ 
                     flexDirection: 'row', 
                     alignItems: 'center', 
-                    backgroundColor: 'rgba(128, 199, 149, 0.25)', 
+                    backgroundColor: 'rgba(16,185,129,0.25)', 
                     borderRadius: 14,
                     padding: 18,
                     marginBottom: 14,
