@@ -299,6 +299,12 @@ CREATE POLICY "skills_delete_own" ON public.skills
 -- 9. BOUNTIES TABLE RLS
 -- ============================================================================
 -- Bounties are publicly viewable but only editable by the poster
+--
+-- IMPORTANT: The bounties table has two owner columns for backwards compatibility:
+-- - user_id: Legacy column (NOT NULL) - many parts of the codebase reference this
+-- - poster_id: New canonical column (nullable) - being backfilled from user_id
+-- Both columns are checked in policies to ensure compatibility during migration.
+-- See database/schema.sql lines 84-87 for documentation of this design decision.
 
 ALTER TABLE public.bounties ENABLE ROW LEVEL SECURITY;
 
@@ -314,18 +320,20 @@ CREATE POLICY "bounties_select_all" ON public.bounties
   USING (true);
 
 -- Users can create bounties (as poster)
--- Uses user_id for backwards compatibility with existing schema
+-- Checks both user_id and poster_id for backwards compatibility
 CREATE POLICY "bounties_insert_own" ON public.bounties
   FOR INSERT
   WITH CHECK (auth.uid() = user_id OR auth.uid() = poster_id);
 
 -- Posters can update their own bounties
+-- Checks both columns for backwards compatibility
 CREATE POLICY "bounties_update_own" ON public.bounties
   FOR UPDATE
   USING (auth.uid() = user_id OR auth.uid() = poster_id)
   WITH CHECK (auth.uid() = user_id OR auth.uid() = poster_id);
 
 -- Posters can delete their own bounties (only if open/cancelled)
+-- Checks both columns for backwards compatibility
 CREATE POLICY "bounties_delete_own" ON public.bounties
   FOR DELETE
   USING (
