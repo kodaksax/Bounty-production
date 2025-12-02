@@ -15,6 +15,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 
 export default function EmailConfirmationScreen() {
   const router = useRouter();
@@ -47,8 +48,7 @@ export default function EmailConfirmationScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={32} color="#a7f3d0" />
-        <Text style={styles.brandingText}>BOUNTY</Text>
+        <BrandingLogo size="large" />
       </View>
 
       {/* Content */}

@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { AvatarFallback } from "components/ui/avatar"
+import { BrandingLogo } from "components/ui/branding-logo"
 import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from "react"
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
@@ -307,8 +308,7 @@ export function EditProfileScreen({
       <View className="flex-1 bg-emerald-600">
         <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
           <View className="flex-row items-center">
-            <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-            <Text className="text-white font-extrabold text-lg tracking-widest ml-2">BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <TouchableOpacity onPress={onBack} accessibilityLabel="Back" className="p-2">
             <MaterialIcons name="arrow-back" size={22} color="#ffffff" />
