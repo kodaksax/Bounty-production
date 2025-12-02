@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { BrandingLogo } from './ui/branding-logo';
+import { BrandingLogo } from 'components/ui/branding-logo';
 import { useHapticFeedback } from "../lib/haptic-feedback";
 
 interface TransactionConfirmationProps {
