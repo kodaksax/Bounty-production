@@ -39,7 +39,7 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
   const avatarUrl = poster_avatar || posterProfile?.avatar
 
   useEffect(() => {
-    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Loading...' -> 'Unknown Poster'
+    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Loading...' -> 'Anonymous'
     // Never fall back to the current user's profile
     if (username) {
       setResolvedUsername(username)
@@ -51,9 +51,9 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
       return
     }
 
-    // Show 'Unknown Poster' only if we're done loading and still no username
+    // Show 'Anonymous' if we're done loading and still no username
     if (!profileLoading) {
-      setResolvedUsername('Unknown Poster')
+      setResolvedUsername('Anonymous')
     } else {
       setResolvedUsername('Loading...')
     }

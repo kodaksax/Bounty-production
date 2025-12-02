@@ -6,40 +6,6 @@ let portfolioStore: Record<string, PortfolioItem[]> | null = null;
 
 const STORAGE_KEY = 'bountyexpo:portfolio_items_v1';
 
-// Seed data (fallback for the primary local user when no persisted items exist)
-const seedPortfolioItems: PortfolioItem[] = [
-  {
-    id: 'p1',
-    userId: 'current-user',
-    type: 'image',
-    url: 'https://via.placeholder.com/400x300/059669/FFFFFF?text=Project+1',
-    thumbnail: 'https://via.placeholder.com/150x150/059669/FFFFFF?text=Project+1',
-    title: 'E-commerce Platform',
-    description: 'Full-stack e-commerce solution built with React and Node.js',
-    createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'p2',
-    userId: 'current-user',
-    type: 'image',
-    url: 'https://via.placeholder.com/400x300/047857/FFFFFF?text=Project+2',
-    thumbnail: 'https://via.placeholder.com/150x150/047857/FFFFFF?text=Project+2',
-    title: 'Mobile App Design',
-    description: 'Cross-platform mobile app with React Native',
-    createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'p3',
-    userId: 'current-user',
-    type: 'video',
-    url: 'https://via.placeholder.com/400x300/065f46/FFFFFF?text=Video+Demo',
-    thumbnail: 'https://via.placeholder.com/150x150/065f46/FFFFFF?text=Video+Demo',
-    title: 'App Demo Video',
-    description: 'Demo of the bounty tracking application',
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
 // Load the per-user map from AsyncStorage into memory (noop if already loaded)
 const loadFromStorage = async () => {
   if (portfolioStore !== null) return;
@@ -55,8 +21,8 @@ const loadFromStorage = async () => {
   } catch (e) {
     console.warn('[portfolio-service] failed to load from storage', e);
   }
-  // fallback: seed only the 'current-user' key to provide demo items
-  portfolioStore = { 'current-user': [...seedPortfolioItems] };
+  // Initialize with empty store - no seed data for production readiness
+  portfolioStore = {};
   await saveToStorage();
 };
 

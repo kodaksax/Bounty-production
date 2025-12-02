@@ -203,36 +203,9 @@ class StripeService {
     try {
       await this.initialize();
       
-      // Mock data - would fetch from Stripe API
-      const mockPaymentMethods: StripePaymentMethod[] = [
-        {
-          id: 'pm_mock_visa',
-          type: 'card',
-          card: {
-            brand: 'visa',
-            last4: '4242',
-            exp_month: 12,
-            exp_year: 2025,
-          },
-          created: Date.now() / 1000,
-        },
-        {
-          id: 'pm_mock_mastercard',
-          type: 'card',
-          card: {
-            brand: 'mastercard',
-            last4: '5555',
-            exp_month: 6,
-            exp_year: 2026,
-          },
-          created: Date.now() / 1000 - 86400,
-        },
-      ];
-
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      return mockPaymentMethods;
+      // Return empty array - users need to add their own payment methods
+      // In production, this would fetch from Stripe API using the customer ID
+      return [];
     } catch (error) {
       console.error('Error fetching payment methods:', error);
       throw this.handleStripeError(error);

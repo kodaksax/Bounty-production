@@ -372,8 +372,12 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             <Text style={styles.emptyTitle}>No transactions found</Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "all"
-                ? "Your transaction history will appear here when you make deposits, withdrawals, or complete bounties."
-                : `No ${activeFilter.slice(0, -1)} transactions found`}
+                ? "Your transaction history will appear here once you make deposits, withdraw funds, or complete bounties."
+                : activeFilter === "deposits"
+                ? "No deposits yet. Add funds to your wallet to get started."
+                : activeFilter === "withdrawals"
+                ? "No withdrawals yet. Your withdrawal history will appear here."
+                : "No bounty transactions yet. Complete or post bounties to see them here."}
             </Text>
           </View>
         ) : (
