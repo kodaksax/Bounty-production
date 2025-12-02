@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BrandingLogo } from '../ui/branding-logo';
+import { BrandingLogo } from 'components/ui/branding-logo';
 import { API_BASE_URL } from '../../lib/config/api';
 import { supabase } from '../../lib/supabase';
 
