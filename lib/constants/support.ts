@@ -20,12 +20,12 @@ export const SUPPORT_PHONE = '+1 (949) 370-0909';
  * Company mailing address for legal correspondence
  */
 export const SUPPORT_ADDRESS = {
-  street: '25552 Adriana st',
+  street: '25552 Adriana Street',
   city: 'Mission Viejo',
   state: 'CA',
   zip: '92691',
   country: 'United States',
-  formatted: '25552 Adriana st, Mission Viejo, CA 92691, United States',
+  formatted: '25552 Adriana Street, Mission Viejo, CA 92691, United States',
 };
 
 /**
@@ -55,21 +55,6 @@ export const EMAIL_SUBJECTS = {
   cancellation: (bountyTitle: string) => `Cancellation Request: ${bountyTitle}`,
   general: 'Support Request',
   urgent: 'URGENT: ',
-};
-
-/**
- * Helper to generate a mailto link with proper encoding
- */
-export const createSupportMailto = (
-  subject: string,
-  body?: string
-): string => {
-  const params = new URLSearchParams();
-  params.set('subject', subject);
-  if (body) {
-    params.set('body', body);
-  }
-  return `mailto:${SUPPORT_EMAIL}?${params.toString()}`;
 };
 
 /**
