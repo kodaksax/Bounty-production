@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import * as Sentry from '@sentry/react-native'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
-import { BrandingLogo } from "./ui/branding-logo"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
