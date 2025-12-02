@@ -1,13 +1,15 @@
 /**
  * Phone Onboarding Screen
  * Third step: collect optional phone number (private, never displayed)
+ * Enhanced with trust-building messaging to encourage verification
  * Note: Phone will eventually be mandatory for verification
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Image, Alert,
+import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,8 +17,10 @@ import { Image, Alert,
   Text,
   TextInput,
   TouchableOpacity,
-  View, } from 'react-native';
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
@@ -113,19 +117,44 @@ export default function PhoneScreen() {
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
-            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
-            <Text style={styles.brandingText}>BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={{ width: 40 }} />
         </View>
 
+        {/* Trust Badge Header */}
+        <View style={styles.trustBadgeHeader}>
+          <View style={styles.trustBadge}>
+            <MaterialIcons name="verified" size={20} color="#10b981" />
+            <Text style={styles.trustBadgeText}>Build Your Trust Score</Text>
+          </View>
+        </View>
+
         {/* Content */}
         <View style={styles.content}>
-          <MaterialIcons name="phone" size={56} color="#a7f3d0" />
-          <Text style={styles.title}>Add Your Phone</Text>
+          <View style={styles.iconCircle}>
+            <MaterialIcons name="phone-android" size={48} color="#a7f3d0" />
+          </View>
+          <Text style={styles.title}>Verify Your Phone</Text>
           <Text style={styles.subtitle}>
-            Your phone number is private and used for account verification and important notifications only.
+            Verified users get more bounty matches and build trust faster. Your number stays private.
           </Text>
+        </View>
+
+        {/* Trust Benefits */}
+        <View style={styles.trustBenefits}>
+          <View style={styles.trustBenefitItem}>
+            <MaterialIcons name="star" size={18} color="#fbbf24" />
+            <Text style={styles.trustBenefitText}>Earn a verified badge on your profile</Text>
+          </View>
+          <View style={styles.trustBenefitItem}>
+            <MaterialIcons name="trending-up" size={18} color="#34d399" />
+            <Text style={styles.trustBenefitText}>Increase your chances of getting responses on your bounties</Text>
+          </View>
+          <View style={styles.trustBenefitItem}>
+            <MaterialIcons name="shield" size={18} color="#60a5fa" />
+            <Text style={styles.trustBenefitText}>Enable two-factor authentication</Text>
+          </View>
         </View>
 
         {/* Phone Input */}
@@ -149,19 +178,11 @@ export default function PhoneScreen() {
             </View>
           </View>
 
-          {/* Future requirement notice */}
-          <View style={styles.futureNotice}>
-            <MaterialIcons name="info-outline" size={18} color="#fbbf24" />
-            <Text style={styles.futureNoticeText}>
-              Phone verification will be required in the future to ensure trust and safety on the platform.
-            </Text>
-          </View>
-
           {/* Info box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
+            <MaterialIcons name="security" size={20} color="#a7f3d0" />
             <Text style={styles.infoText}>
-              Adding your phone helps build trust with other users and enables important security features like two-factor authentication.
+              We use bank-level encryption to protect your data. Your phone number is never displayed to other users.
             </Text>
           </View>
         </View>
@@ -180,7 +201,7 @@ export default function PhoneScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-            <Text style={styles.skipButtonText}>Skip for now</Text>
+            <Text style={styles.skipButtonText}>I'll do this later</Text>
           </TouchableOpacity>
         </View>
 
@@ -226,9 +247,39 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginLeft: 6,
   },
+  trustBadgeHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16,185,129,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.4)',
+  },
+  trustBadgeText: {
+    color: '#10b981',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(5,46,27,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(167,243,208,0.3)',
+  },
   content: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
   },
   title: {
     fontSize: 26,
@@ -244,6 +295,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 16,
+  },
+  trustBenefits: {
+    backgroundColor: 'rgba(5,46,27,0.5)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.2)',
+    gap: 12,
+  },
+  trustBenefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trustBenefitText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    marginLeft: 12,
+    flex: 1,
   },
   inputSection: {
     marginBottom: 24,
@@ -278,23 +348,6 @@ const styles = StyleSheet.create({
     color: '#a7f3d0',
     fontSize: 13,
     marginLeft: 6,
-    flex: 1,
-  },
-  futureNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(251,191,36,0.15)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.3)',
-  },
-  futureNoticeText: {
-    color: '#fef3c7',
-    fontSize: 13,
-    lineHeight: 18,
-    marginLeft: 10,
     flex: 1,
   },
   infoBox: {

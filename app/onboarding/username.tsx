@@ -19,6 +19,7 @@ import { Image, ActivityIndicator,
     TouchableOpacity,
     View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
@@ -263,8 +264,7 @@ export default function UsernameScreen() {
       <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
         {/* Branding Header */}
         <View style={styles.brandingHeader}>
-          <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
-          <Text style={styles.brandingText}>BOUNTY</Text>
+          <BrandingLogo size="medium" />
         </View>
 
         {/* Header */}

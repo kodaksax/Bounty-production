@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
@@ -1053,21 +1054,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         >
           {/* Header */}
             <View className="flex-row justify-between items-center px-4">
-            {/* Left: icon + title aligned like messenger (no back icon) */}
+            {/* Left: logo aligned like messenger (no back icon) */}
             <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
-              <MaterialIcons 
-                name="gps-fixed" 
-                size={24} 
-                color="#ffffff" 
-                accessibilityElementsHidden={true}
-              />
-                <Text
-                  style={{ fontSize: 20, marginLeft: 8 }}
-                  className="font-bold tracking-wider text-white"
-                  accessibilityRole="header"
-                >
-                  BOUNTY
-                </Text>
+              <BrandingLogo size="small" />
             </View>
 
             {/* Right: Wallet balance pill and bookmark (inline) */}

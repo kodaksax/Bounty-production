@@ -23,6 +23,7 @@ import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
+import { BrandingLogo } from "../../components/ui/branding-logo";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { blockingService } from "../../lib/services/blocking-service";
@@ -281,8 +282,7 @@ export default function UserProfileScreen() {
             <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <MaterialIcons name="gps-fixed" size={20} color="#ffffff" />
-            <Text style={styles.headerTitle}>BOUNTY</Text>
+            <BrandingLogo size="small" />
           </View>
           <View style={{ width: 40 }} />
         </View>
@@ -303,7 +303,7 @@ export default function UserProfileScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
@@ -329,8 +329,7 @@ export default function UserProfileScreen() {
           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <MaterialIcons name="gps-fixed" size={20} color="#ffffff" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         {!isOwnProfile && (
           <TouchableOpacity 

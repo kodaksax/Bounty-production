@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { BrandingLogo } from 'components/ui/branding-logo';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -124,8 +125,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     <View className="flex-1 bg-emerald-600">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity onPress={onBack} className="p-2" accessibilityRole="button" accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color="#000" />

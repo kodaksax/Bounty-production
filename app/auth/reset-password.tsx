@@ -1,6 +1,7 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
 import { Alert, AlertDescription } from 'components/ui/alert'
+import { BrandingLogo } from 'components/ui/branding-logo'
 import { Button } from 'components/ui/button'
 import { Input } from 'components/ui/input'
 import { Label } from 'components/ui/label'
@@ -76,8 +77,7 @@ export function ResetPasswordScreen() {
         <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
           {/* Header */}
           <View className="flex-row items-center justify-center mb-6">
-            <MaterialIcons name="gps-fixed" size={40} color="#fff" />
-            <Text className="text-white font-extrabold text-3xl tracking-widest ml-2">BOUNTY</Text>
+            <BrandingLogo size="large" />
           </View>
           
           {/* Title and Description */}

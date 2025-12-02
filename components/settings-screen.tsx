@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import * as Sentry from '@sentry/react-native'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
@@ -82,8 +83,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
       {/* Header */}
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#fff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color="#fff" />

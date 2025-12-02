@@ -2,6 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { BrandingLogo } from 'components/ui/branding-logo';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { API_BASE_URL } from '../lib/config/api';
 import { useStripe } from '../lib/stripe-context';
@@ -232,8 +233,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           <MaterialIcons name="arrow-back" size={20} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
-          <MaterialIcons name="gps-fixed" size={20} color="#fff" />
-          <Text style={styles.headerTitle}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
       </View>
       <View style={styles.titleBox}>

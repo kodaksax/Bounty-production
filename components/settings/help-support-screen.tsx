@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { BrandingLogo } from 'components/ui/branding-logo';
 
 interface HelpSupportScreenProps { onBack: () => void; onNavigateContact: () => void; onNavigateTerms: () => void; onNavigateFAQ: () => void; }
 
@@ -9,8 +10,7 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, on
     <View className="flex-1 bg-emerald-600">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#000" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#000" />

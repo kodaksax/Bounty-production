@@ -1,7 +1,7 @@
 /**
  * Onboarding Carousel
- * Shows 4 screens explaining app features on first launch
- * Includes value statement and Bounty branding
+ * Shows 5 screens explaining app features on first launch
+ * Includes value statement, how-it-works tutorial, and trust messaging
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import { Image, Animated,
   TouchableOpacity,
   View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandingLogo } from '../../components/ui/branding-logo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -34,29 +35,36 @@ const slides: SlideData[] = [
     id: '1',
     icon: 'gps-fixed',
     title: 'Welcome to Bounty',
-    description: 'A marketplace where you can post tasks, find help, and get things done safely. Post a bounty or become a hunter — it\'s that simple.',
+    description: 'The trusted marketplace for getting things done. Post a task, find local help, and pay safely — all in one place.',
     color: '#a7f3d0',
   },
   {
     id: '2',
-    icon: 'work-outline',
-    title: 'Post Tasks & Earn',
-    description: 'Create bounties for tasks you need done, or complete bounties posted by others to earn money and build your reputation.',
+    icon: 'assignment',
+    title: 'Step 1: Create a Bounty',
+    description: 'Describe what you need done, set your budget, and post it. Hunters in your area will see your task and apply to help.',
     color: '#6ee7b7',
   },
   {
     id: '3',
-    icon: 'chat-bubble-outline',
-    title: 'Coordinate with Ease',
-    description: 'Chat directly with your match to discuss details, share updates, and coordinate — all within the app.',
+    icon: 'handshake',
+    title: 'Step 2: Match & Coordinate',
+    description: 'Review applications, pick your helper, and chat directly. Coordinate details, timing, and expectations — all within the app.',
     color: '#34d399',
   },
   {
     id: '4',
-    icon: 'verified-user',
-    title: 'Safe & Secure Payments',
-    description: 'Funds are held in escrow until work is complete. Your money is protected every step of the way, ensuring trust for everyone.',
+    icon: 'check-circle',
+    title: 'Step 3: Complete & Pay',
+    description: 'Once the work is done, release payment with one tap. Funds are held in escrow until you confirm — your money is always protected.',
     color: '#10b981',
+  },
+  {
+    id: '5',
+    icon: 'verified-user',
+    title: 'Built on Trust',
+    description: 'Verified profiles, user ratings, and escrow protection keep everyone safe. Phone verification adds an extra layer of security.',
+    color: '#a7f3d0',
   },
 ];
 
@@ -176,8 +184,7 @@ export default function OnboardingCarousel() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
-        <Text style={styles.brandingText}>BOUNTY</Text>
+        <BrandingLogo size="medium" />
       </View>
 
       {/* Skip button */}
