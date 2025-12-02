@@ -111,7 +111,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "escrow":
         return <MaterialIcons name="lock" size={20} color="#f59e0b" />
       case "release":
-        return <MaterialIcons name="lock-open" size={20} color="#008e2a" />
+        return <MaterialIcons name="lock-open" size={20} color="#10b981" />
       case "refund":
         return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
@@ -161,7 +161,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             <Text
               style={[
                 styles.transactionAmount,
-                { color: transaction.amount > 0 ? '#80c795' : '#fca5a5' }
+                { color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5' }
               ]}
             >
               {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
@@ -187,7 +187,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <Text
                 style={[
                   styles.statusText,
-                  { color: transaction.details.status === "Completed" ? '#80c795' : '#fde68a' }
+                  { color: transaction.details.status === "Completed" ? '#6ee7b7' : '#fde68a' }
                 ]}
               >
                 {transaction.details.status}
@@ -273,7 +273,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "all" ? '#007523' : 'rgba(0,92,28,0.4)',
+            backgroundColor: activeFilter === "all" ? '#047857' : 'rgba(4,120,87,0.4)',
             minHeight: 44, // iOS touch target
             justifyContent: 'center',
             alignItems: 'center'
@@ -281,7 +281,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           onPress={() => handleFilterChange("all")}
         >
           <Text style={{ 
-            color: activeFilter === 'all' ? '#fff' : '#d5ecdc',
+            color: activeFilter === 'all' ? '#fff' : '#d1fae5',
             fontWeight: activeFilter === 'all' ? '600' : '500',
             fontSize: 15
           }}>All Transactions</Text>
@@ -292,7 +292,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "deposits" ? '#007523' : 'rgba(0,92,28,0.4)',
+            backgroundColor: activeFilter === "deposits" ? '#047857' : 'rgba(4,120,87,0.4)',
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -301,7 +301,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           onPress={() => handleFilterChange("deposits")}
         >
           <Text style={{ 
-            color: activeFilter === 'deposits' ? '#fff' : '#d5ecdc',
+            color: activeFilter === 'deposits' ? '#fff' : '#d1fae5',
             fontWeight: activeFilter === 'deposits' ? '600' : '500',
             fontSize: 15
           }}>Deposits</Text>
@@ -312,7 +312,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "withdrawals" ? '#007523' : 'rgba(0,92,28,0.4)',
+            backgroundColor: activeFilter === "withdrawals" ? '#047857' : 'rgba(4,120,87,0.4)',
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -321,7 +321,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           onPress={() => handleFilterChange("withdrawals")}
         >
           <Text style={{ 
-            color: activeFilter === 'withdrawals' ? '#fff' : '#d5ecdc',
+            color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5',
             fontWeight: activeFilter === 'withdrawals' ? '600' : '500',
             fontSize: 15
           }}>Withdrawals</Text>
@@ -332,7 +332,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "bounties" ? '#007523' : 'rgba(0,92,28,0.4)',
+            backgroundColor: activeFilter === "bounties" ? '#047857' : 'rgba(4,120,87,0.4)',
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -341,7 +341,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           onPress={() => handleFilterChange("bounties")}
         >
           <Text style={{ 
-            color: activeFilter === 'bounties' ? '#fff' : '#d5ecdc',
+            color: activeFilter === 'bounties' ? '#fff' : '#d1fae5',
             fontWeight: activeFilter === 'bounties' ? '600' : '500',
             fontSize: 15
           }}>Bounties</Text>
@@ -391,8 +391,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                tintColor="#80c795"
-                colors={['#80c795']}
+                tintColor="#6ee7b7"
+                colors={['#6ee7b7']}
               />
             }
             ListFooterComponent={
@@ -433,20 +433,20 @@ const styles = StyleSheet.create({
     height: 64,
     width: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(0,92,28,0.5)',
+    backgroundColor: 'rgba(4,120,87,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -455,16 +455,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   dateHeader: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     paddingVertical: 8,
   },
   dateText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#aad9b8',
+    color: '#a7f3d0',
   },
   transactionCard: {
-    backgroundColor: 'rgba(0,92,28,0.4)',
+    backgroundColor: 'rgba(4,120,87,0.4)',
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     height: 44,
     width: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,117,35,0.5)',
+    backgroundColor: 'rgba(5,150,105,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#aad9b8',
+    color: '#a7f3d0',
   },
   escrowBadge: {
     flexDirection: 'row',
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 13,
   },
 })

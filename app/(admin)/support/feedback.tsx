@@ -209,7 +209,7 @@ export default function AdminFeedbackScreen() {
               <Text style={styles.submitButtonText}>Submitting...</Text>
             ) : (
               <>
-                <MaterialIcons name="send" size={20} color="#ffffff" />
+                <MaterialIcons name="send" size={20} color="#fffef5" />
                 <Text style={styles.submitButtonText}>Submit Feedback</Text>
               </>
             )}
@@ -226,7 +226,7 @@ export default function AdminFeedbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   keyboardView: {
     flex: 1,
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   },
   typeCard: {
     width: '48%',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -297,13 +297,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.6)',
   },
   textInput: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     fontSize: 15,
-    color: '#ffffff',
+    color: '#fffef5',
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
   },
   textArea: {
     minHeight: 120,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -346,6 +346,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
 });

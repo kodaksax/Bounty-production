@@ -146,10 +146,10 @@ const buttonStyles = StyleSheet.create({
     transform: [{ scale: 1 }],
   },
   default: {
-    backgroundColor: '#008e2a', // Company specified primary green base
+    backgroundColor: '#00912C', // Company specified primary green base
     // Enhanced inner glow effect for premium feel
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.6)',
+    borderColor: 'rgba(0, 145, 44, 0.6)',
   },
   destructive: {
     backgroundColor: '#ef4444', // destructive red
@@ -159,12 +159,12 @@ const buttonStyles = StyleSheet.create({
   outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: 'rgba(0, 142, 42, 0.5)', // emerald outline
+    borderColor: 'rgba(0, 145, 44, 0.5)', // emerald outline
   },
   secondary: {
-    backgroundColor: '#007523', // secondary emerald tone
+    backgroundColor: '#2d5240', // secondary emerald tone
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.3)',
+    borderColor: 'rgba(0, 145, 44, 0.3)',
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -198,22 +198,22 @@ const buttonStyles = StyleSheet.create({
     fontWeight: '600',
   },
   defaultText: {
-    color: '#ffffff', // off-white
+    color: '#fffef5', // off-white
   },
   destructiveText: {
-    color: '#ffffff',
+    color: '#fffef5',
   },
   outlineText: {
-    color: '#008e2a', // emerald text
+    color: '#00912C', // emerald text
   },
   secondaryText: {
-    color: '#ffffff',
+    color: '#fffef5',
   },
   ghostText: {
-    color: '#008e2a', // emerald text
+    color: '#00912C', // emerald text
   },
   linkText: {
-    color: '#008e2a',
+    color: '#00912C',
     textDecorationLine: 'underline',
   },
   disabledText: {

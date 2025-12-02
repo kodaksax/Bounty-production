@@ -102,7 +102,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             onChangeText={handleTitleChange}
             onBlur={handleTitleBlur}
             placeholder="e.g., Help moving furniture, Logo design, Website fixes..."
-            placeholderTextColor="rgba(128, 199, 149, 0.4)"
+            placeholderTextColor="rgba(110, 231, 183, 0.4)"
             className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
             accessibilityLabel="Bounty title input"
             maxLength={120}
@@ -137,7 +137,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                   <MaterialIcons
                     name={category.icon}
                     size={18}
-                    color={isSelected ? '#005c1c' : '#fff'}
+                    color={isSelected ? '#065f46' : '#fff'}
                   />
                   <Text
                     className={`ml-2 font-medium ${
@@ -190,7 +190,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(128, 199, 149, 0.4)'}
+              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
             />
           </TouchableOpacity>
         </View>

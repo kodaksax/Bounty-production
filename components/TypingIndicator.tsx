@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bubble: {
-    backgroundColor: 'rgba(0, 67, 21, 0.6)', // emerald-700/60
+    backgroundColor: 'rgba(6, 95, 70, 0.6)', // emerald-700/60
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -84,11 +84,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#d5ecdc', // emerald-200
+    backgroundColor: '#d1fae5', // emerald-200
   },
   text: {
     fontSize: 12,
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontStyle: 'italic',
   },
 });

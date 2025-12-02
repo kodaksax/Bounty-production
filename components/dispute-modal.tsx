@@ -76,7 +76,7 @@ export function DisputeModal({
               disabled={isSubmitting}
               style={styles.closeButton}
             >
-              <MaterialIcons name="close" size={24} color="#d5ecdc" />
+              <MaterialIcons name="close" size={24} color="#d1fae5" />
             </TouchableOpacity>
           </View>
 
@@ -131,7 +131,7 @@ export function DisputeModal({
 
                 {/* Support contact */}
                 <View style={styles.supportCard}>
-                  <MaterialIcons name="support-agent" size={20} color="#008e2a" />
+                  <MaterialIcons name="support-agent" size={20} color="#10b981" />
                   <View style={styles.supportTextContainer}>
                     <Text style={styles.supportLabel}>Need help now?</Text>
                     <TouchableOpacity onPress={handleContactSupport}>
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modal: {
-    backgroundColor: "#007523", // emerald-700
+    backgroundColor: "#047857", // emerald-700
     borderRadius: 16,
     width: "100%",
     maxWidth: 400,
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#008e2a",
+    borderBottomColor: "#059669",
     gap: 8,
   },
   title: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   infoCard: {
-    backgroundColor: "#005c1c",
+    backgroundColor: "#065f46",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   transactionId: {
     fontSize: 12,
-    color: "#aad9b8",
+    color: "#a7f3d0",
   },
   section: {
     marginBottom: 24,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#008e2a",
+    backgroundColor: "#10b981",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -301,14 +301,14 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     fontSize: 14,
     lineHeight: 20,
   },
   supportCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#005c1c",
+    backgroundColor: "#065f46",
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
@@ -319,17 +319,17 @@ const styles = StyleSheet.create({
   },
   supportLabel: {
     fontSize: 12,
-    color: "#aad9b8",
+    color: "#a7f3d0",
     marginBottom: 2,
   },
   supportEmail: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#008e2a",
+    color: "#10b981",
     textDecorationLine: "underline",
   },
   confirmCard: {
-    backgroundColor: "#005c1c",
+    backgroundColor: "#065f46",
     padding: 24,
     borderRadius: 12,
     alignItems: "center",
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     fontSize: 14,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     textAlign: "center",
     lineHeight: 20,
   },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    backgroundColor: "#008e2a",
+    backgroundColor: "#10b981",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: {
-    color: "#aad9b8",
+    color: "#a7f3d0",
     fontSize: 14,
   },
 });

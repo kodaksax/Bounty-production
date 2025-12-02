@@ -105,7 +105,7 @@ export default function BountyDetailRouter() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#aad9b8" />
+          <ActivityIndicator size="large" color="#a7f3d0" />
           <Text style={styles.loadingText}>Loading bounty...</Text>
         </View>
       </View>
@@ -120,7 +120,7 @@ export default function BountyDetailRouter() {
           <Text style={styles.errorTitle}>Unable to Load Bounty</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <MaterialIcons name="arrow-back" size={20} color="#ffffff" />
+            <MaterialIcons name="arrow-back" size={20} color="#fffef5" />
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -132,7 +132,7 @@ export default function BountyDetailRouter() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#aad9b8" />
+        <ActivityIndicator size="large" color="#a7f3d0" />
         <Text style={styles.loadingText}>Redirecting...</Text>
       </View>
     </View>
@@ -142,7 +142,7 @@ export default function BountyDetailRouter() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   loadingContainer: {
     flex: 1,
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   errorText: {
     fontSize: 14,
@@ -175,14 +175,14 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     gap: 8,
   },
   backButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 16,
     fontWeight: '600',
   },

@@ -164,11 +164,11 @@ export function ChatDetailScreen({
       {/* Header */}
       <View
         className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
-        style={{ borderBottomColor: '#007523' }}
+        style={{ borderBottomColor: '#047857' }}
       >
         <View className="flex-row items-center flex-1">
           <TouchableOpacity onPress={onBack} className="mr-3">
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+            <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => {
@@ -197,10 +197,10 @@ export function ChatDetailScreen({
         </View>
         <View className="flex-row gap-3">
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="phone" size={24} color="#ffffff" />
+            <MaterialIcons name="phone" size={24} color="#fffef5" />
           </TouchableOpacity>
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="videocam" size={24} color="#ffffff" />
+            <MaterialIcons name="videocam" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
       </View>
@@ -259,7 +259,7 @@ export function ChatDetailScreen({
                 }}
               >
                 <Text style={styles.inputPlaceholder}>Type a message...</Text>
-                <MaterialIcons name="send" size={20} color="#d5ecdc" />
+                <MaterialIcons name="send" size={20} color="#d1fae5" />
               </TouchableOpacity>
             </View>
           </View>
@@ -357,24 +357,24 @@ const styles = StyleSheet.create({
     padding: 12,
     // Make the area outside the rounded message box match the main screen
     // (use emerald-600 to match `bg-emerald-600` on the root View)
-    backgroundColor: '#008e2a', // emerald-600
+    backgroundColor: '#059669', // emerald-600
     borderTopWidth: 1,
     // use a slightly darker border so the input area still reads as separate
-    borderTopColor: '#007523', // emerald-700
+    borderTopColor: '#047857', // emerald-700
   },
   inputButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(0, 67, 21, 0.6)',
+    backgroundColor: 'rgba(6, 95, 70, 0.6)',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   inputPlaceholder: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontSize: 15,
   },
   modalOverlay: {
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#005c1c',
+    backgroundColor: '#065f46',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingHorizontal: 16,
@@ -396,10 +396,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   inputWrapper: {
-    backgroundColor: 'rgba(0,92,28,0.6)',
+    backgroundColor: 'rgba(4,120,87,0.6)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.35)',
+    borderColor: 'rgba(16,185,129,0.35)',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -422,17 +422,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   cancelBtn: {
-    backgroundColor: 'rgba(0,67,21,0.5)',
+    backgroundColor: 'rgba(6,95,70,0.5)',
     marginRight: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.25)'
+    borderColor: 'rgba(16,185,129,0.25)'
   },
   cancelText: {
-    color: '#d5ecdc',
+    color: '#d1fae5',
     fontWeight: '600',
   },
   sendBtn: {
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     marginLeft: 8,
   },
   sendText: {

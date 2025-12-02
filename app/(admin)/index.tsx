@@ -132,7 +132,7 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 12,
   },
   carouselContainer: {
@@ -154,20 +154,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   quickLinkCard: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     height: 140,
   },
   quickLinkText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     textAlign: 'center',
   },
   loadingContainer: {
@@ -187,14 +187,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 8,
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 14,
     fontWeight: '600',
   },

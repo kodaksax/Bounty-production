@@ -41,7 +41,7 @@ export default function OnboardingIndex() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#aad9b8" />
+      <ActivityIndicator size="large" color="#a7f3d0" />
     </View>
   );
 }
@@ -49,7 +49,7 @@ export default function OnboardingIndex() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
   },

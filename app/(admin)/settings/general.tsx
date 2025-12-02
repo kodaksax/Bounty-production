@@ -62,7 +62,7 @@ export default function AdminGeneralSettingsScreen() {
               <Switch
                 value={settings.darkMode}
                 onValueChange={() => handleToggle('darkMode')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={settings.darkMode ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -74,7 +74,7 @@ export default function AdminGeneralSettingsScreen() {
               <Switch
                 value={settings.compactView}
                 onValueChange={() => handleToggle('compactView')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={settings.compactView ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -93,7 +93,7 @@ export default function AdminGeneralSettingsScreen() {
               <Switch
                 value={settings.autoRefresh}
                 onValueChange={() => handleToggle('autoRefresh')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={settings.autoRefresh ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -125,7 +125,7 @@ export default function AdminGeneralSettingsScreen() {
               <Switch
                 value={settings.showArchivedBounties}
                 onValueChange={() => handleToggle('showArchivedBounties')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={settings.showArchivedBounties ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -167,7 +167,7 @@ export default function AdminGeneralSettingsScreen() {
 
         {/* Save Button */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <MaterialIcons name="check" size={20} color="#ffffff" />
+          <MaterialIcons name="check" size={20} color="#fffef5" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>
 
@@ -181,7 +181,7 @@ export default function AdminGeneralSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 2,
   },
   settingDescription: {
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
@@ -245,6 +245,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
 });

@@ -163,7 +163,7 @@ export default function EditProfileScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#008e2a" />
+          <ActivityIndicator size="large" color="#10b981" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -392,7 +392,7 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={16} color="#80c795" />
+          <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
           <Text style={styles.infoText}>
             Badges and Achievements are earned automatically and cannot be edited here.
           </Text>
@@ -405,7 +405,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#004315", // emerald-900
+    backgroundColor: "#064e3b", // emerald-900
   },
   pinnedHeader: {
     flexDirection: "row",
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: "#007523", // emerald-700
+    backgroundColor: "#047857", // emerald-700
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   saveButton: {
-    backgroundColor: "#008e2a", // emerald-500
+    backgroundColor: "#10b981", // emerald-500
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -491,13 +491,13 @@ const styles = StyleSheet.create({
   },
   bannerPlaceholder: {
     height: 120,
-    backgroundColor: "#007523",
+    backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
   },
   bannerHelpText: {
     fontSize: 12,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     marginTop: 4,
     fontStyle: "italic",
   },
@@ -510,11 +510,11 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "#008e2a",
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 4,
-    borderColor: "#004315",
+    borderColor: "#064e3b",
   },
   avatarText: {
     fontSize: 40,
@@ -528,11 +528,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#007523",
+    backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    borderColor: "#004315",
+    borderColor: "#064e3b",
   },
   fieldGroup: {
     marginBottom: 24,
@@ -540,12 +540,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#aad9b8",
+    color: "#a7f3d0",
     marginBottom: 16,
     paddingHorizontal: 16,
   },
   fieldContainer: {
-    backgroundColor: "rgba(0, 142, 42, 0.08)",
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginBottom: 1,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#80c795",
+    color: "#6ee7b7",
     marginBottom: 6,
   },
   input: {
@@ -576,14 +576,14 @@ const styles = StyleSheet.create({
   },
   helpText: {
     fontSize: 11,
-    color: "#80c795",
+    color: "#6ee7b7",
     marginTop: 4,
     fontStyle: "italic",
   },
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "rgba(0, 142, 42, 0.12)",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
     padding: 12,
     marginHorizontal: 16,
     marginTop: 8,
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 12,
-    color: "#d5ecdc",
+    color: "#d1fae5",
     lineHeight: 16,
   },
 });

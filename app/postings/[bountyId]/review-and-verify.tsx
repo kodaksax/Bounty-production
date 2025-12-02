@@ -286,7 +286,7 @@ export default function ReviewAndVerifyScreen() {
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color="#008e2a"
+          color="#10b981"
         />
       </View>
       <View style={styles.proofInfo}>
@@ -296,7 +296,7 @@ export default function ReviewAndVerifyScreen() {
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
       <TouchableOpacity style={styles.viewButton} onPress={() => openAttachment(item)}>
-        <MaterialIcons name="visibility" size={20} color="#80c795" />
+        <MaterialIcons name="visibility" size={20} color="#6ee7b7" />
       </TouchableOpacity>
     </View>
   );
@@ -304,7 +304,7 @@ export default function ReviewAndVerifyScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008e2a" />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Loading review...</Text>
       </View>
     );
@@ -393,7 +393,7 @@ export default function ReviewAndVerifyScreen() {
             />
           ) : (
             <View style={styles.emptyProof}>
-              <MaterialIcons name="folder-open" size={48} color="#80c795" />
+              <MaterialIcons name="folder-open" size={48} color="#6ee7b7" />
               <Text style={styles.emptyProofText}>No proof submitted yet</Text>
             </View>
           )}
@@ -417,7 +417,7 @@ export default function ReviewAndVerifyScreen() {
                 <MaterialIcons
                   name={star <= rating ? 'star' : 'star-border'}
                   size={40}
-                  color={star <= rating ? '#fcd34d' : '#80c795'}
+                  color={star <= rating ? '#fcd34d' : '#6ee7b7'}
                 />
               </TouchableOpacity>
             ))}
@@ -438,7 +438,7 @@ export default function ReviewAndVerifyScreen() {
           <TextInput
             style={styles.commentInput}
             placeholder="Share your experience with this hunter..."
-            placeholderTextColor="rgba(128, 199, 149, 0.4)"
+            placeholderTextColor="rgba(110, 231, 183, 0.4)"
             value={ratingComment}
             onChangeText={setRatingComment}
             multiline
@@ -488,11 +488,11 @@ export default function ReviewAndVerifyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -540,9 +540,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 142, 42, 0.2)',
+    borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
   backIcon: {
     padding: 8,
@@ -556,18 +556,18 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   content: {
     padding: 16,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   hunterCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   hunterInfo: {
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   avatarFallbackText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#008e2a',
+    color: '#10b981',
   },
   hunterDetails: {
     flex: 1,
@@ -605,11 +605,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     marginBottom: 16,
   },
   bountyTitle: {
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bountyAmount: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionSubtitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     marginBottom: 12,
   },
@@ -643,17 +643,17 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   proofIcon: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -668,22 +668,22 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   proofSize: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
   },
   viewButton: {
     padding: 8,
   },
   emptyProof: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   emptyProofText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     marginTop: 12,
   },
@@ -710,13 +710,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   commentInput: {
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0, 142, 42, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

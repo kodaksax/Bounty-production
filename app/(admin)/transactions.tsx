@@ -150,12 +150,12 @@ function formatDate(dateString: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   filtersContainer: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,142,42,0.2)',
+    borderBottomColor: 'rgba(0,145,44,0.2)',
   },
   filtersContent: {
     paddingHorizontal: 16,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
   },
   filterText: {
     fontSize: 13,
@@ -179,18 +179,18 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   filterTextActive: {
-    color: '#ffffff',
+    color: '#fffef5',
   },
   listContent: {
     padding: 16,
   },
   transactionCard: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
   },
   transactionHeader: {
     flexDirection: 'row',
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   transactionIcon: {
     width: 40,
     height: 40,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(0,145,44,0.15)',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   amountText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   transactionMeta: {
     gap: 6,
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginTop: 16,
   },
   emptyText: {
@@ -267,14 +267,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   refreshButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 24,
   },
   refreshButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginTop: 16,
   },
   errorText: {
@@ -297,14 +297,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 24,
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 14,
     fontWeight: '600',
   },

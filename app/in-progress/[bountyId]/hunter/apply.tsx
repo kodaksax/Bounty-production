@@ -174,7 +174,7 @@ export default function HunterApplyScreen() {
         <View style={styles.bountyCard}>
           <View style={styles.bountyHeader}>
             <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color="#80c795" />
+              <MaterialIcons name="person" size={32} color="#6ee7b7" />
             </View>
             <View style={styles.bountyInfo}>
               <Text style={styles.bountyTitle} numberOfLines={2}>
@@ -232,7 +232,7 @@ export default function HunterApplyScreen() {
                     <MaterialIcons
                       name={stage.icon as any}
                       size={24}
-                      color={isActive || isCompleted ? '#fff' : '#80c795'}
+                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
                     />
                   </View>
                   <Text style={styles.stageLabel}>{stage.label}</Text>
@@ -244,7 +244,7 @@ export default function HunterApplyScreen() {
 
         {/* Waiting Room Panel */}
         <View style={styles.waitingPanel}>
-          <MaterialIcons name="hourglass-empty" size={32} color="#80c795" />
+          <MaterialIcons name="hourglass-empty" size={32} color="#6ee7b7" />
           <Text style={styles.waitingTitle}>Waiting for Selection</Text>
           <Text style={styles.waitingText}>
             Your application has been submitted. The poster is reviewing applications and will
@@ -262,13 +262,13 @@ export default function HunterApplyScreen() {
           <Text style={styles.description}>{bounty.description}</Text>
           {bounty.location && (
             <View style={styles.detailRow}>
-              <MaterialIcons name="location-on" size={16} color="#80c795" />
+              <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
               <Text style={styles.detailText}>{bounty.location}</Text>
             </View>
           )}
           {bounty.timeline && (
             <View style={styles.detailRow}>
-              <MaterialIcons name="schedule" size={16} color="#80c795" />
+              <MaterialIcons name="schedule" size={16} color="#6ee7b7" />
               <Text style={styles.detailText}>{bounty.timeline}</Text>
             </View>
           )}
@@ -281,15 +281,15 @@ export default function HunterApplyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 16,
   },
   header: {
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 199, 149, 0.1)',
+    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
   backIcon: {
     padding: 4,
@@ -343,11 +343,11 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.3)',
+    borderColor: 'rgba(110, 231, 183, 0.3)',
   },
   bountyHeader: {
     flexDirection: 'row',
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -372,14 +372,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   postedTime: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
   },
   amountContainer: {
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -415,19 +415,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderWidth: 1,
     borderColor: 'transparent',
     minWidth: 120,
   },
   stageItemActive: {
-    backgroundColor: 'rgba(0, 142, 42, 0.3)',
-    borderColor: '#008e2a',
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#10b981',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
-    borderColor: '#008e2a',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#10b981',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -436,30 +436,30 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
   },
   stageLabel: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
     textAlign: 'center',
   },
   waitingPanel: {
-    backgroundColor: 'rgba(0, 117, 35, 0.15)',
+    backgroundColor: 'rgba(5, 150, 105, 0.15)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   waitingTitle: {
     color: '#fff',
@@ -488,13 +488,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   detailsCard: {
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
     gap: 12,
   },
   detailsTitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

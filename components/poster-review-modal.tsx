@@ -412,7 +412,7 @@ export function PosterReviewModal({
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color="#80c795"
+          color="#6ee7b7"
         />
       </View>
       <View style={styles.proofInfo}>
@@ -421,7 +421,7 @@ export function PosterReviewModal({
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <MaterialIcons name="open-in-new" size={20} color="#aad9b8" />
+      <MaterialIcons name="open-in-new" size={20} color="#a7f3d0" />
       </TouchableOpacity>
     );
   };
@@ -452,12 +452,12 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#008e2a" />
+              <ActivityIndicator size="large" color="#10b981" />
               <Text style={styles.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="inbox" size={64} color="#80c795" />
+              <MaterialIcons name="inbox" size={64} color="#6ee7b7" />
               <Text style={styles.emptyText}>No submission yet</Text>
               <Text style={styles.emptySubtext}>
                 Waiting for {hunterName} to submit their work.
@@ -502,7 +502,7 @@ export function PosterReviewModal({
                   onPress={() => setShowPayoutWarning(false)}
                   disabled={isProcessing}
                 >
-                  <MaterialIcons name="arrow-back" size={18} color="#aad9b8" />
+                  <MaterialIcons name="arrow-back" size={18} color="#a7f3d0" />
                   <Text style={styles.warningCancelText}>Back to review</Text>
                 </TouchableOpacity>
               </View>
@@ -608,7 +608,7 @@ export function PosterReviewModal({
           >
             <View style={styles.hunterInfo}>
               <View style={styles.hunterAvatar}>
-                <MaterialIcons name="person" size={32} color="#80c795" />
+                <MaterialIcons name="person" size={32} color="#6ee7b7" />
               </View>
               <View style={styles.hunterDetails}>
                 <Text style={styles.hunterName}>{hunterName}</Text>
@@ -690,7 +690,7 @@ export function PosterReviewModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   header: {
     flexDirection: 'row',
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128, 199, 149, 0.1)',
+    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
   closeButton: {
     padding: 4,
@@ -746,17 +746,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.3)',
+    borderColor: 'rgba(110, 231, 183, 0.3)',
   },
   hunterAvatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -769,7 +769,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   submittedText: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 13,
     marginTop: 4,
   },
@@ -777,18 +777,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   messageBox: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   messageText: {
     color: 'rgba(255,254,245,0.9)',
@@ -801,18 +801,18 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   proofIcon: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 117, 35, 0.3)',
+    backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -826,12 +826,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   proofSize: {
-    color: '#80c795',
+    color: '#6ee7b7',
     fontSize: 12,
   },
   emptyProof: {
     padding: 24,
-    backgroundColor: 'rgba(0, 117, 35, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingVertical: 16,
     borderRadius: 12,
   },
@@ -895,18 +895,18 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   commentInput: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 16,
     color: '#fff',
     fontSize: 15,
     minHeight: 120,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -934,14 +934,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   feedbackInput: {
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 16,
     color: '#fff',
     fontSize: 15,
     minHeight: 150,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.2)',
     width: '100%',
   },
   buttonRow: {
@@ -951,15 +951,15 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: 'rgba(0, 142, 42, 0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#008e2a',
+    borderColor: '#10b981',
   },
   secondaryButtonText: {
-    color: '#008e2a',
+    color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -967,9 +967,9 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 20,
     borderRadius: 16,
-    backgroundColor: 'rgba(0, 117, 35, 0.18)',
+    backgroundColor: 'rgba(5, 150, 105, 0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.35)',
+    borderColor: 'rgba(110, 231, 183, 0.35)',
     alignItems: 'center',
     alignSelf: 'stretch',
   },
@@ -1020,20 +1020,20 @@ const styles = StyleSheet.create({
   },
   sliderTrack: {
     position: 'relative',
-    backgroundColor: 'rgba(0, 92, 28, 0.4)',
+    backgroundColor: 'rgba(4, 120, 87, 0.4)',
     borderRadius: 999,
     height: 60,
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.25)',
+    borderColor: 'rgba(110, 231, 183, 0.25)',
   },
   sliderFill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 142, 42, 0.45)',
+    backgroundColor: 'rgba(16, 185, 129, 0.45)',
   },
   sliderLabel: {
     color: 'rgba(255,254,245,0.85)',
@@ -1047,7 +1047,7 @@ const styles = StyleSheet.create({
     width: SLIDER_HANDLE_WIDTH,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
     top: 2,
@@ -1071,11 +1071,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(128, 199, 149, 0.35)',
-    backgroundColor: 'rgba(0, 117, 35, 0.2)',
+    borderColor: 'rgba(110, 231, 183, 0.35)',
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
   },
   warningCancelText: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.3,

@@ -62,7 +62,7 @@ export default function AdminNotificationSettingsScreen() {
               <Switch
                 value={notifications.pushEnabled}
                 onValueChange={() => handleToggle('pushEnabled')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.pushEnabled ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -75,7 +75,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.newReports}
                 onValueChange={() => handleToggle('newReports')}
                 disabled={!notifications.pushEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.newReports ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -88,7 +88,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.flaggedContent}
                 onValueChange={() => handleToggle('flaggedContent')}
                 disabled={!notifications.pushEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.flaggedContent ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -101,7 +101,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.systemAlerts}
                 onValueChange={() => handleToggle('systemAlerts')}
                 disabled={!notifications.pushEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.systemAlerts ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -120,7 +120,7 @@ export default function AdminNotificationSettingsScreen() {
               <Switch
                 value={notifications.emailEnabled}
                 onValueChange={() => handleToggle('emailEnabled')}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.emailEnabled ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -133,7 +133,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.dailyDigest}
                 onValueChange={() => handleToggle('dailyDigest')}
                 disabled={!notifications.emailEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.dailyDigest ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -146,7 +146,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.weeklyReport}
                 onValueChange={() => handleToggle('weeklyReport')}
                 disabled={!notifications.emailEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.weeklyReport ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -159,7 +159,7 @@ export default function AdminNotificationSettingsScreen() {
                 value={notifications.criticalAlerts}
                 onValueChange={() => handleToggle('criticalAlerts')}
                 disabled={!notifications.emailEnabled}
-                trackColor={{ false: '#767577', true: '#008e2a' }}
+                trackColor={{ false: '#767577', true: '#00912C' }}
                 thumbColor={notifications.criticalAlerts ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -201,7 +201,7 @@ export default function AdminNotificationSettingsScreen() {
 
         {/* Save Button */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <MaterialIcons name="check" size={20} color="#ffffff" />
+          <MaterialIcons name="check" size={20} color="#fffef5" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>
 
@@ -215,7 +215,7 @@ export default function AdminNotificationSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 2,
   },
   settingDescription: {
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
@@ -282,6 +282,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
 });

@@ -75,7 +75,7 @@ export function RatingPromptModal({
               disabled={isSubmitting}
               style={styles.closeButton}
             >
-              <MaterialIcons name="close" size={24} color="#d5ecdc" />
+              <MaterialIcons name="close" size={24} color="#d1fae5" />
             </TouchableOpacity>
           </View>
 
@@ -105,7 +105,7 @@ export function RatingPromptModal({
                     <MaterialIcons
                       name={score && star <= score ? "star" : "star-border"}
                       size={40}
-                      color={score && star <= score ? "#fcd34d" : "#80c795"}
+                      color={score && star <= score ? "#fcd34d" : "#6ee7b7"}
                     />
                   </TouchableOpacity>
                 ))}
@@ -118,7 +118,7 @@ export function RatingPromptModal({
               <TextInput
                 style={styles.commentInput}
                 placeholder="Share your thoughts..."
-                placeholderTextColor="#80c79580"
+                placeholderTextColor="#6ee7b780"
                 value={comment}
                 onChangeText={setComment}
                 multiline
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modal: {
-    backgroundColor: "#007523", // emerald-700
+    backgroundColor: "#047857", // emerald-700
     borderRadius: 16,
     width: "100%",
     maxWidth: 400,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#008e2a",
+    borderBottomColor: "#059669",
   },
   title: {
     fontSize: 18,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   infoCard: {
-    backgroundColor: "#005c1c",
+    backgroundColor: "#065f46",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 14,
-    color: "#aad9b8",
+    color: "#a7f3d0",
   },
   starsContainer: {
     marginBottom: 24,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#d5ecdc",
+    color: "#d1fae5",
     marginBottom: 12,
   },
   stars: {
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   commentInput: {
-    backgroundColor: "#005c1c",
+    backgroundColor: "#065f46",
     borderRadius: 12,
     padding: 12,
     color: "#fff",
@@ -248,11 +248,11 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
     borderWidth: 1,
-    borderColor: "#008e2a",
+    borderColor: "#059669",
   },
   charCount: {
     fontSize: 12,
-    color: "#80c795",
+    color: "#6ee7b7",
     textAlign: "right",
     marginTop: 4,
   },
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   submitButton: {
-    backgroundColor: "#008e2a",
+    backgroundColor: "#10b981",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   skipButtonText: {
-    color: "#aad9b8",
+    color: "#a7f3d0",
     fontSize: 14,
   },
 });

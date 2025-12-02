@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#004315',
+    backgroundColor: '#064e3b',
   },
   title: {
     fontSize: 18,
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   button: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#10b981',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   attachmentButton: {
-    backgroundColor: '#007523',
+    backgroundColor: '#047857',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
@@ -241,16 +241,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   attachmentSize: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 12,
   },
   note: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 14,
     fontStyle: 'italic',
   },
   chatBubble: {
-    backgroundColor: '#007523',
+    backgroundColor: '#047857',
     padding: 12,
     borderRadius: 8,
     maxWidth: '80%',
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   attachmentPreview: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
     padding: 8,
     borderRadius: 4,
   },

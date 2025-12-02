@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 6,
-		backgroundColor: '#008e2a',
+		backgroundColor: '#10b981',
 		marginHorizontal: 6,
 	},
 	devBtnText: {

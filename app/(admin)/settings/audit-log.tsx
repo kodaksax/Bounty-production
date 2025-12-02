@@ -241,7 +241,7 @@ export default function AdminAuditLogScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   filterContainer: {
     flexDirection: 'row',
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,142,42,0.2)',
+    borderBottomColor: 'rgba(0,145,44,0.2)',
   },
   filterTab: {
     flexDirection: 'row',
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterTabActive: {
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
   },
   filterText: {
     fontSize: 13,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.7)',
   },
   filterTextActive: {
-    color: '#ffffff',
+    color: '#fffef5',
   },
   filterDot: {
     width: 8,
@@ -280,12 +280,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   logCard: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
   },
   logHeader: {
     flexDirection: 'row',
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 36,
     height: 36,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(0,145,44,0.15)',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 2,
   },
   userText: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
     marginTop: 16,
   },
   emptyText: {

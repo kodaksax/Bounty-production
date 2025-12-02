@@ -86,7 +86,7 @@ export default function AnalyticsDashboard() {
         {error && (
           <View style={styles.errorContainer}>
             <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-              <MaterialIcons name="refresh" size={20} color="#ffffff" />
+              <MaterialIcons name="refresh" size={20} color="#fffef5" />
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -102,7 +102,7 @@ export default function AnalyticsDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -133,14 +133,14 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#008e2a',
+    backgroundColor: '#00912C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     gap: 8,
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: '#fffef5',
     fontSize: 14,
     fontWeight: '600',
   },

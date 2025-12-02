@@ -123,7 +123,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         {/* Wallet Balance Display */}
         <View className="mb-4 bg-emerald-700/30 rounded-lg p-3 flex-row items-center justify-between">
           <View className="flex-row items-center">
-            <MaterialIcons name="account-balance-wallet" size={20} color="#80c795" />
+            <MaterialIcons name="account-balance-wallet" size={20} color="#6ee7b7" />
             <Text className="text-emerald-100 text-sm font-medium ml-2">
               Available Balance:
             </Text>
@@ -147,7 +147,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
             <Switch
               value={draft.isForHonor}
               onValueChange={handleHonorToggle}
-              trackColor={{ false: '#005c1c', true: '#34d399' }}
+              trackColor={{ false: '#065f46', true: '#34d399' }}
               thumbColor={draft.isForHonor ? '#fff' : '#d1d5db'}
               accessibilityLabel="Post for honor toggle"
             />
@@ -220,7 +220,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                   <MaterialIcons
                     name="edit"
                     size={20}
-                    color={isCustomSelected ? '#005c1c' : 'rgba(128, 199, 149, 0.6)'}
+                    color={isCustomSelected ? '#065f46' : 'rgba(110, 231, 183, 0.6)'}
                   />
                 </View>
               </TouchableOpacity>
@@ -235,7 +235,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                     value={customAmount}
                     onChangeText={handleCustomAmountChange}
                     placeholder="0"
-                    placeholderTextColor="rgba(128, 199, 149, 0.4)"
+                    placeholderTextColor="rgba(110, 231, 183, 0.4)"
                     keyboardType="numeric"
                     className="flex-1 text-white text-lg"
                     accessibilityLabel="Custom amount input"
@@ -267,7 +267,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                 <MaterialIcons
                   name="info-outline"
                   size={20}
-                  color="rgba(128, 199, 149, 0.8)"
+                  color="rgba(110, 231, 183, 0.8)"
                   style={{ marginRight: 8, marginTop: 2 }}
                 />
                 <View className="flex-1">
@@ -289,7 +289,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
               <MaterialIcons
                 name="favorite"
                 size={20}
-                color="rgba(128, 199, 149, 0.8)"
+                color="rgba(110, 231, 183, 0.8)"
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
@@ -340,7 +340,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(128, 199, 149, 0.4)'}
+              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
             />
           </TouchableOpacity>
         </View>

@@ -6,7 +6,7 @@ import { useAdmin } from '../../lib/admin-context';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 
 // Admin screen background color - darker green theme
-const ADMIN_BG_COLOR = '#008e2a';
+const ADMIN_BG_COLOR = '#1a3d2e';
 
 export default function AdminLayout() {
   const { isAdmin, isLoading } = useAdmin();

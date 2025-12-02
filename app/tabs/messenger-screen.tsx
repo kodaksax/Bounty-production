@@ -296,7 +296,7 @@ export function MessengerScreen({
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#008e2a']}
+            colors={['#10b981']}
           />
         }
         // Performance optimizations

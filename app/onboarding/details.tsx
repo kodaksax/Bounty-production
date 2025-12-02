@@ -202,10 +202,10 @@ export default function DetailsScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#aad9b8" />
+            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
-            <MaterialIcons name="gps-fixed" size={20} color="#aad9b8" />
+            <MaterialIcons name="gps-fixed" size={20} color="#a7f3d0" />
             <Text style={styles.brandingText}>BOUNTY</Text>
           </View>
           <View style={{ width: 40 }} />
@@ -340,7 +340,7 @@ export default function DetailsScreen() {
                   <View key={skill} style={styles.customSkillChip}>
                     <Text style={styles.customSkillText}>{skill}</Text>
                     <TouchableOpacity onPress={() => removeSkill(skill)}>
-                      <MaterialIcons name="close" size={16} color="#aad9b8" />
+                      <MaterialIcons name="close" size={16} color="#a7f3d0" />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -403,7 +403,7 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#059669',
   },
   scrollContent: {
     flexGrow: 1,
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     overflow: 'hidden',
     borderWidth: 3,
-    borderColor: '#aad9b8',
+    borderColor: '#a7f3d0',
   },
   avatarImage: {
     width: '100%',
@@ -466,14 +466,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#008e2a',
+    borderColor: '#059669',
   },
   avatarHint: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 8,
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -556,8 +556,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,243,208,0.3)',
   },
   skillChipSelected: {
-    backgroundColor: '#aad9b8',
-    borderColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
+    borderColor: '#a7f3d0',
   },
   skillChipText: {
     color: 'rgba(255,255,255,0.9)',
@@ -583,10 +583,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#097959',
     borderWidth: 1,
-    borderColor: '#aad9b8',
+    borderColor: '#a7f3d0',
   },
   customSkillText: {
-    color: '#aad9b8',
+    color: '#a7f3d0',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 8,
     top: 8,
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 12,
@@ -643,6 +643,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#aad9b8',
+    backgroundColor: '#a7f3d0',
   },
 });

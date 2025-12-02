@@ -225,7 +225,7 @@ export default function AdminHelpCenterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008e2a',
+    backgroundColor: '#1a3d2e',
   },
   scrollView: {
     flex: 1,
@@ -236,19 +236,19 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginBottom: 20,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#ffffff',
+    color: '#fffef5',
   },
   categoryContainer: {
     marginBottom: 12,
@@ -256,17 +256,17 @@ const styles = StyleSheet.create({
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     gap: 12,
   },
   categoryIcon: {
     width: 40,
     height: 40,
-    backgroundColor: 'rgba(0,142,42,0.15)',
+    backgroundColor: 'rgba(0,145,44,0.15)',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   articleCount: {
     fontSize: 13,
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   articleItemTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#ffffff',
+    color: '#fffef5',
     marginBottom: 2,
   },
   articleSummary: {
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   emptyText: {
     fontSize: 14,
@@ -339,14 +339,14 @@ const styles = StyleSheet.create({
   articleTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#fffef5',
   },
   articleContent: {
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,142,42,0.2)',
+    borderColor: 'rgba(0,145,44,0.2)',
     marginBottom: 24,
   },
   articleText: {
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   feedbackButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007523',
+    backgroundColor: '#2d5240',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   },
   feedbackButtonText: {
     fontSize: 14,
-    color: '#ffffff',
+    color: '#fffef5',
     fontWeight: '500',
   },
 });
