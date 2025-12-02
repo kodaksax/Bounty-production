@@ -21,6 +21,7 @@ import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+import { getUserFriendlyError } from '../lib/utils/error-messages';
 
 
 // Load test utilities in development
@@ -100,14 +101,21 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
   }
   render() {
     if (this.state.error) {
+      // Get user-friendly error message (hides technical details)
+      const userError = getUserFriendlyError(this.state.error);
+      
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <View style={{ maxWidth: 320, width: '100%' }}>
             <View style={{ marginBottom: 16 }}>
-              <Text style={{ color: 'white', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>Something went wrong</Text>
-              <Text style={{ color: 'white', fontSize: 14, opacity: 0.85 }} numberOfLines={4}>{this.state.error.message}</Text>
+              <Text style={{ color: 'white', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>{userError.title}</Text>
+              <Text style={{ color: 'white', fontSize: 14, opacity: 0.85 }} numberOfLines={4}>{userError.message}</Text>
             </View>
-            <Text style={{ color: 'white', fontSize: 12, opacity: 0.6 }}>Restart the app or check recent changes. See console for stack trace.</Text>
+            <Text style={{ color: 'white', fontSize: 12, opacity: 0.6 }}>
+              {userError.retryable 
+                ? 'Please restart the app to try again.'
+                : 'Please restart the app or contact support if the problem persists.'}
+            </Text>
           </View>
         </View>
       );
