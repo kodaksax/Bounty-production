@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { BrandingLogo } from '../ui/branding-logo';
+import { BrandingLogo } from 'components/ui/branding-logo';
 
 interface ContactSupportScreenProps { onBack: () => void }
 
