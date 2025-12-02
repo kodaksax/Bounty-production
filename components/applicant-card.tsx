@@ -7,6 +7,8 @@ import type { BountyRequestWithDetails } from '../lib/services/bounty-request-se
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
+import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+import { ReputationScoreCompact } from './ui/reputation-score';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -132,15 +134,29 @@ export function ApplicantCard({
         </View>
 
         <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
-          <Text style={styles.applicantName}>
-            {request.profile?.username || 'Unknown User'}
-          </Text>
-          <View style={styles.ratingContainer}>
-            <MaterialIcons name="star" size={14} color="#fbbf24" />
-            <Text style={styles.ratingText}>
-              {request.profile?.averageRating?.toFixed(1) || '—'}
-              {request.profile?.ratingCount ? ` (${request.profile.ratingCount})` : ''}
+          <View style={styles.nameRow}>
+            <Text style={styles.applicantName}>
+              {request.profile?.username || 'Unknown User'}
             </Text>
+            {/* Verification Badge */}
+            <VerificationBadge 
+              status={((request.profile as any)?.verificationStatus || 'unverified') as VerificationLevel}
+              size="small"
+              showLabel={false}
+              showExplanation={true}
+            />
+          </View>
+          {/* Reputation Score - prominently displayed */}
+          <View style={styles.ratingContainer}>
+            <ReputationScoreCompact 
+              averageRating={request.profile?.averageRating || 0}
+              ratingCount={request.profile?.ratingCount || 0}
+            />
+            {request.profile?.ratingCount ? (
+              <Text style={styles.ratingText}>
+                ({request.profile.ratingCount} review{request.profile.ratingCount !== 1 ? 's' : ''})
+              </Text>
+            ) : null}
           </View>
         </View>{/* avoid whitespace text node */}
 
@@ -269,20 +285,25 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   applicantName: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   ratingText: {
     color: '#a7f3d0', // emerald-200
-    fontSize: 13,
+    fontSize: 12,
   },
   bountySection: {
     marginBottom: 16,

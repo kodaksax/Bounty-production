@@ -5,6 +5,8 @@ import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableO
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
+import { TrustBadgesCompact } from '../../../components/ui/trust-badges';
 import type { Attachment } from '../../../lib/types';
 
 interface StepReviewProps {
@@ -72,7 +74,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
       <FlatList
         ref={(r) => { listRef.current = r }}
         data={useMemo(() => {
-          const sections: string[] = ['header', 'title', 'description', 'compensation', 'location'];
+          const sections: string[] = ['header', 'trust_badges', 'title', 'description', 'compensation', 'location'];
           if (draft.timeline || draft.skills) sections.push('optional');
           if (draft.attachments && draft.attachments.length > 0) sections.push('attachments');
           if (!draft.isForHonor) sections.push('escrow');
@@ -94,6 +96,12 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                 <View className="mb-6">
                   <Text className="text-emerald-100 text-xl font-bold mb-2">Review Your Bounty</Text>
                   <Text className="text-emerald-200/70 text-sm">Double-check everything before posting</Text>
+                </View>
+              );
+            case 'trust_badges':
+              return (
+                <View className="mb-4">
+                  <TrustBadgesCompact />
                 </View>
               );
             case 'title':
@@ -186,16 +194,13 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               );
             case 'escrow':
               return (
-                <TouchableOpacity onPress={() => setShowEscrowModal(true)} className="mb-6 bg-emerald-500/20 rounded-lg p-4 border border-emerald-400/30" accessibilityLabel="View escrow information" accessibilityRole="button">
-                  <View className="flex-row items-start">
-                    <MaterialIcons name="security" size={24} color="rgba(52, 211, 153, 0.9)" style={{ marginRight: 12 }} />
-                    <View className="flex-1">
-                      <Text className="text-emerald-100 font-semibold mb-1">Escrow Protection Active</Text>
-                      <Text className="text-emerald-200/70 text-sm mb-2">${draft.amount} will be held securely until you approve completion</Text>
-                      <View className="flex-row items-center"><Text className="text-emerald-300 text-sm font-medium">Learn how it works</Text><MaterialIcons name="arrow-forward" size={16} color="rgba(52, 211, 153, 0.9)" style={{ marginLeft: 4 }} /></View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                <View className="mb-6">
+                  <EscrowExplainer 
+                    amount={draft.amount} 
+                    variant="card" 
+                    showLearnMore={true}
+                  />
+                </View>
               );
             default:
               return null;

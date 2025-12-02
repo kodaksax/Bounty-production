@@ -7,6 +7,7 @@ import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
+import { TrustBadges } from "components/ui/trust-badges";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
@@ -344,7 +345,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* Portfolio (standalone, after skillsets) */}
         <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
 
-        
+        {/* Platform Security & Trust Badges */}
+        <View style={styles.section}>
+          <TrustBadges compact={true} />
+        </View>
 
         {/* Achievements - grid display (last) */}
         <View style={styles.section}>
