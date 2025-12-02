@@ -149,7 +149,7 @@ export default function PhoneScreen() {
           </View>
           <View style={styles.trustBenefitItem}>
             <MaterialIcons name="trending-up" size={18} color="#34d399" />
-            <Text style={styles.trustBenefitText}>Get 2x more responses on your bounties</Text>
+            <Text style={styles.trustBenefitText}>Increase your chances of getting responses on your bounties</Text>
           </View>
           <View style={styles.trustBenefitItem}>
             <MaterialIcons name="shield" size={18} color="#60a5fa" />
