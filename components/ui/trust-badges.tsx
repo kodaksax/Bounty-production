@@ -1,10 +1,14 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+// Type for MaterialIcons icon names
+type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
+
 export interface TrustBadge {
   id: string;
-  icon: string;
+  icon: MaterialIconName;
   title: string;
   description: string;
   color: string;
@@ -108,7 +112,7 @@ export function TrustBadges({
             accessibilityHint={`Learn more about ${badge.title}`}
           >
             <View style={[styles.badgeIconCircle, { backgroundColor: `${badge.color}20` }]}>
-              <MaterialIcons name={badge.icon as any} size={compact ? 20 : 24} color={badge.color} />
+              <MaterialIcons name={badge.icon} size={compact ? 20 : 24} color={badge.color} />
             </View>
             {!compact && (
               <View style={styles.badgeTextContainer}>
@@ -142,7 +146,7 @@ export function TrustBadges({
                 <View style={styles.modalHeader}>
                   <View style={[styles.modalIconCircle, { backgroundColor: `${selectedBadge.color}20` }]}>
                     <MaterialIcons 
-                      name={selectedBadge.icon as any} 
+                      name={selectedBadge.icon} 
                       size={40} 
                       color={selectedBadge.color} 
                     />
@@ -191,7 +195,7 @@ export function TrustBadgesCompact() {
             accessibilityRole="button"
             accessibilityLabel={badge.title}
           >
-            <MaterialIcons name={badge.icon as any} size={16} color={badge.color} />
+            <MaterialIcons name={badge.icon} size={16} color={badge.color} />
             <Text style={styles.compactBadgeText}>{badge.title}</Text>
           </TouchableOpacity>
         ))}
@@ -214,7 +218,7 @@ export function TrustBadgesCompact() {
                 <View style={styles.modalHeader}>
                   <View style={[styles.modalIconCircle, { backgroundColor: `${selectedBadge.color}20` }]}>
                     <MaterialIcons 
-                      name={selectedBadge.icon as any} 
+                      name={selectedBadge.icon} 
                       size={40} 
                       color={selectedBadge.color} 
                     />

@@ -100,7 +100,9 @@ export function EnhancedProfileSection({
   } = useFollow(userId || 'current-user');
   
   // Fetch reputation/rating stats for this user
-  const { stats: ratingStats, loading: ratingsLoading } = useRatings(resolvedUserId !== 'current-user' ? resolvedUserId : undefined);
+  // Pass undefined for current-user to let the hook handle it (it early-returns with defaults)
+  const ratingUserId = resolvedUserId === 'current-user' ? undefined : resolvedUserId;
+  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
