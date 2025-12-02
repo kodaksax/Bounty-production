@@ -27,7 +27,7 @@ export function WalletBalanceButton({ onPress, accessibilityLabel }: WalletBalan
       accessibilityHint="Tap to view wallet and add money"
     >
       <View style={styles.balanceCard}>
-        <MaterialIcons name="account-balance-wallet" size={16} color="#6ee7b7" style={{ marginRight: 6 }} />
+        <MaterialIcons name="account-balance-wallet" size={16} color="#80c795" style={{ marginRight: 6 }} />
         <Text style={styles.headerBalance}>${balance.toFixed(2)}</Text>
       </View>
     </TouchableOpacity>
@@ -44,12 +44,12 @@ const styles = StyleSheet.create({
   balanceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#6ee7b7',
+    borderColor: '#80c795',
   },
   headerBalance: {
     fontSize: 14,

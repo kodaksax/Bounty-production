@@ -1037,7 +1037,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               left: 0,
               right: 0,
               zIndex: 20,
-              backgroundColor: "#059669", // emerald-600
+              backgroundColor: "#008e2a", // emerald-600
               paddingTop: insets.top, // ensure content starts right under the status bar safe area
             },
             showShadow
@@ -1263,7 +1263,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#008e2a']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -1311,7 +1311,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#008e2a']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -1390,7 +1390,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#008e2a']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}

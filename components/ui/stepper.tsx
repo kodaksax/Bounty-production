@@ -41,7 +41,7 @@ export function Stepper({ stages, activeIndex, variant = 'compact' }: StepperPro
                 <MaterialIcons
                   name={stage.icon as any}
                   size={variant === 'full' ? 16 : 8}
-                  color={isCompleted || isActive ? '#fff' : 'rgba(110,231,183,0.5)'}
+                  color={isCompleted || isActive ? '#fff' : 'rgba(128,199,149,0.5)'}
                 />
               )}
             </View>
@@ -76,27 +76,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bubbleIdle: {
-    backgroundColor: 'rgba(110,231,183,0.3)',
+    backgroundColor: 'rgba(128,199,149,0.3)',
   },
   bubbleActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#008e2a',
   },
   bubbleCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   connector: {
     width: 18,
     height: 2,
-    backgroundColor: 'rgba(110,231,183,0.35)',
+    backgroundColor: 'rgba(128,199,149,0.35)',
     marginHorizontal: 6,
   },
   label: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 10,
     marginLeft: 4,
   },
   labelActive: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontWeight: '600',
   },
 });

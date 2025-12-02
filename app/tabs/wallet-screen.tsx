@@ -236,7 +236,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 {recentTransactions.map(tx => (
                   <View key={tx.id} style={styles.bountyCard}>
                     <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
-                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#80c795' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
                   </View>
                 ))}
               </>
@@ -259,7 +259,7 @@ export default WalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   header: {
     flexDirection: 'row',
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
     gap: 8,
   },
   headerTitleRow: {
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SECTION_GAP,
   },
   balanceCard: {
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
     borderRadius: SPACING.SCREEN_HORIZONTAL,
     padding: 20,
     shadowColor: '#000',
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SCREEN_HORIZONTAL,
   },
   balanceLabel: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     textTransform: 'uppercase',
     fontWeight: 'bold',
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#005c1c',
     borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   sectionManage: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: 'bold',
     minWidth: SIZING.MIN_TOUCH_TARGET,
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: '#007523cc',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: 10,
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   accountIcon: {
     height: SIZING.AVATAR_MEDIUM,
     width: SIZING.AVATAR_MEDIUM,
-    backgroundColor: '#065f46',
+    backgroundColor: '#005c1c',
     borderRadius: SPACING.COMPACT_GAP,
     alignItems: 'center',
     justifyContent: 'center',
@@ -391,14 +391,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   accountSub: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: '#007523cc',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: 10,
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyStateText: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     opacity: 0.9,
   },

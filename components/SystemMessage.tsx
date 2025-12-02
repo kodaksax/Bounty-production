@@ -32,7 +32,7 @@ export function SystemMessage({ message, type = 'info', timestamp }: SystemMessa
       case 'revision':
         return '#fbbf24';
       default:
-        return '#6ee7b7';
+        return '#80c795';
     }
   };
 
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageBox: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(0, 117, 35, 0.15)',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     gap: 8,
     maxWidth: '85%',
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
+    borderColor: 'rgba(128, 199, 149, 0.3)',
   },
   revisionBox: {
     backgroundColor: 'rgba(251, 191, 36, 0.15)',

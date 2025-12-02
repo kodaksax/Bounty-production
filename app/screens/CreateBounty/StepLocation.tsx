@@ -132,7 +132,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                 <MaterialIcons
                   name="place"
                   size={32}
-                  color={draft.workType === 'in_person' ? '#065f46' : '#fff'}
+                  color={draft.workType === 'in_person' ? '#005c1c' : '#fff'}
                 />
                 <Text
                   className={`mt-2 font-semibold ${
@@ -159,7 +159,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                 <MaterialIcons
                   name="language"
                   size={32}
-                  color={draft.workType === 'online' ? '#065f46' : '#fff'}
+                  color={draft.workType === 'online' ? '#005c1c' : '#fff'}
                 />
                 <Text
                   className={`mt-2 font-semibold ${
@@ -184,7 +184,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
               onChangeText={handleLocationChange}
               onBlur={handleLocationBlur}
               placeholder="e.g., San Francisco, CA or 123 Main St"
-              placeholderTextColor="rgba(110, 231, 183, 0.4)"
+              placeholderTextColor="rgba(128, 199, 149, 0.4)"
               className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
               accessibilityLabel="Location input"
             />
@@ -228,7 +228,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                 <MaterialIcons
                   name="info-outline"
                   size={16}
-                  color="rgba(110, 231, 183, 0.8)"
+                  color="rgba(128, 199, 149, 0.8)"
                   style={{ marginRight: 6, marginTop: 2 }}
                 />
                 <Text className="text-emerald-200/70 text-xs flex-1">
@@ -246,7 +246,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
               <MaterialIcons
                 name="cloud"
                 size={20}
-                color="rgba(110, 231, 183, 0.8)"
+                color="rgba(128, 199, 149, 0.8)"
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
@@ -271,7 +271,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
               <MaterialIcons
                 name="public"
                 size={20}
-                color="rgba(110, 231, 183, 0.8)"
+                color="rgba(128, 199, 149, 0.8)"
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
@@ -324,7 +324,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+              color={isValid ? '#fff' : 'rgba(128, 199, 149, 0.4)'}
             />
           </TouchableOpacity>
         </View>

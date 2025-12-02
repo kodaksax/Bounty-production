@@ -55,7 +55,7 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
           <MaterialIcons name="lock" size={20} color="rgba(255,255,255,0.45)" />
         ) : (
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <MaterialIcons name="expand-more" size={24} color="#6ee7b7" />
+            <MaterialIcons name="expand-more" size={24} color="#80c795" />
           </Animated.View>
         )}
       </TouchableOpacity>
@@ -72,10 +72,10 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(0, 117, 35, 0.15)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(0, 142, 42, 0.2)',
     marginVertical: 8,
     overflow: 'hidden',
   },
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   title: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',

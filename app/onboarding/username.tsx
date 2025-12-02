@@ -231,7 +231,7 @@ export default function UsernameScreen() {
             <MaterialIcons 
               name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'} 
               size={24} 
-              color="#a7f3d0" 
+              color="#aad9b8" 
             />
             <Text style={styles.modalTitle}>{title}</Text>
             <TouchableOpacity 
@@ -263,13 +263,13 @@ export default function UsernameScreen() {
       <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
         {/* Branding Header */}
         <View style={styles.brandingHeader}>
-          <MaterialIcons name="gps-fixed" size={28} color="#a7f3d0" />
+          <MaterialIcons name="gps-fixed" size={28} color="#aad9b8" />
           <Text style={styles.brandingText}>BOUNTY</Text>
         </View>
 
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="person-outline" size={56} color="#a7f3d0" />
+          <MaterialIcons name="person-outline" size={56} color="#aad9b8" />
           <Text style={styles.title}>Choose Your Username</Text>
           <Text style={styles.subtitle}>
             This is how others will find you. Pick something unique and memorable.
@@ -291,10 +291,10 @@ export default function UsernameScreen() {
               autoFocus
             />
             {checking && (
-              <ActivityIndicator size="small" color="#a7f3d0" style={styles.indicator} />
+              <ActivityIndicator size="small" color="#aad9b8" style={styles.indicator} />
             )}
             {!checking && username && isValid && (
-              <MaterialIcons name="check-circle" size={24} color="#10b981" style={styles.indicator} />
+              <MaterialIcons name="check-circle" size={24} color="#008e2a" style={styles.indicator} />
             )}
           </View>
           
@@ -324,7 +324,7 @@ export default function UsernameScreen() {
             accessibilityState={{ checked: accepted }}
             accessibilityLabel="Accept terms and privacy policy"
           >
-            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#aad9b8" />
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
               onPress={() => setLegalModal('terms')}
@@ -374,7 +374,7 @@ export default function UsernameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   content: {
     flex: 1,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   linkText: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     textDecorationLine: 'underline',
     fontSize: 13,
     fontWeight: '600',
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   atSymbol: {
     fontSize: 24,
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontWeight: '600',
     marginRight: 4,
   },
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 20,
@@ -523,12 +523,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
   },
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
   },
   modalHeader: {
     flexDirection: 'row',

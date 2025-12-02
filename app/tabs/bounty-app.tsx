@@ -398,7 +398,7 @@ function BountyAppInner() {
       ) : (
         <>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#aad9b8', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
             <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </>
@@ -510,7 +510,7 @@ function BountyAppInner() {
                       <MaterialIcons 
                         name={item.icon} 
                         size={SIZING.ICON_SMALL} 
-                        color={isActive ? '#052e1b' : '#d1fae5'} 
+                        color={isActive ? '#052e1b' : '#d5ecdc'} 
                         style={{ marginRight: SPACING.COMPACT_GAP }}
                         accessibilityElementsHidden={true}
                       />
@@ -530,7 +530,7 @@ function BountyAppInner() {
                     <MaterialIcons
                       name={item.icon}
                       size={SIZING.ICON_SMALL}
-                      color={isActive ? '#052e1b' : '#d1fae5'}
+                      color={isActive ? '#052e1b' : '#d5ecdc'}
                       style={{ marginRight: SPACING.COMPACT_GAP }}
                       accessibilityElementsHidden={true}
                     />
@@ -586,7 +586,7 @@ function BountyAppInner() {
           )}
         </Animated.View>
         <LinearGradient
-          colors={["rgba(5,150,105,0.0)", "rgba(5,150,105,0.25)", "rgba(5,150,105,0.55)"]}
+          colors={["rgba(0,117,35,0.0)", "rgba(0,117,35,0.25)", "rgba(0,117,35,0.55)"]}
           style={styles.gradientSeparator}
           pointerEvents="none"
         />
@@ -623,7 +623,7 @@ function BountyAppInner() {
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
-        colors={["rgba(5,150,105,0)", "rgba(5,150,105,0.5)", "#059669"]}
+        colors={["rgba(0,117,35,0)", "rgba(0,117,35,0.5)", "#008e2a"]}
         style={styles.bottomFade}
         pointerEvents="none"
       />
@@ -674,9 +674,9 @@ export function BountyApp() {
 
 // Styles (consolidated with standardized spacing and sizing)
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
+  container: { flex: 1, backgroundColor: '#008e2a', position: 'relative' },
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#008e2a' },
   headerRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -708,12 +708,12 @@ const styles = StyleSheet.create({
   balanceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: '#007523',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#6ee7b7',
+    borderColor: '#80c795',
   },
   headerBalance: { 
     fontSize: 14, 
@@ -750,9 +750,9 @@ const styles = StyleSheet.create({
     marginRight: SPACING.COMPACT_GAP,
     minHeight: SIZING.MIN_TOUCH_TARGET 
   },
-  chipActive: { backgroundColor: '#a7f3d0' },
+  chipActive: { backgroundColor: '#aad9b8' },
   chipLabel: { 
-    color: '#d1fae5', 
+    color: '#d5ecdc', 
     fontSize: TYPOGRAPHY.SIZE_SMALL, 
     fontWeight: '600' 
   },
@@ -765,9 +765,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  distanceChipActive: { backgroundColor: '#6ee7b7' },
+  distanceChipActive: { backgroundColor: '#80c795' },
   distanceChipLabel: { 
-    color: '#d1fae5', 
+    color: '#d5ecdc', 
     fontSize: TYPOGRAPHY.SIZE_XSMALL, 
     fontWeight: '600' 
   },

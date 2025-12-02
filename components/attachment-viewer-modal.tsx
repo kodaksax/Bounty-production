@@ -217,7 +217,7 @@ export function AttachmentViewerModal({
     if (!hasAttachment) {
       return (
         <View style={styles.errorContainer}>
-          <MaterialIcons name="insert-drive-file" size={64} color="#6ee7b7" />
+          <MaterialIcons name="insert-drive-file" size={64} color="#80c795" />
           <Text style={styles.errorText}>No attachment selected</Text>
         </View>
       );
@@ -309,7 +309,7 @@ export function AttachmentViewerModal({
       case 'document':
         return (
           <View style={styles.documentPreview}>
-            <MaterialIcons name="description" size={80} color="#10b981" />
+            <MaterialIcons name="description" size={80} color="#008e2a" />
             <Text style={styles.documentName}>{displayName}</Text>
             <Text style={styles.documentHint}>Tap download to view this document</Text>
           </View>
@@ -319,7 +319,7 @@ export function AttachmentViewerModal({
       default:
         return (
           <View style={styles.documentPreview}>
-            <MaterialIcons name="insert-drive-file" size={80} color="#6ee7b7" />
+            <MaterialIcons name="insert-drive-file" size={80} color="#80c795" />
             <Text style={styles.documentName}>{displayName}</Text>
             <Text style={styles.documentHint}>Tap download to view this file</Text>
           </View>
@@ -389,7 +389,7 @@ export function AttachmentViewerModal({
         {/* Footer Info */}
         <View style={styles.footer}>
           <View style={styles.footerContent}>
-            <MaterialIcons name="info-outline" size={16} color="#a7f3d0" />
+            <MaterialIcons name="info-outline" size={16} color="#aad9b8" />
             <Text style={styles.footerText}>
               {fileType === 'video'
                 ? 'Video files cannot be downloaded, but you can share them'
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: Platform.OS === 'ios' ? 50 : 12,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#007523', // emerald-700
   },
   headerInfo: {
     flex: 1,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   fileSize: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 12,
     marginTop: 2,
   },
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   documentHint: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorSubtext: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#007523', // emerald-700
   },
   footerContent: {
     flexDirection: 'row',
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     flex: 1,
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 12,
     lineHeight: 18,
   },

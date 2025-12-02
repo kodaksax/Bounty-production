@@ -118,7 +118,7 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
     const typeLabel = this.getTypeLabel(transaction.type);
     const amount = Math.abs(transaction.amount);
     const sign = transaction.amount >= 0 ? '+' : '-';
-    const amountColor = transaction.amount >= 0 ? '#10b981' : '#ef4444';
+    const amountColor = transaction.amount >= 0 ? '#008e2a' : '#ef4444';
 
     return `
 <!DOCTYPE html>
@@ -142,14 +142,14 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
     }
     .header {
       text-align: center;
-      border-bottom: 2px solid #059669;
+      border-bottom: 2px solid #008e2a;
       padding-bottom: 20px;
       margin-bottom: 20px;
     }
     .title {
       font-size: 24px;
       font-weight: bold;
-      color: #059669;
+      color: #008e2a;
       margin: 0;
     }
     .amount {
@@ -180,7 +180,7 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
       text-align: center;
       margin-top: 30px;
       padding-top: 20px;
-      border-top: 2px solid #059669;
+      border-top: 2px solid #008e2a;
       color: #6b7280;
       font-size: 14px;
     }

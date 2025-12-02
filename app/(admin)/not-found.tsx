@@ -37,7 +37,7 @@ export default function AdminNotFoundScreen() {
 
         <View style={styles.actions}>
           <TouchableOpacity style={styles.primaryButton} onPress={handleGoToDashboard}>
-            <MaterialIcons name="dashboard" size={20} color="#fffef5" />
+            <MaterialIcons name="dashboard" size={20} color="#ffffff" />
             <Text style={styles.primaryButtonText}>Go to Dashboard</Text>
           </TouchableOpacity>
           
@@ -61,7 +61,7 @@ export default function AdminNotFoundScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
   },
   content: {
     flex: 1,
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fffef5',
+    color: '#ffffff',
     marginBottom: 12,
   },
   description: {
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: '#008e2a',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -109,19 +109,19 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: '#ffffff',
   },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: 'rgba(0,142,42,0.15)',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.3)',
+    borderColor: 'rgba(0,142,42,0.3)',
   },
   secondaryButtonText: {
     fontSize: 16,

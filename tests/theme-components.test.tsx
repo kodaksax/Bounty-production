@@ -30,11 +30,11 @@ describe('Theme System', () => {
     expect(theme.animations).toBeDefined();
   });
 
-  test('theme has emerald color palette', () => {
-    expect(theme.colors.primary[500]).toBe('#00912C');
-    expect(theme.colors.primary[600]).toBe('#007423');
-    expect(theme.colors.primary[700]).toBe('#00571a');
-    expect(theme.colors.primary[800]).toBe('#003a12');
+  test('theme has brand color palette', () => {
+    expect(theme.colors.primary[500]).toBe('#008e2a');
+    expect(theme.colors.primary[600]).toBe('#007523');
+    expect(theme.colors.primary[700]).toBe('#005c1c');
+    expect(theme.colors.primary[800]).toBe('#004315');
   });
 
   test('theme helper functions work', () => {
@@ -73,7 +73,7 @@ describe('Animated Components', () => {
     expect(component).toBeDefined();
   });
 
-  test('Button with emerald theme can be instantiated', () => {
+  test('Button with brand theme can be instantiated', () => {
     const component = (
       <Button onPress={() => {}}>
         Test Button
@@ -100,9 +100,9 @@ console.log('✅ Theme Components Test Suite');
 console.log('All theme components can be imported and instantiated successfully!');
 console.log('');
 console.log('Theme Colors:');
-console.log('  - Primary (emerald-500):', theme.colors.primary[500]);
-console.log('  - Dark (emerald-600):', theme.colors.primary[600]);
-console.log('  - Darker (emerald-700):', theme.colors.primary[700]);
+console.log('  - Primary (brand-500):', theme.colors.primary[500]);
+console.log('  - Dark (brand-600):', theme.colors.primary[600]);
+console.log('  - Darker (brand-700):', theme.colors.primary[700]);
 console.log('');
 console.log('Available Components:');
 console.log('  ✓ AnimatedCard');

@@ -200,7 +200,7 @@ export default function ChoosePeopleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   contentLift: { marginTop: -30 },
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#047857' },
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#007523' },
   iconButton: { width: 44, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 18, fontWeight: '600' },
   searchWrapper: { paddingHorizontal: 16, paddingVertical: 8 },
@@ -211,6 +211,6 @@ const styles = StyleSheet.create({
   checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
   checkboxChecked: { width: 26, height: 26, borderRadius: 6, backgroundColor: COLORS.EMERALD_200, alignItems: 'center', justifyContent: 'center' },
   removeBadge: { position: 'absolute', right: -6, top: -6, backgroundColor: '#fff', borderRadius: 12, padding: 4, elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6 },
-  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#047857' },
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#007523' },
   doneBtn: { backgroundColor: '#0b63ff', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginHorizontal: 16 },
 })

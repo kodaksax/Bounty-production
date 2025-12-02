@@ -50,13 +50,13 @@ export const MessageBubble = memo(({
       case 'sent':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="check" size={12} color="#d1fae5" />
+            <MaterialIcons name="check" size={12} color="#d5ecdc" />
           </View>
         );
       case 'delivered':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="done-all" size={12} color="#d1fae5" />
+            <MaterialIcons name="done-all" size={12} color="#d5ecdc" />
           </View>
         );
       case 'read':

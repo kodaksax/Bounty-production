@@ -111,7 +111,7 @@ export default function AdminSecuritySettingsScreen() {
               <Switch
                 value={security.requireReauth}
                 onValueChange={() => handleToggle('requireReauth')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
+                trackColor={{ false: '#767577', true: '#008e2a' }}
                 thumbColor={security.requireReauth ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -175,7 +175,7 @@ export default function AdminSecuritySettingsScreen() {
               <Switch
                 value={security.ipRestriction}
                 onValueChange={() => handleToggle('ipRestriction')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
+                trackColor={{ false: '#767577', true: '#008e2a' }}
                 thumbColor={security.ipRestriction ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -187,7 +187,7 @@ export default function AdminSecuritySettingsScreen() {
               <Switch
                 value={security.auditLogging}
                 onValueChange={() => handleToggle('auditLogging')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
+                trackColor={{ false: '#767577', true: '#008e2a' }}
                 thumbColor={security.auditLogging ? '#00dc50' : '#f4f3f4'}
               />
             </View>
@@ -223,7 +223,7 @@ export default function AdminSecuritySettingsScreen() {
 
         {/* Save Button */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <MaterialIcons name="check" size={20} color="#fffef5" />
+          <MaterialIcons name="check" size={20} color="#ffffff" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>
 
@@ -237,7 +237,7 @@ export default function AdminSecuritySettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
   },
   scrollView: {
     flex: 1,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#fffef5',
+    color: '#ffffff',
   },
   settingDescription: {
     fontSize: 12,
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: '#008e2a',
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
@@ -337,6 +337,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: '#ffffff',
   },
 });

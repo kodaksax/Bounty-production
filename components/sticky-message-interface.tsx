@@ -37,7 +37,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   placeholder = 'Message',
   topInset = 0,
   bottomInset = 0,
-  accentColor = '#059669',
+  accentColor = '#008e2a',
   isOtherUserTyping = false,
   onTypingChange,
   typingTimeout = 2000,
@@ -179,9 +179,9 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.45)', justifyContent:'flex-end' }}>
             <Pressable style={{ flex:1 }} onPress={()=> setExpanded(false)} />
             <KeyboardAvoidingView behavior={Platform.select({ ios:'padding', android: undefined })}>
-              <View style={{ backgroundColor:'#065f46', paddingTop:16, paddingHorizontal:12, paddingBottom: bottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
+              <View style={{ backgroundColor:'#005c1c', paddingTop:16, paddingHorizontal:12, paddingBottom: bottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
                 <View style={{ alignSelf:'center', width:48, height:4, backgroundColor:'rgba(255,255,255,0.3)', borderRadius:2, marginBottom:12 }} />
-                <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:'rgba(16,185,129,0.4)', backgroundColor:'rgba(6,95,70,0.4)', paddingHorizontal:12, paddingVertical:8 }}>
+                <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:'rgba(0,142,42,0.4)', backgroundColor:'rgba(0,67,21,0.4)', paddingHorizontal:12, paddingVertical:8 }}>
                   <TextInput
                     ref={expandedInputRef}
                     value={text}
@@ -195,17 +195,17 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                 </View>
                 <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginTop:16 }}>
                   <View style={{ flexDirection:'row', gap:12 }}>
-                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(16,185,129,0.25)', alignItems:'center', justifyContent:'center' }}>
+                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(0,142,42,0.25)', alignItems:'center', justifyContent:'center' }}>
                       <MaterialIcons name="photo-camera" size={22} color="#c7f9d7" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(16,185,129,0.25)', alignItems:'center', justifyContent:'center' }}>
+                    <TouchableOpacity style={{ height:42, width:42, borderRadius:21, backgroundColor:'rgba(0,142,42,0.25)', alignItems:'center', justifyContent:'center' }}>
                       <MaterialIcons name="mic" size={22} color="#c7f9d7" />
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity
                     disabled={!text.trim() || isSending}
                     onPress={handleSend}
-                    style={{ backgroundColor: text.trim()? '#10b981':'rgba(16,185,129,0.35)', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
+                    style={{ backgroundColor: text.trim()? '#008e2a':'rgba(0,142,42,0.35)', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
                     <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim()? '#052e1b':'#c7f9d7'} />
                     <Text style={{ fontWeight:'600', color: text.trim()? '#052e1b':'#c7f9d7' }}>{isSending? 'Sending':'Send'}</Text>
                   </TouchableOpacity>
@@ -248,24 +248,24 @@ const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }>
     if (!message.isUser || !message.status) return null;
 
     let iconName: any = 'check';
-    let iconColor = '#6ee7b7'; // emerald-300
+    let iconColor = '#80c795'; // emerald-300
 
     switch (message.status) {
       case 'sending':
         iconName = 'schedule';
-        iconColor = '#a7f3d0'; // emerald-200
+        iconColor = '#aad9b8'; // emerald-200
         break;
       case 'sent':
         iconName = 'check';
-        iconColor = '#6ee7b7'; // emerald-300
+        iconColor = '#80c795'; // emerald-300
         break;
       case 'delivered':
         iconName = 'done-all';
-        iconColor = '#6ee7b7'; // emerald-300
+        iconColor = '#80c795'; // emerald-300
         break;
       case 'read':
         iconName = 'done-all';
-        iconColor = '#10b981'; // emerald-500 (brighter for read)
+        iconColor = '#008e2a'; // emerald-500 (brighter for read)
         break;
       case 'failed':
         iconName = 'error';
@@ -345,7 +345,7 @@ const TypingIndicator: React.FC = () => {
             width: 8, 
             height: 8, 
             borderRadius: 4, 
-            backgroundColor: '#d1fae5',
+            backgroundColor: '#d5ecdc',
             transform: [{ translateY: dot1Anim }]
           }} 
         />
@@ -354,7 +354,7 @@ const TypingIndicator: React.FC = () => {
             width: 8, 
             height: 8, 
             borderRadius: 4, 
-            backgroundColor: '#d1fae5',
+            backgroundColor: '#d5ecdc',
             transform: [{ translateY: dot2Anim }]
           }} 
         />
@@ -363,7 +363,7 @@ const TypingIndicator: React.FC = () => {
             width: 8, 
             height: 8, 
             borderRadius: 4, 
-            backgroundColor: '#d1fae5',
+            backgroundColor: '#d5ecdc',
             transform: [{ translateY: dot3Anim }]
           }} 
         />

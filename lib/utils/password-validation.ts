@@ -235,7 +235,7 @@ export function getStrengthColor(level: PasswordStrengthResult['level']): string
     case 'strong':
       return '#22c55e'; // green
     case 'very-strong':
-      return '#059669'; // emerald
+      return '#008e2a'; // brand primary
     default:
       return '#6b7280'; // gray
   }

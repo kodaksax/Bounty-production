@@ -39,7 +39,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
       <View style={styles.row}>
         {(onBack || showBack) && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
@@ -62,11 +62,11 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#008e2a',
     paddingBottom: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.2)',
+    borderBottomColor: 'rgba(0,142,42,0.2)',
   },
   row: {
     flexDirection: 'row',
@@ -85,15 +85,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fffef5',
+    color: '#ffffff',
   },
   adminBadge: {
-    backgroundColor: 'rgba(0,145,44,0.2)',
+    backgroundColor: 'rgba(0,142,42,0.2)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.4)',
+    borderColor: 'rgba(0,142,42,0.4)',
   },
   adminBadgeText: {
     fontSize: 10,

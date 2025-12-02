@@ -138,11 +138,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         <View className="bg-black/30 rounded-xl p-4 mb-5">
           <SectionHeader icon="lock" title="Password" subtitle="Change your password to keep account secure." />
           <Text className="text-xs text-emerald-200 mb-1">Current Password</Text>
-          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#aad9b8" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">New Password</Text>
-            <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+            <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#aad9b8" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">Confirm New Password</Text>
-          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
+          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#aad9b8" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
           <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-emerald-700">
             <Text className="text-white text-xs font-medium">Update Password</Text>
           </TouchableOpacity>

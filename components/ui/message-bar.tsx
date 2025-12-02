@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#6ee7b7',
+    color: '#80c795',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(0, 117, 35, 0.2)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
@@ -106,11 +106,11 @@ const styles = StyleSheet.create({
     minHeight: 48,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
+    borderColor: 'rgba(128, 199, 149, 0.2)',
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#008e2a',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -118,6 +118,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(0, 142, 42, 0.3)',
   },
 });

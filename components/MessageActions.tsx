@@ -44,7 +44,7 @@ export function MessageActions({
               <MaterialIcons 
                 name={isPinned ? 'push-pin' : 'push-pin'} 
                 size={22} 
-                color={isPinned ? '#fbbf24' : '#d1fae5'} 
+                color={isPinned ? '#fbbf24' : '#d5ecdc'} 
               />
               <Text style={styles.actionText}>
                 {isPinned ? 'Unpin Message' : 'Pin Message'}
@@ -57,7 +57,7 @@ export function MessageActions({
               style={styles.actionButton}
               onPress={() => handleAction(onCopy)}
             >
-              <MaterialIcons name="content-copy" size={22} color="#d1fae5" />
+              <MaterialIcons name="content-copy" size={22} color="#d5ecdc" />
               <Text style={styles.actionText}>Copy Text</Text>
             </TouchableOpacity>
 
@@ -77,7 +77,7 @@ export function MessageActions({
               style={styles.actionButton}
               onPress={onClose}
             >
-              <MaterialIcons name="close" size={22} color="#d1fae5" />
+              <MaterialIcons name="close" size={22} color="#d5ecdc" />
               <Text style={styles.actionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionSheet: {
-    backgroundColor: '#065f46', // emerald-800
+    backgroundColor: '#005c1c', // emerald-800
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#d1fae5', // emerald-200
+    color: '#d5ecdc', // emerald-200
     fontWeight: '500',
   },
   dangerText: {
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: 'rgba(0, 142, 42, 0.2)',
     marginHorizontal: 20,
   },
 });

@@ -7,7 +7,7 @@ export default function BountyLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#1a3d2e' },
+        contentStyle: { backgroundColor: '#008e2a' },
         animation: 'slide_from_right',
       }}
     >

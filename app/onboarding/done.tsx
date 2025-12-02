@@ -97,7 +97,7 @@ export default function DoneScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 100 }]}>
       {/* Branding Header */}
       <View style={styles.brandingHeader}>
-        <MaterialIcons name="gps-fixed" size={24} color="#a7f3d0" />
+        <MaterialIcons name="gps-fixed" size={24} color="#aad9b8" />
         <Text style={styles.brandingText}>BOUNTY</Text>
       </View>
 
@@ -124,14 +124,14 @@ export default function DoneScreen() {
             <Text style={styles.summaryTitle}>Your Profile Summary</Text>
             
             <View style={styles.summaryItem}>
-              <MaterialIcons name="person" size={18} color="#a7f3d0" />
+              <MaterialIcons name="person" size={18} color="#aad9b8" />
               <Text style={styles.summaryLabel}>Username</Text>
               <Text style={styles.summaryValue}>@{displayUsername}</Text>
             </View>
             
             {displayName && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="badge" size={18} color="#a7f3d0" />
+                <MaterialIcons name="badge" size={18} color="#aad9b8" />
                 <Text style={styles.summaryLabel}>Name</Text>
                 <Text style={styles.summaryValue}>{displayName}</Text>
               </View>
@@ -139,7 +139,7 @@ export default function DoneScreen() {
 
             {displayTitle && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="work" size={18} color="#a7f3d0" />
+                <MaterialIcons name="work" size={18} color="#aad9b8" />
                 <Text style={styles.summaryLabel}>Title</Text>
                 <Text style={styles.summaryValue}>{displayTitle}</Text>
               </View>
@@ -147,7 +147,7 @@ export default function DoneScreen() {
             
             {displayLocation && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="location-on" size={18} color="#a7f3d0" />
+                <MaterialIcons name="location-on" size={18} color="#aad9b8" />
                 <Text style={styles.summaryLabel}>Location</Text>
                 <Text style={styles.summaryValue}>{displayLocation}</Text>
               </View>
@@ -156,7 +156,7 @@ export default function DoneScreen() {
             {displayBio && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="info-outline" size={18} color="#aad9b8" />
                   <Text style={styles.summaryLabel}>Bio</Text>
                 </View>
                 <Text style={styles.summaryBio}>{displayBio}</Text>
@@ -166,7 +166,7 @@ export default function DoneScreen() {
             {displaySkills.length > 0 && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="star" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="star" size={18} color="#aad9b8" />
                   <Text style={styles.summaryLabel}>Skills</Text>
                 </View>
                 <View style={styles.skillsRow}>
@@ -184,7 +184,7 @@ export default function DoneScreen() {
             
             {hasPhone && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="phone" size={18} color="#a7f3d0" />
+                <MaterialIcons name="phone" size={18} color="#aad9b8" />
                 <Text style={styles.summaryLabel}>Phone</Text>
                 <Text style={styles.summaryValue}>✓ Added (private)</Text>
               </View>
@@ -219,7 +219,7 @@ export default function DoneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#008e2a',
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#aad9b8',
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   skillBadgeText: {
-    color: '#a7f3d0',
+    color: '#aad9b8',
     fontSize: 11,
     fontWeight: '500',
   },
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
@@ -363,6 +363,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#aad9b8',
   },
 });

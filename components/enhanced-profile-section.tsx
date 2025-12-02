@@ -127,7 +127,7 @@ export function EnhancedProfileSection({
 
     const configMap: Record<string, { icon: string; color: string; label: string }> = {
       pending: { icon: 'schedule', color: '#fbbf24', label: 'Pending' },
-      verified: { icon: 'verified', color: '#10b981', label: 'Verified' },
+      verified: { icon: 'verified', color: '#008e2a', label: 'Verified' },
     };
     const config = configMap[String(verificationStatus)];
 
@@ -174,7 +174,7 @@ export function EnhancedProfileSection({
                     alt="Profile avatar"
                   />
                 ) : (
-                  <MaterialIcons name="person" size={32} color="#d1fae5" />
+                  <MaterialIcons name="person" size={32} color="#d5ecdc" />
                 )}
               </View>
               {renderVerificationBadge()}
@@ -217,13 +217,13 @@ export function EnhancedProfileSection({
           <View className="mt-3 space-y-2">
             {effectiveProfile.location && (
               <View className="flex-row items-center">
-                <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
+                <MaterialIcons name="location-on" size={16} color="#80c795" />
                 <Text className="text-sm text-emerald-200 ml-2">{effectiveProfile.location}</Text>
               </View>
             )}
             {effectiveProfile.portfolio && (
               <View className="flex-row items-center">
-                <MaterialIcons name="link" size={16} color="#6ee7b7" />
+                <MaterialIcons name="link" size={16} color="#80c795" />
                 <Text className="text-sm text-emerald-200 ml-2" numberOfLines={1}>
                   {effectiveProfile.portfolio}
                 </Text>

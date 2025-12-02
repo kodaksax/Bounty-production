@@ -168,7 +168,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                               : 'insert-drive-file'
                           }
                           size={24}
-                          color="#6ee7b7"
+                          color="#80c795"
                         />
                         <View className="ml-3 flex-1">
                           <Text className="text-white text-sm" numberOfLines={1}>
@@ -178,7 +178,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                             Tap to preview
                           </Text>
                         </View>
-                        <MaterialIcons name="visibility" size={20} color="rgba(110, 231, 183, 0.6)" />
+                        <MaterialIcons name="visibility" size={20} color="rgba(128, 199, 149, 0.6)" />
                       </TouchableOpacity>
                     ))}
                   </View>

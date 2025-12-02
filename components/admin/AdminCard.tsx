@@ -13,11 +13,11 @@ export function AdminCard({ children, style }: AdminCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#007523',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
+    borderColor: 'rgba(0,142,42,0.2)',
   },
 });

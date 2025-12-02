@@ -51,7 +51,7 @@ export function AvatarUploadExample1() {
               width: 100,
               height: 100,
               borderRadius: 50,
-              backgroundColor: '#10b981',
+              backgroundColor: '#008e2a',
               justifyContent: 'center',
               alignItems: 'center',
             }}
@@ -66,7 +66,7 @@ export function AvatarUploadExample1() {
             marginTop: 10,
             paddingHorizontal: 20,
             paddingVertical: 10,
-            backgroundColor: isUploading ? '#6b7280' : '#10b981',
+            backgroundColor: isUploading ? '#6b7280' : '#008e2a',
             borderRadius: 8,
           }}
           onPress={pickAndUploadAvatar}
@@ -90,7 +90,7 @@ export function AvatarUploadExample1() {
         <View
           style={{
             padding: 12,
-            backgroundColor: '#10b981',
+            backgroundColor: '#008e2a',
             borderRadius: 8,
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -122,7 +122,7 @@ export function AvatarUploadExample2() {
       <TouchableOpacity
         style={{
           padding: 12,
-          backgroundColor: '#10b981',
+          backgroundColor: '#008e2a',
           borderRadius: 8,
         }}
         onPress={pickAndUploadAvatar}
