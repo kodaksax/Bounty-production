@@ -9,7 +9,7 @@
 /**
  * Primary support email address for user inquiries
  */
-export const SUPPORT_EMAIL = 'Support@bountyfinder.app';
+export const SUPPORT_EMAIL = 'support@bountyfinder.app';
 
 /**
  * Support phone number for urgent inquiries

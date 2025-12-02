@@ -156,14 +156,14 @@ export default function CancellationRequestScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleCallSupport}
-            className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center mt-3"
+            className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Phone size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Call Support</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.back()}
-            className="px-6 py-3 rounded-lg mt-3"
+            className="px-6 py-3 rounded-lg"
           >
             <Text className="text-gray-600 font-medium text-center">Go Back</Text>
           </TouchableOpacity>
