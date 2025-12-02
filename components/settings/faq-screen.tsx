@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { BrandingLogo } from '../ui/branding-logo';
+import { BrandingLogo } from 'components/ui/branding-logo';
 
 interface FAQScreenProps { onBack: () => void }
 
