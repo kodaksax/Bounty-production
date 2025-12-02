@@ -1,7 +1,7 @@
 /**
  * Onboarding Carousel
- * Shows 4 screens explaining app features on first launch
- * Includes value statement and Bounty branding
+ * Shows 5 screens explaining app features on first launch
+ * Includes value statement, how-it-works tutorial, and trust messaging
  */
 
 import { MaterialIcons } from '@expo/vector-icons';

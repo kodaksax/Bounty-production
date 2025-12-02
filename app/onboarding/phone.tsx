@@ -303,11 +303,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: 'rgba(167,243,208,0.2)',
+    gap: 12,
   },
   trustBenefitItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
   trustBenefitText: {
     color: 'rgba(255,255,255,0.9)',
