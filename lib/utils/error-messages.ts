@@ -58,7 +58,7 @@ const TECHNICAL_ERROR_PATTERNS = [
   /duplicate key/i,
   /violates/i,
   /undefined is not/i,
-  /Cannot read propert/i,
+  /Cannot read property/i,
   /null is not/i,
   /is not a function/i,
   /stack trace/i,
