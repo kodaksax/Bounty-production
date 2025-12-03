@@ -63,6 +63,10 @@ function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: a
   }
 }
 
+// Spam prevention constants
+const DAILY_BOUNTY_LIMIT = 10;  // Maximum bounties a user can create per day
+const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10;  // Minimum title length for substring matching
+
 export const bountyService = {
   /**
    * Get a bounty by ID
@@ -652,9 +656,9 @@ export const bountyService = {
             .eq('poster_id', posterId)
             .gte('created_at', oneDayAgo.toISOString());
           
-          if (!countError && count !== null && count >= 10) {
+          if (!countError && count !== null && count >= DAILY_BOUNTY_LIMIT) {
             logger.warning('Rate limit exceeded for bounty creation', { posterId, count });
-            throw new Error('Rate limit exceeded: You can only create 10 bounties per day. Please try again tomorrow.');
+            throw new Error(`Rate limit exceeded: You can only create ${DAILY_BOUNTY_LIMIT} bounties per day. Please try again tomorrow.`);
           }
         } catch (rateLimitError) {
           if (rateLimitError instanceof Error && rateLimitError.message.includes('Rate limit exceeded')) {
@@ -679,12 +683,12 @@ export const bountyService = {
           
           if (!dupError && recentBounties && recentBounties.length > 0) {
             const normalizedNewTitle = bounty.title.toLowerCase().trim();
-            const isDuplicate = recentBounties.some((b: any) => {
+            const isDuplicate = recentBounties.some((b: { title: string }) => {
               const existingTitle = (b.title || '').toLowerCase().trim();
-              // Exact match or very similar (>80% similarity)
+              // Check for exact match or substring match for longer titles
               return existingTitle === normalizedNewTitle || 
-                     (existingTitle.length > 10 && normalizedNewTitle.includes(existingTitle)) ||
-                     (normalizedNewTitle.length > 10 && existingTitle.includes(normalizedNewTitle));
+                     (existingTitle.length > MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK && normalizedNewTitle.includes(existingTitle)) ||
+                     (normalizedNewTitle.length > MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK && existingTitle.includes(normalizedNewTitle));
             });
             
             if (isDuplicate) {

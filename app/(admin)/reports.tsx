@@ -284,6 +284,18 @@ export default function AdminReportsScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
+                // First verify user exists to prevent invalid operations
+                const { data: existingUser, error: fetchError } = await supabase
+                  .from('profiles')
+                  .select('id')
+                  .eq('id', userId)
+                  .single();
+
+                if (fetchError || !existingUser) {
+                  Alert.alert('Error', 'User not found. They may have already been deleted.');
+                  return;
+                }
+
                 // Update user status in the database
                 const { error } = await supabase
                   .from('profiles')

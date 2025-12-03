@@ -2,6 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import * as Sentry from '@sentry/react-native'
+import { router } from 'expo-router'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { BrandingLogo } from "components/ui/branding-logo"
@@ -170,16 +171,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           description="Learn about our community standards for safety, trust, and respectful behavior."
           primaryLabel="View Guidelines"
           onPrimary={() => {
-            // Navigate to community guidelines using expo-router
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { router } = require('expo-router');
-              if (router && typeof router.push === 'function') {
-                router.push('/legal/community-guidelines');
-              }
-            } catch (e) {
-              console.warn('[Settings] Navigation to community guidelines failed', e);
-            }
+            router.push('/legal/community-guidelines');
           }}
           icon="security"
         />

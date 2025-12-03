@@ -6,9 +6,27 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from '../utils/data-utils';
 
+export type ReportReasonId = 'spam' | 'harassment' | 'inappropriate' | 'fraud';
+export type ReportStatus = 'pending' | 'reviewed' | 'resolved' | 'dismissed';
+export type ReportContentType = 'bounty' | 'profile' | 'message';
+
 export interface ReportReason {
-  id: 'spam' | 'harassment' | 'inappropriate' | 'fraud';
+  id: ReportReasonId;
   label: string;
+}
+
+/** Shape of a report record from the database */
+export interface ReportRecord {
+  id: string;
+  user_id: string;
+  content_type: ReportContentType;
+  content_id: string;
+  reason: ReportReasonId;
+  details?: string;
+  status: ReportStatus;
+  created_at: string;
+  reviewed_at?: string;
+  resolution_notes?: string;
 }
 
 export const REPORT_REASONS: ReportReason[] = [
@@ -285,7 +303,7 @@ export const reportService = {
         highPriority: 0,
       };
 
-      (data || []).forEach((report: any) => {
+      (data || []).forEach((report: Pick<ReportRecord, 'status' | 'reason'>) => {
         if (report.status === 'pending') stats.pending++;
         else if (report.status === 'reviewed') stats.reviewed++;
         else if (report.status === 'resolved') stats.resolved++;
