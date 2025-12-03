@@ -130,6 +130,11 @@ export function EnhancedProfileSection({
     const { verificationStatus } = effectiveProfile || {};
     const status = (verificationStatus || 'unverified') as VerificationLevel;
     
+    // Only show badge for verified or pending users, not for unverified
+    if (status === 'unverified') {
+      return null;
+    }
+    
     return (
       <View className="mt-2">
         <VerificationBadge 
