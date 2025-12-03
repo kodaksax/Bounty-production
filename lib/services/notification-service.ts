@@ -89,6 +89,18 @@ export class NotificationService {
   }
 
   /**
+   * Validate and normalize permission status to known values
+   */
+  private normalizePermissionStatus(status: string | null): 'granted' | 'denied' | 'undetermined' {
+    const validStatuses = ['granted', 'denied', 'undetermined'] as const;
+    if (status && validStatuses.includes(status as typeof validStatuses[number])) {
+      return status as typeof validStatuses[number];
+    }
+    // Map unexpected values (like 'restricted' on iOS) to 'undetermined'
+    return 'undetermined';
+  }
+
+  /**
    * Get the current notification permission status without requesting
    */
   async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
@@ -96,13 +108,13 @@ export class NotificationService {
       const { status } = await Notifications.getPermissionsAsync();
       // Store the status for offline access
       await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
-      return status as 'granted' | 'denied' | 'undetermined';
+      return this.normalizePermissionStatus(status);
     } catch (error) {
       console.error('Error getting permission status:', error);
       // Try to get cached status
       try {
         const cached = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
-        return (cached as 'granted' | 'denied' | 'undetermined') || 'undetermined';
+        return this.normalizePermissionStatus(cached);
       } catch {
         return 'undetermined';
       }
@@ -115,7 +127,8 @@ export class NotificationService {
   async getStoredPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | null> {
     try {
       const status = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
-      return status as 'granted' | 'denied' | 'undetermined' | null;
+      if (status === null) return null;
+      return this.normalizePermissionStatus(status);
     } catch {
       return null;
     }

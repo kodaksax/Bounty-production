@@ -1,9 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
+
+// Delay before navigating to ensure router is ready (milliseconds)
+const ROUTER_READY_DELAY_MS = 100;
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -79,15 +83,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Handle notification tap navigation
-  const handleNotificationTap = useCallback((response: Notifications.NotificationResponse) => {
+  const handleNotificationTap = useCallback(async (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data;
     
     // Navigate based on notification type and data
     if (data.bountyId) {
       router.push(`/bounty/${data.bountyId}`);
-    } else if (data.conversationId) {
-      // Navigate to messenger screen and open specific conversation
-      router.push(`/tabs/messenger-screen?conversationId=${data.conversationId}`);
+    } else if (data.conversationId && typeof data.conversationId === 'string') {
+      // Use navigation intent to pass the conversation ID to the messenger screen
+      await navigationIntent.setPendingConversationId(data.conversationId);
+      router.push('/tabs/bounty-app?screen=create');
     } else if (data.senderId) {
       router.push(`/profile/${data.senderId}`);
     } else if (data.followerId) {
@@ -95,13 +100,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
+  // Track whether initial notification has been handled to prevent duplicate navigation
+  const initialNotificationHandled = useRef(false);
+
   // Check for notification that launched the app
   const checkInitialNotification = useCallback(async () => {
+    // Prevent duplicate handling
+    if (initialNotificationHandled.current) return;
+    
     try {
       const response = await Notifications.getLastNotificationResponseAsync();
       if (response) {
         console.log('App opened from notification:', response);
-        handleNotificationTap(response);
+        initialNotificationHandled.current = true;
+        // Small delay to ensure router is ready
+        setTimeout(() => {
+          handleNotificationTap(response);
+        }, ROUTER_READY_DELAY_MS);
       }
     } catch (error) {
       console.warn('Error checking initial notification:', error);

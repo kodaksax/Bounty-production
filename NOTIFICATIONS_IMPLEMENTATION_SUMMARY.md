@@ -450,7 +450,7 @@ Permission status is stored locally using AsyncStorage for quick access.
 
 The app handles notification taps with deep linking:
 - **Bounty notifications** → `/bounty/{bountyId}`
-- **Message notifications** → _Route not yet implemented — update this once the messenger route is available_
+- **Message notifications** → Uses `navigationIntent` service to pass conversation ID to messenger screen
 - **Profile notifications** → `/profile/{userId}`
 
 Ensure URL scheme is configured in `app.json`:
