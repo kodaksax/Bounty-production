@@ -232,8 +232,8 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       if (type === 'video' && videoThumbnailUri) {
         thumbnailUri = videoThumbnailUri
       } else if (type === 'image') {
-        // Use processedUri (optimized) or uploaded URI, fallback to lastPicked preview
-        thumbnailUri = processedUri || uploaded.uri || uploaded.remoteUri || lastPicked?.uri
+        // Use processedUri (optimized or original assetUri); fallback logic is unnecessary as processedUri is always defined for images
+        thumbnailUri = processedUri
       }
 
       // For the persisted item, use the uploaded.remoteUri/url for canonical access,
