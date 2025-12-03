@@ -152,7 +152,9 @@ export const searchService = {
       // Amount boost
       const amountScore = bounty.amount ? Math.min(bounty.amount / 10, 50) : 10;
 
-      // Simulated engagement (based on deterministic hash of id)
+      // Placeholder engagement metrics (deterministic based on bounty id)
+      // TODO: Replace with real engagement tracking when analytics are available
+      // These are simulated values for display purposes until real metrics are implemented
       const hash = String(bounty.id)
         .split('')
         .reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -195,9 +197,11 @@ export const searchService = {
     alertsEnabled: boolean = true
   ): Promise<SavedSearch> {
     const savedSearches = await this.getSavedSearches(userId);
-
+    
+    // Generate a more robust ID to avoid collisions
+    const randomPart = Math.random().toString(36).substring(2, 10);
     const newSearch: SavedSearch = {
-      id: `saved_${Date.now()}`,
+      id: `saved_${Date.now()}_${randomPart}`,
       userId,
       name,
       type,

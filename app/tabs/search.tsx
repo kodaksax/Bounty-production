@@ -105,7 +105,9 @@ export default function EnhancedSearchScreen() {
         const results = await searchService.getAutocompleteSuggestions(query, 8);
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
-      } catch {
+      } catch (error) {
+        // Log error for debugging but gracefully degrade by hiding suggestions
+        console.warn('Autocomplete suggestions failed:', error);
         setSuggestions([]);
       } finally {
         setIsLoadingSuggestions(false);
@@ -127,9 +129,14 @@ export default function EnhancedSearchScreen() {
       const userId = suggestion.id.replace('user_', '');
       router.push(`/profile/${userId}`);
     } else if (suggestion.type === 'skill') {
-      // Search for bounties with this skill
+      // Search for bounties with this skill, appending to existing skills
       setQuery(suggestion.text);
-      setFilters(prev => ({ ...prev, skills: [suggestion.text] }));
+      setFilters(prev => ({
+        ...prev,
+        skills: prev.skills
+          ? [...prev.skills.filter(s => s !== suggestion.text), suggestion.text]
+          : [suggestion.text]
+      }));
     }
   };
 
