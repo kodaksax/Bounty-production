@@ -7,6 +7,7 @@ import { useAuthProfile } from "hooks/useAuthProfile";
 import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { usePortfolio } from "hooks/usePortfolio";
+import { useRatings } from "hooks/useRatings";
 import { OptimizedImage } from "lib/components/OptimizedImage";
 import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
@@ -22,6 +23,8 @@ import {
     View,
 } from "react-native";
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton-loaders";
+import { VerificationBadge, type VerificationLevel } from "./ui/verification-badge";
+import { ReputationScoreCompact } from "./ui/reputation-score";
 
 interface EnhancedProfileSectionProps {
   userId?: string;
@@ -95,6 +98,11 @@ export function EnhancedProfileSection({
     toggleFollow,
     loading: followLoading 
   } = useFollow(userId || 'current-user');
+  
+  // Fetch reputation/rating stats for this user
+  // Pass undefined for current-user to let the hook handle it (it early-returns with defaults)
+  const ratingUserId = resolvedUserId === 'current-user' ? undefined : resolvedUserId;
+  const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
@@ -120,25 +128,41 @@ export function EnhancedProfileSection({
 
   const renderVerificationBadge = () => {
     const { verificationStatus } = effectiveProfile || {};
+    const status = (verificationStatus || 'unverified') as VerificationLevel;
     
-    if (!verificationStatus || verificationStatus === 'unverified') {
+    // Only show badge for verified or pending users, not for unverified
+    if (status === 'unverified') {
       return null;
     }
-
-    const configMap: Record<string, { icon: string; color: string; label: string }> = {
-      pending: { icon: 'schedule', color: '#fbbf24', label: 'Pending' },
-      verified: { icon: 'verified', color: '#10b981', label: 'Verified' },
-    };
-    const config = configMap[String(verificationStatus)];
-
-    if (!config) return null;
-
+    
     return (
-      <View className="flex-row items-center mt-2">
-        <MaterialIcons name={config.icon as any} size={16} color={config.color} />
-        <Text className="text-xs ml-1" style={{ color: config.color }}>
-          {config.label}
-        </Text>
+      <View className="mt-2">
+        <VerificationBadge 
+          status={status} 
+          size="small" 
+          showLabel={true}
+          showExplanation={true}
+        />
+      </View>
+    );
+  };
+  
+  const renderReputationScore = () => {
+    if (ratingsLoading) {
+      return null;
+    }
+    
+    return (
+      <View className="flex-row items-center mt-1">
+        <ReputationScoreCompact 
+          averageRating={ratingStats.averageRating} 
+          ratingCount={ratingStats.ratingCount} 
+        />
+        {ratingStats.ratingCount > 0 && (
+          <Text className="text-xs text-emerald-300 ml-2">
+            ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
+          </Text>
+        )}
       </View>
     );
   };
@@ -182,6 +206,8 @@ export function EnhancedProfileSection({
             <View className="ml-4 flex-1">
               <Text className="text-lg font-bold">{effectiveProfile.name || effectiveProfile.username}</Text>
               <Text className="text-xs text-emerald-300">{effectiveProfile.username}</Text>
+              {/* Reputation Score - prominently displayed */}
+              {renderReputationScore()}
               {effectiveProfile.title && (
                 <Text className="text-sm text-emerald-200 mt-1">{effectiveProfile.title}</Text>
               )}

@@ -6,6 +6,7 @@ import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWallet } from '../../../lib/wallet-context';
 import { validateBalance, validateAmount, getInsufficientBalanceMessage } from '../../../lib/utils/bounty-validation';
+import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 
 interface StepCompensationProps {
   draft: BountyDraft;
@@ -261,24 +262,13 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
               </View>
             </View>
 
-            {/* Escrow Info */}
-            <View className="mb-6 bg-emerald-700/20 rounded-lg p-4 border border-emerald-500/30">
-              <View className="flex-row items-start">
-                <MaterialIcons
-                  name="info-outline"
-                  size={20}
-                  color="rgba(110, 231, 183, 0.8)"
-                  style={{ marginRight: 8, marginTop: 2 }}
-                />
-                <View className="flex-1">
-                  <Text className="text-emerald-100 font-semibold mb-1">
-                    Escrow Protection
-                  </Text>
-                  <Text className="text-emerald-200/70 text-sm">
-                    Funds are held securely until the task is completed. You'll review and approve before payment is released.
-                  </Text>
-                </View>
-              </View>
+            {/* Escrow Info - Enhanced with interactive explanation */}
+            <View className="mb-6">
+              <EscrowExplainer 
+                amount={draft.amount > 0 ? draft.amount : undefined}
+                variant="card"
+                showLearnMore={true}
+              />
             </View>
           </>
         )}
