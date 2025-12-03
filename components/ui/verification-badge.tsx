@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useHapticFeedback } from '../../lib/haptic-feedback';
 
 export type VerificationLevel = 'unverified' | 'pending' | 'verified';
 
@@ -62,10 +63,16 @@ export function VerificationBadge({
   showExplanation = true,
 }: VerificationBadgeProps) {
   const [showModal, setShowModal] = useState(false);
+  const { triggerHaptic } = useHapticFeedback();
   const config = VERIFICATION_CONFIGS[status];
   
   const iconSize = size === 'small' ? 14 : size === 'large' ? 24 : 18;
   const fontSize = size === 'small' ? 10 : size === 'large' ? 14 : 12;
+
+  const handlePress = useCallback(() => {
+    triggerHaptic('light');
+    setShowModal(true);
+  }, [triggerHaptic]);
   
   const BadgeContent = (
     <View style={[styles.badge, { backgroundColor: config.backgroundColor }]}>
@@ -93,7 +100,7 @@ export function VerificationBadge({
   return (
     <>
       <TouchableOpacity 
-        onPress={() => setShowModal(true)}
+        onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel={`${config.label} status. Tap for more information.`}
         accessibilityHint="Opens a dialog explaining what this verification status means"
@@ -106,6 +113,8 @@ export function VerificationBadge({
         transparent
         animationType="fade"
         onRequestClose={() => setShowModal(false)}
+        accessible={true}
+        accessibilityLabel="Verification status explanation"
       >
         <Pressable 
           style={styles.modalOverlay} 

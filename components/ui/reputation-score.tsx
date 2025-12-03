@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useHapticFeedback } from '../../lib/haptic-feedback';
 
 interface ReputationScoreProps {
   averageRating: number;
@@ -12,7 +13,9 @@ interface ReputationScoreProps {
 }
 
 /**
- * Calculate reputation level based on average rating and number of ratings
+ * Calculate reputation level based on average rating and number of ratings.
+ * The formula uses a weighted score that considers both rating quality and quantity.
+ * Users need at least 5 ratings to achieve their full potential score.
  */
 function getReputationLevel(averageRating: number, ratingCount: number): {
   level: string;
@@ -27,8 +30,9 @@ function getReputationLevel(averageRating: number, ratingCount: number): {
     };
   }
 
-  // Weight by both rating and count
-  const weightedScore = averageRating * Math.min(1, ratingCount / 5);
+  // Weight by both rating and count - users need 5+ ratings for full score potential
+  const ratingMultiplier = Math.min(1, ratingCount / 5);
+  const weightedScore = averageRating * ratingMultiplier;
 
   if (weightedScore >= 4.5) {
     return {
@@ -82,14 +86,20 @@ export function ReputationScore({
   variant = 'default',
 }: ReputationScoreProps) {
   const [showModal, setShowModal] = useState(false);
-  const reputation = getReputationLevel(averageRating, ratingCount);
+  const { triggerHaptic } = useHapticFeedback();
+  
+  // Memoize reputation calculation
+  const reputation = useMemo(
+    () => getReputationLevel(averageRating, ratingCount),
+    [averageRating, ratingCount]
+  );
   
   const iconSize = size === 'small' ? 14 : size === 'large' ? 24 : 18;
   const scoreFontSize = size === 'small' ? 16 : size === 'large' ? 28 : 22;
   const labelFontSize = size === 'small' ? 10 : size === 'large' ? 14 : 12;
 
-  // Render stars
-  const renderStars = (starSize: number = iconSize) => {
+  // Memoize star rendering function
+  const renderStars = useCallback((starSize: number = iconSize) => {
     const stars = [];
     const fullStars = Math.floor(averageRating);
     const hasHalfStar = averageRating - fullStars >= 0.5;
@@ -110,7 +120,12 @@ export function ReputationScore({
       }
     }
     return stars;
-  };
+  }, [averageRating, iconSize]);
+
+  const handlePress = useCallback(() => {
+    triggerHaptic('light');
+    setShowModal(true);
+  }, [triggerHaptic]);
 
   const Content = (
     <View style={[
@@ -171,7 +186,7 @@ export function ReputationScore({
   return (
     <>
       <TouchableOpacity
-        onPress={() => setShowModal(true)}
+        onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel={`Reputation score: ${averageRating.toFixed(1)} stars, ${reputation.level}. Tap for details.`}
       >
@@ -184,6 +199,8 @@ export function ReputationScore({
         transparent
         animationType="fade"
         onRequestClose={() => setShowModal(false)}
+        accessible={true}
+        accessibilityLabel="Reputation score details"
       >
         <Pressable 
           style={styles.modalOverlay}
@@ -235,13 +252,16 @@ export function ReputationScore({
               <Text style={styles.infoTitle}>How Reputation Works</Text>
               <Text style={styles.infoText}>
                 Reputation is calculated based on average ratings and the number of completed transactions. 
-                Higher ratings and more activity lead to better reputation levels.
+                Users need at least 5 ratings to reach their full reputation potential. Higher ratings and 
+                more activity lead to better reputation levels.
               </Text>
             </View>
 
             <TouchableOpacity 
               style={styles.closeButton}
               onPress={() => setShowModal(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
             >
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
@@ -262,7 +282,11 @@ export function ReputationScoreCompact({
   averageRating: number; 
   ratingCount: number 
 }) {
-  const reputation = getReputationLevel(averageRating, ratingCount);
+  // Memoize reputation calculation
+  const reputation = useMemo(
+    () => getReputationLevel(averageRating, ratingCount),
+    [averageRating, ratingCount]
+  );
   
   return (
     <View style={styles.compactInline}>

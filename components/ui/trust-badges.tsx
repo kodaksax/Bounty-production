@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useHapticFeedback } from '../../lib/haptic-feedback';
 
 // Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -79,6 +80,7 @@ export function TrustBadges({
   compact = false,
 }: TrustBadgesProps) {
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
+  const { triggerHaptic } = useHapticFeedback();
   
   const allBadges = showPlatformBadges ? [...PLATFORM_BADGES, ...badges] : badges;
 
@@ -86,9 +88,10 @@ export function TrustBadges({
     return null;
   }
 
-  const handleBadgePress = (badge: TrustBadge) => {
+  const handleBadgePress = useCallback((badge: TrustBadge) => {
+    triggerHaptic('light');
     setSelectedBadge(badge);
-  };
+  }, [triggerHaptic]);
 
   return (
     <View style={styles.container}>
@@ -135,6 +138,8 @@ export function TrustBadges({
         transparent
         animationType="fade"
         onRequestClose={() => setSelectedBadge(null)}
+        accessible={true}
+        accessibilityLabel="Security badge details"
       >
         <Pressable 
           style={styles.modalOverlay}
@@ -179,6 +184,12 @@ export function TrustBadges({
  */
 export function TrustBadgesCompact() {
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
+  const { triggerHaptic } = useHapticFeedback();
+
+  const handleBadgePress = useCallback((badge: TrustBadge) => {
+    triggerHaptic('light');
+    setSelectedBadge(badge);
+  }, [triggerHaptic]);
 
   return (
     <View style={styles.compactContainer}>
@@ -191,9 +202,10 @@ export function TrustBadgesCompact() {
           <TouchableOpacity
             key={badge.id}
             style={styles.compactBadge}
-            onPress={() => setSelectedBadge(badge)}
+            onPress={() => handleBadgePress(badge)}
             accessibilityRole="button"
             accessibilityLabel={badge.title}
+            accessibilityHint={`Learn more about ${badge.title}`}
           >
             <MaterialIcons name={badge.icon} size={16} color={badge.color} />
             <Text style={styles.compactBadgeText}>{badge.title}</Text>
@@ -207,6 +219,8 @@ export function TrustBadgesCompact() {
         transparent
         animationType="fade"
         onRequestClose={() => setSelectedBadge(null)}
+        accessible={true}
+        accessibilityLabel="Security badge details"
       >
         <Pressable 
           style={styles.modalOverlay}
@@ -231,6 +245,8 @@ export function TrustBadgesCompact() {
                 <TouchableOpacity 
                   style={[styles.closeButton, { backgroundColor: selectedBadge.color }]}
                   onPress={() => setSelectedBadge(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
                 >
                   <Text style={styles.closeButtonText}>Got it</Text>
                 </TouchableOpacity>

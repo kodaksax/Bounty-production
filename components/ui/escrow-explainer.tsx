@@ -72,6 +72,8 @@ export function EscrowExplainer({
         transparent
         animationType="fade"
         onRequestClose={() => setShowModal(false)}
+        accessible={true}
+        accessibilityLabel="Escrow protection explanation"
       >
         <Pressable 
           style={styles.modalOverlay}
