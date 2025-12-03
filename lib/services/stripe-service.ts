@@ -71,8 +71,7 @@ class StripeService {
         const stripeModule: any = await import('@stripe/stripe-react-native');
         if (stripeModule.initStripe && this.publishableKey) {
           // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
-          // Default value is for development - update for production in your app config
-          const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'merchant.com.bountyexpo';
+          const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'com.bounty0.BOUNTYExpo';
           await stripeModule.initStripe({
             publishableKey: this.publishableKey,
             merchantIdentifier: merchantId,
@@ -251,8 +250,9 @@ class StripeService {
   /**
    * Confirm a payment using the Stripe SDK
    * Handles 3D Secure authentication when required
+   * Notifies the backend after successful confirmation
    */
-  async confirmPayment(paymentIntentClientSecret: string, paymentMethodId: string): Promise<StripePaymentIntent> {
+  async confirmPayment(paymentIntentClientSecret: string, paymentMethodId: string, authToken?: string): Promise<StripePaymentIntent> {
     performanceService.startMeasurement('payment_confirm', 'payment_process', {
       paymentMethodId,
     });
@@ -356,6 +356,26 @@ class StripeService {
       }
 
       if (paymentIntent.status === 'succeeded') {
+        // Notify backend about the successful payment confirmation
+        // This ensures the backend is aware of 3DS authentication completion
+        try {
+          const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
+          await fetch(`${API_BASE_URL}/payments/confirm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+            },
+            body: JSON.stringify({
+              paymentIntentId,
+              paymentMethodId,
+            }),
+          });
+        } catch (backendError) {
+          // Log but don't fail - the webhook will handle the actual balance update
+          console.warn('[StripeService] Failed to notify backend of confirmation:', backendError);
+        }
+
         // Track payment completed
         await analyticsService.trackEvent('payment_completed', {
           paymentIntentId: paymentIntent.id,
