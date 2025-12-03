@@ -648,16 +648,15 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             if (fallbackError) {
               // Last resort: direct update (log warning about potential race condition)
               console.warn('[Webhook] Using non-atomic balance update - consider adding increment_balance RPC function');
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', userId)
-                .single();
-              
-              const currentBalance = profile?.balance || 0;
-              await supabase.from('profiles')
-                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
-                .eq('id', userId);
+              // Use a direct SQL update for atomicity as a last resort
+              // This requires a Postgres function 'fallback_atomic_increment_balance' to exist
+              const { error: lastResortError } = await supabase.rpc('fallback_atomic_increment_balance', {
+                p_user_id: userId,
+                p_amount: paymentIntent.amount / 100
+              });
+              if (lastResortError) {
+                console.error('[Webhook] Last-resort atomic balance update failed:', lastResortError);
+              }
             }
           } catch (fallbackErr) {
             console.error('[Webhook] Fallback balance update error:', fallbackErr);
