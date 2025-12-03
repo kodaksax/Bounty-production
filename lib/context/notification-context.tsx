@@ -86,8 +86,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (data.bountyId) {
       router.push(`/bounty/${data.bountyId}`);
     } else if (data.conversationId) {
-      // Navigate to specific conversation for message notifications
-      router.push(`/messenger/${data.conversationId}`);
+      // Navigate to messenger screen and open specific conversation
+      router.push(`/tabs/messenger-screen?conversationId=${data.conversationId}`);
     } else if (data.senderId) {
       router.push(`/profile/${data.senderId}`);
     } else if (data.followerId) {
