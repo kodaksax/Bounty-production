@@ -340,11 +340,10 @@ export const searchService = {
       // Now, process alertSearches sequentially to preserve async logic
       for (let i = 0; i < updatedSearches.length; i++) {
         const entry = updatedSearches[i];
-        if (entry.filters) {
+        if (entry.filters && entry.lastNotified) {
           const bounties = await bountyService.searchWithFilters(entry.filters);
           const newBounties = bounties.filter((b: Bounty) => {
-            const createdAt = (b as any).created_at;
-            return createdAt && new Date(createdAt) > entry.lastNotified;
+            return b.created_at && new Date(b.created_at) > entry.lastNotified!;
           });
           if (newBounties.length > 0) {
             results.push({
