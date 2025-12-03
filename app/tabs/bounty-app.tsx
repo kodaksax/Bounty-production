@@ -458,9 +458,13 @@ function BountyAppInner() {
       return null;
     }
 
-    // Helper to calculate how new a bounty is
-    const getAgeBadge = (createdAt: string) => {
-      const hours = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
+    // Helper to calculate how new a bounty is with safe date parsing
+    const getAgeBadge = (createdAt: string | undefined | null): string | null => {
+      if (!createdAt) return null;
+      const date = new Date(createdAt);
+      if (isNaN(date.getTime())) return null;
+      
+      const hours = (Date.now() - date.getTime()) / (1000 * 60 * 60);
       if (hours < 24) return 'New today';
       if (hours < 48) return 'Yesterday';
       if (hours < 72) return '2 days ago';
