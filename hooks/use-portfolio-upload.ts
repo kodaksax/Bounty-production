@@ -226,12 +226,14 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         : (mime && mime.startsWith('video/')) || assetKind === 'video' || (name && /\.(mp4|mov|mkv|webm|avi)$/i.test(name || '')) ? 'video'
         : 'file'
 
-      // Determine thumbnail: use video thumbnail for videos, or image preview for images
+      // Determine thumbnail: use video thumbnail for videos, or processed image for images
+      // Priority: processed image > uploaded image > lastPicked preview
       let thumbnailUri: string | undefined
       if (type === 'video' && videoThumbnailUri) {
         thumbnailUri = videoThumbnailUri
       } else if (type === 'image') {
-        thumbnailUri = lastPicked?.uri || uploaded.uri || uploaded.remoteUri
+        // Use processedUri (optimized) or uploaded URI, fallback to lastPicked preview
+        thumbnailUri = processedUri || uploaded.uri || uploaded.remoteUri || lastPicked?.uri
       }
 
       // For the persisted item, use the uploaded.remoteUri/url for canonical access,

@@ -160,11 +160,13 @@ export async function compressImage(
 
 /**
  * Estimates the file size from base64 string
+ * Base64 encoding increases size by ~33% (4:3 ratio), so to estimate
+ * the original binary size, we reverse this: bytes ≈ base64Length * 3/4
  * @param base64 - Base64 encoded image data
  * @returns Estimated file size in bytes
  */
 export function estimateFileSizeFromBase64(base64: string): number {
-  // Base64 increases size by ~33%, so original bytes ≈ base64Length * 3/4
+  // Reverse base64 expansion: original bytes ≈ base64Length * 3/4
   return Math.ceil((base64.length * 3) / 4);
 }
 
