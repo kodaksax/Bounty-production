@@ -315,44 +315,59 @@ export const searchService = {
       const alertSearches = savedSearches.filter((s) => s.alertsEnabled && s.type === 'bounty');
 
       const results: { searchId: string; name: string; count: number }[] = [];
+      const nowISOString = new Date().toISOString();
+      const updatedSearches = savedSearches.map((search) => {
+        if (search.alertsEnabled && search.type === 'bounty') {
+          const lastNotified = search.lastNotifiedAt
+            ? new Date(search.lastNotifiedAt)
+            : new Date(search.createdAt);
 
-      for (const search of alertSearches) {
-        const lastNotified = search.lastNotifiedAt
-          ? new Date(search.lastNotifiedAt)
-          : new Date(search.createdAt);
+          // Search for bounties created after last notification
+          const filters = {
+            ...(search.filters as BountySearchFilters || {}),
+            keywords: search.query || undefined,
+            status: ['open'],
+            limit: 10,
+          };
 
-        // Search for bounties created after last notification
-        const filters = {
-          ...(search.filters as BountySearchFilters || {}),
-          keywords: search.query || undefined,
-          status: ['open'],
-          limit: 10,
-        };
+          // Note: This is an async call, so we need to handle it outside map.
+          // We'll collect the info needed for now.
+          return { search, lastNotified, filters };
+        } else {
+          return { search };
+        }
+      });
 
-        const bounties = await bountyService.searchWithFilters(filters);
-
-        // Filter to only new bounties
-        const newBounties = bounties.filter((b: Bounty) => {
-          const createdAt = (b as any).created_at;
-          return createdAt && new Date(createdAt) > lastNotified;
-        });
-
-        if (newBounties.length > 0) {
-          results.push({
-            searchId: search.id,
-            name: search.name,
-            count: newBounties.length,
+      // Now, process alertSearches sequentially to preserve async logic
+      for (let i = 0; i < updatedSearches.length; i++) {
+        const entry = updatedSearches[i];
+        if (entry.filters) {
+          const bounties = await bountyService.searchWithFilters(entry.filters);
+          const newBounties = bounties.filter((b: Bounty) => {
+            const createdAt = (b as any).created_at;
+            return createdAt && new Date(createdAt) > entry.lastNotified;
           });
-
-          // Update last notified time
-          search.lastNotifiedAt = new Date().toISOString();
+          if (newBounties.length > 0) {
+            results.push({
+              searchId: entry.search.id,
+              name: entry.search.name,
+              count: newBounties.length,
+            });
+            // Replace with updated lastNotifiedAt
+            updatedSearches[i] = { ...entry, search: { ...entry.search, lastNotifiedAt: nowISOString } };
+          }
         }
       }
+
+      // Build the final array to save
+      const searchesToSave = updatedSearches.map((entry) =>
+        entry.search
+      );
 
       // Save updated searches with new lastNotifiedAt times
       await AsyncStorage.setItem(
         `${SAVED_SEARCHES_KEY}_${userId}`,
-        JSON.stringify(savedSearches)
+        JSON.stringify(searchesToSave)
       );
 
       return results;
