@@ -14,7 +14,7 @@ import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Image, Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Image, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -458,50 +458,58 @@ function BountyAppInner() {
       return null;
     }
 
+    // Helper to calculate how new a bounty is
+    const getAgeBadge = (createdAt: string) => {
+      const hours = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
+      if (hours < 24) return 'New today';
+      if (hours < 48) return 'Yesterday';
+      if (hours < 72) return '2 days ago';
+      return null;
+    };
+
     return (
       <View style={styles.trendingSection}>
         <View style={styles.trendingHeader}>
           <MaterialIcons name="trending-up" size={20} color="#fcd34d" />
           <Text style={styles.trendingTitle}>Trending This Week</Text>
         </View>
-        <FlatList
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={trendingBounties}
-          keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingVertical: 8 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.trendingCard}
-              onPress={() => router.push(`/postings/${item.id}`)}
-              accessibilityRole="button"
-              accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}, ${item.viewCount} views, ${item.applicationCount} applications`}
-            >
-              <View style={styles.trendingCardHeader}>
-                <Text style={styles.trendingCardTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                {item.isForHonor ? (
-                  <View style={styles.trendingHonorBadge}>
-                    <Text style={styles.trendingHonorText}>Honor</Text>
+        >
+          {trendingBounties.map((item) => {
+            const ageBadge = getAgeBadge(item.createdAt);
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.trendingCard}
+                onPress={() => router.push(`/postings/${item.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}${ageBadge ? ', ' + ageBadge : ''}`}
+              >
+                <View style={styles.trendingCardHeader}>
+                  <Text style={styles.trendingCardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  {item.isForHonor ? (
+                    <View style={styles.trendingHonorBadge}>
+                      <Text style={styles.trendingHonorText}>Honor</Text>
+                    </View>
+                  ) : item.amount ? (
+                    <Text style={styles.trendingAmount}>${item.amount}</Text>
+                  ) : null}
+                </View>
+                {ageBadge && (
+                  <View style={styles.trendingNewBadge}>
+                    <MaterialIcons name="schedule" size={12} color="#6ee7b7" />
+                    <Text style={styles.trendingNewText}>{ageBadge}</Text>
                   </View>
-                ) : item.amount ? (
-                  <Text style={styles.trendingAmount}>${item.amount}</Text>
-                ) : null}
-              </View>
-              <View style={styles.trendingStats}>
-                <View style={styles.trendingStat}>
-                  <MaterialIcons name="visibility" size={14} color="#a7f3d0" />
-                  <Text style={styles.trendingStatText}>{item.viewCount}</Text>
-                </View>
-                <View style={styles.trendingStat}>
-                  <MaterialIcons name="person-add" size={14} color="#a7f3d0" />
-                  <Text style={styles.trendingStatText}>{item.applicationCount}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
     );
   }, [isLoadingTrending, trendingBounties, router]);
@@ -933,6 +941,17 @@ const styles = StyleSheet.create({
     color: '#065f46',
     fontSize: 10,
     fontWeight: '700',
+  },
+  trendingNewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  trendingNewText: {
+    color: '#6ee7b7',
+    fontSize: 11,
+    fontWeight: '500',
   },
   trendingStats: {
     flexDirection: 'row',

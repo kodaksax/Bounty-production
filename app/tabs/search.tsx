@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -38,6 +38,7 @@ interface BountyRowItem {
 
 export default function EnhancedSearchScreen() {
   const router = useRouter();
+  const { q } = useLocalSearchParams<{ q?: string }>();
   const [activeTab, setActiveTab] = useState<SearchTab>('bounties');
   const [query, setQuery] = useState('');
   const [bountyResults, setBountyResults] = useState<BountyRowItem[]>([]);
@@ -61,6 +62,13 @@ export default function EnhancedSearchScreen() {
     sortBy: 'date_desc',
     status: ['open'],
   });
+
+  // Handle incoming query parameter from saved searches
+  useEffect(() => {
+    if (q && q.trim()) {
+      setQuery(q);
+    }
+  }, [q]);
 
   // Load saved filters on mount
   useEffect(() => {
