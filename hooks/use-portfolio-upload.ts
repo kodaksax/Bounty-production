@@ -198,7 +198,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       if (assetKind === 'video' || (mimeType && mimeType.startsWith('video/'))) {
         setState(s => ({ ...s, message: 'Generating thumbnail…' }))
         try {
-          videoThumbnailUri = await generateVideoThumbnail(processedUri)
+          videoThumbnailUri = await generateVideoThumbnail(assetUri)
         } catch (e) {
           console.warn('[usePortfolioUpload] video thumbnail generation failed:', e)
         }
