@@ -738,15 +738,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           
           if (rpcError) {
             console.warn('[Webhook] Using non-atomic balance update for refund - consider adding decrement_balance RPC');
-            const { data: profile } = await supabase
+            // Atomically decrement balance in a single SQL statement (fallback)
+            await supabase
               .from('profiles')
-              .select('balance')
-              .eq('id', originalTx.user_id)
-              .single();
-            
-            const currentBalance = profile?.balance || 0;
-            await supabase.from('profiles')
-              .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
+              .update({
+                balance: supabase.rpc('sql', {
+                  query: `GREATEST(0, balance - ${charge.amount_refunded / 100})`
+                })
+              })
               .eq('id', originalTx.user_id);
           }
 
