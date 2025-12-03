@@ -344,6 +344,124 @@ Consider adding:
 - Average time to read notifications
 - Push notification opt-out rate
 
+## Production Setup
+
+### 1. Configure iOS Push Credentials (APNs)
+
+To enable push notifications on iOS devices in production:
+
+1. **Create an APNs Key** in the Apple Developer Portal:
+   - Go to [developer.apple.com](https://developer.apple.com) → Certificates, Identifiers & Profiles
+   - Navigate to Keys and click "+" to create a new key
+   - Enable "Apple Push Notifications service (APNs)"
+   - Download the `.p8` file and note the Key ID
+
+2. **Configure EAS with APNs Key**:
+   ```bash
+   # Run this command and follow the prompts
+   eas credentials
+   
+   # Or configure via eas.json
+   ```
+
+3. **Add to EAS Secrets**:
+   - Go to your project on [expo.dev](https://expo.dev)
+   - Navigate to Secrets
+   - Add the following:
+     - `EXPO_PUSH_NOTIFICATION_APN_KEY_ID` - Your APNs Key ID
+     - `EXPO_PUSH_NOTIFICATION_APN_TEAM_ID` - Your Apple Team ID
+
+### 2. Configure Android Push Credentials (FCM)
+
+To enable push notifications on Android devices in production:
+
+1. **Set up Firebase Cloud Messaging**:
+   - Go to [Firebase Console](https://console.firebase.google.com)
+   - Create or select your project
+   - Go to Project Settings → Cloud Messaging
+   - Generate a new server key (FCM v1)
+
+2. **Download google-services.json**:
+   - In Firebase Console, add your Android app
+   - Download `google-services.json`
+   - Place it in the project root
+
+3. **Configure EAS with FCM**:
+   ```bash
+   eas credentials --platform android
+   ```
+
+4. **Add to EAS Secrets**:
+   - `EXPO_PUSH_NOTIFICATION_FCM_SERVER_KEY` - Your FCM Server Key
+
+### 3. Environment Configuration
+
+Ensure these environment variables are set in production:
+
+```bash
+# Backend (.env)
+DATABASE_URL=postgresql://user:password@host:5432/database
+EXPO_ACCESS_TOKEN=your_expo_access_token  # For Expo Push API
+
+# Frontend (EAS Build)
+EXPO_PUBLIC_API_URL=https://your-production-api.com
+```
+
+### 4. EAS Build Configuration
+
+Update `eas.json` for production builds:
+
+```json
+{
+  "build": {
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://your-production-api.com"
+      }
+    }
+  }
+}
+```
+
+### 5. Verify Configuration
+
+Run the following checks before deploying:
+
+```bash
+# Check notification config in app.json
+npx expo config --type introspect | grep -A 10 "notifications"
+
+# Verify EAS credentials
+eas credentials
+
+# Test notification sending (development)
+cd services/api && npx tsx src/test-notifications.ts
+```
+
+### 6. Permission Request Flow
+
+The app requests notification permissions at two points:
+1. **During Onboarding** - At the end of the onboarding flow (`app/onboarding/done.tsx`)
+2. **On App Launch** - Via NotificationProvider when user is authenticated
+
+Permission status is stored locally using AsyncStorage for quick access.
+
+### 7. Deep Linking Configuration
+
+The app handles notification taps with deep linking:
+- **Bounty notifications** → `/bounty/{bountyId}`
+- **Message notifications** → `/messenger/{conversationId}`
+- **Profile notifications** → `/profile/{userId}`
+
+Ensure URL scheme is configured in `app.json`:
+```json
+{
+  "expo": {
+    "scheme": "bountyexpo-workspace"
+  }
+}
+```
+
 ## Rollout Plan
 
 1. **Phase 1** (Complete): Core infrastructure and UI

@@ -85,6 +85,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // Navigate based on notification type and data
     if (data.bountyId) {
       router.push(`/bounty/${data.bountyId}`);
+    } else if (data.conversationId) {
+      // Navigate to specific conversation for message notifications
+      router.push(`/messenger/${data.conversationId}`);
     } else if (data.senderId) {
       router.push(`/profile/${data.senderId}`);
     } else if (data.followerId) {
@@ -92,10 +95,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
+  // Check for notification that launched the app
+  const checkInitialNotification = useCallback(async () => {
+    try {
+      const response = await Notifications.getLastNotificationResponseAsync();
+      if (response) {
+        console.log('App opened from notification:', response);
+        handleNotificationTap(response);
+      }
+    } catch (error) {
+      console.warn('Error checking initial notification:', error);
+    }
+  }, [handleNotificationTap]);
+
   // Setup notification listeners and request permissions on mount
   useEffect(() => {
     // Request permissions and register token
     notificationService.requestPermissionsAndRegisterToken();
+
+    // Check if app was opened from a notification
+    checkInitialNotification();
 
     // Setup listeners
     const listeners = notificationService.setupNotificationListeners(
@@ -116,7 +135,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return () => {
       listeners.remove();
     };
-  }, [fetchNotifications, refreshUnreadCount, handleNotificationTap]);
+  }, [fetchNotifications, refreshUnreadCount, handleNotificationTap, checkInitialNotification]);
 
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.

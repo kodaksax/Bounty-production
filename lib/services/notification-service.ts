@@ -6,6 +6,7 @@ import type { Notification } from '../types';
 
 const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
+const PERMISSION_STATUS_KEY = 'notifications:permission_status';
 
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
@@ -88,6 +89,38 @@ export class NotificationService {
   }
 
   /**
+   * Get the current notification permission status without requesting
+   */
+  async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      // Store the status for offline access
+      await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
+      return status as 'granted' | 'denied' | 'undetermined';
+    } catch (error) {
+      console.error('Error getting permission status:', error);
+      // Try to get cached status
+      try {
+        const cached = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+        return (cached as 'granted' | 'denied' | 'undetermined') || 'undetermined';
+      } catch {
+        return 'undetermined';
+      }
+    }
+  }
+
+  /**
+   * Get stored permission status from cache (synchronous-ish for quick UI)
+   */
+  async getStoredPermissionStatus(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Request notification permissions and register for push notifications
    */
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
@@ -100,19 +133,22 @@ export class NotificationService {
         finalStatus = status;
       }
 
+      // Store the permission status
+      await AsyncStorage.setItem(PERMISSION_STATUS_KEY, finalStatus);
+
       if (finalStatus !== 'granted') {
         console.log('Notification permissions not granted');
         return null;
       }
 
-  // Get the Expo push token
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
+      // Get the Expo push token
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
       
       // Register token with backend
-  await this.registerPushToken(token);
+      await this.registerPushToken(token);
 
-  // Also try to flush any tokens we cached from previous failed attempts
-  try { await this.flushPendingPushTokens(); } catch {}
+      // Also try to flush any tokens we cached from previous failed attempts
+      try { await this.flushPendingPushTokens(); } catch {}
 
       return token;
     } catch (error) {
