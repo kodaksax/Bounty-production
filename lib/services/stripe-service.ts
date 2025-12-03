@@ -595,13 +595,16 @@ class StripeService {
         decline_code?: string 
       };
       stripeError.type = error.type;
-      stripeError.code = error.code || error.decline_code;
+      // For card errors, decline_code is more specific than code
+      // Prefer decline_code when available for better error messaging
+      stripeError.code = error.decline_code || error.code;
       stripeError.decline_code = error.decline_code;
       return stripeError;
     }
 
     // Map specific error types to user-friendly messages
     if (error?.type === 'card_error' || error?.decline_code) {
+      // For card errors, decline_code is more specific
       const declineCode = error.decline_code || error.code;
       const declineMessages: Record<string, string> = {
         'insufficient_funds': 'Your card has insufficient funds.',

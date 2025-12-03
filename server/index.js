@@ -484,8 +484,13 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
     // Retrieve the payment intent
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-    // Verify ownership
-    if (paymentIntent.metadata?.user_id !== userId) {
+    // Verify ownership with strict string comparison
+    // Both values must be strings and match exactly
+    const metadataUserId = String(paymentIntent.metadata?.user_id || '');
+    const requestUserId = String(userId);
+    
+    if (!metadataUserId || metadataUserId !== requestUserId) {
+      console.warn(`[PaymentConfirm] Ownership mismatch: metadata=${metadataUserId}, request=${requestUserId}`);
       return res.status(403).json({ error: 'Not authorized to confirm this payment' });
     }
 
@@ -622,7 +627,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           throw txError;
         }
 
-        // Update user balance
+        // Update user balance using RPC for atomic operation
         const { error: balanceError } = await supabase.rpc('increment_balance', {
           p_user_id: userId,
           p_amount: paymentIntent.amount / 100
@@ -630,23 +635,39 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         if (balanceError) {
           console.error('[Webhook] Error updating balance via RPC:', balanceError);
-          // Fallback: direct update
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('balance')
-            .eq('id', userId)
-            .single();
-          
-          const currentBalance = profile?.balance || 0;
-          await supabase.from('profiles')
-            .update({ balance: currentBalance + (paymentIntent.amount / 100) })
-            .eq('id', userId);
+          // Fallback: Use SQL expression for atomic update (safer than read-then-write)
+          // Note: Supabase JS client doesn't support raw SQL expressions in update,
+          // so we use a workaround with the .rpc fallback or direct SQL
+          try {
+            // Attempt using textual SQL expression if supported
+            const { error: fallbackError } = await supabase.rpc('atomic_increment_balance', {
+              p_user_id: userId,
+              p_amount: paymentIntent.amount / 100
+            });
+            
+            if (fallbackError) {
+              // Last resort: direct update (log warning about potential race condition)
+              console.warn('[Webhook] Using non-atomic balance update - consider adding increment_balance RPC function');
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', userId)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
+                .eq('id', userId);
+            }
+          } catch (fallbackErr) {
+            console.error('[Webhook] Fallback balance update error:', fallbackErr);
+          }
         }
 
         console.log(`[Webhook] Transaction created: ${transaction.id}, balance updated for user ${userId}`);
         
-        // TODO: Send confirmation email/notification
-        // This can be implemented with a notification service
+        // Note: User notification should be implemented via a notification service
+        // when available (push notifications, email, etc.)
         break;
       }
 
@@ -708,17 +729,26 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
               metadata: { refund_reason: charge.refund?.reason }
             });
 
-          // Update user balance (subtract refunded amount)
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('balance')
-            .eq('id', originalTx.user_id)
-            .single();
+          // Update user balance atomically (subtract refunded amount)
+          // Try RPC first, then fallback to direct update with warning
+          const { error: rpcError } = await supabase.rpc('decrement_balance', {
+            p_user_id: originalTx.user_id,
+            p_amount: charge.amount_refunded / 100
+          });
           
-          const currentBalance = profile?.balance || 0;
-          await supabase.from('profiles')
-            .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
-            .eq('id', originalTx.user_id);
+          if (rpcError) {
+            console.warn('[Webhook] Using non-atomic balance update for refund - consider adding decrement_balance RPC');
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('balance')
+              .eq('id', originalTx.user_id)
+              .single();
+            
+            const currentBalance = profile?.balance || 0;
+            await supabase.from('profiles')
+              .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
+              .eq('id', originalTx.user_id);
+          }
 
           console.log(`[Webhook] Refund processed for user ${originalTx.user_id}`);
         }
@@ -786,21 +816,31 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         if (tx) {
           // Refund the amount back to user's wallet for failed withdrawal
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('balance')
-            .eq('id', tx.user_id)
-            .single();
-          
-          const currentBalance = profile?.balance || 0;
+          // Use atomic RPC if available, with fallback warning
           const refundAmount = Math.abs(tx.amount);
-          await supabase.from('profiles')
-            .update({ balance: currentBalance + refundAmount })
-            .eq('id', tx.user_id);
+          
+          const { error: rpcError } = await supabase.rpc('increment_balance', {
+            p_user_id: tx.user_id,
+            p_amount: refundAmount
+          });
+          
+          if (rpcError) {
+            console.warn('[Webhook] Using non-atomic balance update for failed transfer refund - consider adding increment_balance RPC');
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('balance')
+              .eq('id', tx.user_id)
+              .single();
+            
+            const currentBalance = profile?.balance || 0;
+            await supabase.from('profiles')
+              .update({ balance: currentBalance + refundAmount })
+              .eq('id', tx.user_id);
+          }
           
           console.log(`[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`);
           
-          // TODO: Send notification to user about failed withdrawal
+          // Note: User notification should be implemented via notification service when available
         }
         break;
       }
@@ -1172,16 +1212,66 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
       return res.status(400).json({ error: 'Insufficient balance for retry' });
     }
 
-    // Create new transfer
-    const transfer = await stripe.transfers.create({
-      amount: Math.round(amount * 100),
-      currency: 'usd',
-      destination: profile.stripe_connect_account_id,
-      metadata: { 
-        user_id: userId,
-        retry_of_transaction: transactionId,
-      }
+    // Use atomic balance decrement to prevent race conditions
+    // First try RPC, then fallback with optimistic locking
+    const { error: rpcError } = await supabase.rpc('decrement_balance_if_sufficient', {
+      p_user_id: userId,
+      p_amount: amount
     });
+    
+    let balanceDeducted = !rpcError;
+    
+    if (rpcError) {
+      console.warn('[Connect] RPC not available, using optimistic locking for transfer retry');
+      
+      // Optimistic locking: re-check balance and update atomically
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({ balance: profile.balance - amount })
+        .eq('id', userId)
+        .eq('balance', profile.balance) // Optimistic lock: only update if balance hasn't changed
+        .select()
+        .single();
+      
+      if (updateError || !updatedProfile) {
+        return res.status(409).json({ 
+          error: 'Balance changed during processing. Please try again.',
+          code: 'BALANCE_CONFLICT'
+        });
+      }
+      balanceDeducted = true;
+    }
+
+    if (!balanceDeducted) {
+      return res.status(400).json({ error: 'Failed to deduct balance for retry' });
+    }
+
+    // Create new transfer
+    let transfer;
+    try {
+      transfer = await stripe.transfers.create({
+        amount: Math.round(amount * 100),
+        currency: 'usd',
+        destination: profile.stripe_connect_account_id,
+        metadata: { 
+          user_id: userId,
+          retry_of_transaction: transactionId,
+        }
+      });
+    } catch (stripeError) {
+      // If transfer fails, refund the balance
+      console.error('[Connect] Transfer creation failed, refunding balance:', stripeError);
+      await supabase.rpc('increment_balance', {
+        p_user_id: userId,
+        p_amount: amount
+      }).catch(() => {
+        // Fallback: direct update
+        supabase.from('profiles')
+          .update({ balance: profile.balance })
+          .eq('id', userId);
+      });
+      throw stripeError;
+    }
 
     // Update the transaction with new transfer ID
     await supabase
@@ -1196,11 +1286,6 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
         }
       })
       .eq('id', transactionId);
-
-    // Deduct balance again
-    await supabase.from('profiles')
-      .update({ balance: profile.balance - amount })
-      .eq('id', userId);
 
     console.log(`[Connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`);
 
