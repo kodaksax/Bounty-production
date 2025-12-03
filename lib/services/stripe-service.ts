@@ -184,11 +184,11 @@ class StripeService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        // Do not expose backend error details to the client
         throw {
           type: 'api_error',
           code: response.status.toString(),
-          message: errorData.error || 'Failed to create payment intent',
+          message: 'Failed to create payment intent',
         };
       }
 
