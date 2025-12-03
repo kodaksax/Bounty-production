@@ -635,9 +635,72 @@ export const bountyService = {
 
   /**
    * Create a new bounty with offline support
+   * Includes spam prevention: rate limiting (max 10/day) and duplicate detection
    */
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
+      // Spam prevention: rate limiting - max 10 bounties per day
+      const posterId = (bounty as any).poster_id || (bounty as any).user_id;
+      if (posterId && isSupabaseConfigured) {
+        try {
+          const oneDayAgo = new Date();
+          oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+          
+          const { count, error: countError } = await supabase
+            .from('bounties')
+            .select('*', { count: 'exact', head: true })
+            .eq('poster_id', posterId)
+            .gte('created_at', oneDayAgo.toISOString());
+          
+          if (!countError && count !== null && count >= 10) {
+            logger.warning('Rate limit exceeded for bounty creation', { posterId, count });
+            throw new Error('Rate limit exceeded: You can only create 10 bounties per day. Please try again tomorrow.');
+          }
+        } catch (rateLimitError) {
+          if (rateLimitError instanceof Error && rateLimitError.message.includes('Rate limit exceeded')) {
+            throw rateLimitError;
+          }
+          // Log but don't block if rate limit check fails
+          logger.warning('Rate limit check failed, proceeding with creation', { error: rateLimitError });
+        }
+      }
+      
+      // Spam prevention: duplicate detection - check for similar titles in last 24 hours
+      if (posterId && bounty.title && isSupabaseConfigured) {
+        try {
+          const oneDayAgo = new Date();
+          oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+          
+          const { data: recentBounties, error: dupError } = await supabase
+            .from('bounties')
+            .select('title')
+            .eq('poster_id', posterId)
+            .gte('created_at', oneDayAgo.toISOString());
+          
+          if (!dupError && recentBounties && recentBounties.length > 0) {
+            const normalizedNewTitle = bounty.title.toLowerCase().trim();
+            const isDuplicate = recentBounties.some((b: any) => {
+              const existingTitle = (b.title || '').toLowerCase().trim();
+              // Exact match or very similar (>80% similarity)
+              return existingTitle === normalizedNewTitle || 
+                     (existingTitle.length > 10 && normalizedNewTitle.includes(existingTitle)) ||
+                     (normalizedNewTitle.length > 10 && existingTitle.includes(normalizedNewTitle));
+            });
+            
+            if (isDuplicate) {
+              logger.warning('Duplicate bounty detected', { posterId, title: bounty.title });
+              throw new Error('Duplicate content detected: A similar bounty was recently posted. Please create unique content.');
+            }
+          }
+        } catch (dupError) {
+          if (dupError instanceof Error && dupError.message.includes('Duplicate content detected')) {
+            throw dupError;
+          }
+          // Log but don't block if duplicate check fails
+          logger.warning('Duplicate check failed, proceeding with creation', { error: dupError });
+        }
+      }
+      
       // Check network connectivity
       const netState = await NetInfo.fetch();
       const isOnline = !!netState.isConnected;

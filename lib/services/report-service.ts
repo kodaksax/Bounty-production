@@ -18,6 +18,43 @@ export const REPORT_REASONS: ReportReason[] = [
   { id: 'fraud', label: 'Scam or fraud' },
 ];
 
+/**
+ * Send admin notification about a new report
+ * This creates a notification record for admins to review
+ */
+async function notifyAdminsOfReport(
+  contentType: 'bounty' | 'profile' | 'message',
+  contentId: string,
+  reason: string,
+  reporterId: string
+): Promise<void> {
+  try {
+    // Create an admin notification record (if notifications table exists)
+    // This is a best-effort notification - don't block the report submission
+    const { error } = await supabase.from('admin_notifications').insert({
+      type: 'new_report',
+      title: `New ${contentType} report: ${reason}`,
+      message: `A ${contentType} has been reported for ${reason}. Content ID: ${contentId}`,
+      content_type: contentType,
+      content_id: contentId,
+      reporter_id: reporterId,
+      priority: reason === 'fraud' || reason === 'harassment' ? 'high' : 'normal',
+      read: false,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      // Log but don't throw - notification is non-critical
+      console.warn('Could not create admin notification:', error.message);
+    } else {
+      console.log(`📧 Admin notification sent for ${contentType} report`);
+    }
+  } catch (err) {
+    // Silently fail for notifications - the report itself is what matters
+    console.warn('Admin notification failed:', err);
+  }
+}
+
 export const reportService = {
   /**
    * Report a bounty for moderation review
@@ -46,6 +83,9 @@ export const reportService = {
         console.error('Error submitting bounty report:', error);
         return { success: false, error: error.message };
       }
+
+      // Send admin notification
+      await notifyAdminsOfReport('bounty', String(bountyId), reason, userId);
 
       console.log(`🚨 Bounty ${bountyId} reported`, { reason, details });
       return { success: true };
@@ -86,6 +126,9 @@ export const reportService = {
         return { success: false, error: error.message };
       }
 
+      // Send admin notification
+      await notifyAdminsOfReport('profile', userId, reason, reporterId);
+
       console.log(`🚨 User ${userId} reported`, { reason, details });
       return { success: true };
     } catch (error) {
@@ -124,6 +167,9 @@ export const reportService = {
         console.error('Error submitting message report:', error);
         return { success: false, error: error.message };
       }
+
+      // Send admin notification
+      await notifyAdminsOfReport('message', messageId, reason, userId);
 
       console.log(`🚨 Message ${messageId} reported`, { reason, details });
       return { success: true };
@@ -175,12 +221,22 @@ export const reportService = {
    */
   async updateReportStatus(
     reportId: string,
-    status: 'reviewed' | 'resolved' | 'dismissed'
+    status: 'reviewed' | 'resolved' | 'dismissed',
+    resolutionNotes?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      const updateData: Record<string, any> = { 
+        status,
+        reviewed_at: new Date().toISOString(),
+      };
+      
+      if (resolutionNotes) {
+        updateData.resolution_notes = resolutionNotes;
+      }
+
       const { error } = await supabase
         .from('reports')
-        .update({ status })
+        .update(updateData)
         .eq('id', reportId);
 
       if (error) {
@@ -194,6 +250,57 @@ export const reportService = {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update report',
+      };
+    }
+  },
+
+  /**
+   * Get report statistics for admin dashboard
+   */
+  async getReportStats(): Promise<{ 
+    success: boolean; 
+    stats?: {
+      pending: number;
+      reviewed: number;
+      resolved: number;
+      dismissed: number;
+      highPriority: number;
+    }; 
+    error?: string 
+  }> {
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('status, reason');
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const stats = {
+        pending: 0,
+        reviewed: 0,
+        resolved: 0,
+        dismissed: 0,
+        highPriority: 0,
+      };
+
+      (data || []).forEach((report: any) => {
+        if (report.status === 'pending') stats.pending++;
+        else if (report.status === 'reviewed') stats.reviewed++;
+        else if (report.status === 'resolved') stats.resolved++;
+        else if (report.status === 'dismissed') stats.dismissed++;
+        
+        if (report.reason === 'fraud' || report.reason === 'harassment') {
+          stats.highPriority++;
+        }
+      });
+
+      return { success: true, stats };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get stats',
       };
     }
   },

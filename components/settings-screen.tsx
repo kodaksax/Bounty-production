@@ -165,6 +165,25 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           icon="gavel"
         />
         
+        <SettingsCard
+          title="Community Guidelines"
+          description="Learn about our community standards for safety, trust, and respectful behavior."
+          primaryLabel="View Guidelines"
+          onPrimary={() => {
+            // Navigate to community guidelines using expo-router
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const { router } = require('expo-router');
+              if (router && typeof router.push === 'function') {
+                router.push('/legal/community-guidelines');
+              }
+            } catch (e) {
+              console.warn('[Settings] Navigation to community guidelines failed', e);
+            }
+          }}
+          icon="security"
+        />
+        
         {/* Log Out - placed directly after Legal */}
         <SettingsCard
           title="Log Out"
