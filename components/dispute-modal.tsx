@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SUPPORT_EMAIL, SUPPORT_PHONE, EMAIL_SUBJECTS, createSupportTel } from "../lib/constants/support";
 
 interface DisputeModalProps {
   visible: boolean;
@@ -18,8 +19,6 @@ interface DisputeModalProps {
   bountyTitle: string;
   transactionId?: string;
 }
-
-const SUPPORT_EMAIL = "Support@bountyfinder.app";
 
 export function DisputeModal({
   visible,
@@ -55,7 +54,11 @@ export function DisputeModal({
   };
 
   const handleContactSupport = () => {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Dispute: ${bountyTitle}`);
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(EMAIL_SUBJECTS.dispute(bountyTitle))}`);
+  };
+
+  const handleCallSupport = () => {
+    Linking.openURL(createSupportTel());
   };
 
   return (
@@ -136,6 +139,9 @@ export function DisputeModal({
                     <Text style={styles.supportLabel}>Need help now?</Text>
                     <TouchableOpacity onPress={handleContactSupport}>
                       <Text style={styles.supportEmail}>{SUPPORT_EMAIL}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleCallSupport}>
+                      <Text style={styles.supportPhone}>{SUPPORT_PHONE}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -327,6 +333,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#10b981",
     textDecorationLine: "underline",
+  },
+  supportPhone: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6ee7b7",
+    textDecorationLine: "underline",
+    marginTop: 4,
   },
   confirmCard: {
     backgroundColor: "#065f46",

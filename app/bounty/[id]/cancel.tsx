@@ -7,13 +7,15 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, AlertCircle, Phone, Mail, HelpCircle } from 'lucide-react-native';
 import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import type { Bounty } from 'lib/services/database.types';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
 export default function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -103,6 +105,15 @@ export default function CancellationRequestScreen() {
     }
   };
   
+  const handleContactSupport = () => {
+    const subject = bounty ? EMAIL_SUBJECTS.cancellation(bounty.title) : EMAIL_SUBJECTS.general;
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`);
+  };
+
+  const handleCallSupport = () => {
+    Linking.openURL(createSupportTel());
+  };
+  
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
@@ -122,6 +133,88 @@ export default function CancellationRequestScreen() {
         >
           <Text className="text-white font-semibold">Go Back</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Edge case: Bounty already completed - cannot cancel
+  if (bounty.status === 'completed') {
+    return (
+      <View className="flex-1 bg-white items-center justify-center p-6">
+        <AlertCircle size={48} color="#f59e0b" />
+        <Text className="text-lg font-semibold text-gray-900 mt-4">Cannot Cancel</Text>
+        <Text className="text-gray-600 text-center mt-2">
+          This bounty has already been completed. If you have an issue, please contact support for dispute resolution.
+        </Text>
+        <View className="mt-6 space-y-3 w-full max-w-xs">
+          <TouchableOpacity
+            onPress={handleContactSupport}
+            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+          >
+            <Mail size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">Email Support</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleCallSupport}
+            className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
+          >
+            <Phone size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">Call Support</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="px-6 py-3 rounded-lg"
+          >
+            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Edge case: Bounty already cancelled
+  if (bounty.status === 'cancelled') {
+    return (
+      <View className="flex-1 bg-white items-center justify-center p-6">
+        <AlertCircle size={48} color="#9ca3af" />
+        <Text className="text-lg font-semibold text-gray-900 mt-4">Already Cancelled</Text>
+        <Text className="text-gray-600 text-center mt-2">
+          This bounty has already been cancelled.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
+        >
+          <Text className="text-white font-semibold">Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Edge case: Bounty already has pending cancellation request
+  if (bounty.status === 'cancellation_requested') {
+    return (
+      <View className="flex-1 bg-white items-center justify-center p-6">
+        <AlertCircle size={48} color="#f59e0b" />
+        <Text className="text-lg font-semibold text-gray-900 mt-4">Cancellation Pending</Text>
+        <Text className="text-gray-600 text-center mt-2">
+          A cancellation request is already pending for this bounty. Please wait for the other party to respond.
+        </Text>
+        <View className="mt-6 space-y-3 w-full max-w-xs">
+          <TouchableOpacity
+            onPress={handleContactSupport}
+            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+          >
+            <HelpCircle size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">Contact Support</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="px-6 py-3 rounded-lg mt-3"
+          >
+            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -222,6 +315,37 @@ export default function CancellationRequestScreen() {
               </Text>
             )}
           </TouchableOpacity>
+          
+          {/* Support Contact Section */}
+          <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+            <View className="flex-row items-start">
+              <HelpCircle size={20} color="#3b82f6" />
+              <View className="flex-1 ml-3">
+                <Text className="text-blue-900 font-semibold mb-1">
+                  Need Help?
+                </Text>
+                <Text className="text-blue-800 text-sm mb-3">
+                  If you have questions about the cancellation process or need assistance with a dispute, our support team is here to help.
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  <TouchableOpacity
+                    onPress={handleContactSupport}
+                    className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
+                  >
+                    <Mail size={14} color="white" />
+                    <Text className="text-white text-sm font-medium ml-1">Email</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCallSupport}
+                    className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
+                  >
+                    <Phone size={14} color="white" />
+                    <Text className="text-white text-sm font-medium ml-1">Call</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
           
           <TouchableOpacity
             onPress={() => router.back()}

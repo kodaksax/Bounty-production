@@ -7,15 +7,17 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, AlertCircle, Upload } from 'lucide-react-native';
+import { ArrowLeft, AlertCircle, Upload, Phone, Mail, HelpCircle } from 'lucide-react-native';
 import { disputeService } from 'lib/services/dispute-service';
 import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import type { BountyDispute, DisputeEvidence, BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
 export default function DisputeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -151,6 +153,15 @@ export default function DisputeScreen() {
       setSubmitting(false);
     }
   };
+
+  const handleContactSupport = () => {
+    const subject = bounty ? EMAIL_SUBJECTS.dispute(bounty.title) : EMAIL_SUBJECTS.general;
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`);
+  };
+
+  const handleCallSupport = () => {
+    Linking.openURL(createSupportTel());
+  };
   
   if (loading) {
     return (
@@ -167,12 +178,24 @@ export default function DisputeScreen() {
         <Text className="text-lg font-semibold text-gray-900 mt-4">
           Dispute information not found
         </Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
-        >
-          <Text className="text-white font-semibold">Go Back</Text>
-        </TouchableOpacity>
+        <Text className="text-gray-600 text-center mt-2">
+          Unable to load the dispute information. This may occur if the bounty was not found or no cancellation request exists.
+        </Text>
+        <View className="mt-6 space-y-3 w-full max-w-xs">
+          <TouchableOpacity
+            onPress={handleContactSupport}
+            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+          >
+            <Mail size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">Contact Support</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="px-6 py-3 rounded-lg mt-3"
+          >
+            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -378,6 +401,37 @@ export default function DisputeScreen() {
               </TouchableOpacity>
             </>
           )}
+          
+          {/* Support Contact Section - Always visible */}
+          <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mt-6">
+            <View className="flex-row items-start">
+              <HelpCircle size={20} color="#059669" />
+              <View className="flex-1 ml-3">
+                <Text className="text-emerald-900 font-semibold mb-1">
+                  Dispute Mediation Support
+                </Text>
+                <Text className="text-emerald-800 text-sm mb-2">
+                  Our support team typically responds within {SUPPORT_RESPONSE_TIMES.dispute}. For urgent matters, please call us directly.
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  <TouchableOpacity
+                    onPress={handleContactSupport}
+                    className="flex-row items-center bg-emerald-600 px-3 py-2 rounded-lg"
+                  >
+                    <Mail size={14} color="white" />
+                    <Text className="text-white text-sm font-medium ml-1">{SUPPORT_EMAIL}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCallSupport}
+                    className="flex-row items-center bg-emerald-500 px-3 py-2 rounded-lg"
+                  >
+                    <Phone size={14} color="white" />
+                    <Text className="text-white text-sm font-medium ml-1">{SUPPORT_PHONE}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
           
           <TouchableOpacity
             onPress={() => router.back()}
