@@ -627,7 +627,7 @@ class StripeService {
       const message = declineMessages[declineCode] || error.message || 'Your card was declined.';
       const stripeError = new Error(message) as Error & { type?: string; code?: string; decline_code?: string };
       stripeError.type = 'card_error';
-      stripeError.code = error.code;
+      stripeError.code = declineCode;
       stripeError.decline_code = declineCode;
       return stripeError;
     }
