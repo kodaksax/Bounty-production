@@ -86,7 +86,7 @@ export default function DoneScreen() {
         try {
           const token = await notificationService.requestPermissionsAndRegisterToken();
           if (token) {
-            console.log('[Onboarding] Push notification token registered:', token.substring(0, 20) + '...');
+            console.log('[Onboarding] Push notification token registered successfully');
           } else {
             console.log('[Onboarding] User declined notification permissions or permissions not available');
           }

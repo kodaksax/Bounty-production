@@ -112,9 +112,10 @@ export class NotificationService {
   /**
    * Get stored permission status from cache (synchronous-ish for quick UI)
    */
-  async getStoredPermissionStatus(): Promise<string | null> {
+  async getStoredPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | null> {
     try {
-      return await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+      const status = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+      return status as 'granted' | 'denied' | 'undetermined' | null;
     } catch {
       return null;
     }
