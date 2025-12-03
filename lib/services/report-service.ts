@@ -41,7 +41,7 @@ export const REPORT_REASONS: ReportReason[] = [
  * This creates a notification record for admins to review
  */
 async function notifyAdminsOfReport(
-  contentType: 'bounty' | 'profile' | 'message',
+  contentType: ReportContentType,
   contentId: string,
   reason: ReportReasonId,
   reporterId: string
