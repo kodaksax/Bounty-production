@@ -65,12 +65,17 @@ class StripeService {
       if (this.isInitialized) return;
       
       // Initialize the Stripe React Native SDK if available
+      // NOTE: The merchantIdentifier must be registered in Apple Developer portal for Apple Pay to work.
+      // See STRIPE_INTEGRATION_BACKEND.md for setup instructions.
       try {
         const stripeModule: any = await import('@stripe/stripe-react-native');
         if (stripeModule.initStripe && this.publishableKey) {
+          // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
+          // Default value is for development - update for production in your app config
+          const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'merchant.com.bountyexpo';
           await stripeModule.initStripe({
             publishableKey: this.publishableKey,
-            merchantIdentifier: 'merchant.com.bountyexpo',
+            merchantIdentifier: merchantId,
             urlScheme: 'bountyexpo',
           });
           this.stripeSDK = stripeModule;
@@ -166,6 +171,15 @@ class StripeService {
 
     try {
       await this.initialize();
+      
+      // Validate amount before sending to backend
+      if (amount <= 0) {
+        throw {
+          type: 'validation_error',
+          code: 'invalid_amount',
+          message: 'Amount must be positive',
+        };
+      }
       
       // Call backend API to create PaymentIntent
       const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
@@ -426,10 +440,8 @@ class StripeService {
       });
 
       if (!response.ok) {
-        // If endpoint doesn't exist yet, return empty array
-        if (response.status === 404) {
-          return [];
-        }
+        // Log warning for any error status including 404
+        // 404 could mean endpoint not deployed yet, which should be logged
         console.warn('[StripeService] Failed to fetch payment methods:', response.status);
         return [];
       }
@@ -473,7 +485,7 @@ class StripeService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        // Do not expose backend error details to the client
         throw {
           type: 'api_error',
           code: response.status.toString(),

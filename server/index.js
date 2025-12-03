@@ -635,28 +635,31 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         if (balanceError) {
           console.error('[Webhook] Error updating balance via RPC:', balanceError);
-          // Fallback: Use SQL expression for atomic update (safer than read-then-write)
-          // Note: Supabase JS client doesn't support raw SQL expressions in update,
-          // so we use a workaround with the .rpc fallback or direct SQL
+          // Fallback: Retry the RPC once more in case of transient error
           try {
-            // Attempt using textual SQL expression if supported
-            const { error: fallbackError } = await supabase.rpc('increment_balance', {
+            const { error: retryError } = await supabase.rpc('increment_balance', {
               p_user_id: userId,
               p_amount: paymentIntent.amount / 100
             });
             
-            if (fallbackError) {
-              // Last resort: direct update (log warning about potential race condition)
-              console.warn('[Webhook] Using non-atomic balance update - consider adding increment_balance RPC function');
-              // Use a direct SQL update for atomicity as a last resort
-              // This requires a Postgres function 'fallback_atomic_increment_balance' to exist
-              const { error: lastResortError } = await supabase.rpc('fallback_atomic_increment_balance', {
-                p_user_id: userId,
-                p_amount: paymentIntent.amount / 100
+            if (retryError) {
+              // Last resort: direct update (log error about potential race condition)
+              console.error('[Webhook] Atomic balance update failed after retry - using non-atomic update. Please add increment_balance RPC function to prevent race conditions.', {
+                user_id: userId,
+                amount: paymentIntent.amount / 100,
+                originalError: balanceError,
+                retryError: retryError
               });
-              if (lastResortError) {
-                console.error('[Webhook] Last-resort atomic balance update failed:', lastResortError);
-              }
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', userId)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
+                .eq('id', userId);
             }
           } catch (fallbackErr) {
             console.error('[Webhook] Fallback balance update error:', fallbackErr);
@@ -729,23 +732,38 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             });
 
           // Update user balance atomically (subtract refunded amount)
-          // Try RPC first, then fallback to direct update with warning
+          // Try RPC first, then retry once on failure
           const { error: rpcError } = await supabase.rpc('decrement_balance', {
             p_user_id: originalTx.user_id,
             p_amount: charge.amount_refunded / 100
           });
           
           if (rpcError) {
-            console.warn('[Webhook] Using non-atomic balance update for refund - consider adding decrement_balance RPC');
-            // Atomically decrement balance in a single SQL statement (fallback)
-            await supabase
-              .from('profiles')
-              .update({
-                balance: supabase.rpc('sql', {
-                  query: `GREATEST(0, balance - ${charge.amount_refunded / 100})`
-                })
-              })
-              .eq('id', originalTx.user_id);
+            // Retry the atomic RPC once in case of transient error
+            const { error: retryError } = await supabase.rpc('decrement_balance', {
+              p_user_id: originalTx.user_id,
+              p_amount: charge.amount_refunded / 100
+            });
+            
+            if (retryError) {
+              console.error('[Webhook] Atomic balance update for refund failed after retry. Please add decrement_balance RPC function.', {
+                user_id: originalTx.user_id,
+                amount: charge.amount_refunded / 100,
+                originalError: rpcError,
+                retryError: retryError
+              });
+              // Last resort: non-atomic update with warning
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', originalTx.user_id)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
+                .eq('id', originalTx.user_id);
+            }
           }
 
           console.log(`[Webhook] Refund processed for user ${originalTx.user_id}`);
@@ -759,7 +777,9 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         console.log(`[Webhook] Transfer created: ${transfer.id} to ${transfer.destination} for $${transfer.amount / 100}`);
         
         // Update related transaction with transfer ID
+        // Match by user_id, type, amount, and null stripe_transfer_id for more accurate association
         const userId = transfer.metadata?.user_id;
+        const transferAmountDollars = transfer.amount / 100;
         if (userId) {
           await supabase
             .from('wallet_transactions')
@@ -769,6 +789,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             })
             .eq('user_id', userId)
             .eq('type', 'withdrawal')
+            .eq('amount', -transferAmountDollars) // Match the amount for accurate association
             .is('stripe_transfer_id', null)
             .order('created_at', { ascending: false })
             .limit(1);
