@@ -110,7 +110,7 @@ export class NotificationService {
   }
 
   /**
-   * Get stored permission status from cache (synchronous-ish for quick UI)
+   * Get stored permission status from cache (async but faster than checking system permissions)
    */
   async getStoredPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | null> {
     try {
