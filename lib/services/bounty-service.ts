@@ -685,10 +685,8 @@ export const bountyService = {
             const normalizedNewTitle = bounty.title.toLowerCase().trim();
             const isDuplicate = recentBounties.some((b: { title: string }) => {
               const existingTitle = (b.title || '').toLowerCase().trim();
-              // Check for exact match or substring match for longer titles
-              return existingTitle === normalizedNewTitle || 
-                     (existingTitle.length > MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK && normalizedNewTitle.includes(existingTitle)) ||
-                     (normalizedNewTitle.length > MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK && existingTitle.includes(normalizedNewTitle));
+              // Only check for exact match to avoid false positives
+              return existingTitle === normalizedNewTitle;
             });
             
             if (isDuplicate) {
