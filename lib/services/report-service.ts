@@ -43,7 +43,7 @@ export const REPORT_REASONS: ReportReason[] = [
 async function notifyAdminsOfReport(
   contentType: 'bounty' | 'profile' | 'message',
   contentId: string,
-  reason: string,
+  reason: ReportReasonId,
   reporterId: string
 ): Promise<void> {
   try {
