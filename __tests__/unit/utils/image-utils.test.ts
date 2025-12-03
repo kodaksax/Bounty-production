@@ -6,6 +6,9 @@ import {
   MAX_FILE_SIZE_BYTES,
   DEFAULT_COMPRESS_QUALITY,
   MIN_COMPRESS_QUALITY,
+  QUALITY_STEP,
+  MAX_COMPRESSION_ITERATIONS,
+  MIN_SIZE_REDUCTION_THRESHOLD,
 } from '../../../lib/utils/image-utils';
 
 // Mock expo-image-manipulator
@@ -38,6 +41,18 @@ describe('image-utils', () => {
 
     it('should have correct MIN_COMPRESS_QUALITY', () => {
       expect(MIN_COMPRESS_QUALITY).toBe(0.3);
+    });
+
+    it('should have correct QUALITY_STEP', () => {
+      expect(QUALITY_STEP).toBe(0.15);
+    });
+
+    it('should have correct MAX_COMPRESSION_ITERATIONS', () => {
+      expect(MAX_COMPRESSION_ITERATIONS).toBe(4);
+    });
+
+    it('should have correct MIN_SIZE_REDUCTION_THRESHOLD', () => {
+      expect(MIN_SIZE_REDUCTION_THRESHOLD).toBe(0.05);
     });
   });
 

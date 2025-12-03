@@ -18,6 +18,13 @@ export const DEFAULT_COMPRESS_QUALITY = 0.8;
 export const MIN_COMPRESS_QUALITY = 0.3;
 
 /**
+ * Quality reduction settings for iterative compression
+ */
+export const QUALITY_STEP = 0.15; // Larger steps to reduce iterations
+export const MAX_COMPRESSION_ITERATIONS = 4; // Prevent excessive processing
+export const MIN_SIZE_REDUCTION_THRESHOLD = 0.05; // Early exit if <5% size reduction
+
+/**
  * Image processing options
  */
 export interface ImageProcessOptions {
@@ -205,15 +212,35 @@ export async function processImage(
   // Step 3: Compress with quality, iterating if needed to meet size target
   let currentQuality = quality;
   let compressed = await compressImage(currentUri, currentQuality, format);
+  let previousSize = compressed.base64 ? estimateFileSizeFromBase64(compressed.base64) : 0;
+  let iterations = 0;
 
   // Iterate to reduce quality if file is still too large
+  // Optimizations:
+  // - Max iterations limit prevents excessive processing
+  // - Larger quality steps (QUALITY_STEP) reduce iterations
+  // - Early exit if size reduction between iterations is minimal
   while (
     compressed.base64 &&
     estimateFileSizeFromBase64(compressed.base64) > maxFileSizeBytes &&
-    currentQuality > MIN_COMPRESS_QUALITY
+    currentQuality > MIN_COMPRESS_QUALITY &&
+    iterations < MAX_COMPRESSION_ITERATIONS
   ) {
-    currentQuality -= 0.1;
+    currentQuality -= QUALITY_STEP;
+    currentQuality = Math.max(currentQuality, MIN_COMPRESS_QUALITY);
     compressed = await compressImage(currentUri, currentQuality, format);
+    iterations++;
+
+    // Early exit if size reduction is minimal (< threshold)
+    if (compressed.base64) {
+      const currentSize = estimateFileSizeFromBase64(compressed.base64);
+      const sizeReduction = previousSize > 0 ? (previousSize - currentSize) / previousSize : 0;
+      if (sizeReduction < MIN_SIZE_REDUCTION_THRESHOLD && iterations > 1) {
+        // Further compression won't help much, exit early
+        break;
+      }
+      previousSize = currentSize;
+    }
   }
 
   return {
