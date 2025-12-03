@@ -835,7 +835,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         if (tx) {
           // Refund the amount back to user's wallet for failed withdrawal
-          // Use atomic RPC if available, with fallback warning
+          // Use atomic RPC if available, with fallback
           const refundAmount = Math.abs(tx.amount);
           
           const { error: rpcError } = await supabase.rpc('increment_balance', {
@@ -844,19 +844,30 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           });
           
           if (rpcError) {
-            // Attempt the atomic RPC one more time in case of transient error
-            const { error: secondRpcError } = await supabase.rpc('increment_balance', {
+            // Retry the atomic RPC once in case of transient error
+            const { error: retryError } = await supabase.rpc('increment_balance', {
               p_user_id: tx.user_id,
               p_amount: refundAmount
             });
-            if (secondRpcError) {
-              console.error('[Webhook] Failed to refund user after transfer failure: could not perform atomic balance update via increment_balance RPC.', {
+            
+            if (retryError) {
+              console.error('[Webhook] Atomic balance update for transfer refund failed after retry. Using non-atomic fallback.', {
                 user_id: tx.user_id,
                 refundAmount,
                 originalError: rpcError,
-                secondError: secondRpcError
+                retryError: retryError
               });
-              // Optionally: trigger alert/notification for manual intervention here
+              // Last resort: non-atomic update to ensure user gets refunded
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', tx.user_id)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: currentBalance + refundAmount })
+                .eq('id', tx.user_id);
             }
           }
           
