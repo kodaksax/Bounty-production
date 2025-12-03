@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { AccessibilityRole, Image, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 export interface BrandingLogoProps {
   /**
@@ -17,6 +17,11 @@ export interface BrandingLogoProps {
    * Custom style for the Image
    */
   imageStyle?: StyleProp<ImageStyle>;
+  /**
+   * Accessibility role for screen readers
+   * Defaults to 'header' to maintain parity with previous implementation
+   */
+  accessibilityRole?: AccessibilityRole;
 }
 
 const sizeMap = {
@@ -32,7 +37,8 @@ const sizeMap = {
 export function BrandingLogo({ 
   size = 'medium', 
   containerStyle, 
-  imageStyle 
+  imageStyle,
+  accessibilityRole = 'header',
 }: BrandingLogoProps) {
   const dimensions = sizeMap[size];
   
@@ -43,6 +49,7 @@ export function BrandingLogo({
         style={[dimensions, imageStyle]}
         resizeMode="contain"
         accessibilityLabel="BOUNTY"
+        accessibilityRole={accessibilityRole}
       />
     </View>
   );
