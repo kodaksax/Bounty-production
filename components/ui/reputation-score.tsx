@@ -94,9 +94,10 @@ export function ReputationScore({
     [averageRating, ratingCount]
   );
   
-  const iconSize = size === 'small' ? 14 : size === 'large' ? 24 : 18;
-  const scoreFontSize = size === 'small' ? 16 : size === 'large' ? 28 : 22;
-  const labelFontSize = size === 'small' ? 10 : size === 'large' ? 14 : 12;
+  // Memoize size-based values
+  const iconSize = useMemo(() => size === 'small' ? 14 : size === 'large' ? 24 : 18, [size]);
+  const scoreFontSize = useMemo(() => size === 'small' ? 16 : size === 'large' ? 28 : 22, [size]);
+  const labelFontSize = useMemo(() => size === 'small' ? 10 : size === 'large' ? 14 : 12, [size]);
 
   // Memoize star rendering function
   const renderStars = useCallback((starSize: number = iconSize) => {
@@ -251,9 +252,9 @@ export function ReputationScore({
             <View style={styles.infoBox}>
               <Text style={styles.infoTitle}>How Reputation Works</Text>
               <Text style={styles.infoText}>
-                Reputation is calculated based on average ratings and the number of completed transactions. 
-                Users need at least 5 ratings to reach their full reputation potential. Higher ratings and 
-                more activity lead to better reputation levels.
+                Reputation is calculated based on average ratings and the number of ratings received. 
+                Users need at least 5 ratings to reach their full reputation potential. Consistently 
+                high ratings lead to better reputation levels.
               </Text>
             </View>
 
