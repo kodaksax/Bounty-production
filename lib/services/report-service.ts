@@ -287,33 +287,40 @@ export const reportService = {
     error?: string 
   }> {
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .select('status, reason');
+      // Use parallel count queries for each status and high-priority reasons
+      const [pending, reviewed, resolved, dismissed, highPriority] = await Promise.all([
+        supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'reviewed'),
+        supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
+        supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'dismissed'),
+        supabase.from('reports').select('*', { count: 'exact', head: true }).in('reason', ['fraud', 'harassment']),
+      ]);
 
-      if (error) {
-        return { success: false, error: error.message };
+      // Check for errors in any of the queries
+      if (
+        pending.error ||
+        reviewed.error ||
+        resolved.error ||
+        dismissed.error ||
+        highPriority.error
+      ) {
+        const errorMsg =
+          pending.error?.message ||
+          reviewed.error?.message ||
+          resolved.error?.message ||
+          dismissed.error?.message ||
+          highPriority.error?.message ||
+          'Unknown error';
+        return { success: false, error: errorMsg };
       }
 
       const stats = {
-        pending: 0,
-        reviewed: 0,
-        resolved: 0,
-        dismissed: 0,
-        highPriority: 0,
+        pending: pending.count ?? 0,
+        reviewed: reviewed.count ?? 0,
+        resolved: resolved.count ?? 0,
+        dismissed: dismissed.count ?? 0,
+        highPriority: highPriority.count ?? 0,
       };
-
-      (data || []).forEach((report: Pick<ReportRecord, 'status' | 'reason'>) => {
-        if (report.status === 'pending') stats.pending++;
-        else if (report.status === 'reviewed') stats.reviewed++;
-        else if (report.status === 'resolved') stats.resolved++;
-        else if (report.status === 'dismissed') stats.dismissed++;
-        
-        if (report.reason === 'fraud' || report.reason === 'harassment') {
-          stats.highPriority++;
-        }
-      });
-
       return { success: true, stats };
     } catch (error) {
       return {
