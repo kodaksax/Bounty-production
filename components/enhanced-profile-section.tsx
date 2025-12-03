@@ -31,7 +31,21 @@ import { ReputationScoreCompact } from "./ui/reputation-score";
  * Progress bar component for upload progress
  */
 function UploadProgressBar({ progress, message }: { progress: number; message?: string | null }) {
-  if (progress <= 0 || progress >= 1) return null;
+  const [showBar, setShowBar] = useState(false);
+
+  useEffect(() => {
+    if (progress > 0 && progress < 1) {
+      setShowBar(true);
+    } else if (progress >= 1) {
+      setShowBar(true);
+      const timeout = setTimeout(() => setShowBar(false), 800); // Show for 800ms at 100%
+      return () => clearTimeout(timeout);
+    } else {
+      setShowBar(false);
+    }
+  }, [progress]);
+
+  if (!showBar) return null;
   
   return (
     <View className="bg-emerald-900/50 rounded-lg p-3 mb-3">
