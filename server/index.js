@@ -1266,11 +1266,18 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
       await supabase.rpc('increment_balance', {
         p_user_id: userId,
         p_amount: amount
-      }).catch(() => {
-        // Fallback: direct update
-        supabase.from('profiles')
-          .update({ balance: profile.balance })
-          .eq('id', userId);
+      }).catch(async (rpcFallbackError) => {
+        // Fallback: direct update with error handling and logging
+        try {
+          const { error: fallbackUpdateError } = await supabase.from('profiles')
+            .update({ balance: profile.balance })
+            .eq('id', userId);
+          if (fallbackUpdateError) {
+            console.error('[Connect] Fallback balance refund update failed:', fallbackUpdateError);
+          }
+        } catch (fallbackException) {
+          console.error('[Connect] Exception during fallback balance refund update:', fallbackException);
+        }
       });
       throw stripeError;
     }
