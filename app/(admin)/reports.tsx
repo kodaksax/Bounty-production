@@ -298,7 +298,7 @@ export default function AdminReportsScreen() {
 
                 // Update user status in the database
                 // If suspending, set suspended_until to 7 days from now; otherwise, clear it
-                let suspendedUntil = null;
+                let suspendedUntil: Date | null = null;
                 if (action === 'suspend') {
                   suspendedUntil = new Date();
                   suspendedUntil.setDate(suspendedUntil.getDate() + 7);
@@ -307,7 +307,7 @@ export default function AdminReportsScreen() {
                   .from('profiles')
                   .update({ 
                     status: statusValue,
-                    suspended_until: action === 'suspend' ? suspendedUntil.toISOString() : null
+                    suspended_until: suspendedUntil ? suspendedUntil.toISOString() : null
                   })
                   .eq('id', userId);
 

@@ -317,8 +317,6 @@ export function EnhancedProfileSection({
             transparent
             animationType="fade"
             onRequestClose={() => setShowMoreActions(false)}
-            accessibilityLabel="User actions menu"
-            accessibilityRole="dialog"
           >
             <Pressable 
               style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
