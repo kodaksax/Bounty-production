@@ -15,10 +15,14 @@ import {
 import { bountyService } from '../../lib/services/bounty-service';
 import { userSearchService } from '../../lib/services/user-search-service';
 import { recentSearchService } from '../../lib/services/recent-search-service';
+import { searchService } from '../../lib/services/search-service';
 import type { Bounty } from '../../lib/services/database.types';
-import type { BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
+import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 
 type SearchTab = 'bounties' | 'users';
+
+// Debounce delay for autocomplete (500ms as per requirements)
+const AUTOCOMPLETE_DEBOUNCE_MS = 500;
 
 interface BountyRowItem {
   id: string;
@@ -42,12 +46,38 @@ export default function EnhancedSearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
 
   // Bounty filters
   const [filters, setFilters] = useState<BountySearchFilters>({
     sortBy: 'date_desc',
     status: ['open'],
   });
+
+  // Load saved filters on mount
+  useEffect(() => {
+    const loadSavedFilters = async () => {
+      const savedFilters = await searchService.getLastFilters();
+      if (savedFilters) {
+        setFilters(savedFilters);
+      }
+      setFiltersLoaded(true);
+    };
+    loadSavedFilters();
+  }, []);
+
+  // Persist filters when they change
+  useEffect(() => {
+    if (filtersLoaded) {
+      searchService.saveLastFilters(filters);
+    }
+  }, [filters, filtersLoaded]);
 
   // Load recent searches on mount
   useEffect(() => {
@@ -57,6 +87,50 @@ export default function EnhancedSearchScreen() {
   const loadRecentSearches = async () => {
     const searches = await recentSearchService.getRecentSearchesByType(activeTab === 'bounties' ? 'bounty' : 'user');
     setRecentSearches(searches);
+  };
+  
+  // Autocomplete suggestions with 500ms debounce
+  useEffect(() => {
+    if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
+    
+    if (!query.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    setIsLoadingSuggestions(true);
+    autocompleteRef.current = setTimeout(async () => {
+      try {
+        const results = await searchService.getAutocompleteSuggestions(query, 8);
+        setSuggestions(results);
+        setShowSuggestions(results.length > 0);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, AUTOCOMPLETE_DEBOUNCE_MS);
+    
+    return () => {
+      if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
+    };
+  }, [query]);
+
+  const handleSuggestionPress = (suggestion: AutocompleteSuggestion) => {
+    setShowSuggestions(false);
+    
+    if (suggestion.type === 'bounty') {
+      const bountyId = suggestion.id.replace('bounty_', '');
+      router.push(`/postings/${bountyId}`);
+    } else if (suggestion.type === 'user') {
+      const userId = suggestion.id.replace('user_', '');
+      router.push(`/profile/${userId}`);
+    } else if (suggestion.type === 'skill') {
+      // Search for bounties with this skill
+      setQuery(suggestion.text);
+      setFilters(prev => ({ ...prev, skills: [suggestion.text] }));
+    }
   };
 
   const mapBounty = (b: Bounty): BountyRowItem => ({
@@ -280,23 +354,72 @@ export default function EnhancedSearchScreen() {
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
           placeholderTextColor="#93e5c7"
-          onChangeText={setQuery}
+          onChangeText={(text) => {
+            setQuery(text);
+            if (!text.trim()) {
+              setShowSuggestions(false);
+            }
+          }}
+          onFocus={() => {
+            if (suggestions.length > 0) {
+              setShowSuggestions(true);
+            }
+          }}
           returnKeyType="search"
           style={styles.input}
         />
         {!!query && !isSearching && (
-          <TouchableOpacity onPress={() => setQuery('')} style={{ padding: 4 }}>
+          <TouchableOpacity onPress={() => { setQuery(''); setShowSuggestions(false); }} style={{ padding: 4 }}>
             <MaterialIcons name="close" size={18} color="#6ee7b7" />
           </TouchableOpacity>
         )}
-        {isSearching && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} />}
+        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} />}
         {activeTab === 'bounties' && (
-          <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterBtn}>
-            <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} />
-            {hasActiveFilters && <View style={styles.filterDot} />}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity 
+              onPress={() => router.push('/search/saved-searches')} 
+              style={styles.filterBtn}
+            >
+              <MaterialIcons name="bookmark-outline" size={20} color="#6ee7b7" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterBtn}>
+              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} />
+              {hasActiveFilters && <View style={styles.filterDot} />}
+            </TouchableOpacity>
+          </>
         )}
       </View>
+
+      {/* Autocomplete Suggestions */}
+      {showSuggestions && suggestions.length > 0 && (
+        <View style={styles.suggestionsContainer}>
+          {suggestions.map((suggestion) => (
+            <TouchableOpacity
+              key={suggestion.id}
+              style={styles.suggestionItem}
+              onPress={() => handleSuggestionPress(suggestion)}
+            >
+              <MaterialIcons
+                name={suggestion.icon as any || 'search'}
+                size={18}
+                color="#6ee7b7"
+                style={{ marginRight: 10 }}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.suggestionText}>{suggestion.text}</Text>
+                {suggestion.subtitle && (
+                  <Text style={styles.suggestionSubtext}>{suggestion.subtitle}</Text>
+                )}
+              </View>
+              <View style={styles.suggestionTypeBadge}>
+                <Text style={styles.suggestionTypeText}>
+                  {suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {error && (
         <View style={styles.errorBox}>
@@ -678,4 +801,41 @@ const styles = {
     borderRadius: 8,
   },
   applyFiltersBtnText: { color: '#065f46', fontSize: 14, fontWeight: '700' },
+  // Autocomplete styles
+  suggestionsContainer: {
+    marginHorizontal: 12,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: 12,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  suggestionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  suggestionSubtext: {
+    color: '#a7f3d0',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  suggestionTypeBadge: {
+    backgroundColor: 'rgba(110,231,183,0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  suggestionTypeText: {
+    color: '#6ee7b7',
+    fontSize: 10,
+    fontWeight: '600',
+  },
 } as const;
