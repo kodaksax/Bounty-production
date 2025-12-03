@@ -140,7 +140,11 @@ export function ApplicantCard({
             </Text>
             {/* Verification Badge */}
             <VerificationBadge 
-              status={((request.profile as any)?.verificationStatus || 'unverified') as VerificationLevel}
+              status={
+                typeof request.profile?.verificationStatus === 'string'
+                  ? (request.profile.verificationStatus as VerificationLevel)
+                  : 'unverified'
+              }
               size="small"
               showLabel={false}
               showExplanation={true}
