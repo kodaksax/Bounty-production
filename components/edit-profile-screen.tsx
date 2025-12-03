@@ -15,6 +15,7 @@ import { useProfile } from '../hooks/useProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
+import { processAvatarImage } from '../lib/utils/image-utils'
 import { useWallet } from '../lib/wallet-context'
 
 interface EditProfileScreenProps {
@@ -226,7 +227,7 @@ export function EditProfileScreen({
         return;
       }
 
-      // Launch image library
+      // Launch image library with square aspect ratio for avatar cropping
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -250,23 +251,35 @@ export function EditProfileScreen({
 
       setIsUploadingAvatar(true);
       setUploadProgress(0);
+      setUploadMessage('Processing image…');
+
+      // Process the avatar image (crop to square and compress)
+      let processedUri = selected.uri;
+      try {
+        const processed = await processAvatarImage(selected.uri, 400);
+        processedUri = processed.uri;
+        setUploadProgress(0.3);
+      } catch (processError) {
+        console.warn('Avatar processing failed, using original:', processError);
+      }
 
       const attachment = {
         id: `avatar-${Date.now()}`,
         name: selected.fileName || 'avatar.jpg',
-        uri: selected.uri,
-        mimeType: selected.mimeType || 'image/jpeg',
+        uri: processedUri,
+        mimeType: 'image/jpeg',
         size: (selected as any).fileSize,
         status: 'uploading' as const,
         progress: 0,
       };
 
+      setUploadMessage('Uploading…');
       try {
         const uploaded = await attachmentService.upload(attachment, {
-          onProgress: (p) => setUploadProgress(p),
+          onProgress: (p) => setUploadProgress(0.3 + p * 0.7),
         });
-        // Use local URI for immediate preview; store remote for persistence
-        setAvatar(selected.uri);
+        // Use processed URI for immediate preview; store remote for persistence
+        setAvatar(processedUri);
         setPendingAvatarRemoteUri(uploaded.remoteUri);
         setIsUploadingAvatar(false);
         setUploadMessage('Profile picture uploaded successfully!');
@@ -274,7 +287,7 @@ export function EditProfileScreen({
       } catch (uploadError) {
         console.error('Failed to upload avatar:', uploadError);
         setIsUploadingAvatar(false);
-        setAvatar(selected.uri);
+        setAvatar(processedUri);
         setPendingAvatarRemoteUri(undefined);
         setUploadMessage('Upload failed - using local image');
         setTimeout(() => setUploadMessage(null), 3000);

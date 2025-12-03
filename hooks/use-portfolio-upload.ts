@@ -3,8 +3,10 @@ import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { ActionSheetIOS, Platform } from 'react-native'
 import { attachmentService } from '../lib/services/attachment-service'
+import { generateVideoThumbnail, MAX_PORTFOLIO_ITEMS, portfolioService } from '../lib/services/portfolio-service'
 import type { PortfolioItem } from '../lib/types'
 import { cacheDirectory, copyTo, readAsBase64 } from '../lib/utils/fs-utils'
+import { processImage } from '../lib/utils/image-utils'
 
 export interface PortfolioUploadState {
   isPicking: boolean
@@ -36,6 +38,14 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
 
   const pickAndUpload = async () => {
     try {
+      // Check if user can add more items before picking
+      const canAdd = await portfolioService.canAddItem(userId)
+      if (!canAdd) {
+        setState(s => ({ ...s, message: `Maximum of ${MAX_PORTFOLIO_ITEMS} portfolio items allowed` }))
+        setTimeout(() => setState(s => ({ ...s, message: null })), 3000)
+        return null
+      }
+
       setState(s => ({ ...s, isPicking: true, message: null }))
 
       // Present a native prompt (ActionSheet on iOS, simple choice on Android) to choose source
@@ -166,11 +176,39 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         return null
       }
 
+      // Process images (compress and resize) before upload
+      let processedUri = assetUri
+      if (assetKind === 'image' || (mimeType && mimeType.startsWith('image/'))) {
+        setState(s => ({ ...s, message: 'Processing image…' }))
+        try {
+          const processed = await processImage(assetUri, {
+            maxWidth: 1920,
+            maxHeight: 1080,
+            maxFileSizeBytes: 500 * 1024, // 500KB
+            quality: 0.8,
+          })
+          processedUri = processed.uri
+        } catch (e) {
+          console.warn('[usePortfolioUpload] image processing failed, using original:', e)
+        }
+      }
+
+      // Generate video thumbnail if this is a video
+      let videoThumbnailUri: string | undefined
+      if (assetKind === 'video' || (mimeType && mimeType.startsWith('video/'))) {
+        setState(s => ({ ...s, message: 'Generating thumbnail…' }))
+        try {
+          videoThumbnailUri = await generateVideoThumbnail(processedUri)
+        } catch (e) {
+          console.warn('[usePortfolioUpload] video thumbnail generation failed:', e)
+        }
+      }
+
       // Prepare attachment metadata for the upload service
       const attachment = {
         id: `${Date.now()}`,
         name: name || 'portfolio-item',
-        uri: assetUri,
+        uri: processedUri,
         mimeType: mimeType || undefined,
         size: undefined,
         status: 'uploading' as const,
@@ -188,6 +226,14 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         : (mime && mime.startsWith('video/')) || assetKind === 'video' || (name && /\.(mp4|mov|mkv|webm|avi)$/i.test(name || '')) ? 'video'
         : 'file'
 
+      // Determine thumbnail: use video thumbnail for videos, or image preview for images
+      let thumbnailUri: string | undefined
+      if (type === 'video' && videoThumbnailUri) {
+        thumbnailUri = videoThumbnailUri
+      } else if (type === 'image') {
+        thumbnailUri = lastPicked?.uri || uploaded.uri || uploaded.remoteUri
+      }
+
       // For the persisted item, use the uploaded.remoteUri/url for canonical access,
       // but keep the preview thumbnail (data URI or local file) if available so the UI can show it immediately.
       const item: PortfolioItem = {
@@ -196,8 +242,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         type,
         // use remoteUri for canonical URL when available, but keep local uri for thumbnail/preview
         url: uploaded.remoteUri || uploaded.uri,
-        // prefer lastPicked preview (data URI) for immediate thumbnails when available
-        thumbnail: type === 'image' ? (lastPicked?.uri || uploaded.uri || uploaded.remoteUri) : undefined,
+        thumbnail: thumbnailUri,
         name: uploaded.name,
         mimeType: uploaded.mimeType,
         sizeBytes: uploaded.size,

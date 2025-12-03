@@ -1,10 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { PortfolioItem } from '../types';
 
 // In-memory cache: map of userId -> PortfolioItem[]
 let portfolioStore: Record<string, PortfolioItem[]> | null = null;
 
 const STORAGE_KEY = 'bountyexpo:portfolio_items_v1';
+
+/** Maximum number of portfolio items per user */
+export const MAX_PORTFOLIO_ITEMS = 10;
 
 // Load the per-user map from AsyncStorage into memory (noop if already loaded)
 const loadFromStorage = async () => {
@@ -61,10 +65,18 @@ export const portfolioService = {
 
   /**
    * Add a portfolio item
+   * Enforces MAX_PORTFOLIO_ITEMS limit per user
    */
   addItem: async (item: Omit<PortfolioItem, 'id' | 'createdAt'>): Promise<PortfolioItem> => {
     await loadFromStorage();
     if (!portfolioStore) portfolioStore = {};
+
+    const list = portfolioStore[item.userId] || [];
+    
+    // Check if user has reached the maximum limit
+    if (list.length >= MAX_PORTFOLIO_ITEMS) {
+      throw new Error(`Maximum of ${MAX_PORTFOLIO_ITEMS} portfolio items allowed`);
+    }
 
     const newItem: PortfolioItem = {
       ...item,
@@ -72,7 +84,6 @@ export const portfolioService = {
       createdAt: new Date().toISOString(),
     };
 
-    const list = portfolioStore[item.userId] || [];
     portfolioStore[item.userId] = [newItem, ...list];
     await saveToStorage();
     return newItem;
@@ -134,4 +145,77 @@ export const portfolioService = {
 
     return { success: false, error: 'Item not found' };
   },
+
+  /**
+   * Reorder portfolio items for a user
+   * @param userId - User ID
+   * @param itemIds - Array of item IDs in the new order
+   */
+  reorderItems: async (userId: string, itemIds: string[]): Promise<PortfolioItem[]> => {
+    await loadFromStorage();
+    if (!portfolioStore) portfolioStore = {};
+
+    const list = portfolioStore[userId] || [];
+    
+    // Create a map of id -> item for quick lookup
+    const itemMap = new Map(list.map(item => [item.id, item]));
+    
+    // Reorder based on the provided itemIds
+    const reordered: PortfolioItem[] = [];
+    for (const id of itemIds) {
+      const item = itemMap.get(id);
+      if (item) {
+        reordered.push(item);
+        itemMap.delete(id);
+      }
+    }
+    
+    // Append any items not in the itemIds list (shouldn't happen, but defensive)
+    for (const item of itemMap.values()) {
+      reordered.push(item);
+    }
+    
+    portfolioStore[userId] = reordered;
+    await saveToStorage();
+    return reordered;
+  },
+
+  /**
+   * Get count of portfolio items for a user
+   */
+  getItemCount: async (userId: string): Promise<number> => {
+    await loadFromStorage();
+    const map = portfolioStore || {};
+    return (map[userId] || []).length;
+  },
+
+  /**
+   * Check if user can add more portfolio items
+   */
+  canAddItem: async (userId: string): Promise<boolean> => {
+    const count = await portfolioService.getItemCount(userId);
+    return count < MAX_PORTFOLIO_ITEMS;
+  },
 };
+
+/**
+ * Generate a thumbnail for a video file
+ * @param videoUri - URI of the video file
+ * @param time - Time position in milliseconds (default: 0)
+ * @returns URI of the generated thumbnail, or undefined on failure
+ */
+export async function generateVideoThumbnail(
+  videoUri: string,
+  time: number = 0
+): Promise<string | undefined> {
+  try {
+    const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
+      time,
+      quality: 0.7,
+    });
+    return uri;
+  } catch (error) {
+    console.warn('[portfolio-service] Failed to generate video thumbnail:', error);
+    return undefined;
+  }
+}
