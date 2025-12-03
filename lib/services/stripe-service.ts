@@ -477,7 +477,7 @@ class StripeService {
         throw {
           type: 'api_error',
           code: response.status.toString(),
-          message: errorData.error || 'Failed to remove payment method',
+          message: 'Failed to remove payment method',
         };
       }
       
