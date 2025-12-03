@@ -297,9 +297,18 @@ export default function AdminReportsScreen() {
                 }
 
                 // Update user status in the database
+                // If suspending, set suspended_until to 7 days from now; otherwise, clear it
+                let suspendedUntil = null;
+                if (action === 'suspend') {
+                  suspendedUntil = new Date();
+                  suspendedUntil.setDate(suspendedUntil.getDate() + 7);
+                }
                 const { error } = await supabase
                   .from('profiles')
-                  .update({ status: statusValue })
+                  .update({ 
+                    status: statusValue,
+                    suspended_until: action === 'suspend' ? suspendedUntil.toISOString() : null
+                  })
                   .eq('id', userId);
 
                 if (error) {
