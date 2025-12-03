@@ -13,7 +13,6 @@ import { logger } from '../utils/error-logger';
 
 const SAVED_SEARCHES_KEY = '@bountyexpo:saved_searches';
 const SEARCH_FILTERS_KEY = '@bountyexpo:last_search_filters';
-const DEBOUNCE_DELAY = 500;
 
 // Common skills for autocomplete suggestions
 const COMMON_SKILLS = [

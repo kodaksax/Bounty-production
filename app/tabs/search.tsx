@@ -16,6 +16,7 @@ import { bountyService } from '../../lib/services/bounty-service';
 import { userSearchService } from '../../lib/services/user-search-service';
 import { recentSearchService } from '../../lib/services/recent-search-service';
 import { searchService } from '../../lib/services/search-service';
+import { logger } from '../../lib/utils/error-logger';
 import type { Bounty } from '../../lib/services/database.types';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 
@@ -47,6 +48,7 @@ export default function EnhancedSearchScreen() {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersPersistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
@@ -72,11 +74,22 @@ export default function EnhancedSearchScreen() {
     loadSavedFilters();
   }, []);
 
-  // Persist filters when they change
+  // Persist filters when they change (debounced to reduce I/O overhead)
   useEffect(() => {
     if (filtersLoaded) {
-      searchService.saveLastFilters(filters);
+      if (filtersPersistRef.current) {
+        clearTimeout(filtersPersistRef.current);
+      }
+      filtersPersistRef.current = setTimeout(() => {
+        searchService.saveLastFilters(filters);
+      }, 500);
     }
+    
+    return () => {
+      if (filtersPersistRef.current) {
+        clearTimeout(filtersPersistRef.current);
+      }
+    };
   }, [filters, filtersLoaded]);
 
   // Load recent searches on mount
@@ -107,7 +120,7 @@ export default function EnhancedSearchScreen() {
         setShowSuggestions(results.length > 0);
       } catch (error) {
         // Log error for debugging but gracefully degrade by hiding suggestions
-        console.warn('Autocomplete suggestions failed:', error);
+        logger.warning('Autocomplete suggestions failed', { error });
         setSuggestions([]);
       } finally {
         setIsLoadingSuggestions(false);
@@ -129,13 +142,13 @@ export default function EnhancedSearchScreen() {
       const userId = suggestion.id.replace('user_', '');
       router.push(`/profile/${userId}`);
     } else if (suggestion.type === 'skill') {
-      // Search for bounties with this skill, appending to existing skills
+      // Search for bounties with this skill, appending to existing skills if not already present
       setQuery(suggestion.text);
       setFilters(prev => ({
         ...prev,
-        skills: prev.skills
-          ? [...prev.skills.filter(s => s !== suggestion.text), suggestion.text]
-          : [suggestion.text]
+        skills: prev.skills?.includes(suggestion.text)
+          ? prev.skills
+          : [...(prev.skills || []), suggestion.text]
       }));
     }
   };
@@ -405,6 +418,9 @@ export default function EnhancedSearchScreen() {
               key={suggestion.id}
               style={styles.suggestionItem}
               onPress={() => handleSuggestionPress(suggestion)}
+              accessibilityRole="button"
+              accessibilityLabel={`${suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}: ${suggestion.text}${suggestion.subtitle ? ', ' + suggestion.subtitle : ''}`}
+              accessibilityHint={suggestion.type === 'bounty' ? 'Opens bounty details' : suggestion.type === 'user' ? 'Opens user profile' : 'Searches for bounties with this skill'}
             >
               <MaterialIcons
                 name={suggestion.icon as any || 'search'}

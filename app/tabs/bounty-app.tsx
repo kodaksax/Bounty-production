@@ -337,13 +337,16 @@ function BountyAppInner() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      // Reset pagination and reload first page, also refresh applications
+      // Reset pagination and reload first page, also refresh applications and trending
       setOffset(0)
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
         loadUserApplications().catch(err => {
           console.warn('Failed to refresh user applications:', err);
+        }),
+        loadTrendingBounties().catch(err => {
+          console.warn('Failed to refresh trending bounties:', err);
         })
       ])
     } catch (error) {
@@ -351,7 +354,7 @@ function BountyAppInner() {
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications])
+  }, [loadBounties, loadUserApplications, loadTrendingBounties])
 
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {
@@ -471,6 +474,8 @@ function BountyAppInner() {
             <TouchableOpacity
               style={styles.trendingCard}
               onPress={() => router.push(`/postings/${item.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}, ${item.viewCount} views, ${item.applicationCount} applications`}
             >
               <View style={styles.trendingCardHeader}>
                 <Text style={styles.trendingCardTitle} numberOfLines={2}>

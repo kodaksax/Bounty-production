@@ -111,6 +111,9 @@ export default function SavedSearchesScreen() {
       <TouchableOpacity
         style={styles.searchContent}
         onPress={() => handleRunSearch(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`Saved search: ${item.name}${item.query ? ', query: ' + item.query : ''}, created ${new Date(item.createdAt).toLocaleDateString()}`}
+        accessibilityHint="Tap to run this saved search"
       >
         <View style={styles.searchHeader}>
           <MaterialIcons name="bookmark" size={20} color="#6ee7b7" />
@@ -130,6 +133,9 @@ export default function SavedSearchesScreen() {
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => handleToggleAlerts(item.id, item.alertsEnabled)}
+          accessibilityRole="button"
+          accessibilityLabel={item.alertsEnabled ? 'Alerts enabled' : 'Alerts disabled'}
+          accessibilityHint={item.alertsEnabled ? 'Tap to disable alerts for this search' : 'Tap to enable alerts for this search'}
         >
           <MaterialIcons
             name={item.alertsEnabled ? 'notifications-active' : 'notifications-off'}
@@ -140,6 +146,9 @@ export default function SavedSearchesScreen() {
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => handleDeleteSearch(item.id)}
+          accessibilityRole="button"
+          accessibilityLabel="Delete saved search"
+          accessibilityHint="Tap to delete this saved search"
         >
           <MaterialIcons name="delete-outline" size={20} color="#f87171" />
         </TouchableOpacity>
@@ -209,7 +218,7 @@ export default function SavedSearchesScreen() {
 
       {/* New Search Modal */}
       {showNewSearchModal && (
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Saved Search</Text>
@@ -250,10 +259,11 @@ export default function SavedSearchesScreen() {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.saveBtn}
+                style={[styles.saveBtn, !newSearchName.trim() && styles.saveBtnDisabled]}
                 onPress={handleCreateSearch}
+                disabled={!newSearchName.trim()}
               >
-                <Text style={styles.saveBtnText}>Save Search</Text>
+                <Text style={[styles.saveBtnText, !newSearchName.trim() && styles.saveBtnTextDisabled]}>Save Search</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -448,5 +458,11 @@ const styles = StyleSheet.create({
     color: '#065f46',
     fontSize: 14,
     fontWeight: '700',
+  },
+  saveBtnDisabled: {
+    backgroundColor: 'rgba(110,231,183,0.4)',
+  },
+  saveBtnTextDisabled: {
+    color: 'rgba(6,95,70,0.5)',
   },
 });
