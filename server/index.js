@@ -640,7 +640,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           // so we use a workaround with the .rpc fallback or direct SQL
           try {
             // Attempt using textual SQL expression if supported
-            const { error: fallbackError } = await supabase.rpc('atomic_increment_balance', {
+            const { error: fallbackError } = await supabase.rpc('increment_balance', {
               p_user_id: userId,
               p_amount: paymentIntent.amount / 100
             });
