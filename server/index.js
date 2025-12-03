@@ -824,17 +824,20 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           });
           
           if (rpcError) {
-            console.warn('[Webhook] Using non-atomic balance update for failed transfer refund - consider adding increment_balance RPC');
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('balance')
-              .eq('id', tx.user_id)
-              .single();
-            
-            const currentBalance = profile?.balance || 0;
-            await supabase.from('profiles')
-              .update({ balance: currentBalance + refundAmount })
-              .eq('id', tx.user_id);
+            // Attempt the atomic RPC one more time in case of transient error
+            const { error: secondRpcError } = await supabase.rpc('increment_balance', {
+              p_user_id: tx.user_id,
+              p_amount: refundAmount
+            });
+            if (secondRpcError) {
+              console.error('[Webhook] Failed to refund user after transfer failure: could not perform atomic balance update via increment_balance RPC.', {
+                user_id: tx.user_id,
+                refundAmount,
+                originalError: rpcError,
+                secondError: secondRpcError
+              });
+              // Optionally: trigger alert/notification for manual intervention here
+            }
           }
           
           console.log(`[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`);
