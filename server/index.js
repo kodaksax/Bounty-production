@@ -1216,7 +1216,7 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
 
     // Use atomic balance decrement to prevent race conditions
     // First try RPC, then fallback with optimistic locking
-    const { error: rpcError } = await supabase.rpc('decrement_balance_if_sufficient', {
+    const { error: rpcError } = await supabase.rpc('decrement_balance', {
       p_user_id: userId,
       p_amount: amount
     });
