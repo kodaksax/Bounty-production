@@ -323,6 +323,9 @@ export function EnhancedProfileSection({
             <Pressable 
               style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
               onPress={() => setShowMoreActions(false)}
+              accessibilityLabel="Close menu"
+              accessibilityRole="button"
+              accessibilityHint="Double tap to dismiss the action menu"
             >
               <View style={{ padding: 16 }}>
                 <View style={{ backgroundColor: '#065f46', borderRadius: 16, overflow: 'hidden' }}>
