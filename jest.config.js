@@ -31,6 +31,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^lib/(.*)$': '<rootDir>/lib/$1',
+    '^components/(.*)$': '<rootDir>/components/$1',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
