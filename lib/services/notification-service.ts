@@ -6,6 +6,7 @@ import type { Notification } from '../types';
 
 const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
+const PERMISSION_STATUS_KEY = 'notifications:permission_status';
 
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
@@ -88,6 +89,52 @@ export class NotificationService {
   }
 
   /**
+   * Validate and normalize permission status to known values
+   */
+  private normalizePermissionStatus(status: string | null): 'granted' | 'denied' | 'undetermined' {
+    const validStatuses = ['granted', 'denied', 'undetermined'] as const;
+    if (status && validStatuses.includes(status as typeof validStatuses[number])) {
+      return status as typeof validStatuses[number];
+    }
+    // Map unexpected values (like 'restricted' on iOS) to 'undetermined'
+    return 'undetermined';
+  }
+
+  /**
+   * Get the current notification permission status without requesting
+   */
+  async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      // Store the status for offline access
+      await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
+      return this.normalizePermissionStatus(status);
+    } catch (error) {
+      console.error('Error getting permission status:', error);
+      // Try to get cached status
+      try {
+        const cached = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+        return this.normalizePermissionStatus(cached);
+      } catch {
+        return 'undetermined';
+      }
+    }
+  }
+
+  /**
+   * Get stored permission status from cache (async but faster than checking system permissions)
+   */
+  async getStoredPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | null> {
+    try {
+      const status = await AsyncStorage.getItem(PERMISSION_STATUS_KEY);
+      if (status === null) return null;
+      return this.normalizePermissionStatus(status);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Request notification permissions and register for push notifications
    */
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
@@ -100,19 +147,22 @@ export class NotificationService {
         finalStatus = status;
       }
 
+      // Store the permission status
+      await AsyncStorage.setItem(PERMISSION_STATUS_KEY, finalStatus);
+
       if (finalStatus !== 'granted') {
         console.log('Notification permissions not granted');
         return null;
       }
 
-  // Get the Expo push token
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
+      // Get the Expo push token
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
       
       // Register token with backend
-  await this.registerPushToken(token);
+      await this.registerPushToken(token);
 
-  // Also try to flush any tokens we cached from previous failed attempts
-  try { await this.flushPendingPushTokens(); } catch {}
+      // Also try to flush any tokens we cached from previous failed attempts
+      try { await this.flushPendingPushTokens(); } catch {}
 
       return token;
     } catch (error) {

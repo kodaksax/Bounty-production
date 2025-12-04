@@ -19,6 +19,7 @@ import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { notificationService } from '../../lib/services/notification-service';
 import { supabase } from '../../lib/supabase';
 
 const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
@@ -78,6 +79,19 @@ export default function DoneScreen() {
           } else {
             console.log('[Onboarding] Successfully marked onboarding as complete for user:', userId);
           }
+        }
+        
+        // Request notification permissions at the end of onboarding
+        // This is a good time to ask as the user has just completed setup
+        try {
+          const token = await notificationService.requestPermissionsAndRegisterToken();
+          if (token) {
+            console.log('[Onboarding] Push notification token registered successfully');
+          } else {
+            console.log('[Onboarding] User declined notification permissions or permissions not available');
+          }
+        } catch (notifError) {
+          console.warn('[Onboarding] Failed to request notification permissions:', notifError);
         }
       } catch (error) {
         console.error('[Onboarding] Error marking onboarding as complete:', error);
