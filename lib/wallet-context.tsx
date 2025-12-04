@@ -2,8 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { API_BASE_URL } from './config/api';
 
+// Platform fee configuration
+// Service fees are deducted during bounty completion (when funds are released to hunter)
+// NOT at withdrawal - this ensures transparency and consistency
+export const PLATFORM_FEE_PERCENTAGE = 0.10; // 10% platform fee on bounty completion
+export const CANCELLATION_FEE_EARLY = 0.05; // 5% fee for early cancellation
+export const CANCELLATION_FEE_AFTER_WORK = 0.15; // 15% fee for cancellation after work started
+
 // Local transaction shape (subset aligning with transaction history component)
-export type WalletTransactionType = 'deposit' | 'withdrawal' | 'bounty_posted' | 'bounty_completed' | 'bounty_received' | 'escrow' | 'release' | 'refund';
+export type WalletTransactionType = 'deposit' | 'withdrawal' | 'bounty_posted' | 'bounty_completed' | 'bounty_received' | 'escrow' | 'release' | 'refund' | 'platform_fee';
 export interface WalletTransactionRecord {
   id: string;
   type: WalletTransactionType;
@@ -15,6 +22,9 @@ export interface WalletTransactionRecord {
     status?: string;
     counterparty?: string;
     bounty_id?: string | number;
+    gross_amount?: number; // Original amount before fees
+    platform_fee?: number; // Fee amount deducted
+    fee_percentage?: number; // Fee percentage applied
   };
   disputeStatus?: "none" | "pending" | "resolved";
   escrowStatus?: "funded" | "pending" | "released";
@@ -179,6 +189,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [balance, persist, logTransaction]);
 
   // Release escrowed funds to hunter when bounty is completed
+  // Service fee is deducted here (NOT at withdrawal) for transparency
   const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
     // Find the escrow transaction for this bounty (compare as strings to handle UUIDs)
     const bountyIdStr = String(bountyId);
@@ -191,7 +202,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return false;
     }
 
-    const amount = Math.abs(escrowTx.amount);
+    const grossAmount = Math.abs(escrowTx.amount);
+    
+    // Calculate platform fee (deducted at bounty completion, not withdrawal)
+    const platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
+    const netAmount = grossAmount - platformFee;
 
     // Update escrow transaction status
     setTransactions(prev => {
@@ -202,14 +217,29 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return next;
     });
 
-    // Log release transaction (this would go to hunter's wallet in real system)
+    // Log platform fee transaction (for record keeping)
+    await logTransaction({
+      type: 'platform_fee',
+      amount: -platformFee, // negative as it's a deduction
+      details: { 
+        title: 'Platform Service Fee',
+        bounty_id: bountyIdStr,
+        fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
+        status: 'completed'
+      },
+    });
+
+    // Log release transaction with net amount (after fee deduction)
+    // In a real system, this would go to hunter's wallet
     await logTransaction({
       type: 'release',
-      amount: amount, // positive for the release record
+      amount: netAmount, // Net amount after fee
       details: { 
         title,
-        bounty_id: String(bountyId),
+        bounty_id: bountyIdStr,
         counterparty: hunterId,
+        gross_amount: grossAmount,
+        platform_fee: platformFee,
         status: 'completed'
       },
     });
