@@ -14,7 +14,7 @@ import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Image, Alert, Animated, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Image, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -24,9 +24,11 @@ import { useAdmin } from '../../lib/admin-context'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { bountyRequestService } from '../../lib/services/bounty-request-service'
 import { bountyService } from '../../lib/services/bounty-service'
+import { searchService } from '../../lib/services/search-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import type { TrendingBounty } from '../../lib/types'
 // Calendar removed in favor of Profile as the last tab
 
 // Use the proper Bounty type from database types
@@ -60,6 +62,9 @@ function BountyAppInner() {
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
   // removed unused error state
   const [refreshing, setRefreshing] = useState(false)
+  // Trending bounties state
+  const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
+  const [isLoadingTrending, setIsLoadingTrending] = useState(true)
   const insets = useSafeAreaInsets()
   const scrollY = useRef(new Animated.Value(0)).current
   // Reference to the FlatList for scroll-to-top functionality
@@ -254,6 +259,19 @@ function BountyAppInner() {
     }
   }, [offset])
 
+  // Load trending bounties
+  const loadTrendingBounties = useCallback(async () => {
+    setIsLoadingTrending(true)
+    try {
+      const trending = await searchService.getTrendingBounties(5)
+      setTrendingBounties(trending)
+    } catch (error) {
+      console.error('Error loading trending bounties:', error)
+    } finally {
+      setIsLoadingTrending(false)
+    }
+  }, [])
+
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
@@ -261,16 +279,18 @@ function BountyAppInner() {
 
   useEffect(() => {
     loadBounties({ reset: true })
-  }, [loadBounties])
+    loadTrendingBounties()
+  }, [loadBounties, loadTrendingBounties])
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === "bounty") {
-      // Refresh when returning to the bounty tab - also refresh applications
+      // Refresh when returning to the bounty tab - also refresh applications and trending
       loadBounties({ reset: true })
       loadUserApplications()
+      loadTrendingBounties()
     }
-  }, [activeScreen, loadBounties, loadUserApplications])
+  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
 
   // Check if onboarding is needed and redirect
   useEffect(() => {
@@ -317,13 +337,16 @@ function BountyAppInner() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      // Reset pagination and reload first page, also refresh applications
+      // Reset pagination and reload first page, also refresh applications and trending
       setOffset(0)
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
         loadUserApplications().catch(err => {
           console.warn('Failed to refresh user applications:', err);
+        }),
+        loadTrendingBounties().catch(err => {
+          console.warn('Failed to refresh trending bounties:', err);
         })
       ])
     } catch (error) {
@@ -331,7 +354,7 @@ function BountyAppInner() {
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications])
+  }, [loadBounties, loadUserApplications, loadTrendingBounties])
 
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {
@@ -414,6 +437,86 @@ function BountyAppInner() {
       </View>
     ) : null
   ), [loadingMore]);
+
+  // Trending Section Component
+  const TrendingSection = useCallback(() => {
+    if (isLoadingTrending && trendingBounties.length === 0) {
+      return (
+        <View style={styles.trendingSection}>
+          <View style={styles.trendingHeader}>
+            <MaterialIcons name="trending-up" size={20} color="#fcd34d" />
+            <Text style={styles.trendingTitle}>Trending This Week</Text>
+          </View>
+          <View style={{ paddingVertical: 16 }}>
+            <PostingsListSkeleton count={2} />
+          </View>
+        </View>
+      );
+    }
+
+    if (trendingBounties.length === 0) {
+      return null;
+    }
+
+    // Helper to calculate how new a bounty is with safe date parsing
+    const getAgeBadge = (createdAt: string | undefined | null): string | null => {
+      if (!createdAt) return null;
+      const date = new Date(createdAt);
+      if (isNaN(date.getTime())) return null;
+      
+      const hours = (Date.now() - date.getTime()) / (1000 * 60 * 60);
+      if (hours < 24) return 'New today';
+      if (hours < 48) return 'Yesterday';
+      if (hours < 72) return '2 days ago';
+      return null;
+    };
+
+    return (
+      <View style={styles.trendingSection}>
+        <View style={styles.trendingHeader}>
+          <MaterialIcons name="trending-up" size={20} color="#fcd34d" />
+          <Text style={styles.trendingTitle}>Trending This Week</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingVertical: 8 }}
+        >
+          {trendingBounties.map((item) => {
+            const ageBadge = getAgeBadge(item.createdAt);
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.trendingCard}
+                onPress={() => router.push(`/postings/${item.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}${ageBadge ? ', ' + ageBadge : ''}`}
+              >
+                <View style={styles.trendingCardHeader}>
+                  <Text style={styles.trendingCardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  {item.isForHonor ? (
+                    <View style={styles.trendingHonorBadge}>
+                      <Text style={styles.trendingHonorText}>Honor</Text>
+                    </View>
+                  ) : item.amount ? (
+                    <Text style={styles.trendingAmount}>${item.amount}</Text>
+                  ) : null}
+                </View>
+                {ageBadge && (
+                  <View style={styles.trendingNewBadge}>
+                    <MaterialIcons name="schedule" size={12} color="#6ee7b7" />
+                    <Text style={styles.trendingNewText}>{ageBadge}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  }, [isLoadingTrending, trendingBounties, router]);
 
   // Render dashboard content when activeScreen is "bounty"
   const renderDashboardContent = () => (
@@ -598,6 +701,7 @@ function BountyAppInner() {
         onEndReached={handleEndReached}
         ItemSeparatorComponent={ItemSeparator}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+        ListHeaderComponent={TrendingSection}
         ListEmptyComponent={EmptyListComponent}
         ListFooterComponent={ListFooterComponent}
         renderItem={renderBountyItem}
@@ -789,6 +893,82 @@ const styles = StyleSheet.create({
     color: '#f3fff9', 
     padding: SPACING.COMPACT_GAP, 
     fontSize: TYPOGRAPHY.SIZE_XSMALL 
+  },
+  // Trending section styles
+  trendingSection: {
+    marginBottom: 16,
+    marginHorizontal: -16, // Compensate for FlatList container padding
+    paddingHorizontal: 16,
+  },
+  trendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  trendingTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  trendingCard: {
+    width: 200,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(252,211,77,0.2)',
+  },
+  trendingCardHeader: {
+    marginBottom: 8,
+  },
+  trendingCardTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  trendingAmount: {
+    color: '#6ee7b7',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  trendingHonorBadge: {
+    backgroundColor: '#fcd34d',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  trendingHonorText: {
+    color: '#065f46',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  trendingNewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  trendingNewText: {
+    color: '#6ee7b7',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  trendingStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  trendingStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trendingStatText: {
+    color: '#a7f3d0',
+    fontSize: 12,
   },
   // searchOverlay removed (search is its own route now)
 })

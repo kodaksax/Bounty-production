@@ -289,3 +289,40 @@ export interface RecentSearch {
   filters?: BountySearchFilters | UserSearchFilters;
   timestamp: string;
 }
+
+// Saved Search for alerts
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  type: 'bounty' | 'user';
+  query: string;
+  filters?: BountySearchFilters | UserSearchFilters;
+  alertsEnabled: boolean;
+  createdAt: string;
+  lastNotifiedAt?: string;
+}
+
+// Autocomplete suggestion
+export interface AutocompleteSuggestion {
+  id: string;
+  type: 'bounty' | 'user' | 'skill';
+  text: string;
+  subtitle?: string;
+  icon?: string;
+}
+
+// Trending bounty data
+export interface TrendingBounty {
+  id: string;
+  title: string;
+  description?: string;
+  amount?: number;
+  isForHonor?: boolean;
+  viewCount: number;
+  applicationCount: number;
+  trendingScore: number;
+  createdAt: string;
+  posterUsername?: string;
+  posterAvatar?: string;
+}
