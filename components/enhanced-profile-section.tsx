@@ -9,6 +9,7 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { usePortfolio } from "hooks/usePortfolio";
 import { useRatings } from "hooks/useRatings";
 import { OptimizedImage } from "lib/components/OptimizedImage";
+import { MAX_PORTFOLIO_ITEMS, portfolioService } from "lib/services/portfolio-service";
 import { blockingService } from "lib/services/blocking-service";
 import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
@@ -27,6 +28,42 @@ import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton
 import { VerificationBadge, type VerificationLevel } from "./ui/verification-badge";
 import { ReputationScoreCompact } from "./ui/reputation-score";
 import { showReportAlert } from "./ReportModal";
+
+/**
+ * Progress bar component for upload progress
+ */
+function UploadProgressBar({ progress, message }: { progress: number; message?: string | null }) {
+  const [showBar, setShowBar] = useState(false);
+
+  useEffect(() => {
+    if (progress > 0 && progress < 1) {
+      setShowBar(true);
+    } else if (progress >= 1) {
+      setShowBar(true);
+      const timeout = setTimeout(() => setShowBar(false), 800); // Show for 800ms at 100%
+      return () => clearTimeout(timeout);
+    } else {
+      setShowBar(false);
+    }
+  }, [progress]);
+
+  if (!showBar) return null;
+  
+  return (
+    <View className="bg-emerald-900/50 rounded-lg p-3 mb-3">
+      <View className="flex-row items-center justify-between mb-2">
+        <Text className="text-sm text-white">{message || 'Uploading…'}</Text>
+        <Text className="text-sm text-emerald-300">{Math.round(progress * 100)}%</Text>
+      </View>
+      <View className="h-2 bg-emerald-800 rounded-full overflow-hidden">
+        <View 
+          className="h-full bg-emerald-400 rounded-full"
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
+      </View>
+    </View>
+  );
+}
 
 interface EnhancedProfileSectionProps {
   userId?: string;
@@ -83,6 +120,7 @@ export function EnhancedProfileSection({
     isPicking,
     isUploading,
     progress,
+    message: uploadMessage,
     lastPicked,
   } = usePortfolioUpload({
     userId: resolvedUserId,
@@ -107,6 +145,7 @@ export function EnhancedProfileSection({
   const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
 
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
   const { profile: authProfileFromHook } = useAuthProfile();
   
@@ -422,25 +461,47 @@ export function EnhancedProfileSection({
       {showPortfolio && (
       <View className="mb-4">
         <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-sm font-medium text-white">Portfolio</Text>
+          <View className="flex-row items-center">
+            <Text className="text-sm font-medium text-white">Portfolio</Text>
+            <Text className="text-xs text-emerald-300 ml-2">
+              ({items.length}/{MAX_PORTFOLIO_ITEMS})
+            </Text>
+          </View>
           {isOwnProfile && (
-            <TouchableOpacity
-              className="px-2 py-1 bg-emerald-500 rounded"
-              onPress={pickAndUpload}
-              disabled={isPicking || isUploading}
-            >
-              <Text className="text-xs text-white">
-                {isUploading ? `Uploading ${Math.round((progress || 0) * 100)}%` : 'Add Item'}
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center gap-2">
+              {items.length > 1 && (
+                <TouchableOpacity
+                  className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
+                  onPress={() => setIsReordering(!isReordering)}
+                >
+                  <Text className="text-xs text-white">
+                    {isReordering ? 'Done' : 'Reorder'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
+                onPress={pickAndUpload}
+                disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
+              >
+                <Text className="text-xs text-white">
+                  {isUploading ? `${Math.round((progress || 0) * 100)}%` : 'Add Item'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
+
+        {/* Upload Progress Bar */}
+        {(isPicking || isUploading) && (
+          <UploadProgressBar progress={progress} message={uploadMessage} />
+        )}
 
         {portfolioLoading ? (
           <View className="items-center py-4">
             <ActivityIndicator size="small" color="#ffffff" />
           </View>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !lastPicked ? (
           <View className="bg-emerald-700/20 p-4 rounded-lg">
             <Text className="text-center text-white text-sm">
               {isOwnProfile 
@@ -462,13 +523,14 @@ export function EnhancedProfileSection({
                   name: lastPicked.name,
                   createdAt: new Date().toISOString(),
                 } as PortfolioItem].concat(items) : items
-              ).map((item) => (
+              ).map((item, index) => (
                 <TouchableOpacity
                   key={item.id}
                   className="relative"
-                  onPress={() => setSelectedPortfolioItem(item)}
+                  onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                  onLongPress={() => isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)}
                 >
-                  <View className="w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center">
+                  <View className={`w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center ${isReordering ? 'border-2 border-dashed border-emerald-400' : ''}`}>
                     {item.type === 'image' || item.type === 'video' ? (
                       <>
                         <OptimizedImage 
@@ -497,8 +559,41 @@ export function EnhancedProfileSection({
                         </Text>
                       </View>
                     )}
+                    {/* Reorder mode indicators */}
+                    {isReordering && isOwnProfile && items.length > 1 && (
+                      <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                        <View className="flex-row gap-2">
+                          {index > 0 && (
+                            <TouchableOpacity
+                              className="bg-emerald-500 rounded-full p-2"
+                              onPress={async () => {
+                                const newOrder = [...items];
+                                [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                                await portfolioService.reorderItems(resolvedUserId, newOrder.map(i => i.id));
+                                await refresh();
+                              }}
+                            >
+                              <MaterialIcons name="arrow-back" size={16} color="white" />
+                            </TouchableOpacity>
+                          )}
+                          {index < items.length - 1 && (
+                            <TouchableOpacity
+                              className="bg-emerald-500 rounded-full p-2"
+                              onPress={async () => {
+                                const newOrder = [...items];
+                                [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                                await portfolioService.reorderItems(resolvedUserId, newOrder.map(i => i.id));
+                                await refresh();
+                              }}
+                            >
+                              <MaterialIcons name="arrow-forward" size={16} color="white" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    )}
                   </View>
-                  {isOwnProfile && (
+                  {isOwnProfile && !isReordering && (
                     <TouchableOpacity
                       className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
                       onPress={() => handleDeletePortfolioItem(item.id)}
@@ -587,7 +682,7 @@ export function EnhancedProfileSection({
 export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: string; isOwnProfile?: boolean }) {
   const resolvedUserId = userId || 'current-user'
   const { items, loading: portfolioLoading, deleteItem, addItem, refresh } = usePortfolio(resolvedUserId);
-  const { pickAndUpload, isPicking, isUploading, progress, lastPicked: lastPickedStandalone } = usePortfolioUpload({
+  const { pickAndUpload, isPicking, isUploading, progress, message: uploadMessage, lastPicked: lastPickedStandalone } = usePortfolioUpload({
     userId: resolvedUserId,
     onUploaded: async (item) => {
       await addItem({ ...item, id: undefined as any, createdAt: undefined as any } as any)
@@ -595,6 +690,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
     }
   })
   const [selectedPortfolioItem, setSelectedPortfolioItem] = React.useState<PortfolioItem | null>(null)
+  const [isReordering, setIsReordering] = React.useState(false)
   const { player: standaloneVideoPlayer, hasVideo: standaloneHasVideo } = usePortfolioVideoPlayer(selectedPortfolioItem)
   const handleDeletePortfolioItem = async (itemId: string) => {
     Alert.alert(
@@ -610,16 +706,43 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
   return (
       <View className="mb-4 px-4">
       <View className="flex-row justify-between items-center mb-2">
-        <Text className="text-sm font-medium text-white">Portfolio</Text>
+        <View className="flex-row items-center">
+          <Text className="text-sm font-medium text-white">Portfolio</Text>
+          <Text className="text-xs text-emerald-300 ml-2">
+            ({items.length}/{MAX_PORTFOLIO_ITEMS})
+          </Text>
+        </View>
         {isOwnProfile && (
-          <TouchableOpacity className="px-2 py-1 bg-emerald-500 rounded" onPress={pickAndUpload} disabled={isPicking || isUploading}>
-            <Text className="text-xs text-white">{isUploading ? `Uploading ${Math.round((progress || 0) * 100)}%` : 'Add Item'}</Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            {items.length > 1 && (
+              <TouchableOpacity
+                className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
+                onPress={() => setIsReordering(!isReordering)}
+              >
+                <Text className="text-xs text-white">
+                  {isReordering ? 'Done' : 'Reorder'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`} 
+              onPress={pickAndUpload} 
+              disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
+            >
+              <Text className="text-xs text-white">{isUploading ? `${Math.round((progress || 0) * 100)}%` : 'Add Item'}</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
+      
+      {/* Upload Progress Bar */}
+      {(isPicking || isUploading) && (
+        <UploadProgressBar progress={progress} message={uploadMessage} />
+      )}
+
       {portfolioLoading ? (
         <PortfolioSkeleton count={3} />
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && !lastPickedStandalone ? (
         <View className="bg-emerald-700/20 p-4 rounded-lg">
           <Text className="text-center text-white text-sm">{isOwnProfile ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.' : 'This user hasn\'t added portfolio items yet.'}</Text>
         </View>
@@ -636,9 +759,14 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                 name: lastPickedStandalone.name,
                 createdAt: new Date().toISOString(),
               } as PortfolioItem].concat(items) : items
-            ).map((item) => (
-              <TouchableOpacity key={item.id} className="relative" onPress={() => setSelectedPortfolioItem(item)}>
-                <View className="w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center">
+            ).map((item, index) => (
+              <TouchableOpacity 
+                key={item.id} 
+                className="relative" 
+                onPress={() => !isReordering && setSelectedPortfolioItem(item)}
+                onLongPress={() => isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)}
+              >
+                <View className={`w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center ${isReordering ? 'border-2 border-dashed border-emerald-400' : ''}`}>
                   {item.type === 'image' || item.type === 'video' ? (
                     <>
                       <OptimizedImage source={{ uri: item.thumbnail || item.url }} width={128} height={128} style={{ width: '100%', height: '100%' }} resizeMode="cover" useThumbnail priority="low" alt={item.title || 'Portfolio item'} />
@@ -656,8 +784,41 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                       <Text className="text-[10px] text-white mt-1" numberOfLines={2}>{item.name || 'File'}</Text>
                     </View>
                   )}
+                  {/* Reorder mode indicators */}
+                  {isReordering && isOwnProfile && items.length > 1 && (
+                    <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                      <View className="flex-row gap-2">
+                        {index > 0 && (
+                          <TouchableOpacity
+                            className="bg-emerald-500 rounded-full p-2"
+                            onPress={async () => {
+                              const newOrder = [...items];
+                              [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                              await portfolioService.reorderItems(resolvedUserId, newOrder.map(i => i.id));
+                              await refresh();
+                            }}
+                          >
+                            <MaterialIcons name="arrow-back" size={16} color="white" />
+                          </TouchableOpacity>
+                        )}
+                        {index < items.length - 1 && (
+                          <TouchableOpacity
+                            className="bg-emerald-500 rounded-full p-2"
+                            onPress={async () => {
+                              const newOrder = [...items];
+                              [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                              await portfolioService.reorderItems(resolvedUserId, newOrder.map(i => i.id));
+                              await refresh();
+                            }}
+                          >
+                            <MaterialIcons name="arrow-forward" size={16} color="white" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  )}
                 </View>
-                {isOwnProfile && (
+                {isOwnProfile && !isReordering && (
                   <TouchableOpacity className="absolute top-1 right-1 bg-red-500 rounded-full p-1" onPress={() => handleDeletePortfolioItem(item.id)}>
                     <MaterialIcons name="close" size={16} color="white" />
                   </TouchableOpacity>
