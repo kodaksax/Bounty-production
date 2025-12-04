@@ -20,6 +20,7 @@ import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { ROUTES } from '../../lib/routes';
 import { reportService } from '../../lib/services/report-service';
+import { supabase } from '../../lib/supabase';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
 
 type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
@@ -263,45 +264,133 @@ export default function AdminReportsScreen() {
     []
   );
 
+  // Handle suspend/ban user actions
+  const handleUserAction = useCallback(
+    async (userId: string, action: 'suspend' | 'ban', reportId: string) => {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+
+      const actionLabel = action === 'suspend' ? 'Suspend' : 'Ban';
+      const statusValue = action === 'suspend' ? 'suspended' : 'banned';
+      
+      Alert.alert(
+        `${actionLabel} User`,
+        `Are you sure you want to ${action} this user? ${action === 'ban' ? 'This action is permanent.' : 'The user can be unsuspended later.'}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: actionLabel,
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // First verify user exists to prevent invalid operations
+                const { data: existingUser, error: fetchError } = await supabase
+                  .from('profiles')
+                  .select('id')
+                  .eq('id', userId)
+                  .single();
+
+                if (fetchError || !existingUser) {
+                  Alert.alert('Error', 'User not found. They may have already been deleted.');
+                  return;
+                }
+
+                // Update user status in the database
+                // If suspending, set suspended_until to 7 days from now; otherwise, clear it
+                let suspendedUntil: Date | null = null;
+                if (action === 'suspend') {
+                  suspendedUntil = new Date();
+                  suspendedUntil.setDate(suspendedUntil.getDate() + 7);
+                }
+                const { error } = await supabase
+                  .from('profiles')
+                  .update({ 
+                    status: statusValue,
+                    suspended_until: suspendedUntil ? suspendedUntil.toISOString() : null
+                  })
+                  .eq('id', userId);
+
+                if (error) {
+                  console.error(`Error ${action}ing user:`, error);
+                  Alert.alert('Error', `Failed to ${action} user: ${error.message}`);
+                  return;
+                }
+
+                // Also resolve the report
+                await handleUpdateStatus(reportId, 'resolved');
+                
+                Alert.alert('Success', `User has been ${action === 'suspend' ? 'suspended' : 'banned'} and report resolved.`);
+              } catch (err) {
+                console.error(`Error ${action}ing user:`, err);
+                Alert.alert('Error', `An error occurred while ${action}ing the user`);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [handleUpdateStatus]
+  );
+
   const showActionSheet = useCallback(
     (report: EnhancedReport) => {
       if (Platform.OS !== 'web') {
         Haptics.selectionAsync();
       }
 
+      // Build action buttons based on report type
+      const actions: any[] = [
+        {
+          text: 'View Content',
+          onPress: () => {
+            // Navigate to the reported content using ROUTES constants
+            if (report.content_type === 'bounty') {
+              router.push(ROUTES.ADMIN.BOUNTY_DETAIL(report.content_id));
+            } else if (report.content_type === 'profile') {
+              router.push(ROUTES.ADMIN.USER_DETAIL(report.content_id));
+            }
+          },
+        },
+        {
+          text: 'Mark as Reviewed',
+          onPress: () => handleUpdateStatus(report.id, 'reviewed'),
+        },
+        {
+          text: 'Resolve',
+          onPress: () => handleUpdateStatus(report.id, 'resolved'),
+        },
+      ];
+
+      // Add user actions for profile reports or if we can identify the reported user
+      if (report.content_type === 'profile') {
+        actions.push({
+          text: 'Suspend User (7 days)',
+          style: 'destructive',
+          onPress: () => handleUserAction(report.content_id, 'suspend', report.id),
+        });
+        actions.push({
+          text: 'Ban User Permanently',
+          style: 'destructive',
+          onPress: () => handleUserAction(report.content_id, 'ban', report.id),
+        });
+      }
+
+      actions.push({
+        text: 'Dismiss',
+        style: 'destructive',
+        onPress: () => handleUpdateStatus(report.id, 'dismissed'),
+      });
+      
+      actions.push({ text: 'Cancel', style: 'cancel' });
+
       Alert.alert(
         'Report Actions',
         `What would you like to do with this ${report.content_type} report?`,
-        [
-          {
-            text: 'View Content',
-            onPress: () => {
-              // Navigate to the reported content using ROUTES constants
-              if (report.content_type === 'bounty') {
-                router.push(ROUTES.ADMIN.BOUNTY_DETAIL(report.content_id));
-              } else if (report.content_type === 'profile') {
-                router.push(ROUTES.ADMIN.USER_DETAIL(report.content_id));
-              }
-            },
-          },
-          {
-            text: 'Mark as Reviewed',
-            onPress: () => handleUpdateStatus(report.id, 'reviewed'),
-          },
-          {
-            text: 'Resolve',
-            onPress: () => handleUpdateStatus(report.id, 'resolved'),
-          },
-          {
-            text: 'Dismiss',
-            style: 'destructive',
-            onPress: () => handleUpdateStatus(report.id, 'dismissed'),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
+        actions
       );
     },
-    [router, handleUpdateStatus]
+    [router, handleUpdateStatus, handleUserAction]
   );
 
   // Icon and color helpers

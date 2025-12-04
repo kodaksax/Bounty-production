@@ -128,6 +128,20 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
           <AlertDescription>{submitError}</AlertDescription>
         </Alert>
       )}
+      
+      {/* Safety Tips Banner */}
+      <View className="bg-emerald-700/30 rounded-lg p-3 border border-emerald-500/30">
+        <View className="flex-row items-center mb-2">
+          <MaterialIcons name="security" size={18} color="#10b981" />
+          <Text className="text-sm font-medium text-white ml-2">Safety Tips</Text>
+        </View>
+        <Text className="text-xs text-emerald-200 leading-5">
+          • Never share personal info (address, phone, SSN) outside the app{'\n'}
+          • Always use in-app payments for secure transactions{'\n'}
+          • Meet in public places for in-person bounties{'\n'}
+          • Report suspicious activity immediately
+        </Text>
+      </View>
 
       <View className="space-y-2">
         <Label>Title</Label>

@@ -10,6 +10,7 @@ import { usePortfolio } from "hooks/usePortfolio";
 import { useRatings } from "hooks/useRatings";
 import { OptimizedImage } from "lib/components/OptimizedImage";
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from "lib/services/portfolio-service";
+import { blockingService } from "lib/services/blocking-service";
 import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
 import React, { useEffect, useMemo, useState } from "react";
@@ -26,6 +27,7 @@ import {
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton-loaders";
 import { VerificationBadge, type VerificationLevel } from "./ui/verification-badge";
 import { ReputationScoreCompact } from "./ui/reputation-score";
+import { showReportAlert } from "./ReportModal";
 
 /**
  * Progress bar component for upload progress
@@ -146,6 +148,69 @@ export function EnhancedProfileSection({
   const [isReordering, setIsReordering] = useState(false);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
   const { profile: authProfileFromHook } = useAuthProfile();
+  
+  // Block user state
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+  
+  // Check initial block status for other users
+  useEffect(() => {
+    if (!isOwnProfile && userId) {
+      blockingService.isUserBlocked(userId).then(result => {
+        setIsBlocked(result.isBlocked);
+      });
+    }
+  }, [userId, isOwnProfile]);
+  
+  // Handle block/unblock user
+  const handleBlockUser = async () => {
+    if (!userId || isOwnProfile) return;
+    
+    setBlockLoading(true);
+    try {
+      if (isBlocked) {
+        const result = await blockingService.unblockUser(userId);
+        if (result.success) {
+          setIsBlocked(false);
+          Alert.alert('User Unblocked', 'You have unblocked this user.');
+        } else {
+          Alert.alert('Error', result.error || 'Failed to unblock user.');
+        }
+      } else {
+        Alert.alert(
+          'Block User',
+          'Blocked users cannot message you or see your bounties. Are you sure?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: async () => {
+                const result = await blockingService.blockUser(userId);
+                if (result.success) {
+                  setIsBlocked(true);
+                  Alert.alert('User Blocked', 'This user has been blocked.');
+                } else {
+                  Alert.alert('Error', result.error || 'Failed to block user.');
+                }
+              },
+            },
+          ]
+        );
+      }
+    } finally {
+      setBlockLoading(false);
+      setShowMoreActions(false);
+    }
+  };
+  
+  // Handle report user
+  const handleReportUser = () => {
+    if (!userId || isOwnProfile) return;
+    setShowMoreActions(false);
+    showReportAlert('profile', userId, effectiveProfile?.username);
+  };
 
   // profileLoading already accounts for local + supabase fetch inside useNormalizedProfile
   if (profileLoading) {
@@ -270,7 +335,76 @@ export function EnhancedProfileSection({
               )}
             </TouchableOpacity>
           )}
+          
+          {/* More actions button for other user profiles */}
+          {!isOwnProfile && (
+            <TouchableOpacity 
+              onPress={() => setShowMoreActions(true)}
+              className="ml-2 p-2 rounded-lg bg-emerald-700/50"
+              accessibilityLabel="More actions"
+              accessibilityHint="Open menu for report and block options"
+            >
+              <MaterialIcons name="more-vert" size={20} color="#d1fae5" />
+            </TouchableOpacity>
+          )}
         </View>
+        
+        {/* More Actions Modal */}
+        {!isOwnProfile && (
+          <Modal
+            visible={showMoreActions}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowMoreActions(false)}
+          >
+            <Pressable 
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+              onPress={() => setShowMoreActions(false)}
+              accessibilityLabel="Close menu"
+              accessibilityRole="button"
+              accessibilityHint="Double tap to dismiss the action menu"
+            >
+              <View style={{ padding: 16 }}>
+                <View style={{ backgroundColor: '#065f46', borderRadius: 16, overflow: 'hidden' }}>
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
+                    onPress={handleReportUser}
+                  >
+                    <MaterialIcons name="flag" size={22} color="#fca5a5" />
+                    <Text style={{ fontSize: 16, color: '#fca5a5', fontWeight: '500' }}>Report User</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={{ height: 1, backgroundColor: 'rgba(16, 185, 129, 0.2)', marginHorizontal: 20 }} />
+                  
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
+                    onPress={handleBlockUser}
+                    disabled={blockLoading}
+                  >
+                    {blockLoading ? (
+                      <ActivityIndicator size="small" color="#fca5a5" />
+                    ) : (
+                      <MaterialIcons name={isBlocked ? 'check-circle' : 'block'} size={22} color={isBlocked ? '#10b981' : '#fca5a5'} />
+                    )}
+                    <Text style={{ fontSize: 16, color: isBlocked ? '#10b981' : '#fca5a5', fontWeight: '500' }}>
+                      {isBlocked ? 'Unblock User' : 'Block User'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <View style={{ height: 1, backgroundColor: 'rgba(16, 185, 129, 0.2)', marginHorizontal: 20 }} />
+                  
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
+                    onPress={() => setShowMoreActions(false)}
+                  >
+                    <MaterialIcons name="close" size={22} color="#d1fae5" />
+                    <Text style={{ fontSize: 16, color: '#d1fae5', fontWeight: '500' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Pressable>
+          </Modal>
+        )}
 
         {/* Bio */}
         {effectiveProfile.bio && (
