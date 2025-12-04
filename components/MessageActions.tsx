@@ -8,7 +8,9 @@ interface MessageActionsProps {
   onPin: () => void;
   onCopy: () => void;
   onReport: () => void;
+  onBlockUser?: () => void;
   isPinned?: boolean;
+  showBlockOption?: boolean;
 }
 
 /**
@@ -20,7 +22,9 @@ export function MessageActions({
   onPin, 
   onCopy, 
   onReport,
+  onBlockUser,
   isPinned = false,
+  showBlockOption = true,
 }: MessageActionsProps) {
   const handleAction = (action: () => void) => {
     action();
@@ -70,6 +74,22 @@ export function MessageActions({
               <MaterialIcons name="flag" size={22} color="#fca5a5" />
               <Text style={[styles.actionText, styles.dangerText]}>Report Message</Text>
             </TouchableOpacity>
+
+            {showBlockOption && onBlockUser && (
+              <>
+                <View style={styles.divider} />
+
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => handleAction(onBlockUser)}
+                  accessibilityLabel="Block this user"
+                  accessibilityHint="Block this user to prevent them from contacting you"
+                >
+                  <MaterialIcons name="block" size={22} color="#fca5a5" />
+                  <Text style={[styles.actionText, styles.dangerText]}>Block User</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <View style={styles.divider} />
 

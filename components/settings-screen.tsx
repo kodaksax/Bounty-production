@@ -2,6 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import * as Sentry from '@sentry/react-native'
+import { router } from 'expo-router'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { BrandingLogo } from "components/ui/branding-logo"
@@ -163,6 +164,16 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="View"
           onPrimary={() => setPanel('terms')}
           icon="gavel"
+        />
+        
+        <SettingsCard
+          title="Community Guidelines"
+          description="Learn about our community standards for safety, trust, and respectful behavior."
+          primaryLabel="View Guidelines"
+          onPrimary={() => {
+            router.push('/legal/community-guidelines');
+          }}
+          icon="security"
         />
         
         {/* Log Out - placed directly after Legal */}
