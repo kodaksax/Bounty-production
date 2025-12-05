@@ -124,6 +124,11 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     } catch (error: any) {
       logger.error('[payments] Error creating payment intent:', error);
       
+      // Clean up idempotency key on failure to allow retry
+      if (idempotencyKey) {
+        pendingPayments.delete(idempotencyKey);
+      }
+      
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
         return reply.code(400).send({
@@ -282,7 +287,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     try {
       const { paymentIntentId } = request.body as {
         paymentIntentId: string;
-        paymentMethodId?: string;
       };
 
       if (!request.userId) {

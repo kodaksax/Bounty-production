@@ -276,7 +276,8 @@ export async function withPaymentRetry<T>(
   let lastError: any;
   let attempt = 0;
 
-  while (attempt < maxRetries) {
+  // Initial attempt + maxRetries retries (e.g., maxRetries: 3 = 1 initial + 3 retries = 4 total attempts)
+  while (attempt <= maxRetries) {
     try {
       return await operation();
     } catch (error: any) {
@@ -290,8 +291,8 @@ export async function withPaymentRetry<T>(
 
       attempt++;
 
-      // Don't retry if we've hit the max
-      if (attempt >= maxRetries) {
+      // Don't retry if we've exceeded max retries
+      if (attempt > maxRetries) {
         break;
       }
 
@@ -305,7 +306,7 @@ export async function withPaymentRetry<T>(
         delay = Math.min(paymentError.retryDelayMs, maxDelayMs);
       }
 
-      console.log(`[PaymentRetry] Attempt ${attempt}/${maxRetries} failed, retrying in ${delay}ms...`);
+      console.log(`[PaymentRetry] Attempt ${attempt + 1}/${maxRetries + 1} (retry ${attempt}/${maxRetries}) failed, retrying in ${delay}ms...`);
       
       // Wait before retry
       await new Promise(resolve => setTimeout(resolve, delay));

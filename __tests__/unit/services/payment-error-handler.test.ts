@@ -141,13 +141,18 @@ describe('Payment Error Handler', () => {
   });
 
   describe('idempotency key management', () => {
-    it('should generate unique idempotency keys', () => {
+    it('should generate deterministic idempotency keys', () => {
       const key1 = generateIdempotencyKey('user1', 100, 'deposit');
       const key2 = generateIdempotencyKey('user1', 100, 'deposit');
 
-      expect(key1).not.toBe(key2);
+      // Keys should be deterministic - identical inputs produce identical keys
+      expect(key1).toBe(key2);
       expect(key1).toContain('bountyexpo_pay_');
       expect(key1).toContain('user1');
+      
+      // Different parameters should produce different keys
+      const key3 = generateIdempotencyKey('user2', 100, 'deposit');
+      expect(key1).not.toBe(key3);
     });
 
     it('should detect duplicate payments', () => {
@@ -266,10 +271,11 @@ describe('Payment Error Handler', () => {
       const serverError = { type: 'api_error', message: 'Server error' };
       const operation = jest.fn().mockRejectedValue(serverError);
 
+      // maxRetries: 2 means 1 initial attempt + 2 retries = 3 total attempts
       await expect(
         withPaymentRetry(operation, { maxRetries: 2, baseDelayMs: 10, maxDelayMs: 20 })
       ).rejects.toEqual(serverError);
-      expect(operation).toHaveBeenCalledTimes(2);
+      expect(operation).toHaveBeenCalledTimes(3);
     }, 15000);
   });
 });

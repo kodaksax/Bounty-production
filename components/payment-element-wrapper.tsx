@@ -156,6 +156,7 @@ export function PaymentElementWrapper({
         if (Platform.OS === 'android' && showGooglePay) {
           // Determine test mode from publishable key if available, fallback to client secret pattern
           // The publishable key prefix (pk_test_ vs pk_live_) is the most reliable indicator
+          // Default to test mode in non-production environments for safety
           const publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
           const isTestMode = publishableKey.startsWith('pk_test_') ||
             (!publishableKey && clientSecret.includes('_test_')) ||
