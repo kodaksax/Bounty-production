@@ -302,6 +302,254 @@ app.post('/apple-pay/confirm', paymentLimiter, authenticateUser, async (req, res
   }
 });
 
+// =============================================================================
+// PAYMENT METHODS ENDPOINTS
+// =============================================================================
+
+// GET /payments/methods
+// Retrieves all payment methods for the authenticated user
+app.get('/payments/methods', apiLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user's Stripe customer ID
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.stripe_customer_id) {
+      return res.json({ paymentMethods: [] });
+    }
+
+    // Fetch payment methods from Stripe
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: profile.stripe_customer_id,
+      type: 'card',
+    });
+
+    // Transform to client format
+    const methods = paymentMethods.data.map(pm => ({
+      id: pm.id,
+      type: 'card',
+      card: {
+        brand: pm.card?.brand || 'unknown',
+        last4: pm.card?.last4 || '****',
+        exp_month: pm.card?.exp_month || 0,
+        exp_year: pm.card?.exp_year || 0,
+      },
+      created: pm.created,
+    }));
+
+    console.log(`[PaymentMethods] Retrieved ${methods.length} methods for user ${userId}`);
+    res.json({ paymentMethods: methods });
+
+  } catch (error) {
+    console.error('[PaymentMethods] Error fetching:', error.message);
+    res.status(500).json({ error: 'Failed to fetch payment methods' });
+  }
+});
+
+// POST /payments/methods
+// Attaches a payment method to the user's Stripe customer
+app.post('/payments/methods', paymentLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { paymentMethodId } = req.body;
+
+    if (!paymentMethodId) {
+      return res.status(400).json({ error: 'Payment method ID is required' });
+    }
+
+    // Get or create Stripe customer for user
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id, email')
+      .eq('id', userId)
+      .single();
+
+    let customerId = profile?.stripe_customer_id;
+
+    if (!customerId && profile?.email) {
+      const customer = await stripe.customers.create({
+        email: profile.email,
+        metadata: { user_id: userId }
+      });
+      customerId = customer.id;
+
+      await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId);
+    }
+
+    if (!customerId) {
+      return res.status(400).json({ error: 'Unable to create customer profile' });
+    }
+
+    // Attach payment method to customer
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customerId,
+    });
+
+    // Fetch the payment method details
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+
+    console.log(`[PaymentMethods] Attached ${paymentMethodId} to customer ${customerId}`);
+
+    res.json({
+      success: true,
+      paymentMethod: {
+        id: paymentMethod.id,
+        type: 'card',
+        card: {
+          brand: paymentMethod.card?.brand || 'unknown',
+          last4: paymentMethod.card?.last4 || '****',
+          exp_month: paymentMethod.card?.exp_month || 0,
+          exp_year: paymentMethod.card?.exp_year || 0,
+        },
+        created: paymentMethod.created,
+      }
+    });
+
+  } catch (error) {
+    console.error('[PaymentMethods] Error attaching:', error.message);
+    
+    // Handle specific Stripe errors
+    if (error.type === 'StripeCardError') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.code === 'payment_method_not_found') {
+      return res.status(404).json({ error: 'Payment method not found' });
+    }
+    
+    res.status(500).json({ error: 'Failed to attach payment method' });
+  }
+});
+
+// DELETE /payments/methods/:id
+// Detaches a payment method from the user's Stripe customer
+app.delete('/payments/methods/:id', apiLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const paymentMethodId = req.params.id;
+
+    // Verify the payment method belongs to this user
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.stripe_customer_id) {
+      return res.status(404).json({ error: 'No payment methods found' });
+    }
+
+    // Retrieve the payment method to verify ownership
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    
+    if (paymentMethod.customer !== profile.stripe_customer_id) {
+      return res.status(403).json({ error: 'Not authorized to remove this payment method' });
+    }
+
+    // Detach the payment method
+    await stripe.paymentMethods.detach(paymentMethodId);
+
+    console.log(`[PaymentMethods] Detached ${paymentMethodId} from customer ${profile.stripe_customer_id}`);
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error('[PaymentMethods] Error detaching:', error.message);
+    
+    if (error.code === 'resource_missing') {
+      return res.status(404).json({ error: 'Payment method not found' });
+    }
+    
+    res.status(500).json({ error: 'Failed to remove payment method' });
+  }
+});
+
+// POST /payments/confirm
+// Confirms a payment intent with 3D Secure handling
+app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { paymentIntentId, paymentMethodId } = req.body;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'Payment intent ID is required' });
+    }
+
+    // Retrieve the payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    // Verify ownership with strict string comparison
+    // Both values must be strings and match exactly
+    const metadataUserId = String(paymentIntent.metadata?.user_id || '');
+    const requestUserId = String(userId);
+    
+    if (!metadataUserId || metadataUserId !== requestUserId) {
+      console.warn(`[PaymentConfirm] Ownership mismatch: metadata=${metadataUserId}, request=${requestUserId}`);
+      return res.status(403).json({ error: 'Not authorized to confirm this payment' });
+    }
+
+    // If already succeeded or processing, return current status
+    if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+      return res.json({
+        success: true,
+        status: paymentIntent.status,
+        paymentIntentId: paymentIntent.id,
+      });
+    }
+
+    // Confirm the payment if needed
+    let confirmedIntent = paymentIntent;
+    if (paymentIntent.status === 'requires_confirmation' || paymentIntent.status === 'requires_payment_method') {
+      const confirmParams = {};
+      if (paymentMethodId) {
+        confirmParams.payment_method = paymentMethodId;
+      }
+      
+      confirmedIntent = await stripe.paymentIntents.confirm(paymentIntentId, confirmParams);
+    }
+
+    // Handle 3D Secure / requires_action
+    if (confirmedIntent.status === 'requires_action') {
+      return res.json({
+        success: false,
+        status: 'requires_action',
+        requiresAction: true,
+        clientSecret: confirmedIntent.client_secret,
+        nextAction: confirmedIntent.next_action,
+      });
+    }
+
+    const success = confirmedIntent.status === 'succeeded';
+    console.log(`[PaymentConfirm] Payment ${paymentIntentId} status: ${confirmedIntent.status}`);
+
+    res.json({
+      success,
+      status: confirmedIntent.status,
+      paymentIntentId: confirmedIntent.id,
+    });
+
+  } catch (error) {
+    console.error('[PaymentConfirm] Error:', error.message);
+    
+    // Handle specific Stripe errors
+    if (error.type === 'StripeCardError') {
+      return res.status(400).json({
+        error: error.message,
+        code: error.code,
+        decline_code: error.decline_code,
+      });
+    }
+    
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
 // POST /webhooks/stripe
 // Handles Stripe webhook events with signature verification
 app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
@@ -379,23 +627,80 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           throw txError;
         }
 
-        // Update user balance
+        // Update user balance using RPC for atomic operation
         const { error: balanceError } = await supabase.rpc('increment_balance', {
           p_user_id: userId,
           p_amount: paymentIntent.amount / 100
         });
 
         if (balanceError) {
-          console.error('[Webhook] Error updating balance:', balanceError);
-          // Create the function if it doesn't exist
-          await supabase.from('profiles')
-            .update({ 
-              balance: supabase.raw(`balance + ${paymentIntent.amount / 100}`)
-            })
-            .eq('id', userId);
+          console.error('[Webhook] Error updating balance via RPC:', balanceError);
+          // Fallback: Retry the RPC once more in case of transient error
+          try {
+            const { error: retryError } = await supabase.rpc('increment_balance', {
+              p_user_id: userId,
+              p_amount: paymentIntent.amount / 100
+            });
+            
+            if (retryError) {
+              // Last resort: direct update (log error about potential race condition)
+              console.error('[Webhook] Atomic balance update failed after retry - using non-atomic update. Please add increment_balance RPC function to prevent race conditions.', {
+                user_id: userId,
+                amount: paymentIntent.amount / 100,
+                originalError: balanceError,
+                retryError: retryError
+              });
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', userId)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
+                .eq('id', userId);
+            }
+          } catch (fallbackErr) {
+            console.error('[Webhook] Fallback balance update error:', fallbackErr);
+          }
         }
 
         console.log(`[Webhook] Transaction created: ${transaction.id}, balance updated for user ${userId}`);
+        
+        // Note: User notification should be implemented via a notification service
+        // when available (push notifications, email, etc.)
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object;
+        const userId = paymentIntent.metadata?.user_id;
+        const error = paymentIntent.last_payment_error;
+        
+        console.log(`[Webhook] PaymentIntent failed: ${paymentIntent.id} for user ${userId}`);
+        console.log(`[Webhook] Failure reason: ${error?.code} - ${error?.message}`);
+        
+        // Log failed payment attempt for analytics/fraud detection
+        await supabase.from('stripe_events').update({
+          processed: true,
+          processed_at: new Date().toISOString(),
+          event_data: {
+            ...event.data.object,
+            _processed_notes: `Payment failed: ${error?.code}`
+          }
+        }).eq('stripe_event_id', event.id);
+        
+        // TODO: Send notification to user about failed payment
+        break;
+      }
+
+      case 'payment_intent.requires_action': {
+        const paymentIntent = event.data.object;
+        const userId = paymentIntent.metadata?.user_id;
+        
+        console.log(`[Webhook] PaymentIntent requires action (3DS): ${paymentIntent.id} for user ${userId}`);
+        // This is informational - the client-side SDK handles 3DS authentication
         break;
       }
 
@@ -426,16 +731,182 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
               metadata: { refund_reason: charge.refund?.reason }
             });
 
-          // Update user balance (subtract refunded amount)
-          await supabase.from('profiles')
-            .update({ 
-              balance: supabase.raw(`balance - ${charge.amount_refunded / 100}`)
-            })
-            .eq('id', originalTx.user_id);
+          // Update user balance atomically (subtract refunded amount)
+          // Try RPC first, then retry once on failure
+          const { error: rpcError } = await supabase.rpc('decrement_balance', {
+            p_user_id: originalTx.user_id,
+            p_amount: charge.amount_refunded / 100
+          });
+          
+          if (rpcError) {
+            // Retry the atomic RPC once in case of transient error
+            const { error: retryError } = await supabase.rpc('decrement_balance', {
+              p_user_id: originalTx.user_id,
+              p_amount: charge.amount_refunded / 100
+            });
+            
+            if (retryError) {
+              console.error('[Webhook] Atomic balance update for refund failed after retry. Please add decrement_balance RPC function.', {
+                user_id: originalTx.user_id,
+                amount: charge.amount_refunded / 100,
+                originalError: rpcError,
+                retryError: retryError
+              });
+              // Last resort: non-atomic update with warning
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', originalTx.user_id)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
+                .eq('id', originalTx.user_id);
+            }
+          }
 
           console.log(`[Webhook] Refund processed for user ${originalTx.user_id}`);
         }
         
+        break;
+      }
+
+      case 'transfer.created': {
+        const transfer = event.data.object;
+        console.log(`[Webhook] Transfer created: ${transfer.id} to ${transfer.destination} for $${transfer.amount / 100}`);
+        
+        // Update related transaction with transfer ID
+        // Match by user_id, type, amount, and null stripe_transfer_id for more accurate association
+        const userId = transfer.metadata?.user_id;
+        const transferAmountDollars = transfer.amount / 100;
+        if (userId) {
+          await supabase
+            .from('wallet_transactions')
+            .update({
+              stripe_transfer_id: transfer.id,
+              metadata: { transfer_status: 'created' }
+            })
+            .eq('user_id', userId)
+            .eq('type', 'withdrawal')
+            .eq('amount', -transferAmountDollars) // Match the amount for accurate association
+            .is('stripe_transfer_id', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+        }
+        break;
+      }
+
+      case 'transfer.paid': {
+        const transfer = event.data.object;
+        console.log(`[Webhook] Transfer paid: ${transfer.id}`);
+        
+        // Update transaction status
+        await supabase
+          .from('wallet_transactions')
+          .update({
+            status: 'completed',
+            metadata: { transfer_status: 'paid', paid_at: new Date().toISOString() }
+          })
+          .eq('stripe_transfer_id', transfer.id);
+        
+        // TODO: Send notification to user that funds have been transferred
+        break;
+      }
+
+      case 'transfer.failed': {
+        const transfer = event.data.object;
+        console.log(`[Webhook] Transfer failed: ${transfer.id}`);
+        
+        // Mark transaction as failed and prepare for retry
+        const { data: tx } = await supabase
+          .from('wallet_transactions')
+          .update({
+            status: 'failed',
+            metadata: { 
+              transfer_status: 'failed', 
+              failure_reason: transfer.failure_code,
+              retry_count: 0
+            }
+          })
+          .eq('stripe_transfer_id', transfer.id)
+          .select()
+          .single();
+
+        if (tx) {
+          // Refund the amount back to user's wallet for failed withdrawal
+          // Use atomic RPC if available, with fallback
+          const refundAmount = Math.abs(tx.amount);
+          
+          const { error: rpcError } = await supabase.rpc('increment_balance', {
+            p_user_id: tx.user_id,
+            p_amount: refundAmount
+          });
+          
+          if (rpcError) {
+            // Retry the atomic RPC once in case of transient error
+            const { error: retryError } = await supabase.rpc('increment_balance', {
+              p_user_id: tx.user_id,
+              p_amount: refundAmount
+            });
+            
+            if (retryError) {
+              console.error('[Webhook] Atomic balance update for transfer refund failed after retry. Using non-atomic fallback.', {
+                user_id: tx.user_id,
+                refundAmount,
+                originalError: rpcError,
+                retryError: retryError
+              });
+              // Last resort: non-atomic update to ensure user gets refunded
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('balance')
+                .eq('id', tx.user_id)
+                .single();
+              
+              const currentBalance = profile?.balance || 0;
+              await supabase.from('profiles')
+                .update({ balance: currentBalance + refundAmount })
+                .eq('id', tx.user_id);
+            }
+          }
+          
+          console.log(`[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`);
+          
+          // Note: User notification should be implemented via notification service when available
+        }
+        break;
+      }
+
+      case 'account.updated': {
+        const account = event.data.object;
+        console.log(`[Webhook] Connect account updated: ${account.id}`);
+        
+        // Update user's Connect status
+        if (account.metadata?.user_id) {
+          await supabase
+            .from('profiles')
+            .update({
+              stripe_connect_onboarded_at: account.details_submitted && account.payouts_enabled 
+                ? new Date().toISOString() 
+                : null
+            })
+            .eq('id', account.metadata.user_id);
+        }
+        break;
+      }
+
+      case 'payout.paid': {
+        const payout = event.data.object;
+        console.log(`[Webhook] Payout paid: ${payout.id} for $${payout.amount / 100}`);
+        // Informational - funds have been paid out to connected account's bank
+        break;
+      }
+
+      case 'payout.failed': {
+        const payout = event.data.object;
+        console.log(`[Webhook] Payout failed: ${payout.id}, reason: ${payout.failure_code}`);
+        // TODO: Notify user and support about failed payout
         break;
       }
 
@@ -649,6 +1120,228 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
   }
 });
 
+// =============================================================================
+// WALLET ENDPOINTS
+// =============================================================================
+
+// GET /wallet/balance
+// Returns the user's current wallet balance
+app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('balance')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('[Wallet] Error fetching balance:', error);
+      return res.status(500).json({ error: 'Failed to fetch balance' });
+    }
+
+    res.json({
+      balance: profile?.balance || 0,
+      currency: 'USD',
+    });
+
+  } catch (error) {
+    console.error('[Wallet] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch balance' });
+  }
+});
+
+// GET /wallet/transactions
+// Returns the user's transaction history
+app.get('/wallet/transactions', apiLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const { data: transactions, error } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[Wallet] Error fetching transactions:', error);
+      return res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+
+    // Transform to client format
+    const formattedTransactions = (transactions || []).map(tx => ({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      date: tx.created_at,
+      details: {
+        title: tx.description,
+        method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
+        status: tx.status || 'completed',
+        bounty_id: tx.bounty_id,
+      },
+    }));
+
+    res.json({ transactions: formattedTransactions });
+
+  } catch (error) {
+    console.error('[Wallet] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
+// POST /connect/retry-transfer
+// Retries a failed transfer
+app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { transactionId } = req.body;
+
+    if (!transactionId) {
+      return res.status(400).json({ error: 'Transaction ID is required' });
+    }
+
+    // Get the failed transaction
+    const { data: tx, error: txError } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('user_id', userId)
+      .eq('status', 'failed')
+      .single();
+
+    if (txError || !tx) {
+      return res.status(404).json({ error: 'Failed transaction not found' });
+    }
+
+    // Check retry count
+    const retryCount = tx.metadata?.retry_count || 0;
+    if (retryCount >= 3) {
+      return res.status(400).json({ 
+        error: 'Maximum retry attempts reached. Please contact support.',
+        maxRetriesReached: true 
+      });
+    }
+
+    // Get user's Connect account
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_connect_account_id, balance')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.stripe_connect_account_id) {
+      return res.status(400).json({ error: 'Stripe Connect account not found' });
+    }
+
+    const amount = Math.abs(tx.amount);
+
+    // Check if user still has the balance (it was refunded after failure)
+    if (profile.balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance for retry' });
+    }
+
+    // Use atomic balance decrement to prevent race conditions
+    // First try RPC, then fallback with optimistic locking
+    const { error: rpcError } = await supabase.rpc('decrement_balance', {
+      p_user_id: userId,
+      p_amount: amount
+    });
+    
+    let balanceDeducted = !rpcError;
+    
+    if (rpcError) {
+      console.warn('[Connect] RPC not available, using optimistic locking for transfer retry');
+      
+      // Optimistic locking: re-check balance and update atomically
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({ balance: profile.balance - amount })
+        .eq('id', userId)
+        .eq('balance', profile.balance) // Optimistic lock: only update if balance hasn't changed
+        .select()
+        .single();
+      
+      if (updateError || !updatedProfile) {
+        return res.status(409).json({ 
+          error: 'Balance changed during processing. Please try again.',
+          code: 'BALANCE_CONFLICT'
+        });
+      }
+      balanceDeducted = true;
+    }
+
+    if (!balanceDeducted) {
+      return res.status(400).json({ error: 'Failed to deduct balance for retry' });
+    }
+
+    // Create new transfer
+    let transfer;
+    try {
+      transfer = await stripe.transfers.create({
+        amount: Math.round(amount * 100),
+        currency: 'usd',
+        destination: profile.stripe_connect_account_id,
+        metadata: { 
+          user_id: userId,
+          retry_of_transaction: transactionId,
+        }
+      });
+    } catch (stripeError) {
+      // If transfer fails, refund the balance
+      console.error('[Connect] Transfer creation failed, refunding balance:', stripeError);
+      await supabase.rpc('increment_balance', {
+        p_user_id: userId,
+        p_amount: amount
+      }).catch(async (rpcFallbackError) => {
+        // Fallback: direct update with error handling and logging
+        try {
+          const { error: fallbackUpdateError } = await supabase.from('profiles')
+            .update({ balance: profile.balance })
+            .eq('id', userId);
+          if (fallbackUpdateError) {
+            console.error('[Connect] Fallback balance refund update failed:', fallbackUpdateError);
+          }
+        } catch (fallbackException) {
+          console.error('[Connect] Exception during fallback balance refund update:', fallbackException);
+        }
+      });
+      throw stripeError;
+    }
+
+    // Update the transaction with new transfer ID
+    await supabase
+      .from('wallet_transactions')
+      .update({
+        stripe_transfer_id: transfer.id,
+        status: 'pending',
+        metadata: {
+          ...tx.metadata,
+          retry_count: retryCount + 1,
+          retried_at: new Date().toISOString(),
+        }
+      })
+      .eq('id', transactionId);
+
+    console.log(`[Connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`);
+
+    res.json({
+      success: true,
+      transferId: transfer.id,
+      transactionId,
+      message: 'Transfer retry initiated successfully.',
+    });
+
+  } catch (error) {
+    console.error('[Connect] Error retrying transfer:', error);
+    res.status(500).json({ error: error.message || 'Failed to retry transfer' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
@@ -663,9 +1356,20 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📝 Webhook secret configured: ${!!process.env.STRIPE_WEBHOOK_SECRET ? 'Yes' : 'No'}`);
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /health`);
+  console.log(`  GET  /debug`);
   console.log(`  POST /payments/create-payment-intent`);
+  console.log(`  POST /payments/confirm`);
+  console.log(`  GET  /payments/methods`);
+  console.log(`  POST /payments/methods`);
+  console.log(`  DELETE /payments/methods/:id`);
+  console.log(`  POST /apple-pay/payment-intent`);
+  console.log(`  POST /apple-pay/confirm`);
   console.log(`  POST /webhooks/stripe`);
+  console.log(`  GET  /wallet/balance`);
+  console.log(`  GET  /wallet/transactions`);
   console.log(`  POST /connect/create-account-link`);
+  console.log(`  POST /connect/verify-onboarding`);
   console.log(`  POST /connect/transfer`);
+  console.log(`  POST /connect/retry-transfer`);
   console.log(`\n💡 Set up your .env file before running in production\n`);
 });
