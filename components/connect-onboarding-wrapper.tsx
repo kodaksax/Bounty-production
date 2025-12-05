@@ -166,7 +166,7 @@ export function ConnectOnboardingWrapper({
         throw new Error(errorData.error || 'Failed to create onboarding link');
       }
 
-      const { url, accountId } = await response.json();
+      const { url } = await response.json();
 
       // Check if we can open the URL
       const supported = await Linking.canOpenURL(url);
