@@ -345,9 +345,28 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Track processed webhook events to prevent replay attacks
+  // NOTE: In production, this should be stored in Redis or database for persistence across restarts
+  const processedWebhookEvents = new Map<string, number>();
+  const WEBHOOK_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  function cleanupProcessedWebhookEvents() {
+    const now = Date.now();
+    for (const [eventId, timestamp] of processedWebhookEvents.entries()) {
+      if (now - timestamp >= WEBHOOK_EVENT_TTL_MS) {
+        processedWebhookEvents.delete(eventId);
+      }
+    }
+  }
+
   /**
    * Webhook handler for Stripe events
    * Handles payment confirmations, failures, refunds, etc.
+   * 
+   * Security notes:
+   * - Signature verification protects against forged webhooks
+   * - Event ID tracking prevents replay attacks
+   * - No authMiddleware needed - Stripe signature is the authentication
    */
   fastify.post('/payments/webhook', {
     config: {
@@ -357,61 +376,93 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     const sig = request.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+    // Validate webhook secret is configured
     if (!webhookSecret) {
-      logger.warn('[payments] Webhook secret not configured');
-      return reply.code(400).send({ error: 'Webhook not configured' });
+      logger.error('[payments] STRIPE_WEBHOOK_SECRET not configured - webhook endpoint disabled');
+      return reply.code(500).send({ error: 'Webhook not configured on server' });
+    }
+
+    // Validate signature header is present
+    if (!sig) {
+      logger.warn('[payments] Missing stripe-signature header');
+      return reply.code(400).send({ error: 'Missing signature' });
     }
 
     let event: Stripe.Event;
 
     try {
-      // Verify webhook signature
-      const body = (request as any).rawBody || request.body;
+      // Get raw body for signature verification
+      // Fastify with rawBody: true stores it in request.rawBody
+      // Fallback to stringified body if rawBody not available
+      const rawBody = (request as any).rawBody;
+      if (!rawBody) {
+        logger.warn('[payments] rawBody not available - ensure Fastify rawBody plugin is configured');
+      }
+      const body = rawBody || (typeof request.body === 'string' ? request.body : JSON.stringify(request.body));
+      
+      // Verify webhook signature - this validates the webhook came from Stripe
+      // and hasn't been tampered with
       event = stripe.webhooks.constructEvent(
-        typeof body === 'string' ? body : JSON.stringify(body),
-        sig as string,
+        body,
+        sig,
         webhookSecret
       );
     } catch (err: any) {
-      logger.error('[payments] Webhook signature verification failed:', err.message);
+      logger.error({ err: err.message }, '[payments] Webhook signature verification failed');
       return reply.code(400).send({ error: 'Invalid signature' });
     }
 
+    // Replay attack protection: check if we've already processed this event
+    if (processedWebhookEvents.has(event.id)) {
+      logger.info(`[payments] Ignoring duplicate webhook event: ${event.id}`);
+      return { received: true, duplicate: true };
+    }
+
+    // Mark event as processed before handling (prevents concurrent duplicate processing)
+    processedWebhookEvents.set(event.id, Date.now());
+    cleanupProcessedWebhookEvents();
+
     // Handle the event
-    switch (event.type) {
-      case 'payment_intent.succeeded': {
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        logger.info(`[payments] PaymentIntent ${paymentIntent.id} succeeded`);
-        
-        // Record deposit if wallet_deposit purpose
-        if (paymentIntent.metadata.purpose === 'wallet_deposit') {
-          try {
-            await walletService.createTransaction({
-              user_id: paymentIntent.metadata.user_id,
-              type: 'deposit',
-              amount: paymentIntent.amount / 100,
-            });
-          } catch (txError: any) {
-            logger.warn({ err: txError }, '[payments] Transaction may already exist');
+    try {
+      switch (event.type) {
+        case 'payment_intent.succeeded': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          logger.info(`[payments] PaymentIntent ${paymentIntent.id} succeeded`);
+          
+          // Record deposit if wallet_deposit purpose
+          if (paymentIntent.metadata.purpose === 'wallet_deposit') {
+            try {
+              await walletService.createTransaction({
+                user_id: paymentIntent.metadata.user_id,
+                type: 'deposit',
+                amount: paymentIntent.amount / 100,
+              });
+            } catch (txError: any) {
+              logger.warn({ err: txError }, '[payments] Transaction may already exist');
+            }
           }
+          break;
         }
-        break;
-      }
 
-      case 'payment_intent.payment_failed': {
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        logger.warn({ error: paymentIntent.last_payment_error?.message }, `[payments] PaymentIntent ${paymentIntent.id} failed`);
-        break;
-      }
+        case 'payment_intent.payment_failed': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          logger.warn({ error: paymentIntent.last_payment_error?.message }, `[payments] PaymentIntent ${paymentIntent.id} failed`);
+          break;
+        }
 
-      case 'setup_intent.succeeded': {
-        const setupIntent = event.data.object as Stripe.SetupIntent;
-        logger.info(`[payments] SetupIntent ${setupIntent.id} succeeded, payment method: ${setupIntent.payment_method}`);
-        break;
-      }
+        case 'setup_intent.succeeded': {
+          const setupIntent = event.data.object as Stripe.SetupIntent;
+          logger.info(`[payments] SetupIntent ${setupIntent.id} succeeded, payment method: ${setupIntent.payment_method}`);
+          break;
+        }
 
-      default:
-        logger.info(`[payments] Unhandled webhook event: ${event.type}`);
+        default:
+          logger.info(`[payments] Unhandled webhook event: ${event.type}`);
+      }
+    } catch (handlerError: any) {
+      // Log error but still return 200 to prevent Stripe from retrying
+      // (we've already recorded the event as processed)
+      logger.error({ err: handlerError }, `[payments] Error handling webhook event ${event.id}`);
     }
 
     return { received: true };
