@@ -918,7 +918,7 @@ class StripeService {
       metadata?: Record<string, string>;
     }
   ): Promise<StripePaymentIntent> {
-    const { userId = 'anonymous', purpose = 'payment', metadata = {} } = options || {};
+    const { userId = 'anonymous', purpose = 'payment' } = options || {};
 
     // Generate idempotency key for duplicate protection
     const idempotencyKey = generateIdempotencyKey(userId, amount, purpose);
