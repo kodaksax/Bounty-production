@@ -18,7 +18,7 @@ The **Application Identifier** (also called Package Name) uniquely identifies yo
 
 ### Current Configuration
 
-The BOUNTY app uses the following identifier (defined in `app.json`):
+The BOUNTY app currently has the Android package name configured automatically by Expo based on the slug. To explicitly set it, add a `package` field to your `app.json`:
 
 ```json
 {
@@ -29,6 +29,8 @@ The BOUNTY app uses the following identifier (defined in `app.json`):
   }
 }
 ```
+
+> **Note:** If no explicit `package` is set, EAS Build will prompt you to enter one during your first build.
 
 ### Setting Up a New Application Identifier
 
