@@ -320,7 +320,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       }
 
       // Clean up idempotency tracking
-      const idempotencyKey = paymentIntent.metadata.idempotency_key;
+      const idempotencyKey = paymentIntent.metadata?.idempotency_key;
       if (idempotencyKey) {
         pendingPayments.delete(idempotencyKey);
       }
