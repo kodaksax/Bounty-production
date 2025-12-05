@@ -61,7 +61,9 @@ The BOUNTY app uses the following identifier (defined in `app.json`):
 
 ### Best Practices
 
-- Use lowercase letters, numbers, and underscores only
+- Use the format `com.<company>.<appname>` with dots (`.`) separating segments
+- Each segment should contain only lowercase letters, numbers, and underscores
+- Package name must have at least one dot (e.g., `com.example`)
 - Match your domain (if you own `bounty.app`, use `app.bounty.*`)
 - Keep it short but descriptive
 - Never include sensitive information
