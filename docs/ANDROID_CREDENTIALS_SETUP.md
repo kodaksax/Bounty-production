@@ -45,12 +45,7 @@ The BOUNTY app currently has the Android package name configured automatically b
    {
      "expo": {
        "android": {
-         "package": "com.yourcompany.bountyexpo",
-         "adaptiveIcon": {
-           "foregroundImage": "./assets/images/bounty-icon.png",
-           "backgroundColor": "#ffffff"
-         },
-         "edgeToEdgeEnabled": true
+         "package": "com.yourcompany.bountyexpo"
        }
      }
    }
