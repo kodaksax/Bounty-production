@@ -280,7 +280,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
     try {
-      const { paymentIntentId, paymentMethodId } = request.body as {
+      const { paymentIntentId } = request.body as {
         paymentIntentId: string;
         paymentMethodId?: string;
       };
