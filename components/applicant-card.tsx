@@ -6,9 +6,9 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { ReputationScoreCompact } from './ui/reputation-score';
 import TextGuard from './ui/TextGuard';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
-import { ReputationScoreCompact } from './ui/reputation-score';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -141,8 +141,8 @@ export function ApplicantCard({
             {/* Verification Badge */}
             <VerificationBadge 
               status={
-                typeof request.profile?.verificationStatus === 'string'
-                  ? (request.profile.verificationStatus as VerificationLevel)
+                typeof (request.profile as any)?.verificationStatus === 'string'
+                  ? ((request.profile as any).verificationStatus as VerificationLevel)
                   : 'unverified'
               }
               size="small"

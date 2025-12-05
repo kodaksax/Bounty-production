@@ -11,14 +11,15 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NotFoundScreen } from '../../../components/not-found-screen';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
-import { NotFoundScreen } from '../../../components/not-found-screen';
 
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
@@ -41,6 +42,7 @@ export default function BountyDashboard() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
+  const { pushColor, popColor } = useBackgroundColor();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,8 +65,13 @@ export default function BountyDashboard() {
       setIsLoading(false)
       return
     }
+    // Ensure the app-level safe area color matches this screen's dark background
+    pushColor('#1a3d2e');
     loadBounty(routeBountyId)
     loadConversation(routeBountyId)
+    return () => {
+      popColor('#1a3d2e');
+    }
   }, [routeBountyId]);
 
   const loadBounty = async (id: string) => {
@@ -206,10 +213,10 @@ export default function BountyDashboard() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Loading bounty...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -231,7 +238,7 @@ export default function BountyDashboard() {
     
     // Other errors - show error screen with retry
     return (
-      <View style={styles.errorContainer}>
+      <SafeAreaView style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Failed to load bounty'}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
@@ -240,7 +247,7 @@ export default function BountyDashboard() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -249,7 +256,7 @@ export default function BountyDashboard() {
     : bounty.description;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
@@ -464,7 +471,7 @@ export default function BountyDashboard() {
           </TouchableOpacity>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
