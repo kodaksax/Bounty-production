@@ -2,10 +2,13 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useAuthContext } from "../hooks/use-auth-context"
+import { API_BASE_URL } from "../lib/config/api"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
+import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
   onBack: () => void
@@ -16,6 +19,12 @@ interface AddCardModalProps {
    * (e.g. PaymentMethodsModal). Default: false
    */
   embedded?: boolean
+  /**
+   * When usePaymentElement is true, uses Stripe's Payment Element
+   * for better PCI compliance. Requires native SDK support.
+   * Default: false (falls back to manual card input)
+   */
+  usePaymentElement?: boolean
 }
 
 interface CardData {
@@ -25,15 +34,75 @@ interface CardData {
   securityCode: string
 }
 
-export function AddCardModal({ onBack, onSave, embedded = false }: AddCardModalProps) {
+export function AddCardModal({ onBack, onSave, embedded = false, usePaymentElement = false }: AddCardModalProps) {
   const [cardNumber, setCardNumber] = useState("")
   const [cardholderName, setCardholderName] = useState("")
   const [expiryDate, setExpiryDate] = useState("")
   const [securityCode, setSecurityCode] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [cardErrors, setCardErrors] = useState<{[key: string]: string}>({})
+  const [setupIntentSecret, setSetupIntentSecret] = useState<string | null>(null)
+  const [isCreatingSetupIntent, setIsCreatingSetupIntent] = useState(false)
   
-  const { createPaymentMethod, error: stripeError } = useStripe()
+  const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
+  const { session } = useAuthContext()
+
+  // Create SetupIntent for Payment Element mode
+  useEffect(() => {
+    if (usePaymentElement && !setupIntentSecret) {
+      createSetupIntent()
+    }
+  }, [usePaymentElement])
+
+  const createSetupIntent = async () => {
+    if (!session?.access_token) {
+      Alert.alert('Error', 'Please sign in to add a payment method')
+      return
+    }
+
+    setIsCreatingSetupIntent(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/payments/create-setup-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          usage: 'off_session',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to initialize payment setup')
+      }
+
+      const { clientSecret } = await response.json()
+      setSetupIntentSecret(clientSecret)
+    } catch (error) {
+      console.error('[AddCardModal] SetupIntent creation error:', error)
+      Alert.alert('Error', 'Failed to initialize payment setup. Please try again.')
+    } finally {
+      setIsCreatingSetupIntent(false)
+    }
+  }
+
+  const handlePaymentElementSuccess = async () => {
+    // Refresh payment methods after successful save
+    await loadPaymentMethods()
+    
+    Alert.alert('Success', 'Payment method added successfully!', [
+      { text: 'OK', onPress: onBack }
+    ])
+  }
+
+  const handlePaymentElementError = (error: any) => {
+    if (error.type === 'canceled') {
+      // User cancelled, just go back
+      return
+    }
+    Alert.alert('Error', error.message || 'Failed to add payment method')
+  }
 
   const formatCardNumber = (value: string) => {
     const digits = value.replace(/\D/g, "")
@@ -160,6 +229,103 @@ export function AddCardModal({ onBack, onSave, embedded = false }: AddCardModalP
     expiryDate.length >= 5 && 
     securityCode.length >= 3 &&
     Object.keys(cardErrors).length === 0
+
+  // Render Payment Element mode
+  if (usePaymentElement) {
+    if (isCreatingSetupIntent || !setupIntentSecret) {
+      return (
+        <View style={embedded ? embeddedStyles.container : styles.overlayContainer}>
+          {embedded ? (
+            <View style={embeddedStyles.navBar}>
+              <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                <MaterialIcons name="arrow-back" size={22} color="#fff" />
+              </TouchableOpacity>
+              <Text style={embeddedStyles.title}>Add Card</Text>
+              <View style={{ width: 44 }} />
+            </View>
+          ) : (
+            <View style={styles.sheet}>
+              <View style={styles.navBar}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Close add card"
+                  onPress={onBack}
+                  style={styles.navButton}
+                >
+                  <MaterialIcons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.navTitle}>Add Card</Text>
+                <View style={styles.navButtonPlaceholder} />
+              </View>
+            </View>
+          )}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>
+              Preparing secure payment form...
+            </Text>
+          </View>
+        </View>
+      )
+    }
+
+    // Render with PaymentElementWrapper
+    const paymentElementContent = (
+      <PaymentElementWrapper
+        clientSecret={setupIntentSecret}
+        mode="setup"
+        onSuccess={handlePaymentElementSuccess}
+        onError={handlePaymentElementError}
+        onCancel={onBack}
+        showApplePay={true}
+        showGooglePay={true}
+        buttonText="Save Card"
+        merchantDisplayName="BountyExpo"
+      />
+    )
+
+    if (embedded) {
+      return (
+        <View style={embeddedStyles.container}>
+          <View style={embeddedStyles.navBar}>
+            <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+              <MaterialIcons name="arrow-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={embeddedStyles.title}>Add Card</Text>
+            <View style={{ width: 44 }} />
+          </View>
+          <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+            {paymentElementContent}
+          </View>
+        </View>
+      )
+    }
+
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.overlayContainer}
+      >
+        <View style={styles.sheet}>
+          <View style={styles.navBar}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Close add card"
+              onPress={onBack}
+              style={styles.navButton}
+            >
+              <MaterialIcons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.navTitle}>Add Card</Text>
+            <View style={styles.navButtonPlaceholder} />
+          </View>
+          <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+            {paymentElementContent}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    )
+  }
 
   if (embedded) {
     // Render inline when embedded inside another modal
