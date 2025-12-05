@@ -341,9 +341,8 @@ export function generateIdempotencyKey(
   amount: number,
   purpose: string
 ): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
-  return `${IDEMPOTENCY_KEY_PREFIX}${userId}_${amount}_${purpose}_${timestamp}_${random}`;
+  // Deterministic key: identical parameters yield identical key
+  return `${IDEMPOTENCY_KEY_PREFIX}${userId}_${amount}_${purpose}`;
 }
 
 /**
