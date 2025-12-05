@@ -72,8 +72,10 @@ When registering your Bundle ID, enable these capabilities:
 
 - **Push Notifications** - For chat and status notifications
 - **Associated Domains** - For deep linking (if using universal links)
-- **Apple Pay** - For payment processing (merchant identifier: `merchant.com.bountyexpo-workspace`)
+- **Apple Pay** - For payment processing (current merchant identifier: `merchant.com.bountyexpo-workspace` as configured in `app.json`)
 - **Sign In with Apple** - If implementing Apple Sign-In
+
+> **Note**: If creating a new bundle identifier, consider using a consistent naming pattern (e.g., if bundle ID is `com.yourcompany.bountyexpo`, use merchant ID `merchant.com.yourcompany.bountyexpo`).
 
 ---
 
