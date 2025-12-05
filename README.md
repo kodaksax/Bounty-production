@@ -469,6 +469,34 @@ npm run reset-project
 ```
 (Not typically needed now that base scaffolding is customized.)
 
+## 📱 Mobile Deployment
+
+### Android Build & Publish
+
+For building and publishing to Google Play Store, you'll need to configure:
+
+1. **Application Identifier** - Your unique package name
+2. **Android Upload Keystore** - Code signing certificate
+3. **Google Service Account Key** - For automated publishing (optional)
+
+📖 **Full documentation:** See [docs/ANDROID_CREDENTIALS_SETUP.md](./docs/ANDROID_CREDENTIALS_SETUP.md)
+
+**Quick Start:**
+```bash
+# Build for production (EAS generates credentials automatically)
+eas build --platform android --profile production
+
+# Submit to Google Play Store
+eas submit --platform android
+```
+
+### iOS Build & Publish
+
+iOS deployment documentation coming soon. The process involves:
+- Apple Developer Account setup
+- App Store Connect configuration
+- Provisioning profiles and certificates
+
 ## 📁 Suggested Structure (Illustrative)
 ```
 app/
