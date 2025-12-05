@@ -5,6 +5,11 @@ import { walletService } from '../services/wallet-service';
 import { logger } from '../services/logger';
 
 // Idempotency tracking for duplicate payment prevention
+// NOTE: In production, this should be stored in a persistent database (e.g., Redis or PostgreSQL)
+// The in-memory implementation below is suitable for development/single-instance deployments only.
+// For multi-instance production deployments, implement idempotency via:
+// 1. Store idempotency keys in Redis with TTL
+// 2. Or use PostgreSQL with a unique constraint on idempotency_key
 const pendingPayments = new Map<string, number>();
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -412,7 +417,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 // Helper functions
 
 /**
- * Customer ID storage - in production this should be in database
+ * Customer ID storage
+ * 
+ * IMPORTANT: This in-memory Map is for development/testing only.
+ * In production, customer IDs should be stored in the database (users table)
+ * with the stripe_customer_id field. The users schema already has this field.
+ * 
+ * TODO: Replace this with database queries when deploying to production:
+ * - On lookup: SELECT stripe_customer_id FROM users WHERE id = userId
+ * - On create: UPDATE users SET stripe_customer_id = customerId WHERE id = userId
  */
 const customerIds = new Map<string, string>();
 

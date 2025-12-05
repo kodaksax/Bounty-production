@@ -154,7 +154,11 @@ export function PaymentElementWrapper({
 
         // Configure Google Pay (Android)
         if (Platform.OS === 'android' && showGooglePay) {
-          const isTestMode = clientSecret.includes('_test_');
+          // Determine test mode from publishable key if available, fallback to client secret pattern
+          // The publishable key prefix (pk_test_ vs pk_live_) is the most reliable indicator
+          const publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+          const isTestMode = publishableKey.startsWith('pk_test_') || 
+            (!publishableKey && clientSecret.includes('_test_'));
           paymentSheetConfig.googlePay = {
             merchantCountryCode: 'US',
             testEnv: isTestMode,

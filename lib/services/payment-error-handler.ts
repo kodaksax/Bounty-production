@@ -318,6 +318,16 @@ export async function withPaymentRetry<T>(
 
 /**
  * Idempotency key generation and management for duplicate prevention
+ * 
+ * NOTE: This is a client-side implementation for immediate duplicate detection.
+ * The server-side idempotency (in payments.ts) provides the authoritative check.
+ * This client-side cache is used for:
+ * 1. Preventing rapid double-clicks from creating duplicate requests
+ * 2. Providing immediate feedback to users without a network round-trip
+ * 
+ * For production distributed systems, consider using:
+ * - Server-side: Redis with atomic operations
+ * - Client-side: This in-memory cache is sufficient as it's per-device
  */
 const IDEMPOTENCY_KEY_PREFIX = 'bountyexpo_pay_';
 const IDEMPOTENCY_CACHE = new Map<string, number>();
