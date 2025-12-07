@@ -20,6 +20,13 @@ export interface StripePaymentIntent {
   status: 'requires_payment_method' | 'requires_confirmation' | 'requires_action' | 'processing' | 'requires_capture' | 'canceled' | 'succeeded';
 }
 
+export interface StripeSetupIntent {
+  id: string;
+  client_secret: string;
+  status: 'requires_payment_method' | 'requires_confirmation' | 'requires_action' | 'processing' | 'canceled' | 'succeeded';
+  payment_method?: string;
+}
+
 export interface CreatePaymentMethodData {
   cardNumber: string;
   expiryDate: string;
@@ -42,6 +49,15 @@ export interface PaymentConfirmationResult {
 
 import { API_BASE_URL } from '../config/api';
 import { analyticsService } from './analytics-service';
+import {
+  checkDuplicatePayment,
+  completePaymentAttempt,
+  generateIdempotencyKey,
+  logPaymentError,
+  parsePaymentError,
+  recordPaymentAttempt,
+  withPaymentRetry,
+} from './payment-error-handler';
 import { performanceService } from './performance-service';
 
 class StripeService {
@@ -732,6 +748,279 @@ class StripeService {
     }
     
     return sum % 10 === 0;
+  }
+
+  /**
+   * Create a SetupIntent for saving a payment method without charging
+   * This is the recommended approach for PCI compliance when saving cards
+   */
+  async createSetupIntent(authToken?: string): Promise<StripeSetupIntent> {
+    performanceService.startMeasurement('setup_intent_create', 'payment_process', {});
+
+    try {
+      await this.initialize();
+
+      const response = await fetch(`${API_BASE_URL}/payments/create-setup-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          usage: 'off_session', // Allow future off-session payments
+        }),
+      });
+
+      if (!response.ok) {
+        throw {
+          type: 'api_error',
+          code: response.status.toString(),
+          message: 'Failed to create setup intent',
+        };
+      }
+
+      const { clientSecret, setupIntentId } = await response.json();
+
+      const setupIntent: StripeSetupIntent = {
+        id: setupIntentId,
+        client_secret: clientSecret,
+        status: 'requires_payment_method',
+      };
+
+      await analyticsService.trackEvent('setup_intent_created', {
+        setupIntentId: setupIntent.id,
+      });
+
+      await performanceService.endMeasurement('setup_intent_create', {
+        success: true,
+      });
+
+      return setupIntent;
+    } catch (error) {
+      console.error('[StripeService] Error creating setup intent:', error);
+
+      await analyticsService.trackEvent('setup_intent_failed', {
+        error: String(error),
+      });
+
+      await performanceService.endMeasurement('setup_intent_create', {
+        success: false,
+        error: String(error),
+      });
+
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Confirm a SetupIntent using the Payment Sheet
+   * This saves the payment method for future use
+   */
+  async confirmSetupIntent(clientSecret: string): Promise<{
+    success: boolean;
+    paymentMethodId?: string;
+    error?: StripeError;
+  }> {
+    try {
+      await this.initialize();
+
+      if (!this.stripeSDK?.initPaymentSheet || !this.stripeSDK?.presentPaymentSheet) {
+        console.warn('[StripeService] Payment sheet not available for setup intent');
+        return {
+          success: false,
+          error: {
+            type: 'api_error',
+            code: 'not_supported',
+            message: 'Payment setup is not available. Please use the card form.',
+          },
+        };
+      }
+
+      // Initialize payment sheet for setup
+      const { error: initError } = await this.stripeSDK.initPaymentSheet({
+        setupIntentClientSecret: clientSecret,
+        merchantDisplayName: 'BountyExpo',
+        style: 'automatic',
+        applePay: {
+          merchantCountryCode: 'US',
+        },
+        googlePay: {
+          merchantCountryCode: 'US',
+          testEnv: !this.publishableKey.startsWith('pk_live'),
+        },
+        returnURL: 'bountyexpo://setup-complete',
+      });
+
+      if (initError) {
+        return {
+          success: false,
+          error: {
+            type: 'api_error',
+            code: initError.code,
+            message: initError.message,
+          },
+        };
+      }
+
+      // Present the payment sheet
+      const { error: presentError } = await this.stripeSDK.presentPaymentSheet();
+
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          return {
+            success: false,
+            error: {
+              type: 'card_error',
+              code: 'canceled',
+              message: 'Setup was cancelled',
+            },
+          };
+        }
+
+        return {
+          success: false,
+          error: {
+            type: presentError.type || 'card_error',
+            code: presentError.code,
+            message: presentError.message,
+          },
+        };
+      }
+
+      // Extract setup intent ID from client secret to get payment method
+      const setupIntentId = clientSecret.split('_secret_')[0];
+      
+      await analyticsService.trackEvent('setup_intent_confirmed', {
+        setupIntentId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('[StripeService] Error confirming setup intent:', error);
+      return {
+        success: false,
+        error: this.handleStripeError(error) as StripeError,
+      };
+    }
+  }
+
+  /**
+   * Create a payment intent with idempotency and duplicate protection
+   * This is the secure way to create payments
+   */
+  async createPaymentIntentSecure(
+    amount: number,
+    currency: string = 'usd',
+    authToken?: string,
+    options?: {
+      userId?: string;
+      purpose?: string;
+      metadata?: Record<string, string>;
+    }
+  ): Promise<StripePaymentIntent> {
+    const { userId = 'anonymous', purpose = 'payment' } = options || {};
+
+    // Generate idempotency key for duplicate protection
+    const idempotencyKey = generateIdempotencyKey(userId, amount, purpose);
+
+    // Check for duplicate submission
+    if (checkDuplicatePayment(idempotencyKey)) {
+      const duplicateError = {
+        type: 'idempotency_error',
+        code: 'duplicate_transaction',
+        message: 'This payment is already being processed. Please wait.',
+      };
+      throw duplicateError;
+    }
+
+    // Record the payment attempt
+    recordPaymentAttempt(idempotencyKey);
+
+    try {
+      // Use retry wrapper for transient errors
+      const result = await withPaymentRetry(
+        async () => {
+          return await this.createPaymentIntent(amount, currency, authToken);
+        },
+        {
+          maxRetries: 3,
+          baseDelayMs: 1000,
+          maxDelayMs: 5000,
+        }
+      );
+
+      // Payment successful, complete the attempt tracking
+      completePaymentAttempt(idempotencyKey);
+      
+      return result;
+    } catch (error) {
+      // Parse and log the error
+      const paymentError = parsePaymentError(error);
+      await logPaymentError(paymentError, {
+        amount,
+        currency,
+        userId,
+        stage: 'initiate',
+      });
+
+      // Complete the attempt tracking (allows retry after error)
+      completePaymentAttempt(idempotencyKey);
+
+      throw error;
+    }
+  }
+
+  /**
+   * Confirm payment with enhanced error handling and logging
+   */
+  async confirmPaymentSecure(
+    paymentIntentClientSecret: string,
+    paymentMethodId: string,
+    authToken?: string,
+    options?: {
+      userId?: string;
+    }
+  ): Promise<StripePaymentIntent> {
+    const { userId } = options || {};
+
+    try {
+      const result = await withPaymentRetry(
+        async () => {
+          return await this.confirmPayment(paymentIntentClientSecret, paymentMethodId, authToken);
+        },
+        {
+          maxRetries: 2, // Fewer retries for confirmation
+          baseDelayMs: 2000,
+          maxDelayMs: 5000,
+        }
+      );
+
+      return result;
+    } catch (error) {
+      // Parse and log the error
+      const paymentError = parsePaymentError(error);
+      await logPaymentError(paymentError, {
+        paymentIntentId: paymentIntentClientSecret.split('_secret_')[0],
+        userId,
+        stage: 'confirm',
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Get the native SDK instance for advanced use cases
+   */
+  getStripeSDK(): any {
+    return this.stripeSDK;
+  }
+
+  /**
+   * Check if the native SDK is available
+   */
+  isSDKAvailable(): boolean {
+    return !!this.stripeSDK;
   }
 }
 

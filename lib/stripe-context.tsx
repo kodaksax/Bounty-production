@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 // Fixed import path: stripe-context.tsx sits in lib/, so services is a sibling folder under lib/
 import { API_BASE_URL } from 'lib/config/api';
-import { CreatePaymentMethodData, StripePaymentMethod, stripeService } from './services/stripe-service';
+import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 
 export async function createPaymentIntent(amount: number) {
   const res = await fetch(`${API_BASE_URL}/api/payments/create-payment-intent`, {
@@ -24,6 +24,8 @@ interface StripeContextType {
   loadPaymentMethods: () => Promise<void>;
   removePaymentMethod: (paymentMethodId: string) => Promise<void>;
   processPayment: (amount: number, paymentMethodId?: string) => Promise<{ success: boolean; error?: string }>;
+  processPaymentSecure: (amount: number, options?: { userId?: string; purpose?: string }) => Promise<{ success: boolean; error?: string }>;
+  createSetupIntent: () => Promise<StripeSetupIntent | null>;
   clearError: () => void;
 }
 
@@ -160,6 +162,71 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }
   };
 
+  const processPaymentSecure = async (
+    amount: number, 
+    options?: { userId?: string; purpose?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setIsLoading(true);
+      clearError();
+
+      // Create payment intent with duplicate protection
+      const paymentIntent = await stripeService.createPaymentIntentSecure(
+        amount, 
+        'usd', 
+        undefined, 
+        options
+      );
+      
+      // Use default payment method
+      const pmId = paymentMethods[0]?.id;
+      
+      if (!pmId) {
+        throw new Error('No payment method available. Please add a payment method first.');
+      }
+
+      // Confirm payment with enhanced error handling
+      const confirmedIntent = await stripeService.confirmPaymentSecure(
+        paymentIntent.client_secret, 
+        pmId, 
+        undefined,
+        { userId: options?.userId }
+      );
+      
+      if (confirmedIntent.status === 'succeeded') {
+        return { success: true };
+      } else {
+        return { 
+          success: false, 
+          error: 'Payment was not completed. Please try again.' 
+        };
+      }
+    } catch (err: any) {
+      const errorMessage = err instanceof Error ? err.message : 'Payment processing failed';
+      setError(errorMessage);
+      return { 
+        success: false, 
+        error: errorMessage 
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const createSetupIntent = async (): Promise<StripeSetupIntent | null> => {
+    try {
+      setIsLoading(true);
+      clearError();
+      return await stripeService.createSetupIntent();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create setup intent';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Initialize on mount
   useEffect(() => {
     initialize();
@@ -175,6 +242,8 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     loadPaymentMethods,
     removePaymentMethod,
     processPayment,
+    processPaymentSecure,
+    createSetupIntent,
     clearError,
   };
 

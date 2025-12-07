@@ -70,6 +70,7 @@ const { registerSearchRoutes } = require('./routes/search');
 const { registerAnalyticsRoutes } = require('./routes/analytics');
 const { registerMessagingRoutes } = require('./routes/messaging');
 const { registerStaleBountyRoutes } = require('./routes/stale-bounty');
+const { registerPaymentRoutes } = require('./routes/payments');
 const { bountyService } = require('./services/bounty-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
@@ -121,6 +122,9 @@ const startServer = async () => {
 
   // Register stale bounty routes
   await registerStaleBountyRoutes(fastify);
+
+  // Register payment routes (SetupIntent, PaymentIntent, etc.)
+  await registerPaymentRoutes(fastify);
 
   // Delete account endpoint
   fastify.delete('/auth/delete-account', {

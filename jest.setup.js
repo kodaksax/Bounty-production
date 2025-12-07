@@ -6,10 +6,21 @@ process.env.SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
 process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
+process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.NODE_ENV = 'test';
 
 // Global test timeout
 jest.setTimeout(10000);
+
+// Mock expo-constants
+jest.mock('expo-constants', () => ({
+  default: {
+    expoConfig: {
+      extra: {},
+    },
+    manifest: {},
+  },
+}));
 
 // Mock React Native modules that aren't available in Node.js test environment
 jest.mock('react-native', () => ({
@@ -42,6 +53,7 @@ jest.mock('react-native', () => ({
   Dimensions: {
     get: jest.fn().mockReturnValue({ width: 375, height: 812 }),
   },
+  NativeModules: {},
   View: 'View',
   Text: 'Text',
   TouchableOpacity: 'TouchableOpacity',
@@ -68,6 +80,16 @@ jest.mock('expo-haptics', () => ({
     Warning: 'Warning',
     Error: 'Error',
   },
+}));
+
+// Mock @stripe/stripe-react-native
+jest.mock('@stripe/stripe-react-native', () => ({
+  initStripe: jest.fn().mockResolvedValue(undefined),
+  createPaymentMethod: jest.fn(),
+  confirmPayment: jest.fn(),
+  initPaymentSheet: jest.fn(),
+  presentPaymentSheet: jest.fn(),
+  handleNextAction: jest.fn(),
 }));
 
 // Mock console methods to reduce noise in tests, but preserve critical errors

@@ -20,8 +20,13 @@ export type AnalyticsEvent =
   | 'payment_initiated'
   | 'payment_completed'
   | 'payment_failed'
+  | 'payment_error'
   | 'escrow_funded'
   | 'escrow_released'
+  // SetupIntent events
+  | 'setup_intent_created'
+  | 'setup_intent_confirmed'
+  | 'setup_intent_failed'
   // Messaging events
   | 'message_sent'
   | 'conversation_started'
