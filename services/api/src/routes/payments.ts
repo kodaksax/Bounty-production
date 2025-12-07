@@ -447,12 +447,144 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         case 'payment_intent.payment_failed': {
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
           logger.warn({ error: paymentIntent.last_payment_error?.message }, `[payments] PaymentIntent ${paymentIntent.id} failed`);
+          // TODO: Notify user of payment failure
+          // TODO: Track failed payment attempts for fraud detection
+          break;
+        }
+
+        case 'payment_intent.canceled': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          logger.info(`[payments] PaymentIntent ${paymentIntent.id} canceled`);
+          break;
+        }
+
+        case 'payment_intent.requires_action': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          logger.info(`[payments] PaymentIntent ${paymentIntent.id} requires action (3DS)`);
+          // Payment requires additional authentication (3D Secure)
+          // Client should handle this via the next_action field
           break;
         }
 
         case 'setup_intent.succeeded': {
           const setupIntent = event.data.object as Stripe.SetupIntent;
           logger.info(`[payments] SetupIntent ${setupIntent.id} succeeded, payment method: ${setupIntent.payment_method}`);
+          // TODO: Update user's payment method status in database
+          break;
+        }
+
+        case 'setup_intent.setup_failed': {
+          const setupIntent = event.data.object as Stripe.SetupIntent;
+          logger.warn(`[payments] SetupIntent ${setupIntent.id} failed`);
+          break;
+        }
+
+        case 'charge.refunded': {
+          const charge = event.data.object as Stripe.Charge;
+          logger.info(`[payments] Charge ${charge.id} refunded`);
+          // Record refund in wallet transactions
+          // TODO: Update bounty status if refund is for escrow
+          break;
+        }
+
+        case 'charge.dispute.created': {
+          const dispute = event.data.object as Stripe.Dispute;
+          logger.warn(`[payments] Dispute created for charge ${dispute.charge}`);
+          // TODO: Notify admin team
+          // TODO: Freeze related funds
+          break;
+        }
+
+        case 'charge.dispute.closed': {
+          const dispute = event.data.object as Stripe.Dispute;
+          logger.info(`[payments] Dispute closed for charge ${dispute.charge}, status: ${dispute.status}`);
+          break;
+        }
+
+        // Stripe Connect Account Events
+        case 'account.updated': {
+          const account = event.data.object as Stripe.Account;
+          logger.info(`[payments] Connect account ${account.id} updated`);
+          // Track verification status changes
+          if (account.details_submitted) {
+            logger.info(`[payments] Connect account ${account.id} details submitted`);
+          }
+          if (account.charges_enabled) {
+            logger.info(`[payments] Connect account ${account.id} charges enabled`);
+          }
+          if (account.payouts_enabled) {
+            logger.info(`[payments] Connect account ${account.id} payouts enabled`);
+          }
+          // TODO: Update user's Connect account status in database
+          // TODO: Notify user if action required (requirements.currently_due)
+          break;
+        }
+
+        case 'account.external_account.created': {
+          const externalAccount = event.data.object as Stripe.BankAccount | Stripe.Card;
+          logger.info(`[payments] External account added: ${externalAccount.id}`);
+          break;
+        }
+
+        case 'account.external_account.deleted': {
+          const externalAccount = event.data.object as Stripe.BankAccount | Stripe.Card;
+          logger.info(`[payments] External account removed: ${externalAccount.id}`);
+          break;
+        }
+
+        // Payout Events
+        case 'payout.created': {
+          const payout = event.data.object as Stripe.Payout;
+          logger.info(`[payments] Payout created: ${payout.id}, amount: ${payout.amount}`);
+          break;
+        }
+
+        case 'payout.paid': {
+          const payout = event.data.object as Stripe.Payout;
+          logger.info(`[payments] Payout paid: ${payout.id}`);
+          // TODO: Update transaction status in database
+          break;
+        }
+
+        case 'payout.failed': {
+          const payout = event.data.object as Stripe.Payout;
+          logger.error(`[payments] Payout failed: ${payout.id}`);
+          // TODO: Notify user and admin
+          break;
+        }
+
+        // Transfer Events (for Connect)
+        case 'transfer.created': {
+          const transfer = event.data.object as Stripe.Transfer;
+          logger.info(`[payments] Transfer created: ${transfer.id}, amount: ${transfer.amount}`);
+          break;
+        }
+
+        case 'transfer.reversed': {
+          const transfer = event.data.object as Stripe.Transfer;
+          logger.warn(`[payments] Transfer reversed: ${transfer.id}`);
+          break;
+        }
+
+        // Radar Events (Fraud Detection)
+        case 'radar.early_fraud_warning.created': {
+          const warning = event.data.object as Stripe.Radar.EarlyFraudWarning;
+          logger.error(`[payments] Fraud warning for charge ${warning.charge}`);
+          // TODO: Immediately freeze related funds
+          // TODO: Alert fraud team
+          break;
+        }
+
+        case 'review.opened': {
+          const review = event.data.object as Stripe.Review;
+          logger.warn(`[payments] Review opened for payment intent ${review.payment_intent}`);
+          // TODO: Hold funds pending review
+          break;
+        }
+
+        case 'review.closed': {
+          const review = event.data.object as Stripe.Review;
+          logger.info(`[payments] Review closed for payment intent ${review.payment_intent}, reason: ${review.closed_reason}`);
           break;
         }
 
