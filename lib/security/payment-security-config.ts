@@ -58,11 +58,17 @@ export const STRIPE_CSP_DIRECTIVES = {
 
   /**
    * Style sources - Allow Stripe Elements styling
+   * IMPORTANT: In production, replace 'unsafe-inline' with nonces
+   * Example: "'nonce-{random-value}'" generated per-request
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/style-src
    */
   'style-src': [
     "'self'",
-    // Use nonces for inline styles in production
-    "'unsafe-inline'", // Only for development; replace with nonces
+    // TODO: Replace with nonces in production for XSS prevention
+    // Generate unique nonce per request: crypto.randomBytes(16).toString('base64')
+    // Add to inline styles: <style nonce="{nonce}">
+    // For now, unsafe-inline is used for development only
+    ...(process.env.NODE_ENV === 'production' ? [] : ["'unsafe-inline'"]),
   ],
 };
 
@@ -488,8 +494,9 @@ export const NEGATIVE_BALANCE_POLICY = {
   monitoring: {
     // Check for negative balances daily
     checkFrequency: 'daily',
-    // Send alerts to these emails
-    alertEmails: ['finance@bountyexpo.com'],
+    // Send alerts to configured email addresses
+    // Set via NEGATIVE_BALANCE_ALERT_EMAILS environment variable (comma-separated)
+    alertEmails: (process.env.NEGATIVE_BALANCE_ALERT_EMAILS || 'finance@bountyexpo.com').split(',').map(e => e.trim()),
   },
 };
 
