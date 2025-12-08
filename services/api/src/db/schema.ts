@@ -2,12 +2,19 @@ import { relations } from 'drizzle-orm';
 import { boolean, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 // Users table as specified in requirements
-export const users = pgTable('users', {
+// Map the code's `users` symbol to the existing `profiles` table in the database.
+// Several parts of the codebase (and Supabase) use `profiles.username` and
+// `profiles.stripe_connect_account_id`. We expose these as the properties
+// `handle` and `stripe_account_id` here so the service code doesn't need
+// to change.
+export const users = pgTable('profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  handle: text('handle').notNull(),
-  stripe_account_id: text('stripe_account_id'),
+  // property name `handle` maps to column `username`
+  handle: text('username').notNull(),
+  // property name `stripe_account_id` maps to column `stripe_connect_account_id`
+  stripe_account_id: text('stripe_connect_account_id'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp
+  deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp (if present)
 });
 
 // Bounties table as specified in requirements
