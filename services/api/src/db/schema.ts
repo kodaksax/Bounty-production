@@ -9,8 +9,6 @@ import { boolean, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, 
 // to change.
 export const users = pgTable('profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  handle: text('handle').notNull(),
-  stripe_account_id: text('stripe_account_id'),
   // Compliance and verification fields
   verification_status: text('verification_status').default('pending').notNull(), // pending, verified, rejected, under_review
   kyc_verified_at: timestamp('kyc_verified_at', { withTimezone: true }),
