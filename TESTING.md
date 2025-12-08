@@ -6,22 +6,38 @@ This document provides comprehensive information about the testing infrastructur
 
 ## Testing Stack
 
-- **Test Runner**: Jest
-- **TypeScript Support**: ts-jest
-- **HTTP Testing**: supertest
-- **HTTP Mocking**: nock
+- **Test Runner**: Jest 30.x
+- **TypeScript Support**: ts-jest 29.x
+- **Component Testing**: @testing-library/react-native 13.x
+- **HTTP Testing**: supertest 7.x
+- **HTTP Mocking**: nock 14.x
 - **Node Version**: 18.x and 20.x
+
+### React Native Mocks
+
+The following React Native modules are automatically mocked in `jest.setup.js`:
+- `react-native` core modules
+- `expo-haptics`
+- `expo-secure-store`
+- `expo-constants`
+- `@stripe/stripe-react-native`
+- `@react-native-community/netinfo`
+- `@react-native-async-storage/async-storage`
+- `react-native-url-polyfill`
 
 ## Test Structure
 
 ```
 __tests__/
 ├── unit/              # Unit tests for individual functions and services
-│   ├── services/      # Service layer tests
-│   └── utils/         # Utility function tests
-├── integration/       # Integration tests for API endpoints
-│   └── api/          # API endpoint tests
-└── e2e/              # End-to-end test scenarios
+│   ├── services/      # Service layer tests (auth, payment, search, etc.)
+│   ├── utils/         # Utility function tests (date, validation, etc.)
+│   └── components/    # React component tests
+├── integration/       # Integration tests for API endpoints and flows
+│   ├── api/          # API endpoint tests
+│   └── bounty-creation.test.ts  # Bounty creation flow test
+├── e2e/              # End-to-end test scenarios
+└── components/       # React Native component tests
 ```
 
 ## Running Tests
@@ -70,15 +86,18 @@ Unit tests focus on testing individual functions and services in isolation. They
 **Location**: `__tests__/unit/`
 
 **Examples**:
-- `auth-service.test.ts` - Tests for authentication service
-- `stripe-service.test.ts` - Tests for payment processing
-- `utils.test.ts` - Tests for utility functions
+- `services/auth-service.test.ts` - Tests for authentication service
+- `services/stripe-service.test.ts` - Tests for payment processing
+- `utils/date-utils.test.ts` - Tests for date formatting utilities
+- `utils/bounty-validation.test.ts` - Tests for bounty validation logic
+- `components/offline-status-badge.test.tsx` - Tests for offline status component
 
 **Best Practices**:
-- Mock all external dependencies
+- Mock all external dependencies (Supabase, Stripe, etc.)
 - Test edge cases and error scenarios
-- Keep tests focused and fast
+- Keep tests focused and fast (< 100ms per test)
 - Aim for 100% coverage of business logic
+- Use descriptive test names following "should [action] when [condition]" pattern
 
 ### Integration Tests
 
@@ -87,15 +106,17 @@ Integration tests verify that different parts of the system work together correc
 **Location**: `__tests__/integration/`
 
 **Examples**:
-- `payment-endpoints.test.ts` - Tests payment API endpoints
-- `auth-flow.test.ts` - Tests authentication flows
-- `bounty-service.test.ts` - Tests bounty acceptance flow
+- `api/payment-endpoints.test.ts` - Tests payment API endpoints
+- `api/auth-flow.test.ts` - Tests authentication flows
+- `api/bounty-service.test.ts` - Tests bounty acceptance flow
+- `bounty-creation.test.ts` - Tests complete bounty creation workflow
 
 **Best Practices**:
 - Mock external services (Stripe, Supabase)
 - Test complete user flows
 - Verify error handling and edge cases
 - Use realistic test data
+- Test database interactions and transactions
 
 ### E2E Tests
 
@@ -111,6 +132,42 @@ End-to-end tests simulate complete user workflows from start to finish.
 - Include happy path and error scenarios
 - Verify data persistence and state changes
 - Test security and authorization
+
+### Component Tests
+
+Component tests verify that React Native components render correctly and handle user interactions.
+
+**Location**: `__tests__/components/`
+
+**Examples**:
+- `offline-status-badge.test.tsx` - Tests offline status indicator
+- `wallet-transaction-display.test.ts` - Tests wallet transaction rendering
+- `chat-enhancements.test.ts` - Tests chat UI components
+
+**Best Practices**:
+- Use React Native Testing Library for rendering
+- Mock custom hooks and context providers
+- Test component props and state changes
+- Verify accessibility features
+- Test user interactions (press, input, etc.)
+
+**Component Test Template**:
+```typescript
+import React from 'react';
+import { render } from '@testing-library/react-native';
+import { MyComponent } from '../components/MyComponent';
+
+jest.mock('../hooks/useMyHook', () => ({
+  useMyHook: jest.fn(),
+}));
+
+describe('MyComponent', () => {
+  it('should render correctly', () => {
+    const { getByText } = render(<MyComponent title="Test" />);
+    expect(getByText('Test')).toBeTruthy();
+  });
+});
+```
 
 ## Coverage Requirements
 
