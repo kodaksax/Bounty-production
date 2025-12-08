@@ -80,6 +80,7 @@ const { stripeConnectService } = require('./services/stripe-connect-service');
 const { staleBountyService } = require('./services/stale-bounty-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
 const { registerWalletRoutes } = require('./routes/wallet');
+const riskManagementRoutes = require('./routes/risk-management');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -125,6 +126,9 @@ const startServer = async () => {
 
   // Register payment routes (SetupIntent, PaymentIntent, etc.)
   await registerPaymentRoutes(fastify);
+
+  // Register risk management routes
+  await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
 
   // Delete account endpoint
   fastify.delete('/auth/delete-account', {
