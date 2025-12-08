@@ -329,42 +329,14 @@ class PaymentService {
   }
 
   /**
-   * Get payment receipt information
-   * Can be used to generate receipts for completed payments
+   * [UNIMPLEMENTED] Get payment receipt information
+   * This method is not yet implemented and will throw if called.
    */
-  async getPaymentReceipt(
+  async _getPaymentReceiptNotImplemented(
     paymentIntentId: string,
     authToken?: string
-  ): Promise<{
-    success: boolean;
-    receipt?: PaymentReceipt;
-    error?: { message: string };
-  }> {
-    try {
-      // In a real implementation, this would fetch from your backend
-      // which would retrieve the PaymentIntent from Stripe and format it
-      
-      // For now, return a placeholder structure
-      // TODO: Implement backend endpoint to fetch and format receipt
-      
-      console.warn('[PaymentService] getPaymentReceipt not fully implemented');
-      
-      return {
-        success: false,
-        error: {
-          message: 'Receipt generation not yet implemented',
-        },
-      };
-    } catch (error: any) {
-      console.error('[PaymentService] Error getting receipt:', error);
-
-      return {
-        success: false,
-        error: {
-          message: error.message || 'Failed to generate receipt',
-        },
-      };
-    }
+  ): Promise<never> {
+    throw new Error("getPaymentReceipt is not implemented yet. This method is a placeholder and should not be used until the backend endpoint is ready.");
   }
 
   /**
