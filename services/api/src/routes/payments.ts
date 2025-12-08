@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { walletService } from '../services/wallet-service';
 import { logger } from '../services/logger';
+import { walletService } from '../services/wallet-service';
 
 // Idempotency tracking for duplicate payment prevention
 // NOTE: In production, this should be stored in a persistent database (e.g., Redis or PostgreSQL)
@@ -63,13 +63,16 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/create-payment-intent', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
-      const { amountCents, currency = 'usd', metadata = {}, idempotencyKey } = request.body as {
+      const body = request.body as {
         amountCents: number;
         currency?: string;
         metadata?: Record<string, string>;
         idempotencyKey?: string;
       };
+      const { amountCents, currency = 'usd', metadata = {} } = body;
+      idempotencyKey = body.idempotencyKey;
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });

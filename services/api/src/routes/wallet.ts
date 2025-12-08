@@ -1,11 +1,11 @@
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { FastifyInstance } from 'fastify';
-import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { walletService } from '../services/wallet-service';
-import { stripeConnectService } from '../services/stripe-connect-service';
-import { db } from '../db/connection';
-import { walletTransactions, bounties } from '../db/schema';
-import { eq, desc, and } from 'drizzle-orm';
 import Stripe from 'stripe';
+import { db } from '../db/connection';
+import { bounties, walletTransactions } from '../db/schema';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { stripeConnectService } from '../services/stripe-connect-service';
+import { walletService } from '../services/wallet-service';
 
 // Transaction types that add to balance (inflow)
 const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
@@ -119,38 +119,20 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         },
       }));
 
+      // Get total count for pagination
+      const [{ count }] = await db
+        .select({ count: sql`COUNT(*)`.as('count') })
+        .from(walletTransactions)
+        .where(eq(walletTransactions.user_id, request.userId));
+
+      const totalCount = Number(count);
+      const hasMore = offset + transformedTransactions.length < totalCount;
+
       return {
         transactions: transformedTransactions,
         page: pageNum,
         limit: limitNum,
-        hasMore: transactions.length === limitNum,
-      };
-    } catch (error) {
-      console.error('Error fetching wallet transactions:', error);
-      return reply.code(500).send({
-        error: 'Failed to fetch wallet transactions'
-      });
-    }
-  });
-
-  /**
-   * Get user's wallet balance
-   * This calculates balance based on all transactions
-   */
-  fastify.get('/wallet/balance', {
-    preHandler: authMiddleware
-  }, async (request: AuthenticatedRequest, reply) => {
-    try {
-      if (!request.userId) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
-
-      const balanceCents = await calculateUserBalance(request.userId);
-
-      return {
-        balance: balanceCents / 100,
-        balanceCents,
-        currency: 'USD',
+        hasMore,
       };
     } catch (error) {
       console.error('Error fetching wallet balance:', error);

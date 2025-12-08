@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { riskAssessmentCron } from './services/risk-assessment-cron';
 // Defer importing modules that may read environment variables until after
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
@@ -878,6 +879,14 @@ const start = async () => {
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
     console.log(`📡 WebSocket server available at ws://${host}:${port}/events/subscribe`);
     
+    // Start scheduled risk assessment jobs
+    try {
+      riskAssessmentCron.start();
+      console.log('🕐 Risk assessment cron started');
+    } catch (cronErr) {
+      console.warn('⚠️  Failed to start risk assessment cron:', cronErr);
+    }
+    
     // If Supabase mode is enabled, avoid pinging the Postgres pool (this
     // prevents ECONNRESET/ECONNREFUSED logs when legacy DB envs point at
     // a different DB type or closed port). Start the outbox worker and let
@@ -916,6 +925,12 @@ const start = async () => {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  
+  // Stop cron jobs
+  try {
+    riskAssessmentCron.stop();
+    console.log('🛑 Risk assessment cron stopped');
+  } catch {}
   
   // Stop the outbox worker
   outboxWorker.stop();

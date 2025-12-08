@@ -1,10 +1,10 @@
-import { FastifyPluginAsync } from 'fastify';
-import { riskManagementService } from '../services/risk-management-service';
-import { remediationService } from '../services/remediation-service';
-import { db } from '../db/connection';
-import { restrictedBusinessCategories, remediationWorkflows } from '../db/schema';
 import { eq } from 'drizzle-orm';
-import { authMiddleware, adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { FastifyPluginAsync } from 'fastify';
+import { db } from '../db/connection';
+import { remediationWorkflows, restrictedBusinessCategories } from '../db/schema';
+import { adminMiddleware, AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { remediationService } from '../services/remediation-service';
+import { riskManagementService } from '../services/risk-management-service';
 
 const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -319,54 +319,7 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  /**
-   * Get user's remediation status (authenticated users, own status only or admin)
-   */
-  fastify.get('/api/risk/remediation/user/:userId', {
-    preHandler: authMiddleware
-  }, async (request: AuthenticatedRequest, reply) => {
-    try {
-      const { userId } = request.params as { userId: string };
 
-      // Authorization: Users can only view their own status, admins can view anyone's
-      if (request.userId !== userId && !request.isAdmin) {
-        return reply.code(403).send({
-          success: false,
-          error: 'Unauthorized: You can only view your own remediation status',
-        });
-      }
-
-      const workflows = await remediationService.getRemediationStatus(userId);
-
-      return reply.code(200).send({
-        success: true,
-        data: workflows,
-      });
-    } catch (error) {
-      console.error('Error getting remediation status:', error);
-      return reply.code(500).send({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get remediation status',
-      });
-    }
-  });
-    try {
-      const { userId } = request.params as { userId: string };
-
-      const workflows = await remediationService.getRemediationStatus(userId);
-
-      return reply.code(200).send({
-        success: true,
-        data: workflows,
-      });
-    } catch (error) {
-      console.error('Error getting remediation status:', error);
-      return reply.code(500).send({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get remediation status',
-      });
-    }
-  });
 
   /**
    * Get pending remediation workflows (admin only)
