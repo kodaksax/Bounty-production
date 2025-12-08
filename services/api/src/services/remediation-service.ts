@@ -1,6 +1,6 @@
 import { db } from '../db/connection';
 import { remediationWorkflows, riskActions, users, riskCommunications } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 export interface RemediationRequirement {
   documentType: string;
