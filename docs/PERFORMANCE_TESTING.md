@@ -180,10 +180,12 @@ npx react-native run-ios --configuration Release --profile
 npx react-native-bundle-visualizer
 
 # Memory profiling (iOS)
-xcrun xctrace record --template 'Time Profiler' --device <device-id> --launch com.bountyexpo
+# Note: Update device-id and bundle identifier to match your app configuration
+xcrun xctrace record --template 'Time Profiler' --device <device-id> --launch <your-bundle-id>
 
 # Memory profiling (Android)
-adb shell am start -n com.bountyexpo/.MainActivity --es profile true
+# Note: Update package name to match your app configuration
+adb shell am start -n <your-package-name>/.MainActivity --es profile true
 ```
 
 ## Resources

@@ -10,6 +10,10 @@
 
 import React from 'react';
 
+// Performance thresholds (in milliseconds)
+const SLOW_OPERATION_THRESHOLD = 1000; // Operations slower than 1s are logged as warnings
+const SIXTY_FPS_THRESHOLD = 16.67; // 1000ms / 60fps ≈ 16.67ms per frame
+
 interface PerformanceMetric {
   name: string;
   startTime: number;
@@ -64,7 +68,7 @@ class PerformanceMonitor {
     }
 
     // Log slow operations (>1000ms)
-    if (duration > 1000) {
+    if (duration > SLOW_OPERATION_THRESHOLD) {
       console.warn(`[Performance] Slow operation detected: ${name} took ${duration.toFixed(2)}ms`, metric.metadata);
     } else if (__DEV__) {
       console.log(`[Performance] ${name}: ${duration.toFixed(2)}ms`, metric.metadata);
@@ -103,7 +107,7 @@ class PerformanceMonitor {
     averageDuration: number;
   } {
     const completed = Array.from(this.metrics.values()).filter(m => m.duration !== undefined);
-    const slow = completed.filter(m => (m.duration || 0) > 1000);
+    const slow = completed.filter(m => (m.duration || 0) > SLOW_OPERATION_THRESHOLD);
     const avgDuration = completed.length > 0
       ? completed.reduce((sum, m) => sum + (m.duration || 0), 0) / completed.length
       : 0;
@@ -138,7 +142,7 @@ export function useRenderPerformance(componentName: string, metadata?: Record<st
     renderCount.current += 1;
     const duration = performance.now() - startTime.current;
 
-    if (__DEV__ && duration > 16.67) { // Slower than 60fps
+    if (__DEV__ && duration > SIXTY_FPS_THRESHOLD) { // Slower than 60fps
       console.warn(
         `[Performance] ${componentName} render #${renderCount.current} took ${duration.toFixed(2)}ms (slower than 60fps)`,
         metadata
@@ -206,16 +210,19 @@ export function trackAsyncPerformance<T>(
 
 /**
  * Utility for measuring memory usage (if available)
+ * Note: performance.memory is a non-standard feature only available in Chrome-based browsers
  */
 export function logMemoryUsage(label?: string) {
   if (!__DEV__) return;
 
-  // @ts-ignore - performance.memory is non-standard
-  if (typeof performance !== 'undefined' && performance.memory) {
-    // @ts-ignore
-    const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } = performance.memory;
-    console.log(
-      `[Memory${label ? ` - ${label}` : ''}] Used: ${(usedJSHeapSize / 1048576).toFixed(2)}MB / Total: ${(totalJSHeapSize / 1048576).toFixed(2)}MB / Limit: ${(jsHeapSizeLimit / 1048576).toFixed(2)}MB`
-    );
+  // Check if performance.memory is available (non-standard, Chrome only)
+  if (typeof performance !== 'undefined' && 'memory' in performance) {
+    const memory = (performance as any).memory;
+    if (memory && typeof memory.usedJSHeapSize === 'number') {
+      const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } = memory;
+      console.log(
+        `[Memory${label ? ` - ${label}` : ''}] Used: ${(usedJSHeapSize / 1048576).toFixed(2)}MB / Total: ${(totalJSHeapSize / 1048576).toFixed(2)}MB / Limit: ${(jsHeapSizeLimit / 1048576).toFixed(2)}MB`
+      );
+    }
   }
 }
