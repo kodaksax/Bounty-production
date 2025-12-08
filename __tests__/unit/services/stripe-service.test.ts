@@ -56,6 +56,7 @@ describe('Stripe Service', () => {
 
     it('should create a payment method with valid card data (fallback mode)', async () => {
       // In test environment, the SDK is not available, so it uses fallback
+      // Fallback includes a 500ms delay to simulate network call
       const paymentMethod = await stripeService.createPaymentMethod(validCardData);
 
       expect(paymentMethod).toHaveProperty('id');
@@ -64,14 +65,14 @@ describe('Stripe Service', () => {
       expect(paymentMethod.card.last4).toBe('4242');
       expect(paymentMethod.card.exp_month).toBe(12);
       expect(paymentMethod.card.exp_year).toBe(2025);
-    }, 15000);
+    });
 
     it('should detect card brand correctly', async () => {
       const visaCard = { ...validCardData, cardNumber: '4242424242424242' };
       const result = await stripeService.createPaymentMethod(visaCard);
       
       expect(result.card.brand).toBe('visa');
-    }, 15000);
+    });
 
     it('should handle Mastercard', async () => {
       const mastercardData = { ...validCardData, cardNumber: '5555555555554444' };
@@ -79,14 +80,14 @@ describe('Stripe Service', () => {
       
       expect(result.card.brand).toBe('mastercard');
       expect(result.card.last4).toBe('4444');
-    }, 15000);
+    });
 
     it('should include created timestamp', async () => {
       const result = await stripeService.createPaymentMethod(validCardData);
       
       expect(result.created).toBeGreaterThan(0);
       expect(typeof result.created).toBe('number');
-    }, 15000);
+    });
   });
 
   describe('createPaymentIntent', () => {

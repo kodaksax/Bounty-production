@@ -116,11 +116,12 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock @stripe/stripe-react-native
+// Default to successful empty state; individual tests can override as needed
 jest.mock('@stripe/stripe-react-native', () => ({
   initStripe: jest.fn().mockResolvedValue(undefined),
   createPaymentMethod: jest.fn().mockResolvedValue({
     paymentMethod: null,
-    error: { code: 'mock_unavailable', message: 'Mock not available' }
+    error: null, // Success by default
   }),
   confirmPayment: jest.fn(),
   initPaymentSheet: jest.fn(),

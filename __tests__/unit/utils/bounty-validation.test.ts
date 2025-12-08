@@ -98,6 +98,9 @@ describe('Bounty Validation Utils', () => {
     });
 
     it('should allow negative amounts for honor bounties', () => {
+      // Note: This tests current implementation behavior
+      // Honor bounties don't validate amount as they have no monetary value
+      // Future improvement: Consider adding validation even for honor bounties
       const result = validateAmount(-10, true);
       expect(result).toBeNull();
     });
