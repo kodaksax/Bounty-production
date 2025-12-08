@@ -7,6 +7,9 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { Check, Download, Share2, Mail } from 'lucide-react-native';
 
+// Support email - configurable via environment variable
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@bountyexpo.com';
+
 export interface PaymentReceiptData {
   id: string;
   type: 'payment' | 'refund' | 'transfer' | 'deposit' | 'withdrawal';
@@ -236,7 +239,7 @@ export function PaymentReceipt({
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             Questions about this transaction?{'\n'}
-            Contact support@bountyexpo.com
+            Contact {SUPPORT_EMAIL}
           </Text>
         </View>
 

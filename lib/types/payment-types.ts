@@ -202,14 +202,14 @@ export interface TransferResponse {
  * Webhook Event Response
  * For processing Stripe webhook notifications
  */
-export interface WebhookEventResponse {
+export interface WebhookEventResponse<T = unknown> {
   id: string;
   object: 'event';
   api_version: string | null;
   created: number;
   data: {
-    object: any;
-    previous_attributes?: any;
+    object: T;
+    previous_attributes?: Partial<T>;
   };
   livemode: boolean;
   pending_webhooks: number;
@@ -235,7 +235,7 @@ export interface PaymentErrorResponse {
     payment_intent?: PaymentIntentResponse;
     payment_method?: PaymentMethodResponse;
     setup_intent?: SetupIntentResponse;
-    source?: any;
+    source?: Stripe.Source | Stripe.Card | Stripe.BankAccount | unknown;
   };
 }
 

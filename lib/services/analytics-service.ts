@@ -21,6 +21,10 @@ export type AnalyticsEvent =
   | 'payment_completed'
   | 'payment_failed'
   | 'payment_error'
+  | 'payment_security_warning'
+  | 'payment_sca_required'
+  | 'payment_method_removed'
+  | 'payment_method_saved'
   | 'escrow_funded'
   | 'escrow_released'
   // SetupIntent events

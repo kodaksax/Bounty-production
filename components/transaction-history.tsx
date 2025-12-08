@@ -3,7 +3,7 @@
  * Shows payment history with detailed status information
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,6 @@ import {
   AlertCircle,
   ChevronRight,
 } from 'lucide-react-native';
-import { PaymentReceiptData } from './payment-receipt';
 
 export interface Transaction {
   id: string;
@@ -61,11 +60,7 @@ export function TransactionHistory({
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    loadTransactions();
-  }, [userId, authToken]);
-
-  const loadTransactions = async (isRefresh: boolean = false) => {
+  const loadTransactions = useCallback(async (isRefresh: boolean = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -149,7 +144,11 @@ export function TransactionHistory({
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [userId, authToken, limit]);
+
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
 
   const handleRefresh = () => {
     loadTransactions(true);

@@ -6,10 +6,8 @@
 
 import { stripeService } from './stripe-service';
 import {
-  PaymentIntentResponse,
   PaymentMethodResponse,
   PaymentReceipt,
-  PaymentErrorResponse,
 } from '../types/payment-types';
 import {
   validatePaymentSecurity,
