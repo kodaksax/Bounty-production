@@ -116,12 +116,13 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock @stripe/stripe-react-native
-// Default to successful empty state; individual tests can override as needed
+// Returns empty state (no payment method created, no error) to allow fallback logic in tests
+// Individual tests can override as needed
 jest.mock('@stripe/stripe-react-native', () => ({
   initStripe: jest.fn().mockResolvedValue(undefined),
   createPaymentMethod: jest.fn().mockResolvedValue({
-    paymentMethod: null,
-    error: null, // Success by default
+    paymentMethod: null, // No payment method (triggers fallback in implementation)
+    error: null,         // No error (allows tests to proceed)
   }),
   confirmPayment: jest.fn(),
   initPaymentSheet: jest.fn(),
