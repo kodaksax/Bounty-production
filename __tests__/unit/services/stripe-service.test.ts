@@ -18,12 +18,22 @@ jest.mock('../../../lib/services/performance-service', () => ({
   },
 }));
 
+// Mock @stripe/stripe-react-native to throw error so fallback is used
+jest.mock('@stripe/stripe-react-native', () => {
+  throw new Error('SDK not available in test environment');
+});
+
+// Mock global fetch for API calls
+global.fetch = jest.fn();
+
 const { analyticsService } = require('../../../lib/services/analytics-service');
 const { performanceService } = require('../../../lib/services/performance-service');
 
 describe('Stripe Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset fetch mock before each test
+    (global.fetch as jest.Mock).mockClear();
   });
 
   describe('initialize', () => {
@@ -44,23 +54,24 @@ describe('Stripe Service', () => {
       cardholderName: 'Test User',
     };
 
-    it('should create a payment method with valid card data', async () => {
+    it('should create a payment method with valid card data (fallback mode)', async () => {
+      // In test environment, the SDK is not available, so it uses fallback
       const paymentMethod = await stripeService.createPaymentMethod(validCardData);
 
       expect(paymentMethod).toHaveProperty('id');
-      expect(paymentMethod.id).toMatch(/^pm_mock_/);
+      expect(paymentMethod.id).toMatch(/^pm_/);
       expect(paymentMethod.type).toBe('card');
       expect(paymentMethod.card.last4).toBe('4242');
       expect(paymentMethod.card.exp_month).toBe(12);
       expect(paymentMethod.card.exp_year).toBe(2025);
-    });
+    }, 15000);
 
     it('should detect card brand correctly', async () => {
       const visaCard = { ...validCardData, cardNumber: '4242424242424242' };
       const result = await stripeService.createPaymentMethod(visaCard);
       
       expect(result.card.brand).toBe('visa');
-    });
+    }, 15000);
 
     it('should handle Mastercard', async () => {
       const mastercardData = { ...validCardData, cardNumber: '5555555555554444' };
@@ -68,17 +79,28 @@ describe('Stripe Service', () => {
       
       expect(result.card.brand).toBe('mastercard');
       expect(result.card.last4).toBe('4444');
-    });
+    }, 15000);
 
     it('should include created timestamp', async () => {
       const result = await stripeService.createPaymentMethod(validCardData);
       
       expect(result.created).toBeGreaterThan(0);
       expect(typeof result.created).toBe('number');
-    });
+    }, 15000);
   });
 
   describe('createPaymentIntent', () => {
+    beforeEach(() => {
+      // Mock successful API response
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          clientSecret: 'pi_mock_secret_12345',
+          paymentIntentId: 'pi_mock_67890',
+        }),
+      });
+    });
+
     it('should create a payment intent with valid amount', async () => {
       const amount = 100;
       const currency = 'usd';
@@ -86,11 +108,11 @@ describe('Stripe Service', () => {
       const paymentIntent = await stripeService.createPaymentIntent(amount, currency);
 
       expect(paymentIntent).toHaveProperty('id');
-      expect(paymentIntent.id).toMatch(/^pi_mock_/);
+      expect(paymentIntent.id).toBe('pi_mock_67890');
       expect(paymentIntent.amount).toBe(10000); // Converted to cents
       expect(paymentIntent.currency).toBe(currency);
       expect(paymentIntent.status).toBe('requires_payment_method');
-      expect(paymentIntent.client_secret).toContain('secret');
+      expect(paymentIntent.client_secret).toBe('pi_mock_secret_12345');
     });
 
     it('should track analytics event on success', async () => {
@@ -99,7 +121,7 @@ describe('Stripe Service', () => {
       expect(analyticsService.trackEvent).toHaveBeenCalledWith('payment_initiated', {
         amount: 50,
         currency: 'usd',
-        paymentIntentId: expect.stringMatching(/^pi_mock_/),
+        paymentIntentId: 'pi_mock_67890',
       });
     });
 

@@ -82,10 +82,46 @@ jest.mock('expo-haptics', () => ({
   },
 }));
 
+// Mock expo-secure-store
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn().mockResolvedValue(null),
+  setItemAsync: jest.fn().mockResolvedValue(undefined),
+  deleteItemAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock react-native-url-polyfill
+jest.mock('react-native-url-polyfill/auto', () => ({}));
+
+// Mock @react-native-community/netinfo
+jest.mock('@react-native-community/netinfo', () => ({
+  fetch: jest.fn().mockResolvedValue({
+    isConnected: true,
+    isInternetReachable: true,
+    type: 'wifi',
+    details: null,
+  }),
+  addEventListener: jest.fn().mockReturnValue(() => {}),
+}));
+
+// Mock @react-native-async-storage/async-storage
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn().mockResolvedValue(null),
+  setItem: jest.fn().mockResolvedValue(undefined),
+  removeItem: jest.fn().mockResolvedValue(undefined),
+  multiGet: jest.fn().mockResolvedValue([]),
+  multiSet: jest.fn().mockResolvedValue(undefined),
+  multiRemove: jest.fn().mockResolvedValue(undefined),
+  clear: jest.fn().mockResolvedValue(undefined),
+  getAllKeys: jest.fn().mockResolvedValue([]),
+}));
+
 // Mock @stripe/stripe-react-native
 jest.mock('@stripe/stripe-react-native', () => ({
   initStripe: jest.fn().mockResolvedValue(undefined),
-  createPaymentMethod: jest.fn(),
+  createPaymentMethod: jest.fn().mockResolvedValue({
+    paymentMethod: null,
+    error: { code: 'mock_unavailable', message: 'Mock not available' }
+  }),
   confirmPayment: jest.fn(),
   initPaymentSheet: jest.fn(),
   presentPaymentSheet: jest.fn(),
