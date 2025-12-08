@@ -2,6 +2,7 @@ import { riskManagementService } from '../services/risk-management-service';
 import { remediationService } from '../services/remediation-service';
 import { db } from '../db/connection';
 import { users, walletTransactions, restrictedBusinessCategories } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Risk Management Service Tests
@@ -30,7 +31,7 @@ describe('Risk Management Service', () => {
   afterEach(async () => {
     // Clean up test data
     if (testUserId) {
-      await db.delete(users).where({ id: testUserId });
+      await db.delete(users).where(eq(users.id, testUserId));
     }
   });
 
@@ -136,7 +137,7 @@ describe('Risk Management Service', () => {
       const updatedUser = await db
         .select()
         .from(users)
-        .where({ id: testUserId })
+        .where(eq(users.id, testUserId))
         .limit(1);
       
       expect(updatedUser[0].account_restricted).toBe(true);
@@ -337,7 +338,7 @@ describe('Remediation Service', () => {
       const user = await db
         .select()
         .from(users)
-        .where({ id: testUserId })
+        .where(eq(users.id, testUserId))
         .limit(1);
       
       expect(user[0].account_restricted).toBe(false);

@@ -1,7 +1,7 @@
 import { riskManagementService } from './risk-management-service';
 import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql, and, gte } from 'drizzle-orm';
 
 /**
  * Integration service to connect wallet operations with risk management
@@ -60,7 +60,7 @@ export class WalletRiskIntegrationService {
   private async shouldRunPeriodicAssessment(userId: string): Promise<boolean> {
     // Run assessment every 50 transactions
     const txnCount = await db
-      .select({ count: db.$count() })
+      .select({ count: sql<number>`count(*)::int` })
       .from(walletTransactions)
       .where(eq(walletTransactions.user_id, userId));
 
@@ -164,8 +164,10 @@ export class WalletRiskIntegrationService {
         .select()
         .from(walletTransactions)
         .where(
-          eq(walletTransactions.user_id, userId)
-          // Would add date filter here: gte(walletTransactions.created_at, thirtyDaysAgo)
+          and(
+            eq(walletTransactions.user_id, userId),
+            gte(walletTransactions.created_at, thirtyDaysAgo)
+          )
         );
 
       const totalVolumeCents = recentTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount_cents), 0);

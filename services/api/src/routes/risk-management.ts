@@ -2,13 +2,17 @@ import { FastifyPluginAsync } from 'fastify';
 import { riskManagementService } from '../services/risk-management-service';
 import { remediationService } from '../services/remediation-service';
 import { db } from '../db/connection';
-import { restrictedBusinessCategories } from '../db/schema';
+import { restrictedBusinessCategories, remediationWorkflows } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { authMiddleware, adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
 
 const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   /**
-   * Assess user risk
+   * Assess user risk (admin only)
    */
-  fastify.post('/api/risk/assess/:userId', async (request, reply) => {
+  fastify.post('/api/risk/assess/:userId', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { userId } = request.params as { userId: string };
       const { assessmentType } = request.body as { assessmentType?: string };
@@ -29,9 +33,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Take a risk action on a user
+   * Take a risk action on a user (admin only)
    */
-  fastify.post('/api/risk/action', async (request, reply) => {
+  fastify.post('/api/risk/action', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { userId, actionType, reason, severity, automated, triggeredBy } = request.body as {
         userId: string;
@@ -78,9 +84,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Establish a reserve for a user
+   * Establish a reserve for a user (admin only)
    */
-  fastify.post('/api/risk/reserve', async (request, reply) => {
+  fastify.post('/api/risk/reserve', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { userId, reserveType, amountCents, percentage, reason, releaseDays } = request.body as {
         userId: string;
@@ -152,9 +160,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Get total platform liability
+   * Get total platform liability (admin only)
    */
-  fastify.get('/api/risk/liability', async (request, reply) => {
+  fastify.get('/api/risk/liability', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const liability = await riskManagementService.calculateTotalLiability();
 
@@ -172,9 +182,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Create remediation workflow
+   * Create remediation workflow (admin only)
    */
-  fastify.post('/api/risk/remediation/create', async (request, reply) => {
+  fastify.post('/api/risk/remediation/create', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { userId, riskActionId, workflowType, requiredDocuments } = request.body as {
         userId: string;
@@ -217,9 +229,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Submit documents for remediation
+   * Submit documents to remediation workflow (authenticated users, own workflow only)
    */
-  fastify.post('/api/risk/remediation/:workflowId/submit', async (request, reply) => {
+  fastify.post('/api/risk/remediation/:workflowId/submit', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { workflowId } = request.params as { workflowId: string };
       const { documents } = request.body as {
@@ -230,6 +244,27 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({
           success: false,
           error: 'Missing or invalid documents field',
+        });
+      }
+
+      // Authorization: Verify workflow belongs to authenticated user
+      const workflow = await db
+        .select()
+        .from(remediationWorkflows)
+        .where(eq(remediationWorkflows.id, workflowId))
+        .limit(1);
+      
+      if (!workflow.length) {
+        return reply.code(404).send({
+          success: false,
+          error: 'Remediation workflow not found',
+        });
+      }
+
+      if (workflow[0].user_id !== request.userId) {
+        return reply.code(403).send({
+          success: false,
+          error: 'Unauthorized: You can only submit documents to your own remediation workflows',
         });
       }
 
@@ -249,9 +284,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Review and approve/reject remediation
+   * Review and approve/reject remediation (admin only)
    */
-  fastify.post('/api/risk/remediation/:workflowId/review', async (request, reply) => {
+  fastify.post('/api/risk/remediation/:workflowId/review', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { workflowId } = request.params as { workflowId: string };
       const { approved, reviewNotes, reviewedBy } = request.body as {
@@ -283,9 +320,36 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Get user's remediation status
+   * Get user's remediation status (authenticated users, own status only or admin)
    */
-  fastify.get('/api/risk/remediation/user/:userId', async (request, reply) => {
+  fastify.get('/api/risk/remediation/user/:userId', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      const { userId } = request.params as { userId: string };
+
+      // Authorization: Users can only view their own status, admins can view anyone's
+      if (request.userId !== userId && !request.isAdmin) {
+        return reply.code(403).send({
+          success: false,
+          error: 'Unauthorized: You can only view your own remediation status',
+        });
+      }
+
+      const workflows = await remediationService.getRemediationStatus(userId);
+
+      return reply.code(200).send({
+        success: true,
+        data: workflows,
+      });
+    } catch (error) {
+      console.error('Error getting remediation status:', error);
+      return reply.code(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get remediation status',
+      });
+    }
+  });
     try {
       const { userId } = request.params as { userId: string };
 
@@ -305,9 +369,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Get pending remediation workflows (admin)
+   * Get pending remediation workflows (admin only)
    */
-  fastify.get('/api/risk/remediation/pending', async (request, reply) => {
+  fastify.get('/api/risk/remediation/pending', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const pending = await remediationService.getPendingRemediations();
 
@@ -345,9 +411,11 @@ const riskManagementRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Add a restricted business category (admin)
+   * Add a restricted business category (admin only)
    */
-  fastify.post('/api/risk/restricted-categories', async (request, reply) => {
+  fastify.post('/api/risk/restricted-categories', {
+    preHandler: adminMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
     try {
       const { categoryCode, categoryName, description, riskLevel, isProhibited } = request.body as {
         categoryCode: string;
