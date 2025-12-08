@@ -19,18 +19,4 @@ config.transformer = {
   },
 };
 
-// Enable caching for faster rebuilds
-config.cacheStores = [
-  {
-    name: 'metro-cache',
-    get: (key) => {
-      // Use default cache implementation
-      return undefined;
-    },
-    set: (key, value) => {
-      // Use default cache implementation
-    },
-  },
-];
-
 module.exports = withNativeWind(config, { input: './global.css' });
