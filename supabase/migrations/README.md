@@ -182,6 +182,155 @@ Existing users who signed up with `age_verified: true` in their auth metadata ar
 
 ---
 
+## Migration: risk_management_system.sql
+
+This migration implements the comprehensive Risk Management System to address Stripe's platform liability requirements for negative account balances.
+
+### Overview
+
+This migration adds 7 new tables and extends the `profiles` table with 8 risk management fields to support:
+- Seller onboarding compliance
+- Risk assessment and scoring
+- Automated risk monitoring
+- Platform reserves for liability coverage
+- Seller communication and remediation workflows
+
+### Tables Extended
+
+1. **profiles** - Extended with 8 risk management columns:
+   - `verification_status` (text) - pending, verified, rejected, under_review
+   - `kyc_verified_at` (timestamptz) - When KYC verification was completed
+   - `business_category` (text) - Business category code
+   - `risk_level` (text) - low, medium, high, critical
+   - `risk_score` (integer) - Numeric score 0-100
+   - `account_restricted` (boolean) - Whether account has restrictions
+   - `restriction_reason` (text) - Reason for restriction
+   - `restricted_at` (timestamptz) - When account was restricted
+
+### Tables Created
+
+1. **restricted_business_categories** - Compliance rules for business types
+   - 26 categories: 6 prohibited, 6 high-risk, 5 medium-risk, 9 low-risk
+   - Examples: gambling (prohibited), cryptocurrency (high-risk), general services (low-risk)
+
+2. **risk_assessments** - Historical record of risk evaluations
+   - Multi-factor scoring (0-100): transaction velocity, amounts, account age, verification, chargebacks, refunds, business category, geography
+   - Tracks assessment type, risk factors, assessed_by
+
+3. **risk_actions** - Mitigation actions taken
+   - Action types: hold, restrict, delay_payout, require_verification, suspend, flag_for_review
+   - Tracks automated vs manual actions, resolution status
+
+4. **platform_reserves** - Reserves held for liability coverage
+   - Reserve types: rolling, fixed, transaction_based
+   - Based on risk level: Low (5%), Medium (10%), High (20%), Critical (30%)
+   - 90-day default release period
+
+5. **risk_communications** - Communication audit trail
+   - Multi-channel: email, in_app, sms, push
+   - Tracks delivery and read status
+
+6. **remediation_workflows** - Document verification workflows
+   - Workflow types: document_verification, identity_check, business_verification, transaction_review
+   - Tracks required vs submitted documents, review status
+
+7. **transaction_patterns** - Fraud/risk pattern detection
+   - Pattern types: high_velocity, unusual_amount, geographic_anomaly, chargebacks, refund_pattern
+   - Auto-triggered when thresholds exceeded
+
+### Indexes Created
+
+Performance indexes on:
+- `profiles(risk_level, account_restricted)`
+- `risk_assessments(user_id, created_at)`
+- `risk_actions(user_id, status, created_at)`
+- `platform_reserves(user_id, status, release_date)`
+- `risk_communications(user_id, risk_action_id, sent_at)`
+- `remediation_workflows(user_id, status, risk_action_id)`
+- `transaction_patterns(user_id, reviewed, detected_at)`
+
+### Row Level Security (RLS)
+
+Comprehensive RLS policies for all tables:
+- **Public**: `restricted_business_categories` (read-only for all)
+- **User access**: Users can view their own risk data
+- **Admin access**: Service role has full management access
+- **User updates**: Users can update their own remediation workflows
+
+### Triggers
+
+Automatic `updated_at` timestamp updates for:
+- `restricted_business_categories`
+- `platform_reserves`
+- `remediation_workflows`
+
+### Running This Migration
+
+**Step 1: Main Migration**
+```bash
+# Via Supabase Dashboard SQL Editor
+# Copy contents of risk_management_system.sql and execute
+```
+
+**Step 2: Seed Categories**
+```bash
+# Via Supabase Dashboard SQL Editor
+# Copy contents of seed_restricted_categories.sql and execute
+```
+
+**Step 3: Verify**
+```sql
+-- Check all tables exist
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' 
+  AND table_name LIKE 'risk_%' OR table_name = 'restricted_business_categories';
+
+-- Verify categories seeded (should show 26 total)
+SELECT risk_level, COUNT(*) as count
+FROM restricted_business_categories
+GROUP BY risk_level;
+```
+
+### Rollback
+
+If you need to rollback:
+```sql
+-- Drop all new tables
+DROP TABLE IF EXISTS transaction_patterns CASCADE;
+DROP TABLE IF EXISTS remediation_workflows CASCADE;
+DROP TABLE IF EXISTS risk_communications CASCADE;
+DROP TABLE IF EXISTS platform_reserves CASCADE;
+DROP TABLE IF EXISTS risk_actions CASCADE;
+DROP TABLE IF EXISTS risk_assessments CASCADE;
+DROP TABLE IF EXISTS restricted_business_categories CASCADE;
+
+-- Remove columns from profiles
+ALTER TABLE profiles
+DROP COLUMN IF EXISTS verification_status,
+DROP COLUMN IF EXISTS kyc_verified_at,
+DROP COLUMN IF EXISTS business_category,
+DROP COLUMN IF EXISTS risk_level,
+DROP COLUMN IF EXISTS risk_score,
+DROP COLUMN IF EXISTS account_restricted,
+DROP COLUMN IF EXISTS restriction_reason,
+DROP COLUMN IF EXISTS restricted_at;
+```
+
+### Related Files
+
+Backend services:
+- `services/api/src/services/risk-management-service.ts` - Core risk engine (650 LOC)
+- `services/api/src/services/remediation-service.ts` - Remediation workflows (350 LOC)
+- `services/api/src/services/wallet-risk-integration.ts` - Transaction monitoring (200 LOC)
+- `services/api/src/routes/risk-management.ts` - API endpoints (12 routes)
+
+Documentation:
+- `RISK_MANAGEMENT_GUIDE.md` - Complete technical documentation
+- `RISK_MANAGEMENT_QUICKSTART.md` - Implementation guide
+- `RISK_MANAGEMENT_IMPLEMENTATION_SUMMARY.md` - Overview
+
+---
+
 ## Related Files (Completion Flow)
 
 The completion migration supports the following code changes:

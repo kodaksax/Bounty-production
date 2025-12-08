@@ -9,6 +9,15 @@ import { boolean, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, 
 // to change.
 export const users = pgTable('profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
+  // Compliance and verification fields
+  verification_status: text('verification_status').default('pending').notNull(), // pending, verified, rejected, under_review
+  kyc_verified_at: timestamp('kyc_verified_at', { withTimezone: true }),
+  business_category: text('business_category'), // Track seller business type
+  risk_level: text('risk_level').default('low').notNull(), // low, medium, high, critical
+  risk_score: integer('risk_score').default(0).notNull(), // 0-100 numeric risk score
+  account_restricted: boolean('account_restricted').default(false).notNull(),
+  restriction_reason: text('restriction_reason'),
+  restricted_at: timestamp('restricted_at', { withTimezone: true }),
   // property name `handle` maps to column `username`
   handle: text('username').notNull(),
   // property name `stripe_account_id` maps to column `stripe_connect_account_id`
@@ -151,6 +160,12 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   notificationPreferences: one(notificationPreferences),
   conversationParticipants: many(conversationParticipants),
   sentMessages: many(messages),
+  riskAssessments: many(riskAssessments),
+  riskActions: many(riskActions),
+  platformReserves: many(platformReserves),
+  riskCommunications: many(riskCommunications),
+  remediationWorkflows: many(remediationWorkflows),
+  transactionPatterns: many(transactionPatterns),
 }));
 
 export const bountiesRelations = relations(bounties, ({ one, many }) => ({
@@ -226,5 +241,165 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   replyToMessage: one(messages, {
     fields: [messages.reply_to],
     references: [messages.id],
+  }),
+}));
+
+// Risk Management Tables
+
+// Restricted business categories table
+export const restrictedBusinessCategories = pgTable('restricted_business_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  category_code: text('category_code').notNull().unique(), // e.g., 'gambling', 'adult_content', 'weapons'
+  category_name: text('category_name').notNull(),
+  description: text('description'),
+  risk_level: text('risk_level').notNull().default('high'), // low, medium, high, prohibited
+  is_prohibited: boolean('is_prohibited').default(false).notNull(), // Completely blocked categories
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Risk assessments table - track risk evaluation history
+export const riskAssessments = pgTable('risk_assessments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  assessment_type: text('assessment_type').notNull(), // onboarding, periodic, triggered, manual
+  risk_score: integer('risk_score').notNull(), // 0-100
+  risk_level: text('risk_level').notNull(), // low, medium, high, critical
+  factors: jsonb('factors').notNull(), // Detailed risk factors and their weights
+  assessed_by: text('assessed_by').notNull(), // system, admin_user_id, or automated_system
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Risk actions table - track mitigation actions taken
+export const riskActions = pgTable('risk_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  action_type: text('action_type').notNull(), // hold, restrict, delay_payout, require_verification, suspend, flag_for_review
+  reason: text('reason').notNull(),
+  severity: text('severity').notNull(), // low, medium, high, critical
+  status: text('status').notNull().default('active'), // active, resolved, cancelled
+  automated: boolean('automated').default(false).notNull(), // Was this action automated?
+  triggered_by: text('triggered_by'), // What triggered this action (e.g., 'high_transaction_volume', 'fraud_pattern')
+  metadata: jsonb('metadata'), // Additional context like transaction IDs, amounts, etc.
+  actioned_by: text('actioned_by').notNull(), // admin_user_id or system
+  resolved_at: timestamp('resolved_at', { withTimezone: true }),
+  resolved_by: text('resolved_by'),
+  resolution_notes: text('resolution_notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Platform reserves table - track reserves held for liability coverage
+export const platformReserves = pgTable('platform_reserves', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  reserve_type: text('reserve_type').notNull(), // rolling, fixed, transaction_based
+  amount_cents: integer('amount_cents').notNull(), // Amount held in reserve
+  percentage: integer('percentage'), // If percentage-based (e.g., 10 = 10%)
+  reason: text('reason').notNull(),
+  status: text('status').notNull().default('active'), // active, released, expired
+  release_date: timestamp('release_date', { withTimezone: true }), // When reserve can be released
+  released_at: timestamp('released_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Risk communication logs - audit trail of all risk-related communications
+export const riskCommunications = pgTable('risk_communications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  risk_action_id: uuid('risk_action_id').references(() => riskActions.id),
+  communication_type: text('communication_type').notNull(), // email, in_app, sms, push
+  subject: text('subject').notNull(),
+  message: text('message').notNull(),
+  status: text('status').notNull().default('sent'), // sent, delivered, read, failed
+  metadata: jsonb('metadata'), // Delivery receipts, tracking info, etc.
+  sent_at: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
+  delivered_at: timestamp('delivered_at', { withTimezone: true }),
+  read_at: timestamp('read_at', { withTimezone: true }),
+});
+
+// Seller remediation workflows
+export const remediationWorkflows = pgTable('remediation_workflows', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  risk_action_id: uuid('risk_action_id').references(() => riskActions.id).notNull(),
+  workflow_type: text('workflow_type').notNull(), // document_verification, identity_check, business_verification, transaction_review
+  status: text('status').notNull().default('pending'), // pending, in_progress, completed, failed, cancelled
+  required_documents: jsonb('required_documents'), // List of required documents/info
+  submitted_documents: jsonb('submitted_documents'), // Documents submitted by user
+  review_notes: text('review_notes'),
+  reviewed_by: text('reviewed_by'),
+  reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
+  completed_at: timestamp('completed_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Transaction monitoring patterns - detect fraud/risk patterns
+export const transactionPatterns = pgTable('transaction_patterns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  pattern_type: text('pattern_type').notNull(), // high_velocity, unusual_amount, geographic_anomaly, chargebacks, refund_pattern
+  severity: text('severity').notNull(), // low, medium, high, critical
+  details: jsonb('details').notNull(), // Pattern-specific data
+  threshold_exceeded: boolean('threshold_exceeded').default(false).notNull(),
+  action_taken: text('action_taken'), // Reference to risk_actions if action was taken
+  reviewed: boolean('reviewed').default(false).notNull(),
+  reviewed_by: text('reviewed_by'),
+  reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
+  detected_at: timestamp('detected_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Define relations for new risk management tables
+export const riskAssessmentsRelations = relations(riskAssessments, ({ one }) => ({
+  user: one(users, {
+    fields: [riskAssessments.user_id],
+    references: [users.id],
+  }),
+}));
+
+export const riskActionsRelations = relations(riskActions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [riskActions.user_id],
+    references: [users.id],
+  }),
+  communications: many(riskCommunications),
+  remediationWorkflows: many(remediationWorkflows),
+}));
+
+export const platformReservesRelations = relations(platformReserves, ({ one }) => ({
+  user: one(users, {
+    fields: [platformReserves.user_id],
+    references: [users.id],
+  }),
+}));
+
+export const riskCommunicationsRelations = relations(riskCommunications, ({ one }) => ({
+  user: one(users, {
+    fields: [riskCommunications.user_id],
+    references: [users.id],
+  }),
+  riskAction: one(riskActions, {
+    fields: [riskCommunications.risk_action_id],
+    references: [riskActions.id],
+  }),
+}));
+
+export const remediationWorkflowsRelations = relations(remediationWorkflows, ({ one }) => ({
+  user: one(users, {
+    fields: [remediationWorkflows.user_id],
+    references: [users.id],
+  }),
+  riskAction: one(riskActions, {
+    fields: [remediationWorkflows.risk_action_id],
+    references: [riskActions.id],
+  }),
+}));
+
+export const transactionPatternsRelations = relations(transactionPatterns, ({ one }) => ({
+  user: one(users, {
+    fields: [transactionPatterns.user_id],
+    references: [users.id],
   }),
 }));
