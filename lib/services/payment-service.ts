@@ -378,7 +378,29 @@ class PaymentService {
    * Format card for display
    */
   formatCardDisplay(paymentMethod: PaymentMethodResponse): string {
-    return stripeService.formatCardDisplay(paymentMethod as any);
+    // Adapter: convert PaymentMethodResponse to the expected type for stripeService.formatCardDisplay
+    const adapted = this._adaptPaymentMethodForStripe(paymentMethod);
+    return stripeService.formatCardDisplay(adapted);
+  }
+
+  /**
+   * Adapter to convert PaymentMethodResponse to the type expected by stripeService.formatCardDisplay
+   * Adjust the returned object as needed to match the expected shape.
+   */
+  private _adaptPaymentMethodForStripe(paymentMethod: PaymentMethodResponse): any {
+    // This is a minimal adapter. Adjust fields as needed to match the expected input.
+    // For example, if stripeService expects { card: { brand, last4, exp_month, exp_year } }
+    // and PaymentMethodResponse has these fields, map them accordingly.
+    return {
+      card: {
+        brand: paymentMethod.cardBrand || paymentMethod.brand,
+        last4: paymentMethod.last4,
+        exp_month: paymentMethod.expMonth || paymentMethod.exp_month,
+        exp_year: paymentMethod.expYear || paymentMethod.exp_year,
+      },
+      id: paymentMethod.id,
+      // Add other fields as needed
+    };
   }
 
   /**
