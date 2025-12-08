@@ -126,7 +126,6 @@ export function ConnectionStatus({
               name="refresh" 
               size={18} 
               color="#fff"
-              style={isChecking && styles.spinning}
             />
           </TouchableOpacity>
         )}
@@ -168,9 +167,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: SPACING.COMPACT_GAP,
-  },
-  spinning: {
-    // Note: Actual spinning animation would require additional Animated setup
-    // For now, this is a placeholder for the style
   },
 });

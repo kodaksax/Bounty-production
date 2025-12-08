@@ -99,8 +99,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   render() {
     if (this.state.hasError && this.state.error) {
-      // Get user-friendly error message
-      const userError = getUserFriendlyError(this.state.error);
+      // Get user-friendly error message with fallback
+      let userError: UserFriendlyError;
+      try {
+        userError = getUserFriendlyError(this.state.error);
+      } catch (conversionError) {
+        // Fallback if error conversion fails
+        console.error('[ErrorBoundary] Failed to convert error:', conversionError);
+        userError = {
+          type: 'unknown',
+          title: 'Something Went Wrong',
+          message: 'An unexpected error occurred. Please restart the app.',
+          retryable: false,
+        };
+      }
 
       // Use custom fallback if provided
       if (this.props.fallback) {

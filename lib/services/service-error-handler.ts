@@ -12,8 +12,8 @@ import { logger } from '../utils/error-logger';
  * Either successful with data, or failed with user-friendly error
  */
 export type ServiceResult<T> =
-  | { success: true; data: T; error?: undefined }
-  | { success: false; data?: undefined; error: UserFriendlyError };
+  | { success: true; data: T }
+  | { success: false; error: UserFriendlyError };
 
 /**
  * Options for service error handler

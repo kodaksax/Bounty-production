@@ -4,7 +4,7 @@
  * Integrates with the existing offline queue service
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { offlineQueueService } from '../lib/services/offline-queue-service';
 
@@ -56,6 +56,7 @@ export function useOfflineMode(): OfflineMode {
   const [isOnline, setIsOnline] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [queuedItemsCount, setQueuedItemsCount] = useState(0);
+  const prevOnlineStatus = useRef(true);
 
   // Update queued items count
   const updateQueueCount = useCallback(() => {
@@ -71,13 +72,15 @@ export function useOfflineMode(): OfflineMode {
     // Initial state check
     NetInfo.fetch().then((state: NetInfoState) => {
       setIsOnline(!!state.isConnected);
+      prevOnlineStatus.current = !!state.isConnected;
     });
 
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      const wasOffline = !isOnline;
+      const wasOffline = !prevOnlineStatus.current;
       const isNowOnline = !!state.isConnected;
       
+      prevOnlineStatus.current = isNowOnline;
       setIsOnline(isNowOnline);
 
       // Log connectivity change
@@ -91,7 +94,7 @@ export function useOfflineMode(): OfflineMode {
     return () => {
       unsubscribe();
     };
-  }, [isOnline]);
+  }, []);
 
   // Listen for queue changes
   useEffect(() => {
