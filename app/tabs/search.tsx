@@ -484,6 +484,10 @@ export default function EnhancedSearchScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderRecentSearch}
             scrollEnabled={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={3}
+            initialNumToRender={5}
           />
         </View>
       )}
@@ -503,6 +507,10 @@ export default function EnhancedSearchScreen() {
               </View>
             ) : null
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={8}
         />
       ) : (
         <FlatList
@@ -518,6 +526,10 @@ export default function EnhancedSearchScreen() {
               </View>
             ) : null
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={8}
         />
       )}
 
