@@ -185,11 +185,13 @@ class AddressAutocompleteService {
         
         // Parse address components
         const components: PlaceDetails['components'] = {};
+        const streetParts: string[] = [];
+        
         if (result.address_components) {
           for (const component of result.address_components) {
             const types = component.types;
             if (types.includes('street_number') || types.includes('route')) {
-              components.street = (components.street || '') + ' ' + component.long_name;
+              streetParts.push(component.long_name);
             } else if (types.includes('locality')) {
               components.city = component.long_name;
             } else if (types.includes('administrative_area_level_1')) {
@@ -199,6 +201,11 @@ class AddressAutocompleteService {
             } else if (types.includes('postal_code')) {
               components.postalCode = component.long_name;
             }
+          }
+          
+          // Combine street parts with proper spacing
+          if (streetParts.length > 0) {
+            components.street = streetParts.join(' ').trim();
           }
         }
 

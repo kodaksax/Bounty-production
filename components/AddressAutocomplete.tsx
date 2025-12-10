@@ -97,7 +97,7 @@ export function AddressAutocomplete({
           latitude: userLocation?.latitude,
           longitude: userLocation?.longitude,
           radius: searchRadius,
-          types: ['address', 'geocode'],
+          types: ['address'], // Removed deprecated 'geocode' type
           components: countryCode ? `country:${countryCode}` : undefined,
         });
 
