@@ -264,11 +264,22 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 /**
- * Helper: Base64 encode string
+ * Helper: Base64 encode string (UTF-8 safe)
+ * Uses modern approach avoiding deprecated unescape/escape
  */
 function base64Encode(str: string): string {
   try {
-    return btoa(unescape(encodeURIComponent(str)));
+    // Use TextEncoder for proper UTF-8 encoding
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    
+    // Convert Uint8Array to string for btoa
+    let binary = '';
+    for (let i = 0; i < data.length; i++) {
+      binary += String.fromCharCode(data[i]);
+    }
+    
+    return btoa(binary);
   } catch (error) {
     console.error('[Encryption] Failed to base64 encode:', error);
     throw new Error('Failed to encode data');
@@ -276,11 +287,22 @@ function base64Encode(str: string): string {
 }
 
 /**
- * Helper: Base64 decode string
+ * Helper: Base64 decode string (UTF-8 safe)
+ * Uses modern approach avoiding deprecated unescape/escape
  */
 function base64Decode(str: string): string {
   try {
-    return decodeURIComponent(escape(atob(str)));
+    const binary = atob(str);
+    
+    // Convert binary string to Uint8Array
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    
+    // Use TextDecoder for proper UTF-8 decoding
+    const decoder = new TextDecoder();
+    return decoder.decode(bytes);
   } catch (error) {
     console.error('[Encryption] Failed to base64 decode:', error);
     throw new Error('Failed to decode data');

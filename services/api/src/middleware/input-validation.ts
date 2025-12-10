@@ -177,9 +177,9 @@ export const userProfileSchema = z.object({
 // Payment intent validation schema
 export const paymentIntentSchema = z.object({
   amount: z.number()
-    .int('Amount must be an integer')
-    .min(50, 'Minimum payment amount is $0.50')
-    .max(1000000, 'Maximum payment amount is $10,000'),
+    .int('Amount must be an integer (in cents)')
+    .min(50, 'Minimum payment amount is $0.50 (50 cents)')
+    .max(1000000, 'Maximum payment amount is $10,000.00 (1,000,000 cents)'),
   
   currency: z.string()
     .length(3, 'Currency must be a 3-letter code')
