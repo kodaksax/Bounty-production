@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { exportAndShareUserData } from '../../lib/services/data-export-service';
+import { supabase } from '../../lib/supabase';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -117,10 +119,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     
     try {
       persist({ exporting: true });
-      
-      // Import the data export service and supabase
-      const { exportAndShareUserData } = require('../../lib/services/data-export-service');
-      const { supabase } = require('../../lib/supabase');
       
       // Get current user ID
       const { data: { user }, error: userError } = await supabase.auth.getUser();

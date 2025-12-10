@@ -8,6 +8,14 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../supabase';
 
+// Transaction types for wallet balance calculation
+const WALLET_TRANSACTION_TYPES = {
+  ESCROW: 'escrow',
+  PAYMENT: 'payment',
+  RELEASE: 'release',
+  REFUND: 'refund',
+} as const;
+
 interface UserDataExport {
   exportDate: string;
   profile: any;
@@ -73,9 +81,8 @@ export async function exportUserData(userId: string): Promise<{
         .single();
       
       if (!error && profile) {
-        // Remove sensitive fields if any
-        const { password_hash, ...safeProfile } = profile as any;
-        exportData.profile = safeProfile;
+        // Supabase auth handles passwords separately, so no sensitive fields to remove from profiles
+        exportData.profile = profile;
       }
     } catch (e) {
       console.warn('[DataExport] Profile fetch failed:', e);
@@ -146,11 +153,11 @@ export async function exportUserData(userId: string): Promise<{
       
       if (!error && transactions) {
         exportData.wallet.transactions = transactions;
-        // Calculate balance from transactions
+        // Calculate balance from transactions using defined transaction types
         exportData.wallet.balance = transactions.reduce((sum: number, tx: any) => {
-          if (tx.type === 'escrow' || tx.type === 'payment') {
+          if (tx.type === WALLET_TRANSACTION_TYPES.ESCROW || tx.type === WALLET_TRANSACTION_TYPES.PAYMENT) {
             return sum - (tx.amount || 0);
-          } else if (tx.type === 'release' || tx.type === 'refund') {
+          } else if (tx.type === WALLET_TRANSACTION_TYPES.RELEASE || tx.type === WALLET_TRANSACTION_TYPES.REFUND) {
             return sum + (tx.amount || 0);
           }
           return sum;
