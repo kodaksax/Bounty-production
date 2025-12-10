@@ -9,11 +9,13 @@ import * as Sharing from 'expo-sharing';
 import { supabase } from '../supabase';
 
 // Transaction types for wallet balance calculation
+// Based on database schema: wallet_tx_type_enum AS ENUM ('escrow', 'release', 'refund', 'deposit', 'withdrawal')
 const WALLET_TRANSACTION_TYPES = {
-  ESCROW: 'escrow',
-  PAYMENT: 'payment',
-  RELEASE: 'release',
-  REFUND: 'refund',
+  ESCROW: 'escrow',       // Money held in escrow (negative - funds locked)
+  RELEASE: 'release',     // Money released to hunter (positive for hunter, negative for poster)
+  REFUND: 'refund',       // Money refunded to poster (positive for poster)
+  DEPOSIT: 'deposit',     // Money deposited to wallet (positive)
+  WITHDRAWAL: 'withdrawal', // Money withdrawn from wallet (negative)
 } as const;
 
 interface UserDataExport {
@@ -154,13 +156,31 @@ export async function exportUserData(userId: string): Promise<{
       if (!error && transactions) {
         exportData.wallet.transactions = transactions;
         // Calculate balance from transactions using defined transaction types
+        // Note: The actual balance is maintained by the database/API, this is just an informational calculation
+        // Transaction amounts are always stored as positive values; the type determines the direction
         exportData.wallet.balance = transactions.reduce((sum: number, tx: any) => {
-          if (tx.type === WALLET_TRANSACTION_TYPES.ESCROW || tx.type === WALLET_TRANSACTION_TYPES.PAYMENT) {
-            return sum - (tx.amount || 0);
-          } else if (tx.type === WALLET_TRANSACTION_TYPES.RELEASE || tx.type === WALLET_TRANSACTION_TYPES.REFUND) {
-            return sum + (tx.amount || 0);
+          const amount = tx.amount || 0;
+          
+          switch (tx.type) {
+            case WALLET_TRANSACTION_TYPES.DEPOSIT:   // Positive: money added to wallet
+            case WALLET_TRANSACTION_TYPES.REFUND:    // Positive: money returned from escrow
+              return sum + amount;
+              
+            case WALLET_TRANSACTION_TYPES.ESCROW:      // Negative: money locked in escrow
+            case WALLET_TRANSACTION_TYPES.WITHDRAWAL:  // Negative: money taken out
+              return sum - amount;
+              
+            case WALLET_TRANSACTION_TYPES.RELEASE:   // Context-dependent: depends on role
+              // Release increases balance for hunters, decreases for posters
+              // Since we're exporting the user's data, we need context to know their role
+              // For now, include the transaction but note this needs role context for accurate balance
+              return sum; // Skip in calculation as it requires role context
+              
+            default:
+              // Unknown transaction type, skip it
+              console.warn(`[DataExport] Unknown transaction type: ${tx.type}`);
+              return sum;
           }
-          return sum;
         }, 0);
       }
     } catch (e) {
