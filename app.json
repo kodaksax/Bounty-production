@@ -22,7 +22,8 @@
         "foregroundImage": "./assets/images/bounty-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "app.bountyfinder.BOUNTYExpo"
     },
     "web": {
       "bundler": "metro",
