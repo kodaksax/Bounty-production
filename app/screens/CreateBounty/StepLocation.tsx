@@ -26,7 +26,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   const { addresses } = useAddressLibrary();
   
   // Get user location for proximity-based suggestions
-  const { currentLocation } = useLocation();
+  const { location: currentLocation } = useLocation();
 
   const validateLocation = (location: string, workType: string): string | null => {
     if (workType === 'in_person') {
