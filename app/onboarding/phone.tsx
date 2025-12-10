@@ -24,6 +24,7 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { sendPhoneOTP } from '../../lib/services/phone-verification-service';
 
 export default function PhoneScreen() {
   const router = useRouter();
@@ -48,6 +49,12 @@ export default function PhoneScreen() {
   }, [phone]);
 
   const handleNext = async () => {
+    // If phone is empty, just skip
+    if (!phone.trim()) {
+      router.push('/onboarding/done');
+      return;
+    }
+
     setSaving(true);
     
     // Save to local storage
@@ -66,8 +73,29 @@ export default function PhoneScreen() {
       phone: phone.trim() || undefined,
     });
 
+    // Send OTP for verification
+    const otpResult = await sendPhoneOTP(phone.trim());
     setSaving(false);
-    router.push('/onboarding/done');
+
+    if (otpResult.success) {
+      // Navigate to verification screen with phone number
+      router.push({
+        pathname: '/onboarding/verify-phone',
+        params: { phone: phone.trim() },
+      });
+    } else {
+      Alert.alert(
+        'Unable to Send Code',
+        `${otpResult.message}\n\nYou can still continue without verification.`,
+        [
+          { text: 'Try Again', style: 'cancel' },
+          { 
+            text: 'Continue Anyway', 
+            onPress: () => router.push('/onboarding/done'),
+          },
+        ]
+      );
+    }
   };
 
   const handleSkip = () => {
