@@ -38,7 +38,11 @@ export function getInsufficientBalanceMessage(amount: number, balance: number): 
  */
 export function validateAmount(amount: number, isForHonor: boolean): string | null {
   if (isForHonor) {
-    return null; // Honor bounties don't need amount validation
+    // Honor bounties should still reject negative amounts
+    if (amount < 0) {
+      return 'Amount must be at least $0';
+    }
+    return null; // Honor bounties accept 0 or positive values
   }
   if (!amount || amount < 1) {
     return 'Amount must be at least $1';
