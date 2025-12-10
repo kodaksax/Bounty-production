@@ -180,11 +180,12 @@ npx react-native run-ios --configuration Release --profile
 npx react-native-bundle-visualizer
 
 # Memory profiling (iOS)
-# Note: Update device-id and bundle identifier to match your app configuration
+# device-id: Find with `xcrun xctrace list devices`
+# your-bundle-id: Found in app.json under expo.ios.bundleIdentifier
 xcrun xctrace record --template 'Time Profiler' --device <device-id> --launch <your-bundle-id>
 
 # Memory profiling (Android)
-# Note: Update package name to match your app configuration
+# your-package-name: Found in app.json under expo.android.package
 adb shell am start -n <your-package-name>/.MainActivity --es profile true
 ```
 
