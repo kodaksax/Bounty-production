@@ -8,6 +8,7 @@ const bodyParser = require('body-parser');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
 const rateLimit = require('express-rate-limit');
+const validator = require('validator');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,30 @@ const paymentLimiter = rateLimit({
   max: 10, // Limit payment requests
   message: 'Too many payment requests, please try again later.',
 });
+
+// Input sanitization helpers
+function sanitizeText(input) {
+  if (!input) return '';
+  // Remove HTML tags and escape dangerous characters
+  let sanitized = validator.stripLow(String(input));
+  sanitized = validator.escape(sanitized);
+  return sanitized.trim();
+}
+
+function sanitizeNumber(input) {
+  if (input === null || input === undefined) {
+    throw new Error('Number is required');
+  }
+  const str = String(input);
+  if (!validator.isNumeric(str, { no_symbols: true })) {
+    throw new Error('Invalid numeric format');
+  }
+  const num = Number(str);
+  if (isNaN(num) || !isFinite(num)) {
+    throw new Error('Invalid number');
+  }
+  return num;
+}
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -188,10 +213,24 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
     const { amountCents, currency = 'usd', metadata = {} } = req.body;
     const userId = req.user.id;
 
-    // Validate amount
-    if (!amountCents || typeof amountCents !== 'number' || amountCents <= 0) {
+    // Sanitize and validate amount
+    let validatedAmount;
+    try {
+      validatedAmount = sanitizeNumber(amountCents);
+      if (validatedAmount <= 0) {
+        throw new Error('Amount must be positive');
+      }
+    } catch (error) {
       return res.status(400).json({ 
         error: 'Invalid amount. Must be a positive number in cents.' 
+      });
+    }
+    
+    // Sanitize currency
+    const validatedCurrency = sanitizeText(currency).toLowerCase();
+    if (!['usd', 'eur', 'gbp'].includes(validatedCurrency)) {
+      return res.status(400).json({ 
+        error: 'Invalid currency. Supported: usd, eur, gbp.' 
       });
     }
 
@@ -219,14 +258,23 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
         .eq('id', userId);
     }
 
+    // Sanitize metadata - only allow specific keys
+    const sanitizedMetadata = {};
+    if (metadata.bounty_id) {
+      sanitizedMetadata.bounty_id = sanitizeText(metadata.bounty_id);
+    }
+    if (metadata.description) {
+      sanitizedMetadata.description = sanitizeText(metadata.description);
+    }
+
     // Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountCents,
-      currency: currency,
+      amount: validatedAmount,
+      currency: validatedCurrency,
       customer: customerId,
       metadata: {
         user_id: userId,
-        ...metadata
+        ...sanitizedMetadata
       },
       automatic_payment_methods: {
         enabled: true,
@@ -257,20 +305,31 @@ app.post('/apple-pay/payment-intent', paymentLimiter, authenticateUser, async (r
 
     if (!req.user || !req.user.id) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!amountCents || typeof amountCents !== 'number' || amountCents < 50) {
+    // Sanitize and validate amount
+    let validatedAmount;
+    try {
+      validatedAmount = sanitizeNumber(amountCents);
+      if (validatedAmount < 50) {
+        throw new Error('Amount too small');
+      }
+    } catch (error) {
       return res.status(400).json({ error: 'Amount must be at least $0.50' });
     }
 
+    // Sanitize text inputs
+    const sanitizedBountyId = bountyId ? sanitizeText(bountyId) : '';
+    const sanitizedDescription = description ? sanitizeText(description) : 'BountyExpo Payment';
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountCents,
+      amount: validatedAmount,
       currency: 'usd',
       payment_method_types: ['card'],
       metadata: {
         user_id: req.user.id,
-        bounty_id: bountyId || '',
+        bounty_id: sanitizedBountyId,
         payment_method: 'apple_pay'
       },
-      description: description || 'BountyExpo Payment',
+      description: sanitizedDescription,
     });
 
     return res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
@@ -288,7 +347,10 @@ app.post('/apple-pay/confirm', paymentLimiter, authenticateUser, async (req, res
 
     if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
 
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    // Sanitize payment intent ID (alphanumeric from Stripe)
+    const sanitizedPaymentIntentId = sanitizeText(paymentIntentId);
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(sanitizedPaymentIntentId);
 
     if (paymentIntent && paymentIntent.status === 'succeeded') {
       // Here you could record wallet txs or trigger webhooks — keep simple for parity
@@ -1349,11 +1411,17 @@ app.use((err, req, res, next) => {
 });
 
 // Start server (bind to 0.0.0.0 so LAN devices can reach it)
+// SECURITY: In production, ensure this server runs behind a reverse proxy (nginx, Apache)
+// that enforces HTTPS. All client requests should use HTTPS URLs.
+// Rate limiting is configured above to prevent abuse.
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 BountyExpo Stripe Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY ? 'Yes' : 'No'}`);
   console.log(`📝 Webhook secret configured: ${!!process.env.STRIPE_WEBHOOK_SECRET ? 'Yes' : 'No'}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`⚠️  SECURITY: Ensure this server is behind HTTPS proxy in production`);
+  }
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /health`);
   console.log(`  GET  /debug`);

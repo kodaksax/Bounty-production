@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { API_BASE_URL } from './config/api';
+import { getSecureJSON, setSecureJSON, SecureKeys } from './utils/secure-storage';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -49,8 +49,7 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'wallet:balance:v1';
-const TX_STORAGE_KEY = 'wallet:transactions:v1';
+// Use SecureStore for sensitive wallet data (balance and transactions)
 // Start with 0 balance for production readiness - balance comes from API or deposits
 const INITIAL_BALANCE = 0;
 
@@ -60,33 +59,43 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
 
   const persist = useCallback(async (value: number) => {
-    try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(value)); } catch {}
+    try { 
+      await setSecureJSON(SecureKeys.WALLET_BALANCE, value); 
+    } catch (error) {
+      console.error('[wallet] Error persisting balance:', error);
+    }
   }, []);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [rawBalance, rawTx] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEY),
-        AsyncStorage.getItem(TX_STORAGE_KEY),
-      ]);
-      if (rawBalance) setBalance(JSON.parse(rawBalance));
-      else await persist(INITIAL_BALANCE);
-
-      if (rawTx) {
-        try {
-          const parsed: any[] = JSON.parse(rawTx);
-            setTransactions(parsed.map(t => ({ ...t, date: new Date(t.date) })));
-        } catch {}
+      // Load balance from SecureStore
+      const storedBalance = await getSecureJSON<number>(SecureKeys.WALLET_BALANCE);
+      if (storedBalance !== null) {
+        setBalance(storedBalance);
+      } else {
+        await persist(INITIAL_BALANCE);
       }
-    } catch {}
+
+      // Load transactions from SecureStore
+      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
+      if (storedTx && Array.isArray(storedTx)) {
+        setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
+      }
+    } catch (error) {
+      console.error('[wallet] Error refreshing from storage:', error);
+    }
     setIsLoading(false);
   }, [persist]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
-    try { await AsyncStorage.setItem(TX_STORAGE_KEY, JSON.stringify(list)); } catch {}
+    try { 
+      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, list); 
+    } catch (error) {
+      console.error('[wallet] Error persisting transactions:', error);
+    }
   }, []);
 
   const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
@@ -142,7 +151,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const clearAllTransactions = useCallback(async () => {
     setTransactions([]);
-    try { await AsyncStorage.removeItem(TX_STORAGE_KEY); } catch {}
+    try { 
+      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []); 
+    } catch (error) {
+      console.error('[wallet] Error clearing transactions:', error);
+    }
   }, []);
 
   const updateDisputeStatus = useCallback(async (transactionId: string, status: "none" | "pending" | "resolved") => {
