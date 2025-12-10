@@ -73,24 +73,32 @@ export async function hashData(data: string): Promise<string> {
 
 /**
  * Encrypt data with a given key
- * Returns base64-encoded encrypted data with IV prepended
- * Format: IV (16 bytes) + encrypted data
+ * 
+ * ⚠️ WARNING: This is NOT true encryption - it provides data obfuscation and integrity checking only.
+ * The data is base64-encoded (easily decoded) with an integrity hash.
+ * 
+ * For production use with actual encryption, use:
+ * - react-native-aes-crypto for AES encryption
+ * - @react-native-community/async-storage with encryption
+ * - expo-crypto with Web Crypto API (when available)
+ * 
+ * This implementation is suitable for:
+ * - Obfuscating data from casual inspection
+ * - Verifying data integrity
+ * - Development/testing
  */
 export async function encryptData(data: string, key: string): Promise<string> {
   try {
-    // For expo-crypto, we'll use a simpler approach with hashing
-    // In production, consider using react-native-aes-crypto or similar
-    
-    // Create a deterministic hash-based encryption
+    // Create integrity hash (NOT ENCRYPTION - data is visible)
     const keyHash = await hashData(key);
     const dataWithTimestamp = `${data}|${Date.now()}`;
     const combined = dataWithTimestamp + keyHash;
-    const encrypted = await hashData(combined);
+    const integrity = await hashData(combined);
     
-    // Encode data + encrypted hash
+    // Encode data + integrity hash (data is NOT encrypted)
     const payload = {
       data: base64Encode(dataWithTimestamp),
-      hash: encrypted
+      hash: integrity
     };
     
     return base64Encode(JSON.stringify(payload));
@@ -204,16 +212,25 @@ export async function decryptMessage(
 
 /**
  * Generate a key pair for E2E encryption
- * In production, use actual public-key cryptography
+ * 
+ * ⚠️ WARNING: This is a PLACEHOLDER implementation only.
+ * Deriving a public key from a private key via hashing is NOT cryptographically secure.
+ * 
+ * For production, use proper public-key cryptography:
+ * - libsodium (via react-native-sodium)
+ * - tweetnacl (via tweetnacl-react-native-randombytes)
+ * - Web Crypto API when available
  */
 export async function generateKeyPair(): Promise<{
   publicKey: string;
   privateKey: string;
 }> {
   try {
-    // Generate random keys
+    // PLACEHOLDER: Generate random keys (not actual key pair)
     const privateKey = await generateEncryptionKey();
-    const publicKey = await hashData(privateKey); // Derive public from private (simplified)
+    const publicKey = await hashData(privateKey); // NOT secure - placeholder only
+    
+    console.warn('[Encryption] generateKeyPair is a placeholder - use proper crypto library in production');
     
     return { publicKey, privateKey };
   } catch (error) {

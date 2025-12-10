@@ -152,22 +152,31 @@ export class SecureStorage {
   /**
    * Clear all secure data (use with caution!)
    * Does not clear public data
+   * 
+   * ⚠️ Note: SecureStore doesn't provide key enumeration (security feature).
+   * This method only clears keys from the KEY_REGISTRY.
+   * Apps should register all secure keys they create.
    */
+  private static readonly KEY_REGISTRY = new Set<string>([
+    'auth_token',
+    'refresh_token',
+    'encryption_key',
+    'user_credentials',
+  ]);
+
+  /**
+   * Register a secure key for tracking
+   * Call this when creating new secure keys to enable clearSecureData
+   */
+  static registerSecureKey(key: string): void {
+    this.KEY_REGISTRY.add(key);
+  }
+
   static async clearSecureData(): Promise<void> {
     try {
-      // Note: SecureStore doesn't provide a way to list all keys
-      // This is a security feature - you need to know what you're deleting
-      console.warn('[SecureStorage] clearSecureData called - only clears known keys');
+      console.warn('[SecureStorage] clearSecureData called - clearing registered keys');
       
-      // Clear known sensitive keys
-      const knownKeys = [
-        'auth_token',
-        'refresh_token',
-        'encryption_key',
-        'user_credentials',
-      ];
-      
-      for (const key of knownKeys) {
+      for (const key of this.KEY_REGISTRY) {
         try {
           await this.removeItem(key, DataSensitivity.CRITICAL);
         } catch {

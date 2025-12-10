@@ -165,20 +165,23 @@ export function sanitizeJSON(input: string): string {
 
 /**
  * Sanitize search queries
+ * 
+ * Note: When using parameterized queries or ORMs (like Drizzle), SQL injection
+ * is prevented at the database layer. This function primarily limits length
+ * and removes control characters for consistency.
+ * 
+ * Avoid keyword filtering as it can break legitimate searches (e.g., "select a table")
  */
 export function sanitizeSearchQuery(query: string): string {
   if (!query || typeof query !== 'string') return '';
   
-  // Remove SQL injection attempts
   let sanitized = query.trim();
   
-  // Remove SQL keywords (basic protection)
-  const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'UNION', 'EXEC', 'SCRIPT'];
-  const pattern = new RegExp(`\\b(${sqlKeywords.join('|')})\\b`, 'gi');
-  sanitized = sanitized.replace(pattern, '');
+  // Remove control characters (but keep normal punctuation)
+  sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
   
-  // Remove special SQL characters
-  sanitized = sanitized.replace(/[;'"\\]/g, '');
+  // Remove null bytes
+  sanitized = sanitized.replace(/\0/g, '');
   
   // Limit length
   return sanitized.substring(0, 500);

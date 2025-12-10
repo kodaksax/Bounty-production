@@ -240,24 +240,23 @@ export function validateRequest<T extends ZodSchema>(
 
 /**
  * SQL Injection prevention
+ * 
+ * ⚠️ Note: When using ORMs like Drizzle or parameterized queries,
+ * SQL injection is prevented at the database layer.
+ * This function is provided for legacy/custom query scenarios only.
+ * 
+ * Prefer using the ORM's query builder or parameterized queries instead
+ * of manual string sanitization.
  */
 export function preventSQLInjection(input: string): string {
   if (!input || typeof input !== 'string') return '';
   
-  // Remove SQL keywords and special characters
-  const sqlKeywords = [
-    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER',
-    'EXEC', 'EXECUTE', 'UNION', 'DECLARE', 'TABLE', 'FROM', 'WHERE',
-  ];
+  // For ORMs: This function should NOT be used
+  console.warn('[Security] preventSQLInjection called - ensure you are using parameterized queries');
   
-  let sanitized = input;
-  for (const keyword of sqlKeywords) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    sanitized = sanitized.replace(regex, '');
-  }
-  
-  // Remove dangerous characters
-  sanitized = sanitized.replace(/[;'"\\]/g, '');
+  // Remove null bytes and control characters
+  let sanitized = input.replace(/\0/g, '');
+  sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
   
   return sanitized.trim();
 }
@@ -299,7 +298,18 @@ export function preventCommandInjection(input: string): string {
 
 /**
  * Rate limiting validation
- * Checks if request exceeds rate limits based on various factors
+ * 
+ * ⚠️ WARNING: This in-memory implementation is suitable for development only.
+ * 
+ * Limitations:
+ * - Lost on server restart
+ * - Does not work across multiple server instances
+ * - No persistence
+ * 
+ * For production, use:
+ * - Redis (recommended): fast, distributed, persistent
+ * - Database: persistent but slower
+ * - API Gateway: handles rate limiting at edge
  */
 export interface RateLimitInfo {
   identifier: string; // user ID, IP, etc.
@@ -308,6 +318,7 @@ export interface RateLimitInfo {
   windowMs: number;
 }
 
+// In-memory store (dev/testing only)
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 export function checkRateLimit(info: RateLimitInfo): {
@@ -315,6 +326,11 @@ export function checkRateLimit(info: RateLimitInfo): {
   remaining: number;
   resetAt: number;
 } {
+  // Log warning in production
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('[RateLimit] Using in-memory rate limiting in production - consider Redis');
+  }
+  
   const key = `${info.identifier}:${info.endpoint}`;
   const now = Date.now();
   
@@ -430,7 +446,7 @@ export async function securityHeadersMiddleware(
   // Set security headers
   reply.header('X-Content-Type-Options', 'nosniff');
   reply.header('X-Frame-Options', 'SAMEORIGIN');
-  reply.header('X-XSS-Protection', '1; mode=block');
+  // Note: X-XSS-Protection is deprecated and omitted - rely on CSP instead
   reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   reply.header('Permissions-Policy', 'payment=(self), geolocation=()');
