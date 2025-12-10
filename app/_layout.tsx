@@ -186,15 +186,13 @@ function RootLayout({ children }: { children: React.ReactNode }) {
                     <WebSocketProvider>
                       <ErrorBoundary
                         onError={(error, errorInfo) => {
-                          // Log to Sentry (already done in ErrorBoundary, but we can add custom tags)
-                          Sentry.captureException(error, {
-                            contexts: {
-                              react: {
-                                componentStack: errorInfo.componentStack,
-                              },
-                            },
-                            tags: {
-                              error_boundary: 'root_layout',
+                          // Add custom breadcrumb for additional context (do not capture exception again)
+                          Sentry.addBreadcrumb({
+                            category: 'root_layout',
+                            message: 'Error caught in root layout',
+                            level: 'error',
+                            data: {
+                              componentStack: errorInfo.componentStack,
                             },
                           });
                         }}
