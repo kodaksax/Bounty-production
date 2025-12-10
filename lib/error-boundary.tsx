@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#fff',
-    fontSize: TYPOGRAPHY.SIZE_HEADING,
+    fontSize: TYPOGRAPHY.SIZE_LARGE,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: SPACING.ELEMENT_GAP,
