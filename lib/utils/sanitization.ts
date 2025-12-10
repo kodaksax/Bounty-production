@@ -91,9 +91,23 @@ export function sanitizeNumber(input: string | number | null | undefined): numbe
   
   // Additional validation: ensure input was actually numeric-looking
   const str = String(input).trim();
-  // Allow digits, decimal point, minus sign, and plus sign
-  if (!/^[+-]?\d+(\.\d+)?$/.test(str)) {
+  // Allow digits, decimal point, minus sign (but not plus sign for consistency)
+  if (!/^-?\d+(\.\d+)?$/.test(str)) {
     throw new Error('Invalid numeric format');
+  }
+  
+  return num;
+}
+
+/**
+ * Sanitize positive numeric input (for amounts, prices)
+ * Only allows positive numbers including decimals
+ */
+export function sanitizePositiveNumber(input: string | number | null | undefined): number {
+  const num = sanitizeNumber(input);
+  
+  if (num < 0) {
+    throw new Error('Number must be positive');
   }
   
   return num;
@@ -123,7 +137,8 @@ export function sanitizeBountyInput(input: BountyInput): SanitizedBounty {
   };
   
   if (input.amount !== undefined && input.amount !== null && input.amount !== '') {
-    sanitized.amount = sanitizeNumber(input.amount);
+    // Use sanitizePositiveNumber for bounty amounts (must be positive)
+    sanitized.amount = sanitizePositiveNumber(input.amount);
   }
   
   if (input.location) {
@@ -137,10 +152,6 @@ export function sanitizeBountyInput(input: BountyInput): SanitizedBounty {
   
   if (!sanitized.description || sanitized.description.length < 10) {
     throw new Error('Description must be at least 10 characters');
-  }
-  
-  if (sanitized.amount !== undefined && sanitized.amount < 0) {
-    throw new Error('Amount must be positive');
   }
   
   return sanitized;

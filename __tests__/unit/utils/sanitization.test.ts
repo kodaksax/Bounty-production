@@ -7,6 +7,7 @@ import {
   sanitizeEmail,
   sanitizeURL,
   sanitizeNumber,
+  sanitizePositiveNumber,
   sanitizeMessage,
   sanitizeBountyInput,
   sanitizeProfileInput,
@@ -122,6 +123,29 @@ describe('sanitization utilities', () => {
       expect(() => sanitizeNumber(null)).toThrow('Number is required');
       expect(() => sanitizeNumber(undefined)).toThrow('Number is required');
     });
+
+    it('should accept negative numbers', () => {
+      expect(sanitizeNumber(-10)).toBe(-10);
+      expect(sanitizeNumber('-25.5')).toBe(-25.5);
+    });
+
+    it('should reject numbers with plus sign for consistency', () => {
+      // Plus sign not allowed to maintain consistency
+      expect(() => sanitizeNumber('+10')).toThrow('Invalid numeric format');
+    });
+  });
+
+  describe('sanitizePositiveNumber', () => {
+    it('should accept positive numbers', () => {
+      expect(sanitizePositiveNumber(123)).toBe(123);
+      expect(sanitizePositiveNumber('456.78')).toBe(456.78);
+      expect(sanitizePositiveNumber(0)).toBe(0);
+    });
+
+    it('should throw error for negative numbers', () => {
+      expect(() => sanitizePositiveNumber(-10)).toThrow('Number must be positive');
+      expect(() => sanitizePositiveNumber('-5.5')).toThrow('Number must be positive');
+    });
   });
 
   describe('sanitizeMessage', () => {
@@ -186,8 +210,8 @@ describe('sanitization utilities', () => {
         description: 'Valid description here',
         amount: -10,
       };
-      // Negative numbers are not considered "numeric" by validator (no_symbols: true)
-      expect(() => sanitizeBountyInput(input)).toThrow();
+      // Bounty amounts must be positive
+      expect(() => sanitizeBountyInput(input)).toThrow('Number must be positive');
     });
 
     it('should accept bounty without amount', () => {

@@ -49,17 +49,33 @@ function sanitizeText(input) {
   return sanitized.trim();
 }
 
-function sanitizeNumber(input) {
+function sanitizeNumber(input, allowNegative = false) {
   if (input === null || input === undefined) {
     throw new Error('Number is required');
   }
-  const str = String(input);
-  if (!validator.isNumeric(str, { no_symbols: true })) {
+  
+  // Convert to number first
+  const num = Number(input);
+  
+  // Check if valid number
+  if (isNaN(num) || !isFinite(num)) {
     throw new Error('Invalid numeric format');
   }
-  const num = Number(str);
-  if (isNaN(num) || !isFinite(num)) {
-    throw new Error('Invalid number');
+  
+  // Validate format - allow decimals, optionally allow negative
+  const str = String(input).trim();
+  const pattern = allowNegative ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
+  if (!pattern.test(str)) {
+    throw new Error('Invalid numeric format');
+  }
+  
+  return num;
+}
+
+function sanitizePositiveNumber(input) {
+  const num = sanitizeNumber(input, false);
+  if (num < 0) {
+    throw new Error('Number must be positive');
   }
   return num;
 }
@@ -213,10 +229,10 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
     const { amountCents, currency = 'usd', metadata = {} } = req.body;
     const userId = req.user.id;
 
-    // Sanitize and validate amount
+    // Sanitize and validate amount (must be positive)
     let validatedAmount;
     try {
-      validatedAmount = sanitizeNumber(amountCents);
+      validatedAmount = sanitizePositiveNumber(amountCents);
       if (validatedAmount <= 0) {
         throw new Error('Amount must be positive');
       }
@@ -305,10 +321,10 @@ app.post('/apple-pay/payment-intent', paymentLimiter, authenticateUser, async (r
 
     if (!req.user || !req.user.id) return res.status(401).json({ error: 'Unauthorized' });
 
-    // Sanitize and validate amount
+    // Sanitize and validate amount (must be positive and >= 50 cents)
     let validatedAmount;
     try {
-      validatedAmount = sanitizeNumber(amountCents);
+      validatedAmount = sanitizePositiveNumber(amountCents);
       if (validatedAmount < 50) {
         throw new Error('Amount too small');
       }
