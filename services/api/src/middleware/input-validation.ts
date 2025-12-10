@@ -1,0 +1,459 @@
+/**
+ * Input Validation Middleware
+ * 
+ * Provides server-side validation and sanitization for all API inputs
+ * This is a critical security layer - never trust client-side validation alone
+ */
+
+import type { FastifyRequest, FastifyReply } from 'fastify';
+import { z, ZodSchema, ZodError } from 'zod';
+
+/**
+ * Sanitization utilities (server-side versions)
+ */
+
+/**
+ * Sanitize text input
+ */
+export function sanitizeText(input: string, maxLength: number = 10000): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Remove null bytes
+  let sanitized = input.replace(/\0/g, '');
+  
+  // Remove control characters except newlines and tabs
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // Remove zero-width characters
+  sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  
+  // Trim and enforce max length
+  return sanitized.trim().substring(0, maxLength);
+}
+
+/**
+ * Sanitize HTML - strip all HTML tags
+ */
+export function sanitizeHTML(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^<]*>/gi, '')
+    .replace(/<link\b[^<]*>/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/<[^>]+>/g, '');
+}
+
+/**
+ * Sanitize email
+ */
+export function sanitizeEmail(email: string): string {
+  if (!email || typeof email !== 'string') return '';
+  
+  let sanitized = email.toLowerCase().trim();
+  sanitized = sanitized.replace(/[^a-z0-9@.\-_+]/g, '');
+  
+  const atCount = (sanitized.match(/@/g) || []).length;
+  if (atCount !== 1) return '';
+  
+  return sanitized;
+}
+
+/**
+ * Sanitize URL
+ */
+export function sanitizeURL(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  
+  const trimmed = url.trim();
+  const lowerURL = trimmed.toLowerCase();
+  
+  // Block dangerous protocols
+  const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:'];
+  for (const protocol of dangerousProtocols) {
+    if (lowerURL.startsWith(protocol)) {
+      return '';
+    }
+  }
+  
+  // Only allow http, https, and mailto
+  if (!lowerURL.startsWith('http://') && 
+      !lowerURL.startsWith('https://') && 
+      !lowerURL.startsWith('mailto:')) {
+    return `https://${trimmed}`;
+  }
+  
+  return trimmed;
+}
+
+/**
+ * Zod schemas for common data types
+ */
+
+// Bounty validation schema
+export const bountySchema = z.object({
+  title: z.string()
+    .min(1, 'Title is required')
+    .max(200, 'Title must be 200 characters or less')
+    .transform(val => sanitizeText(val, 200)),
+  
+  description: z.string()
+    .min(1, 'Description is required')
+    .max(5000, 'Description must be 5000 characters or less')
+    .transform(val => sanitizeText(val, 5000)),
+  
+  amount: z.number()
+    .min(0, 'Amount must be non-negative')
+    .max(1000000, 'Amount must be less than 1,000,000')
+    .optional(),
+  
+  isForHonor: z.boolean().optional(),
+  
+  location: z.string()
+    .max(500, 'Location must be 500 characters or less')
+    .transform(val => sanitizeText(val, 500))
+    .optional(),
+  
+  dueDate: z.string()
+    .datetime()
+    .optional(),
+  
+  category: z.string()
+    .max(100)
+    .optional(),
+});
+
+// Message validation schema
+export const messageSchema = z.object({
+  text: z.string()
+    .min(1, 'Message cannot be empty')
+    .max(10000, 'Message must be 10,000 characters or less')
+    .transform(val => sanitizeText(val, 10000)),
+  
+  conversationId: z.string()
+    .uuid('Invalid conversation ID'),
+  
+  attachments: z.array(z.object({
+    type: z.enum(['image', 'file', 'video']),
+    url: z.string().url(),
+    name: z.string().max(255),
+  })).optional(),
+});
+
+// User profile validation schema
+export const userProfileSchema = z.object({
+  username: z.string()
+    .min(3, 'Username must be at least 3 characters')
+    .max(50, 'Username must be 50 characters or less')
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
+    .transform(val => sanitizeText(val, 50)),
+  
+  displayName: z.string()
+    .max(100, 'Display name must be 100 characters or less')
+    .transform(val => sanitizeText(val, 100))
+    .optional(),
+  
+  bio: z.string()
+    .max(500, 'Bio must be 500 characters or less')
+    .transform(val => sanitizeText(val, 500))
+    .optional(),
+  
+  website: z.string()
+    .url('Invalid website URL')
+    .transform(val => sanitizeURL(val))
+    .optional(),
+  
+  location: z.string()
+    .max(100, 'Location must be 100 characters or less')
+    .transform(val => sanitizeText(val, 100))
+    .optional(),
+  
+  skills: z.array(z.string().max(50)).max(20).optional(),
+});
+
+// Payment intent validation schema
+export const paymentIntentSchema = z.object({
+  amount: z.number()
+    .int('Amount must be an integer')
+    .min(50, 'Minimum payment amount is $0.50')
+    .max(1000000, 'Maximum payment amount is $10,000'),
+  
+  currency: z.string()
+    .length(3, 'Currency must be a 3-letter code')
+    .regex(/^[A-Z]{3}$/, 'Currency must be uppercase letters')
+    .default('USD'),
+  
+  description: z.string()
+    .max(500, 'Description must be 500 characters or less')
+    .transform(val => sanitizeText(val, 500))
+    .optional(),
+  
+  bountyId: z.string()
+    .uuid('Invalid bounty ID')
+    .optional(),
+});
+
+// Webhook validation schema
+export const webhookSchema = z.object({
+  type: z.string(),
+  data: z.record(z.any()),
+  created: z.number().int().positive(),
+  livemode: z.boolean(),
+});
+
+/**
+ * Generic validation middleware factory
+ */
+export function validateRequest<T extends ZodSchema>(
+  schema: T,
+  source: 'body' | 'query' | 'params' = 'body'
+) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const data = request[source];
+      const validated = await schema.parseAsync(data);
+      
+      // Replace the original data with validated/sanitized version
+      (request as any)[source] = validated;
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.code(400).send({
+          error: 'Validation Error',
+          message: 'Invalid input data',
+          details: error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+          })),
+        });
+      }
+      
+      return reply.code(400).send({
+        error: 'Validation Error',
+        message: 'Invalid input data',
+      });
+    }
+  };
+}
+
+/**
+ * SQL Injection prevention
+ */
+export function preventSQLInjection(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Remove SQL keywords and special characters
+  const sqlKeywords = [
+    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER',
+    'EXEC', 'EXECUTE', 'UNION', 'DECLARE', 'TABLE', 'FROM', 'WHERE',
+  ];
+  
+  let sanitized = input;
+  for (const keyword of sqlKeywords) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  }
+  
+  // Remove dangerous characters
+  sanitized = sanitized.replace(/[;'"\\]/g, '');
+  
+  return sanitized.trim();
+}
+
+/**
+ * XSS prevention
+ */
+export function preventXSS(input: string): string {
+  return sanitizeHTML(input);
+}
+
+/**
+ * Path traversal prevention
+ */
+export function preventPathTraversal(path: string): string {
+  if (!path || typeof path !== 'string') return '';
+  
+  // Remove path traversal attempts
+  let sanitized = path.replace(/\.\.[\\/]/g, '');
+  
+  // Remove directory separators at the start
+  sanitized = sanitized.replace(/^[\/\\]+/, '');
+  
+  // Remove null bytes
+  sanitized = sanitized.replace(/\0/g, '');
+  
+  return sanitized;
+}
+
+/**
+ * Command injection prevention
+ */
+export function preventCommandInjection(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Remove shell metacharacters
+  return input.replace(/[;&|`$(){}[\]<>]/g, '');
+}
+
+/**
+ * Rate limiting validation
+ * Checks if request exceeds rate limits based on various factors
+ */
+export interface RateLimitInfo {
+  identifier: string; // user ID, IP, etc.
+  endpoint: string;
+  limit: number;
+  windowMs: number;
+}
+
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+export function checkRateLimit(info: RateLimitInfo): {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+} {
+  const key = `${info.identifier}:${info.endpoint}`;
+  const now = Date.now();
+  
+  const existing = rateLimitStore.get(key);
+  
+  if (!existing || now > existing.resetAt) {
+    // Create new window
+    const resetAt = now + info.windowMs;
+    rateLimitStore.set(key, { count: 1, resetAt });
+    return {
+      allowed: true,
+      remaining: info.limit - 1,
+      resetAt,
+    };
+  }
+  
+  if (existing.count >= info.limit) {
+    // Rate limit exceeded
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: existing.resetAt,
+    };
+  }
+  
+  // Increment count
+  existing.count++;
+  rateLimitStore.set(key, existing);
+  
+  return {
+    allowed: true,
+    remaining: info.limit - existing.count,
+    resetAt: existing.resetAt,
+  };
+}
+
+/**
+ * Clean up expired rate limit entries (call periodically)
+ */
+export function cleanupRateLimits(): void {
+  const now = Date.now();
+  for (const [key, value] of rateLimitStore.entries()) {
+    if (now > value.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
+}
+
+// Clean up every 5 minutes
+setInterval(cleanupRateLimits, 5 * 60 * 1000);
+
+/**
+ * Validation helpers
+ */
+
+export const validators = {
+  isEmail: (email: string): boolean => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(email);
+  },
+  
+  isURL: (url: string): boolean => {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  
+  isUUID: (id: string): boolean => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(id);
+  },
+  
+  isAlphanumeric: (str: string): boolean => {
+    return /^[a-zA-Z0-9]+$/.test(str);
+  },
+  
+  isStrongPassword: (password: string): boolean => {
+    // At least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+  },
+};
+
+/**
+ * Content Security Policy helpers
+ */
+export function generateCSPHeader(): string {
+  const directives = [
+    "default-src 'self'",
+    "script-src 'self' https://js.stripe.com",
+    "style-src 'self' 'unsafe-inline'", // React Native requires unsafe-inline
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://api.stripe.com wss:",
+    "frame-src 'self' https://js.stripe.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ];
+  
+  return directives.join('; ');
+}
+
+/**
+ * Security headers middleware
+ */
+export async function securityHeadersMiddleware(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  // Set security headers
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'SAMEORIGIN');
+  reply.header('X-XSS-Protection', '1; mode=block');
+  reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  reply.header('Permissions-Policy', 'payment=(self), geolocation=()');
+  reply.header('Content-Security-Policy', generateCSPHeader());
+}
+
+export default {
+  validateRequest,
+  sanitizeText,
+  sanitizeHTML,
+  sanitizeEmail,
+  sanitizeURL,
+  preventSQLInjection,
+  preventXSS,
+  preventPathTraversal,
+  preventCommandInjection,
+  checkRateLimit,
+  validators,
+  securityHeadersMiddleware,
+  // Schemas
+  bountySchema,
+  messageSchema,
+  userProfileSchema,
+  paymentIntentSchema,
+  webhookSchema,
+};
