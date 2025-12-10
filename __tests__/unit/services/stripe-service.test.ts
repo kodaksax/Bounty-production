@@ -18,10 +18,14 @@ jest.mock('../../../lib/services/performance-service', () => ({
   },
 }));
 
-// Mock @stripe/stripe-react-native to throw error so fallback is used
-jest.mock('@stripe/stripe-react-native', () => {
-  throw new Error('SDK not available in test environment');
-});
+// Mock @stripe/stripe-react-native to simulate unavailable SDK (initStripe rejects)
+jest.mock('@stripe/stripe-react-native', () => ({
+  initStripe: jest.fn().mockRejectedValue(new Error('SDK not available in test environment')),
+  createPaymentMethod: jest.fn(),
+  confirmPayment: jest.fn(),
+  initPaymentSheet: jest.fn(),
+  presentPaymentSheet: jest.fn(),
+}));
 
 // Mock global fetch for API calls
 global.fetch = jest.fn();
