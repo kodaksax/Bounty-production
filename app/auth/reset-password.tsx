@@ -9,7 +9,6 @@ import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
 import React, { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native'
-import { Image } from 'expo-image'
 
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
