@@ -74,22 +74,26 @@ export function sanitizeRichText(input: string | null | undefined): string {
 
 /**
  * Sanitize numeric input (amounts, IDs, etc.)
+ * Allows positive and negative numbers, including decimals
  */
 export function sanitizeNumber(input: string | number | null | undefined): number {
   if (input === null || input === undefined) {
     throw new Error('Number is required');
   }
   
-  const str = String(input);
+  // Convert to number first to handle both string and number inputs
+  const num = Number(input);
   
-  if (!validator.isNumeric(str, { no_symbols: true })) {
+  // Check if conversion resulted in valid number
+  if (isNaN(num) || !isFinite(num)) {
     throw new Error('Invalid numeric format');
   }
   
-  const num = Number(str);
-  
-  if (isNaN(num) || !isFinite(num)) {
-    throw new Error('Invalid number');
+  // Additional validation: ensure input was actually numeric-looking
+  const str = String(input).trim();
+  // Allow digits, decimal point, minus sign, and plus sign
+  if (!/^[+-]?\d+(\.\d+)?$/.test(str)) {
+    throw new Error('Invalid numeric format');
   }
   
   return num;
