@@ -90,14 +90,13 @@ export async function handleServiceError<T>(
     // Convert to user-friendly error
     const userFriendlyError = getUserFriendlyError(error);
     
-    // Override retryable if specified
-    if (options.retryable !== undefined) {
-      userFriendlyError.retryable = options.retryable;
-    }
-
+    // Use object spread to override retryable if specified
     return {
       success: false,
-      error: userFriendlyError,
+      error: {
+        ...userFriendlyError,
+        retryable: options.retryable ?? userFriendlyError.retryable
+      },
     };
   }
 }
