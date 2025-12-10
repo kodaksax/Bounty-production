@@ -5,11 +5,27 @@
 import { formatDate, formatRelativeTime, formatDateForGrouping, formatTime } from '../../../lib/utils/date-utils';
 
 describe('Date Utils', () => {
+  // Use fake timers to ensure consistent test behavior
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2024-01-15T14:30:00'));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   // Fixed date for consistent testing
   const fixedDate = new Date('2024-01-15T14:30:00');
-  const todayDate = new Date();
-  const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  let todayDate: Date;
+  let yesterdayDate: Date;
   const oldDate = new Date('2023-12-01T10:00:00');
+
+  beforeEach(() => {
+    // Create dates after fake timer is set to ensure consistency
+    todayDate = new Date();
+    yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  });
 
   describe('formatDate', () => {
     it('should format today\'s date with time', () => {
