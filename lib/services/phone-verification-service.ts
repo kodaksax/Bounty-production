@@ -12,6 +12,11 @@ export interface PhoneVerificationResult {
   error?: string;
 }
 
+// Constants for phone validation
+const MIN_PHONE_LENGTH = 10; // Minimum digits for most countries
+const OTP_LENGTH = 6; // Standard OTP length
+const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
+
 /**
  * Format phone number to E.164 format
  * If phone already has country code, use it
@@ -44,7 +49,7 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
   try {
     // Validate phone format (basic validation)
     const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
+    if (cleanPhone.length < MIN_PHONE_LENGTH) {
       return {
         success: false,
         message: 'Please enter a valid phone number',
@@ -106,10 +111,10 @@ export async function verifyPhoneOTP(
 ): Promise<PhoneVerificationResult> {
   try {
     // Validate token format
-    if (!token || token.length !== 6 || !/^\d{6}$/.test(token)) {
+    if (!token || token.length !== OTP_LENGTH || !OTP_PATTERN.test(token)) {
       return {
         success: false,
-        message: 'Please enter a valid 6-digit code',
+        message: `Please enter a valid ${OTP_LENGTH}-digit code`,
         error: 'invalid_token',
       };
     }

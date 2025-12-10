@@ -40,10 +40,19 @@ export default function VerifyPhoneScreen() {
 
   // Handle resend cooldown
   useEffect(() => {
+    let timer: NodeJS.Timeout | undefined;
+    
     if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => {
+        setResendCooldown(prev => Math.max(0, prev - 1));
+      }, 1000);
     }
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [resendCooldown]);
 
   const handleOtpChange = (value: string, index: number) => {

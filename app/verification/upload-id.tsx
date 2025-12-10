@@ -116,23 +116,32 @@ export default function UploadIDScreen() {
     
     // Placeholder implementation - in production this would call a real API
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Simulate API call with proper cleanup
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 2000);
+        // Store timer reference for cleanup if component unmounts
+        return () => clearTimeout(timer);
+      });
       
-      setIsSubmitting(false);
-      Alert.alert(
-        'Verification Submitted',
-        'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
+      // Check if component is still mounted before updating state
+      if (isSubmitting) {
+        setIsSubmitting(false);
+        Alert.alert(
+          'Verification Submitted',
+          'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      }
     } catch (error) {
-      setIsSubmitting(false);
-      Alert.alert('Error', 'Failed to submit verification. Please try again.');
+      if (isSubmitting) {
+        setIsSubmitting(false);
+        Alert.alert('Error', 'Failed to submit verification. Please try again.');
+      }
     }
   };
 
