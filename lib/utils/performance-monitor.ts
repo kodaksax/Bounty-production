@@ -126,6 +126,9 @@ export const performanceMonitor = new PerformanceMonitor();
 /**
  * React hook for tracking component render performance
  * 
+ * Measures the duration of each render cycle by recording time before and after
+ * the component's DOM mutations are applied.
+ * 
  * Usage:
  * ```tsx
  * function MyComponent() {
@@ -135,12 +138,15 @@ export const performanceMonitor = new PerformanceMonitor();
  * ```
  */
 export function useRenderPerformance(componentName: string, metadata?: Record<string, any>) {
-  const startTime = React.useRef<number>(performance.now());
+  const renderStartTime = React.useRef<number>(performance.now());
   const renderCount = React.useRef<number>(0);
 
-  React.useEffect(() => {
+  // Use useLayoutEffect to measure render time more accurately
+  // This runs synchronously after all DOM mutations, capturing the actual render duration
+  React.useLayoutEffect(() => {
+    const renderEndTime = performance.now();
+    const duration = renderEndTime - renderStartTime.current;
     renderCount.current += 1;
-    const duration = performance.now() - startTime.current;
 
     if (__DEV__ && duration > SIXTY_FPS_THRESHOLD) { // Slower than 60fps
       console.warn(
@@ -148,9 +154,10 @@ export function useRenderPerformance(componentName: string, metadata?: Record<st
         metadata
       );
     }
-
-    startTime.current = performance.now();
   });
+
+  // Update start time for the next render at the beginning of the render phase
+  renderStartTime.current = performance.now();
 }
 
 /**

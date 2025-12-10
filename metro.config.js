@@ -8,7 +8,8 @@ const config = getSentryExpoConfig(__dirname);
 // Performance optimizations for Metro bundler
 config.transformer = {
   ...config.transformer,
-  // Enable minification for better performance
+  // Configure minification with preserved names for Sentry error tracking
+  // Keeps function and class names intact for better error reporting in production
   minifierConfig: {
     keep_classnames: true,
     keep_fnames: true,
