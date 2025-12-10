@@ -6,6 +6,7 @@ import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
+import { ConnectionStatus } from 'components/connection-status'
 import { NotificationsBell } from 'components/notifications-bell'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
@@ -727,6 +728,9 @@ function BountyAppInner() {
 
   return (
     <View style={styles.container}>
+      {/* Connection Status Banner - appears at top when offline */}
+      <ConnectionStatus showQueueCount={true} />
+      
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
