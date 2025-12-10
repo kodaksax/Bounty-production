@@ -18,21 +18,34 @@ const WALLET_TRANSACTION_TYPES = {
   WITHDRAWAL: 'withdrawal', // Money withdrawn from wallet (negative)
 } as const;
 
+// Type for wallet transactions from database
+interface WalletTransactionRecord {
+  id: string;
+  type: string;
+  amount: number;
+  bounty_id?: string;
+  description?: string;
+  status?: string;
+  created_at?: string;
+  [key: string]: unknown; // Allow for additional fields
+}
+
 interface UserDataExport {
   exportDate: string;
-  profile: any;
+  profile: Record<string, unknown> | null;
   bounties: {
-    created: any[];
-    accepted: any[];
-    applications: any[];
+    created: Record<string, unknown>[];
+    accepted: Record<string, unknown>[];
+    applications: Record<string, unknown>[];
   };
-  messages: any[];
+  messages: Record<string, unknown>[];
   wallet: {
-    transactions: any[];
+    transactions: WalletTransactionRecord[];
     balance: number;
+    balanceNote?: string; // Note about balance calculation limitations
   };
-  notifications: any[];
-  completions: any[];
+  notifications: Record<string, unknown>[];
+  completions: Record<string, unknown>[];
 }
 
 /**
@@ -154,11 +167,14 @@ export async function exportUserData(userId: string): Promise<{
         .eq('user_id', userId);
       
       if (!error && transactions) {
-        exportData.wallet.transactions = transactions;
-        // Calculate balance from transactions using defined transaction types
+        exportData.wallet.transactions = transactions as WalletTransactionRecord[];
+        
+        // Calculate approximate balance from transactions
         // Note: The actual balance is maintained by the database/API, this is just an informational calculation
         // Transaction amounts are always stored as positive values; the type determines the direction
-        exportData.wallet.balance = transactions.reduce((sum: number, tx: any) => {
+        let hasReleaseTransactions = false;
+        
+        exportData.wallet.balance = transactions.reduce((sum: number, tx: WalletTransactionRecord) => {
           const amount = tx.amount || 0;
           
           switch (tx.type) {
@@ -172,8 +188,8 @@ export async function exportUserData(userId: string): Promise<{
               
             case WALLET_TRANSACTION_TYPES.RELEASE:   // Context-dependent: depends on role
               // Release increases balance for hunters, decreases for posters
-              // Since we're exporting the user's data, we need context to know their role
-              // For now, include the transaction but note this needs role context for accurate balance
+              // Mark that we have release transactions requiring role context
+              hasReleaseTransactions = true;
               return sum; // Skip in calculation as it requires role context
               
             default:
@@ -182,6 +198,13 @@ export async function exportUserData(userId: string): Promise<{
               return sum;
           }
         }, 0);
+        
+        // Add note if balance calculation is incomplete due to release transactions
+        if (hasReleaseTransactions) {
+          exportData.wallet.balanceNote = 
+            'Balance calculation excludes "release" transactions which require role context. ' +
+            'The actual balance in your account may differ. This is an informational summary only.';
+        }
       }
     } catch (e) {
       console.warn('[DataExport] Wallet transactions fetch failed:', e);
@@ -240,11 +263,12 @@ export async function exportUserData(userId: string): Promise<{
         data: exportData,
       };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[DataExport] Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to export data. Please try again.';
     return {
       success: false,
-      message: error.message || 'Failed to export data. Please try again.',
+      message: errorMessage,
     };
   }
 }
@@ -287,11 +311,12 @@ export async function exportAndShareUserData(userId: string): Promise<{
       success: true,
       message: 'Data exported and shared successfully.',
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[DataExport] Share error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to share data. Please try again.';
     return {
       success: false,
-      message: error.message || 'Failed to share data. Please try again.',
+      message: errorMessage,
     };
   }
 }

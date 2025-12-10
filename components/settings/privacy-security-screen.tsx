@@ -141,9 +141,10 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       } else {
         Alert.alert('Export Failed', result.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Data export error:', err);
-      Alert.alert('Error', err.message || 'Failed to export data. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export data. Please try again.';
+      Alert.alert('Error', errorMessage);
     } finally {
       persist({ exporting: false });
     }
