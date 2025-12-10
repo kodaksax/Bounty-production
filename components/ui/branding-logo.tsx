@@ -1,5 +1,6 @@
 import React from 'react';
-import { AccessibilityRole, Image, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { AccessibilityRole, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
 
 export interface BrandingLogoProps {
   /**

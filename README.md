@@ -490,6 +490,56 @@ Initial phase: mock transactions for UI. Future integration targets: Stripe Conn
 - Release only by Poster confirmation or dual-sign event.
 - Refund path for timeouts / disputes (manual early phase).
 
+## ⚡ Performance Optimization
+
+### Cache Management
+The app uses Metro bundler caching for faster rebuilds. If you encounter layout issues or stale code:
+
+```bash
+# Clear Metro cache and restart
+npx expo start --clear
+
+# Alternative: Clear all caches
+rm -rf node_modules/.cache
+rm -rf .expo
+npx expo start --clear
+```
+
+### Image Optimization
+- **Auto-caching**: The app uses `expo-image` instead of React Native's `Image` for automatic caching
+- **Lazy loading**: Images in lists are loaded on-demand with thumbnail optimization
+- **CDN-aware**: Supports Cloudinary and Imgix transformations for optimal sizing
+
+### List Performance
+All FlatLists are optimized with:
+- `windowSize={5}` - Renders 5 screens worth of items
+- `maxToRenderPerBatch={5}` - Batches rendering for smoother scrolling
+- `removeClippedSubviews={true}` - Removes off-screen views from memory
+- `initialNumToRender={5}` - Initial render size for faster startup
+
+### Bundle Analysis
+To analyze bundle size and identify large dependencies:
+
+```bash
+# Install the analyzer
+npm install --save-dev react-native-bundle-visualizer
+
+# Analyze the bundle
+npx react-native-bundle-visualizer
+```
+
+### Performance Monitoring
+Performance is tracked using:
+- React Profiler for identifying slow renders
+- Expo performance monitoring for screen load times
+- Custom metrics for user interactions
+
+**Target Metrics:**
+- Images load instantly from cache
+- Lists scroll at 60fps
+- Bundle size < 10MB
+- App launch < 2 seconds
+
 ## 🧪 Testing (Planned)
 - Unit: domain helpers & formatting.
 - Integration: navigation flows (Detox / Maestro candidate).

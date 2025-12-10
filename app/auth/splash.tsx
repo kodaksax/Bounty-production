@@ -1,6 +1,7 @@
 import * as ExpoSplash from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
-import { Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 // Centralized helpers: RootLayout (and any other callers) should use these
