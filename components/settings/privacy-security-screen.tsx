@@ -114,11 +114,41 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
   const exportData = async () => {
     if (state.exporting) return;
-    persist({ exporting: true });
-    setTimeout(() => {
-      Alert.alert('Export Ready', 'Your data export link has been emailed.');
+    
+    try {
+      persist({ exporting: true });
+      
+      // Import the data export service and supabase
+      const { exportAndShareUserData } = require('../../lib/services/data-export-service');
+      const { supabase } = require('../../lib/supabase');
+      
+      // Get current user ID
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        Alert.alert('Error', 'Unable to verify user. Please sign in again.');
+        persist({ exporting: false });
+        return;
+      }
+      
+      // Export and share the data
+      const result = await exportAndShareUserData(user.id);
+      
+      if (result.success) {
+        Alert.alert(
+          'Data Export Complete',
+          'Your data has been exported successfully. You can now save or share it.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Export Failed', result.message);
+      }
+    } catch (err: any) {
+      console.error('Data export error:', err);
+      Alert.alert('Error', err.message || 'Failed to export data. Please try again.');
+    } finally {
       persist({ exporting: false });
-    }, 1200);
+    }
   };
 
   return (
@@ -184,11 +214,15 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           ))}
         </View>
 
-        {/* Data Export */}
+        {/* Data Export - GDPR Compliance */}
         <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="file-download" title="Data Export" subtitle="Request a copy of your account data." />
+          <SectionHeader 
+            icon="file-download" 
+            title="Data Export (GDPR)" 
+            subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more." 
+          />
           <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}> 
-            <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing…' : 'Start Export'}</Text>
+            <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
