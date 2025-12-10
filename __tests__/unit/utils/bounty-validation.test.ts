@@ -97,12 +97,10 @@ describe('Bounty Validation Utils', () => {
       expect(result).toBe('Amount must be at least $1');
     });
 
-    it('should allow negative amounts for honor bounties', () => {
-      // Note: This tests current implementation behavior
-      // Honor bounties don't validate amount as they have no monetary value
-      // Future improvement: Consider adding validation even for honor bounties
+    it('should return error for negative amounts for honor bounties', () => {
+      // Negative amounts are now rejected for honor bounties as well
       const result = validateAmount(-10, true);
-      expect(result).toBeNull();
+      expect(result).toBe('Amount must be at least $0');
     });
   });
 });
