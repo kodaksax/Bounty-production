@@ -14,6 +14,8 @@ import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { useFormSubmission } from 'hooks/useFormSubmission';
 import { useWallet } from 'lib/wallet-context';
 import { validateBalance, getInsufficientBalanceMessage } from 'lib/utils/bounty-validation';
+import { useEmailVerification } from 'hooks/use-email-verification';
+import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -35,10 +37,16 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft();
   const insets = useSafeAreaInsets();
   const { balance, logTransaction, withdraw } = useWallet();
+  const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
   
   // Use form submission hook with debouncing
   const { submit, isSubmitting, error: submitError, reset } = useFormSubmission(
     async () => {
+      // Email verification gate: Block posting if email not verified
+      if (!canPostBounties) {
+        throw new Error('Please verify your email address before posting bounties. Check your inbox for the verification link.');
+      }
+
       // Check balance before posting using shared validation (for non-honor bounties)
       // This pre-check provides immediate user feedback before attempting creation
       if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
@@ -173,6 +181,11 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       keyboardVerticalOffset={insets.top}
     >
       <View className="flex-1">
+        {/* Email Verification Banner */}
+        {!isEmailVerified && (
+          <EmailVerificationBanner email={userEmail} />
+        )}
+
         {/* Inline Stepper (no duplicate app header) */}
         <View className="px-0" style={{ paddingTop: 8, paddingBottom: 8 }}>
           <StepperHeader
