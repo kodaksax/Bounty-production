@@ -13,10 +13,31 @@ export interface PhoneVerificationResult {
 }
 
 /**
+ * Format phone number to E.164 format
+ * If phone already has country code, use it
+ * Otherwise, assume US/Canada (+1) for backwards compatibility
+ * 
+ * @param phone - Phone number to format
+ * @returns E.164 formatted phone number
+ */
+function formatToE164(phone: string): string {
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // If already has country code (starts with +), return as-is
+  if (phone.startsWith('+')) {
+    return phone;
+  }
+  
+  // Default to +1 (US/Canada) for backwards compatibility
+  // TODO: Add country code selection in UI for international support
+  return `+1${cleanPhone}`;
+}
+
+/**
  * Send OTP to phone number
  * Uses Supabase phone authentication
  * 
- * @param phone - Phone number in E.164 format (e.g., +1234567890)
+ * @param phone - Phone number in E.164 format (e.g., +1234567890) or local format
  * @returns Promise with result of the operation
  */
 export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResult> {
@@ -31,8 +52,8 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
       };
     }
 
-    // Format to E.164 if not already formatted
-    const e164Phone = phone.startsWith('+') ? phone : `+1${cleanPhone}`;
+    // Format to E.164
+    const e164Phone = formatToE164(phone);
 
     // Use Supabase phone auth to send OTP
     const { error } = await supabase.auth.signInWithOtp({
@@ -75,7 +96,7 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
 /**
  * Verify OTP code
  * 
- * @param phone - Phone number in E.164 format
+ * @param phone - Phone number in E.164 format or local format
  * @param token - 6-digit OTP code
  * @returns Promise with result of the operation
  */
@@ -94,8 +115,7 @@ export async function verifyPhoneOTP(
     }
 
     // Format phone to E.164
-    const cleanPhone = phone.replace(/\D/g, '');
-    const e164Phone = phone.startsWith('+') ? phone : `+1${cleanPhone}`;
+    const e164Phone = formatToE164(phone);
 
     // Verify OTP with Supabase
     const { data, error } = await supabase.auth.verifyOtp({
@@ -189,8 +209,7 @@ export async function checkPhoneVerified(): Promise<boolean> {
  */
 export async function updatePhoneNumber(phone: string): Promise<PhoneVerificationResult> {
   try {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const e164Phone = phone.startsWith('+') ? phone : `+1${cleanPhone}`;
+    const e164Phone = formatToE164(phone);
 
     const { error } = await supabase.auth.updateUser({
       phone: e164Phone,

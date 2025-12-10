@@ -125,19 +125,23 @@ if (verified.success) {
 
 If you prefer direct Twilio integration:
 
-1. Install Twilio SDK:
+⚠️ **SECURITY WARNING**: Twilio credentials (Account SID and Auth Token) must NEVER be stored in client-side code. Direct Twilio integration requires a backend API server.
+
+1. Install Twilio SDK on your backend server:
    ```bash
    npm install twilio
    ```
 
-2. Add environment variables:
+2. Add environment variables to your **backend server** (not client):
    ```
    TWILIO_ACCOUNT_SID=your_account_sid
    TWILIO_AUTH_TOKEN=your_auth_token
    TWILIO_PHONE_NUMBER=+1234567890
    ```
 
-3. Update `phone-verification-service.ts` to use Twilio directly
+3. Create backend API endpoints (e.g., `/api/sms/send-otp` and `/api/sms/verify-otp`)
+
+4. Update `phone-verification-service.ts` to call your backend API instead of Supabase
 
 ### Testing
 

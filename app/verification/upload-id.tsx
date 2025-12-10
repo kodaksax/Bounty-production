@@ -114,8 +114,11 @@ export default function UploadIDScreen() {
     // 2. Stripe Identity: https://stripe.com/identity
     // 3. Supabase Edge Function + Manual Review
     
-    // Placeholder implementation
-    setTimeout(() => {
+    // Placeholder implementation - in production this would call a real API
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       setIsSubmitting(false);
       Alert.alert(
         'Verification Submitted',
@@ -127,7 +130,10 @@ export default function UploadIDScreen() {
           },
         ]
       );
-    }, 2000);
+    } catch (error) {
+      setIsSubmitting(false);
+      Alert.alert('Error', 'Failed to submit verification. Please try again.');
+    }
   };
 
   const canSubmit = frontImage && (selectedDocType === 'passport' || backImage);

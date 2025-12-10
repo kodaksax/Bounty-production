@@ -75,15 +75,16 @@ export default function PhoneScreen() {
 
     // Send OTP for verification
     const otpResult = await sendPhoneOTP(phone.trim());
-    setSaving(false);
 
     if (otpResult.success) {
+      setSaving(false);
       // Navigate to verification screen with phone number
       router.push({
         pathname: '/onboarding/verify-phone',
         params: { phone: phone.trim() },
       });
     } else {
+      setSaving(false);
       Alert.alert(
         'Unable to Send Code',
         `${otpResult.message}\n\nYou can still continue without verification.`,

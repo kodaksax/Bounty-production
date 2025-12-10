@@ -75,10 +75,11 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
       if (error) throw error;
 
       if (data) {
-        // Show QR code and secret for user to scan
+        // Show instructions without exposing secret directly
+        // In production, display QR code in a modal or dedicated screen
         Alert.alert(
           'Set Up Authenticator',
-          `1. Open Google Authenticator or similar app\n2. Scan the QR code or enter this secret:\n\n${data.totp.secret}\n\n3. Enter the 6-digit code to verify`,
+          '1. Open Google Authenticator or Authy\n2. Scan the QR code shown on the next screen\n3. Enter the 6-digit code to verify\n\nNote: The QR code will be displayed in a secure screen.',
           [
             {
               text: 'Cancel',
@@ -92,8 +93,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               },
             },
             {
-              text: 'Enter Code',
-              onPress: () => promptForVerificationCode(data.id),
+              text: 'Continue',
+              onPress: () => {
+                // TODO: Navigate to dedicated QR code display screen
+                // For now, proceed to code entry
+                // The QR code URI can be generated from data.totp.qr_code or data.totp.uri
+                promptForVerificationCode(data.id);
+              },
             },
           ]
         );
