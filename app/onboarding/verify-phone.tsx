@@ -151,11 +151,33 @@ export default function VerifyPhoneScreen() {
   };
 
   const formatPhoneDisplay = (phone: string) => {
+    if (!phone) return 'Invalid number';
+    
+    const hasPlus = phone.trim().startsWith('+');
     const digits = phone.replace(/\D/g, '');
-    if (digits.length <= 10) {
-      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    
+    if (digits.length < 7) {
+      return 'Invalid number';
     }
-    return phone;
+    
+    // Show last 4 digits, mask the rest for security
+    const visibleDigits = digits.slice(-4);
+    const maskedLength = digits.length - visibleDigits.length;
+    
+    // For US numbers (10 digits without country code)
+    if (!hasPlus && digits.length === 10) {
+      return `(***) ***-${visibleDigits}`;
+    }
+    
+    // For international numbers
+    if (hasPlus && digits.length > 10) {
+      const countryCode = digits.slice(0, digits.length - 10);
+      return `+${countryCode} (***) ***-${visibleDigits}`;
+    }
+    
+    // Default: mask all but last 4 digits
+    const masked = '*'.repeat(Math.max(0, maskedLength));
+    return masked + visibleDigits;
   };
 
   return (

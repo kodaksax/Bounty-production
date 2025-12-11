@@ -57,9 +57,12 @@ export default function PhoneScreen() {
 
     setSaving(true);
     
+    // Trim phone once for consistency
+    const trimmedPhone = phone.trim();
+    
     // Save to local storage
     const result = await updateProfile({
-      phone: phone.trim() || undefined,
+      phone: trimmedPhone || undefined,
     });
 
     if (!result.success) {
@@ -70,18 +73,18 @@ export default function PhoneScreen() {
 
     // Also sync to Supabase via AuthProfileService
     await updateAuthProfile({
-      phone: phone.trim() || undefined,
+      phone: trimmedPhone || undefined,
     });
 
     // Send OTP for verification
-    const otpResult = await sendPhoneOTP(phone.trim());
+    const otpResult = await sendPhoneOTP(trimmedPhone);
 
     if (otpResult.success) {
       setSaving(false);
       // Navigate to verification screen with phone number
       router.push({
         pathname: '/onboarding/verify-phone',
-        params: { phone: phone.trim() },
+        params: { phone: trimmedPhone },
       });
     } else {
       setSaving(false);

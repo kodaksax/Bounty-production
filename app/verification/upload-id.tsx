@@ -20,13 +20,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 
-type DocumentType = 'passport' | 'drivers_license' | 'national_id';
+type DocumentType = 'passport' | 'driversLicense' | 'nationalId';
 
 export default function UploadIDScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
-  const [selectedDocType, setSelectedDocType] = useState<DocumentType>('drivers_license');
+  const [selectedDocType, setSelectedDocType] = useState<DocumentType>('driversLicense');
   const [frontImage, setFrontImage] = useState<string | null>(null);
   const [backImage, setBackImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,34 +115,21 @@ export default function UploadIDScreen() {
     // 3. Supabase Edge Function + Manual Review
     
     // Placeholder implementation - in production this would call a real API
-    try {
-      // Simulate API call with proper cleanup
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, 2000);
-        // Store timer reference for cleanup if component unmounts
-        return () => clearTimeout(timer);
-      });
-      
-      // Check if component is still mounted before updating state
-      if (isSubmitting) {
-        setIsSubmitting(false);
-        Alert.alert(
-          'Verification Submitted',
-          'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
-      }
-    } catch (error) {
-      if (isSubmitting) {
-        setIsSubmitting(false);
-        Alert.alert('Error', 'Failed to submit verification. Please try again.');
-      }
-    }
+    // Use a simple timeout without the Promise wrapper pattern
+    setTimeout(() => {
+      // In production, check if component is still mounted using a ref
+      setIsSubmitting(false);
+      Alert.alert(
+        'Verification Submitted',
+        'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    }, 2000);
   };
 
   const canSubmit = frontImage && (selectedDocType === 'passport' || backImage);
@@ -198,12 +185,12 @@ export default function UploadIDScreen() {
             <TouchableOpacity
               style={[
                 styles.docTypeButton,
-                selectedDocType === 'drivers_license' && styles.docTypeButtonActive,
+                selectedDocType === 'driversLicense' && styles.docTypeButtonActive,
               ]}
-              onPress={() => handleDocTypeSelect('drivers_license')}
+              onPress={() => handleDocTypeSelect('driversLicense')}
             >
-              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'drivers_license' ? '#10b981' : '#a7f3d0'} />
-              <Text style={[styles.docTypeText, selectedDocType === 'drivers_license' && styles.docTypeTextActive]}>
+              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} />
+              <Text style={[styles.docTypeText, selectedDocType === 'driversLicense' && styles.docTypeTextActive]}>
                 Driver's License
               </Text>
             </TouchableOpacity>
@@ -224,12 +211,12 @@ export default function UploadIDScreen() {
             <TouchableOpacity
               style={[
                 styles.docTypeButton,
-                selectedDocType === 'national_id' && styles.docTypeButtonActive,
+                selectedDocType === 'nationalId' && styles.docTypeButtonActive,
               ]}
-              onPress={() => handleDocTypeSelect('national_id')}
+              onPress={() => handleDocTypeSelect('nationalId')}
             >
-              <MaterialIcons name="badge" size={24} color={selectedDocType === 'national_id' ? '#10b981' : '#a7f3d0'} />
-              <Text style={[styles.docTypeText, selectedDocType === 'national_id' && styles.docTypeTextActive]}>
+              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#10b981' : '#a7f3d0'} />
+              <Text style={[styles.docTypeText, selectedDocType === 'nationalId' && styles.docTypeTextActive]}>
                 National ID
               </Text>
             </TouchableOpacity>

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { supabase } from '../../lib/supabase';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -47,7 +48,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         }
         
         // Load 2FA status from Supabase
-        const { supabase } = require('../../lib/supabase');
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
@@ -95,9 +95,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     }
     
     try {
-      // Import supabase here to avoid circular dependencies
-      const { supabase } = require('../../lib/supabase');
-      
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
@@ -151,8 +148,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     setIsEnabling2FA(true);
 
     try {
-      const { supabase } = require('../../lib/supabase');
-      
       // Enroll TOTP factor with Supabase MFA
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: 'totp',
@@ -197,6 +192,9 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   const promptForVerificationCode = (factorId: string) => {
+    // TODO: Replace Alert.prompt with a proper modal/screen for better accessibility
+    // Alert.prompt is not accessible to screen readers and doesn't work on Android
+    // Consider creating a dedicated 2FA verification modal component
     Alert.prompt(
       'Enter Verification Code',
       'Enter the 6-digit code from your authenticator app',
@@ -205,7 +203,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           text: 'Cancel',
           style: 'cancel',
           onPress: async () => {
-            const { supabase } = require('../../lib/supabase');
             await supabase.auth.mfa.unenroll({ factorId });
             setIsEnabling2FA(false);
           },
@@ -227,8 +224,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
   const verifyAndEnable2FA = async (factorId: string, code: string) => {
     try {
-      const { supabase } = require('../../lib/supabase');
-      
       const { data, error } = await supabase.auth.mfa.challengeAndVerify({
         factorId,
         code,
@@ -254,7 +249,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
             text: 'Cancel',
             style: 'cancel',
             onPress: async () => {
-              const { supabase } = require('../../lib/supabase');
               await supabase.auth.mfa.unenroll({ factorId });
             },
           },
@@ -276,7 +270,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           style: 'destructive',
           onPress: async () => {
             try {
-              const { supabase } = require('../../lib/supabase');
               const { data: factors } = await supabase.auth.mfa.listFactors();
               
               if (factors?.totp?.length > 0) {

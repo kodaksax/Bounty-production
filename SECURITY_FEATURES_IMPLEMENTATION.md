@@ -104,7 +104,9 @@ if (verified.success) {
 
 ### Configuration
 
-#### Option A: Supabase Phone Auth (Recommended)
+#### Recommended: Supabase Phone Auth
+
+**This is the ONLY recommended approach for production use.**
 
 1. Enable Phone Auth in Supabase:
    ```
@@ -121,27 +123,27 @@ if (verified.success) {
    - Twilio Auth Token
    - Twilio Phone Number
 
-#### Option B: Twilio Direct Integration
+**Why Supabase Phone Auth?**
+- Credentials stay secure on the server
+- No need to build your own backend API
+- Automatic rate limiting and security
+- Built-in OTP management
 
-If you prefer direct Twilio integration:
+#### Advanced: Custom Backend Integration (Not Recommended)
 
-⚠️ **SECURITY WARNING**: Twilio credentials (Account SID and Auth Token) must NEVER be stored in client-side code. Direct Twilio integration requires a backend API server.
+⚠️ **WARNING**: Direct integration with SMS providers is NOT recommended and should only be considered by advanced users with existing backend infrastructure.
 
-1. Install Twilio SDK on your backend server:
-   ```bash
-   npm install twilio
-   ```
+**Security Requirements:**
+- Twilio credentials (Account SID and Auth Token) must NEVER be stored in client-side code
+- Requires a secure backend API server with proper authentication
+- Must implement rate limiting to prevent SMS abuse
+- Must handle OTP storage and verification securely
 
-2. Add environment variables to your **backend server** (not client):
-   ```
-   TWILIO_ACCOUNT_SID=your_account_sid
-   TWILIO_AUTH_TOKEN=your_auth_token
-   TWILIO_PHONE_NUMBER=+1234567890
-   ```
-
-3. Create backend API endpoints (e.g., `/api/sms/send-otp` and `/api/sms/verify-otp`)
-
-4. Update `phone-verification-service.ts` to call your backend API instead of Supabase
+If you absolutely need a custom backend:
+1. Build secure API endpoints for OTP send/verify
+2. Never expose SMS provider credentials to the client
+3. Implement comprehensive rate limiting
+4. Consider using Supabase Phone Auth instead - it's easier and more secure
 
 ### Testing
 
