@@ -216,7 +216,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <EmptyState
                 icon="receipt-long"
                 title="No Transactions Yet"
-                description="Your transaction history will appear here once you add funds, post, or complete a bounty."
+                description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
                 actionLabel="Browse Bounties"
                 onAction={() => {}}
                 style={{ paddingVertical: 40 }}
