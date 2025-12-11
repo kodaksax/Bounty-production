@@ -122,7 +122,7 @@ npm start -- --clear
 - **Debounce**: 500ms after last keystroke
 
 ### Dependencies Added
-- `react-native-google-places-autocomplete`: ^2.5.6
+- Direct Google Places API integration (no third-party library dependencies)
 - No native module linking required (uses fetch)
 
 ### Configuration Files Modified

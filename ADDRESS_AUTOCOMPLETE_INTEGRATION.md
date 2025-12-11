@@ -36,7 +36,7 @@ const suggestions = await addressAutocompleteService.searchAddresses('123 Main S
   latitude: 37.7749,
   longitude: -122.4194,
   radius: 50000,
-  types: ['address', 'geocode'],
+  types: ['address'], // Note: 'geocode' type is deprecated, use only 'address'
   components: 'country:us'
 });
 

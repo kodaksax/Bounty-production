@@ -3,10 +3,11 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import { useAddressLibrary } from 'app/hooks/useAddressLibrary';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import { addressAutocompleteService } from '../../../lib/services/address-autocomplete-service';
+import { sanitizeAddressText } from '../../../lib/utils/address-sanitization';
 import { useLocation } from 'app/hooks/useLocation';
 
 interface StepLocationProps {
@@ -71,15 +72,34 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
     try {
       const details = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
       if (details) {
+        // Sanitize the formatted address before storing
+        const sanitizedAddress = sanitizeAddressText(details.formattedAddress);
         onUpdate({ 
-          location: details.formattedAddress,
+          location: sanitizedAddress,
         });
+        setTouched({ ...touched, location: true });
+      } else {
+        // If place details fetch returns null, inform user and use fallback
+        Alert.alert(
+          'Address Details Unavailable',
+          'Could not fetch detailed information for this address. Using basic address information.',
+          [{ text: 'OK' }]
+        );
+        const sanitizedDescription = sanitizeAddressText(suggestion.description);
+        onUpdate({ location: sanitizedDescription });
         setTouched({ ...touched, location: true });
       }
     } catch (err) {
       console.error('Error fetching place details:', err);
-      // Fallback to just using the description
-      onUpdate({ location: suggestion.description });
+      // Inform user of the error and use fallback
+      Alert.alert(
+        'Connection Issue',
+        'Could not fetch detailed address information. Using basic address.',
+        [{ text: 'OK' }]
+      );
+      // Fallback to using the sanitized description
+      const sanitizedDescription = sanitizeAddressText(suggestion.description);
+      onUpdate({ location: sanitizedDescription });
       setTouched({ ...touched, location: true });
     }
   };

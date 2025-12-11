@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,6 +10,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { addressAutocompleteService, type AddressSuggestion } from '../lib/services/address-autocomplete-service';
+import { sanitizeAddressText } from '../lib/utils/address-sanitization';
 
 interface AddressAutocompleteProps extends Omit<TextInputProps, 'onChangeText'> {
   value: string;
@@ -73,6 +74,7 @@ export function AddressAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestionCount, setSuggestionCount] = useState(0);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const isConfigured = addressAutocompleteService.isConfigured();
 
@@ -103,6 +105,7 @@ export function AddressAutocomplete({
 
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
+        setSuggestionCount(results.length);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to fetch suggestions';
         setError(message);
@@ -135,7 +138,9 @@ export function AddressAutocomplete({
   // Handle suggestion selection
   const handleSelectSuggestion = useCallback(
     async (suggestion: AddressSuggestion) => {
-      onChangeText(suggestion.description);
+      // Sanitize the address before using it
+      const sanitizedDescription = sanitizeAddressText(suggestion.description);
+      onChangeText(sanitizedDescription);
       setShowSuggestions(false);
       setSuggestions([]);
 
@@ -159,18 +164,24 @@ export function AddressAutocomplete({
   // Handle saved address selection
   const handleSelectSavedAddress = useCallback(
     (address: { id: string; label: string; address: string }) => {
-      onChangeText(address.address);
+      // Sanitize saved address before using it
+      const sanitizedAddress = sanitizeAddressText(address.address);
+      onChangeText(sanitizedAddress);
       setShowSuggestions(false);
     },
     [onChangeText]
   );
 
-  // Filter saved addresses based on input
-  const filteredSavedAddresses = savedAddresses.filter(
-    (addr) =>
-      value.length >= 2 &&
-      (addr.label.toLowerCase().includes(value.toLowerCase()) ||
-        addr.address.toLowerCase().includes(value.toLowerCase()))
+  // Filter saved addresses based on input with memoization
+  const filteredSavedAddresses = useMemo(
+    () =>
+      savedAddresses.filter(
+        (addr) =>
+          value.length >= 2 &&
+          (addr.label.toLowerCase().includes(value.toLowerCase()) ||
+            addr.address.toLowerCase().includes(value.toLowerCase()))
+      ),
+    [savedAddresses, value]
   );
 
   // Cleanup on unmount
@@ -199,6 +210,7 @@ export function AddressAutocomplete({
           className={`bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base ${inputClassName || ''}`}
           editable={!disabled}
           accessibilityLabel="Address input"
+          accessibilityRole="search"
           accessibilityHint="Type to search for addresses"
           accessibilityRole="search"
           {...inputProps}
@@ -246,7 +258,17 @@ export function AddressAutocomplete({
       {(showSuggestions || (showSavedAddresses && filteredSavedAddresses.length > 0)) && (
         <View
           className={`mt-2 bg-emerald-700/50 rounded-lg border border-emerald-500/50 overflow-hidden ${suggestionsClassName || ''}`}
+          accessibilityLiveRegion="polite"
         >
+          {/* Hidden text for screen readers to announce suggestion count */}
+          <Text
+            style={{ position: 'absolute', left: -10000, top: -10000 }}
+            accessibilityLiveRegion="polite"
+          >
+            {suggestionCount > 0
+              ? `${suggestionCount} ${suggestionCount === 1 ? 'suggestion' : 'suggestions'} available`
+              : 'No suggestions available'}
+          </Text>
           {/* Saved Addresses Section */}
           {showSavedAddresses && filteredSavedAddresses.length > 0 && (
             <>

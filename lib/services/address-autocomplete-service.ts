@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { sanitizeAddressText, sanitizePlaceId, sanitizeSearchQuery } from '../utils/address-sanitization';
 
 /**
  * Address suggestion from autocomplete service
@@ -41,6 +42,7 @@ class AddressAutocompleteService {
   private apiKey: string | null = null;
   private cache: Map<string, AddressSuggestion[]> = new Map();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
+  private cacheTimeoutIds: Map<string, NodeJS.Timeout> = new Map();
   private lastRequestTime = 0;
   private minRequestInterval = 300; // Rate limiting: 300ms between requests
   
@@ -87,8 +89,15 @@ class AddressAutocompleteService {
       return [];
     }
 
+    // Sanitize the query input
+    const sanitizedQuery = sanitizeSearchQuery(query);
+    if (!sanitizedQuery) {
+      console.warn('Invalid search query');
+      return [];
+    }
+
     // Check cache first
-    const cacheKey = this.getCacheKey(query, options);
+    const cacheKey = this.getCacheKey(sanitizedQuery, options);
     const cached = this.cache.get(cacheKey);
     if (cached) {
       return cached;
@@ -106,7 +115,7 @@ class AddressAutocompleteService {
       
       // Build request URL
       const params = new URLSearchParams({
-        input: query.trim(),
+        input: sanitizedQuery,
         key: this.apiKey!,
       });
 
@@ -134,10 +143,12 @@ class AddressAutocompleteService {
       if (data.status === 'OK' && data.predictions) {
         const suggestions: AddressSuggestion[] = data.predictions.map((prediction: any) => ({
           id: prediction.place_id,
-          description: prediction.description,
+          description: sanitizeAddressText(prediction.description),
           placeId: prediction.place_id,
-          mainText: prediction.structured_formatting?.main_text || prediction.description,
-          secondaryText: prediction.structured_formatting?.secondary_text,
+          mainText: sanitizeAddressText(prediction.structured_formatting?.main_text || prediction.description),
+          secondaryText: prediction.structured_formatting?.secondary_text 
+            ? sanitizeAddressText(prediction.structured_formatting.secondary_text)
+            : undefined,
         }));
 
         // Cache results
@@ -148,7 +159,11 @@ class AddressAutocompleteService {
       } else if (data.status === 'ZERO_RESULTS') {
         return [];
       } else {
-        console.error('Places API error:', data.status, data.error_message);
+        // Log error status for debugging but don't expose API error message to prevent information leakage
+        console.error('Places API error:', data.status);
+        if (__DEV__) {
+          console.error('Places API error details (dev only):', data.error_message);
+        }
         throw new Error('Unable to fetch address suggestions. Please try again later.');
       }
     } catch (error) {
@@ -168,9 +183,16 @@ class AddressAutocompleteService {
       return null;
     }
 
+    // Validate and sanitize place ID
+    const sanitizedPlaceId = sanitizePlaceId(placeId);
+    if (!sanitizedPlaceId) {
+      console.warn('Invalid place ID provided');
+      return null;
+    }
+
     try {
       const params = new URLSearchParams({
-        place_id: placeId,
+        place_id: sanitizedPlaceId,
         key: this.apiKey!,
         fields: 'formatted_address,geometry,address_components',
       });
@@ -191,15 +213,15 @@ class AddressAutocompleteService {
           for (const component of result.address_components) {
             const types = component.types;
             if (types.includes('street_number') || types.includes('route')) {
-              streetParts.push(component.long_name);
+              streetParts.push(sanitizeAddressText(component.long_name));
             } else if (types.includes('locality')) {
-              components.city = component.long_name;
+              components.city = sanitizeAddressText(component.long_name);
             } else if (types.includes('administrative_area_level_1')) {
-              components.state = component.short_name;
+              components.state = sanitizeAddressText(component.short_name);
             } else if (types.includes('country')) {
-              components.country = component.long_name;
+              components.country = sanitizeAddressText(component.long_name);
             } else if (types.includes('postal_code')) {
-              components.postalCode = component.long_name;
+              components.postalCode = sanitizeAddressText(component.long_name);
             }
           }
           
@@ -210,14 +232,18 @@ class AddressAutocompleteService {
         }
 
         return {
-          placeId,
-          formattedAddress: result.formatted_address,
+          placeId: sanitizedPlaceId,
+          formattedAddress: sanitizeAddressText(result.formatted_address),
           latitude: result.geometry?.location?.lat,
           longitude: result.geometry?.location?.lng,
           components,
         };
       } else {
-        console.error('Place details API error:', data.status, data.error_message);
+        // Log error status for debugging but don't expose API error message
+        console.error('Place details API error:', data.status);
+        if (__DEV__) {
+          console.error('Place details API error details (dev only):', data.error_message);
+        }
         return null;
       }
     } catch (error) {
@@ -246,9 +272,14 @@ class AddressAutocompleteService {
   }
 
   /**
-   * Clear the suggestion cache
+   * Clear the suggestion cache and cancel all pending timeouts
    */
   clearCache(): void {
+    // Clear all pending timeout callbacks
+    for (const timeoutId of this.cacheTimeoutIds.values()) {
+      clearTimeout(timeoutId);
+    }
+    this.cacheTimeoutIds.clear();
     this.cache.clear();
   }
 
@@ -263,9 +294,19 @@ class AddressAutocompleteService {
    * Schedule cache cleanup for a specific key
    */
   private scheduleCacheCleanup(key: string): void {
-    setTimeout(() => {
+    // Cancel any existing timeout for this key
+    const existingTimeout = this.cacheTimeoutIds.get(key);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+    
+    // Set new timeout and store its ID
+    const timeoutId = setTimeout(() => {
       this.cache.delete(key);
+      this.cacheTimeoutIds.delete(key);
     }, this.cacheTimeout);
+    
+    this.cacheTimeoutIds.set(key, timeoutId);
   }
 
   /**
