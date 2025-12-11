@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { exportAndShareUserData } from '../../lib/services/data-export-service';
+import { supabase } from '../../lib/supabase';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -114,11 +116,38 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
   const exportData = async () => {
     if (state.exporting) return;
-    persist({ exporting: true });
-    setTimeout(() => {
-      Alert.alert('Export Ready', 'Your data export link has been emailed.');
+    
+    try {
+      persist({ exporting: true });
+      
+      // Get current user ID
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        Alert.alert('Error', 'Unable to verify user. Please sign in again.');
+        persist({ exporting: false });
+        return;
+      }
+      
+      // Export and share the data
+      const result = await exportAndShareUserData(user.id);
+      
+      if (result.success) {
+        Alert.alert(
+          'Data Export Complete',
+          'Your data has been exported successfully. You can now save or share it.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Export Failed', result.message);
+      }
+    } catch (err: unknown) {
+      console.error('Data export error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export data. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
       persist({ exporting: false });
-    }, 1200);
+    }
   };
 
   return (
@@ -184,11 +213,15 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           ))}
         </View>
 
-        {/* Data Export */}
+        {/* Data Export - GDPR Compliance */}
         <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="file-download" title="Data Export" subtitle="Request a copy of your account data." />
+          <SectionHeader 
+            icon="file-download" 
+            title="Data Export (GDPR)" 
+            subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more." 
+          />
           <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}> 
-            <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing…' : 'Start Export'}</Text>
+            <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
