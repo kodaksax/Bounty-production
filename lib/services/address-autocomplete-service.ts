@@ -149,7 +149,7 @@ class AddressAutocompleteService {
         return [];
       } else {
         console.error('Places API error:', data.status, data.error_message);
-        throw new Error(data.error_message || `API error: ${data.status}`);
+        throw new Error('Unable to fetch address suggestions. Please try again later.');
       }
     } catch (error) {
       console.error('Error fetching address suggestions:', error);
