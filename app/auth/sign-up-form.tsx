@@ -223,21 +223,29 @@ export function SignUpForm() {
             </View>
             {fieldErrors.ageVerified && <Text className="text-xs text-red-400 mt-1">{fieldErrors.ageVerified}</Text>}
 
-            <View className="flex-row items-center mt-3">
-              <TouchableOpacity
-                onPress={() => setTermsAccepted(v => !v)}
-                className="mr-3"
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: termsAccepted }}
-              >
-                <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? '#10b981' : '#fff'} />
-              </TouchableOpacity>
-              <Text className="text-white/90">I accept the </Text>
-              <TouchableOpacity onPress={() => router.push('/legal/terms')}>
-                <Text className="text-white underline">Terms & Privacy</Text>
-              </TouchableOpacity>
+            <View className="mt-3">
+              <View className="flex-row items-start">
+                <TouchableOpacity
+                  onPress={() => setTermsAccepted(v => !v)}
+                  className="mr-3 mt-0.5"
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: termsAccepted }}
+                >
+                  <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? '#10b981' : '#fff'} />
+                </TouchableOpacity>
+                <View className="flex-1 flex-row flex-wrap">
+                  <Text className="text-white/90">I accept the </Text>
+                  <TouchableOpacity onPress={() => router.push('/legal/terms')}>
+                    <Text className="text-white underline">Terms of Service</Text>
+                  </TouchableOpacity>
+                  <Text className="text-white/90"> and </Text>
+                  <TouchableOpacity onPress={() => router.push('/legal/privacy')}>
+                    <Text className="text-white underline">Privacy Policy</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              {fieldErrors.termsAccepted && <Text className="text-xs text-red-400 mt-1 ml-9">{fieldErrors.termsAccepted}</Text>}
             </View>
-            {fieldErrors.termsAccepted && <Text className="text-xs text-red-400 mt-1">{fieldErrors.termsAccepted}</Text>}
 
             <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-medium">Create Account</Text>}
