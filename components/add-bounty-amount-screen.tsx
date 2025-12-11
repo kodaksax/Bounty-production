@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { BrandingLogo } from "components/ui/branding-logo"
+import { InfoTooltip } from "components/ui/tooltip"
 import { useHapticFeedback } from '../lib/haptic-feedback'
 
 interface AddBountyAmountScreenProps {
@@ -309,7 +310,15 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* For Honor Toggle */}
       <View style={styles.toggleContainer}>
-        <Text style={styles.toggleLabel}>For Honor</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={styles.toggleLabel}>For Honor</Text>
+          <InfoTooltip
+            title="What are Honor Bounties?"
+            content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
+            iconSize={16}
+            iconColor="#10b981"
+          />
+        </View>
         <TouchableOpacity
           onPress={() => setIsForHonor(!isForHonor)}
           style={[
@@ -329,7 +338,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {isForHonor && (
         <View style={styles.honorTextContainer}>
           <Text style={styles.honorText}>
-            This bounty will be posted without monetary reward. People will complete it for honor and reputation.
+            This bounty will be posted without payment. Hunters complete it to build reputation and help the community.
           </Text>
         </View>
       )}

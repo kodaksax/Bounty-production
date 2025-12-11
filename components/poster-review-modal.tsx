@@ -548,7 +548,7 @@ export function PosterReviewModal({
                 {isProcessing ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.buttonText}>Submit Rating & Complete</Text>
+                  <Text style={styles.buttonText}>Complete Bounty & Rate Hunter</Text>
                 )}
               </TouchableOpacity>
             </View>
