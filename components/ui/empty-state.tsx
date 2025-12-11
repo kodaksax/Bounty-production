@@ -63,18 +63,64 @@ export function EmptyState({
     const animDuration = prefersReducedMotion ? 0 : A11Y.ANIMATION_SLOW;
     const contentDuration = prefersReducedMotion ? 0 : A11Y.ANIMATION_NORMAL;
 
-    Animated.sequence([
-      Animated.timing(iconScale, {
-        toValue: 1,
-        duration: animDuration,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: contentDuration,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    if (prefersReducedMotion) {
+      // Instant appearance for reduced motion
+      iconScale.setValue(1);
+      contentOpacity.setValue(1);
+    } else {
+      // Enhanced entrance animation with bounce
+      Animated.sequence([
+        // Icon bounces in with spring
+        Animated.spring(iconScale, {
+          toValue: 1.1,
+          useNativeDriver: true,
+          tension: 40,
+          friction: 3,
+        }),
+        Animated.parallel([
+          // Icon settles to normal size
+          Animated.spring(iconScale, {
+            toValue: 1,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 7,
+          }),
+          // Content fades in
+          Animated.timing(contentOpacity, {
+            toValue: 1,
+            duration: contentDuration,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+      
+      // Add a subtle continuous float animation to the icon
+      const floatAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(iconScale, {
+            toValue: 1.05,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(iconScale, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      
+      // Start the float animation after entrance
+      setTimeout(() => {
+        if (!prefersReducedMotion) {
+          floatAnimation.start();
+        }
+      }, animDuration + contentDuration);
+      
+      return () => {
+        floatAnimation.stop();
+      };
+    }
   }, [iconScale, contentOpacity, prefersReducedMotion]);
 
   // Size-based configuration

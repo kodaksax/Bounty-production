@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SuccessAnimation, ConfettiAnimation } from '../../../components/ui/success-animation';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -32,6 +33,8 @@ export default function PayoutScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmRelease, setConfirmRelease] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
     loadBounty();
@@ -102,19 +105,28 @@ export default function PayoutScreen() {
         throw new Error('Failed to update bounty status');
       }
 
-      Alert.alert(
-        'Success',
-        `Payout of $${bounty.amount.toFixed(2)} has been released successfully! The funds have been transferred to the hunter. The bounty is now completed and will be archived.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate back to postings screen
-              router.replace('/tabs/bounty-app');
+      // Show success animation with confetti
+      setShowSuccessAnimation(true);
+      setShowConfetti(true);
+      
+      // After animations, show alert and navigate
+      setTimeout(() => {
+        setShowSuccessAnimation(false);
+        setShowConfetti(false);
+        Alert.alert(
+          'Success',
+          `Payout of $${bounty.amount.toFixed(2)} has been released successfully! The funds have been transferred to the hunter. The bounty is now completed and will be archived.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate back to postings screen
+                router.replace('/tabs/bounty-app');
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }, 2000);
     } catch (err) {
       console.error('Error releasing payout:', err);
       Alert.alert('Error', 'Failed to release payout. Please try again.');
@@ -161,14 +173,21 @@ export default function PayoutScreen() {
                 });
               }
 
-              Alert.alert('Success', 'Bounty marked as complete and archived.', [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    router.replace('/tabs/bounty-app');
+              // Show success animation
+              setShowSuccessAnimation(true);
+              
+              // After animation, show alert and navigate
+              setTimeout(() => {
+                setShowSuccessAnimation(false);
+                Alert.alert('Success', 'Bounty marked as complete and archived.', [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      router.replace('/tabs/bounty-app');
+                    },
                   },
-                },
-              ]);
+                ]);
+              }, 1500);
             } catch (err) {
               console.error('Error marking as complete:', err);
               Alert.alert('Error', 'Failed to complete bounty. Please try again.');
@@ -414,6 +433,15 @@ export default function PayoutScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Success Animations */}
+      <SuccessAnimation
+        visible={showSuccessAnimation}
+        icon="check-circle"
+        size={80}
+        color="#10b981"
+      />
+      <ConfettiAnimation visible={showConfetti} />
     </View>
   );
 }

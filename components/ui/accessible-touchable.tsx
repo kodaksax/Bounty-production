@@ -27,7 +27,7 @@ interface AccessibleTouchableProps extends TouchableOpacityProps {
   animate?: boolean;
   /**
    * Scale factor for press animation
-   * @default 0.96
+   * @default 0.95
    */
   scaleOnPress?: number;
   /**
@@ -47,7 +47,7 @@ export function AccessibleTouchable({
   enforceMinSize = true,
   haptic = 'light',
   animate = true,
-  scaleOnPress = 0.96,
+  scaleOnPress = 0.95,
   children,
   onPress,
   onPressIn,
