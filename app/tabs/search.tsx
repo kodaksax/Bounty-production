@@ -258,7 +258,8 @@ export default function EnhancedSearchScreen() {
 
   const renderBountyItem = ({ item }: { item: BountyRowItem }) => {
     const priceLabel = item.is_for_honor ? 'for honor' : item.amount != null ? `$${item.amount}` : '';
-    const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${item.location ? ', located in ' + item.location : ''}`;
+    const locationLabel = item.location ? `, in ${item.location}` : '';
+    const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
     
     return (
       <TouchableOpacity

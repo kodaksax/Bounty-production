@@ -251,11 +251,11 @@ export default function UploadIDScreen() {
             style={styles.uploadBox}
             onPress={() => pickImage('front')}
             accessibilityRole="button"
-            accessibilityLabel={frontImage ? "Front side photo uploaded" : "Upload front side of document"}
+            accessibilityLabel={frontImage ? `Front side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'passport' ? 'passport' : 'national ID'} photo uploaded` : "Upload front side of document"}
             accessibilityHint="Opens camera or photo library to capture front side"
           >
             {frontImage ? (
-              <Image source={{ uri: frontImage }} style={styles.uploadedImage} accessibilityLabel="Front side of document photo" />
+              <Image source={{ uri: frontImage }} style={styles.uploadedImage} accessibilityLabel={`Front side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'passport' ? 'passport' : 'national ID'} photo`} />
             ) : (
               <>
                 <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
@@ -272,11 +272,11 @@ export default function UploadIDScreen() {
                 style={styles.uploadBox}
                 onPress={() => pickImage('back')}
                 accessibilityRole="button"
-                accessibilityLabel={backImage ? "Back side photo uploaded" : "Upload back side of document"}
+                accessibilityLabel={backImage ? `Back side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'nationalId' ? 'national ID' : 'document'} photo uploaded` : "Upload back side of document"}
                 accessibilityHint="Opens camera or photo library to capture back side"
               >
                 {backImage ? (
-                  <Image source={{ uri: backImage }} style={styles.uploadedImage} accessibilityLabel="Back side of document photo" />
+                  <Image source={{ uri: backImage }} style={styles.uploadedImage} accessibilityLabel={`Back side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'nationalId' ? 'national ID' : 'document'} photo`} />
                 ) : (
                   <>
                     <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />

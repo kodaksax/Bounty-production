@@ -83,6 +83,17 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         friction: 10,
       }).start();
     }, [disabled, scaleAnim]);
+
+    // Handle keyboard focus events for web/keyboard navigation
+    const handleFocus = React.useCallback(() => {
+      if (disabled) return;
+      setIsFocused(true);
+    }, [disabled]);
+
+    const handleBlur = React.useCallback(() => {
+      if (disabled) return;
+      setIsFocused(false);
+    }, [disabled]);
     
     const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -104,6 +115,8 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         accessible={true}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
