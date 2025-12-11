@@ -1,6 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import type { Conversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
+import { sanitizeMessage } from '../utils/sanitization';
 import * as messagingService from './messaging';
 import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
@@ -34,6 +35,17 @@ export const messageService = {
    * Send a message (optimistic update with offline support)
    */
   sendMessage: async (conversationId: string, text: string, senderId: string = 'current-user'): Promise<{ message: Message; error?: string }> => {
+    // Sanitize message text to prevent XSS attacks
+    let sanitizedText: string;
+    try {
+      sanitizedText = sanitizeMessage(text);
+    } catch (error) {
+      return { 
+        message: {} as Message, 
+        error: error instanceof Error ? error.message : 'Invalid message' 
+      };
+    }
+
     // Check network connectivity
     const netState = await NetInfo.fetch();
     const isOnline = !!netState.isConnected;
@@ -47,14 +59,14 @@ export const messageService = {
         id: `temp-${Date.now()}`,
         conversationId,
         senderId,
-        text,
+        text: sanitizedText,
         createdAt: new Date().toISOString(),
         status: 'sending',
       };
       
       await offlineQueueService.enqueue('message', {
         conversationId,
-        text,
+        text: sanitizedText,
         senderId,
         tempId: tempMessage.id,
       });
@@ -62,8 +74,8 @@ export const messageService = {
       return { message: tempMessage };
     }
 
-    // Send message using persistent storage
-    const message = await messagingService.sendMessage(conversationId, text, senderId);
+    // Send message using persistent storage (with sanitized text)
+    const message = await messagingService.sendMessage(conversationId, sanitizedText, senderId);
 
     // Track message sent event
     await analyticsService.trackEvent('message_sent', {

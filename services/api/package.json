@@ -41,7 +41,7 @@
     "@types/node": "^20.8.10",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.10.9",
-    "drizzle-kit": "^0.20.0",
+    "drizzle-kit": "^0.31.8",
     "tsx": "^4.6.0",
     "typescript": "~5.9.2"
   }

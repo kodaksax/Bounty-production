@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { getSecureJSON, setSecureJSON, SecureKeys } from '../../lib/utils/secure-storage';
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
 import { supabase } from '../../lib/supabase';
 
@@ -18,8 +18,7 @@ interface PrivacyState {
   exporting: boolean;
 }
 
-const STORAGE_KEY = 'settings:privacy';
-
+// Use SecureStore for privacy settings as they contain sensitive security preferences
 export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ onBack }) => {
   const [state, setState] = useState<PrivacyState>({
     showProfilePublic: true,
@@ -43,9 +42,9 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          setState(s => ({ ...s, ...JSON.parse(raw) }));
+        const stored = await getSecureJSON<Partial<PrivacyState>>(SecureKeys.PRIVACY_SETTINGS);
+        if (stored) {
+          setState(s => ({ ...s, ...stored }));
         }
         
         // Load 2FA status from Supabase
@@ -70,7 +69,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   const persist = async (patch: Partial<PrivacyState>) => {
     setState(prev => {
       const next = { ...prev, ...patch };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(err => console.warn('persist failed', err));
+      setSecureJSON(SecureKeys.PRIVACY_SETTINGS, next).catch(err => console.warn('persist failed', err));
       return next;
     });
   };
