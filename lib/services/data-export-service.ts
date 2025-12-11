@@ -38,14 +38,23 @@ interface UserDataExport {
     accepted: Record<string, unknown>[];
     applications: Record<string, unknown>[];
   };
+  conversations: {
+    conversations: Record<string, unknown>[];
+    participants: Record<string, unknown>[];
+  };
   messages: Record<string, unknown>[];
   wallet: {
     transactions: WalletTransactionRecord[];
-    balance: number;
-    balanceNote?: string; // Note about balance calculation limitations
+    currentBalance: number | null;
   };
   notifications: Record<string, unknown>[];
   completions: Record<string, unknown>[];
+  skills: Record<string, unknown>[];
+  reports: Record<string, unknown>[];
+  blockedUsers: Record<string, unknown>[];
+  cancellations: Record<string, unknown>[];
+  disputes: Record<string, unknown>[];
+  completionReady: Record<string, unknown>[];
 }
 
 /**
@@ -78,13 +87,23 @@ export async function exportUserData(userId: string): Promise<{
         accepted: [],
         applications: [],
       },
+      conversations: {
+        conversations: [],
+        participants: [],
+      },
       messages: [],
       wallet: {
         transactions: [],
-        balance: 0,
+        currentBalance: null,
       },
       notifications: [],
       completions: [],
+      skills: [],
+      reports: [],
+      blockedUsers: [],
+      cancellations: [],
+      disputes: [],
+      completionReady: [],
     };
 
     // 1. Get profile data
@@ -98,6 +117,8 @@ export async function exportUserData(userId: string): Promise<{
       if (!error && profile) {
         // Supabase auth handles passwords separately, so no sensitive fields to remove from profiles
         exportData.profile = profile;
+        // Store the actual current balance from the profile
+        exportData.wallet.currentBalance = profile.balance || 0;
       }
     } catch (e) {
       console.warn('[DataExport] Profile fetch failed:', e);
@@ -145,12 +166,39 @@ export async function exportUserData(userId: string): Promise<{
       console.warn('[DataExport] Applications fetch failed:', e);
     }
 
-    // 5. Get messages
+    // 5. Get conversations the user participates in
+    try {
+      const { data: participants, error: partError } = await supabase
+        .from('conversation_participants')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (!partError && participants) {
+        exportData.conversations.participants = participants;
+        
+        // Get full conversation details for conversations the user participates in
+        if (participants.length > 0) {
+          const conversationIds = participants.map((p: any) => p.conversation_id);
+          const { data: conversations, error: convError } = await supabase
+            .from('conversations')
+            .select('*')
+            .in('id', conversationIds);
+          
+          if (!convError && conversations) {
+            exportData.conversations.conversations = conversations;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[DataExport] Conversations fetch failed:', e);
+    }
+
+    // 6. Get messages sent by the user
     try {
       const { data: messages, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('sender_id', userId);
+        .eq('user_id', userId);
       
       if (!error && messages) {
         exportData.messages = messages;
@@ -159,7 +207,7 @@ export async function exportUserData(userId: string): Promise<{
       console.warn('[DataExport] Messages fetch failed:', e);
     }
 
-    // 6. Get wallet transactions
+    // 7. Get wallet transactions
     try {
       const { data: transactions, error } = await supabase
         .from('wallet_transactions')
@@ -168,49 +216,13 @@ export async function exportUserData(userId: string): Promise<{
       
       if (!error && transactions) {
         exportData.wallet.transactions = transactions as WalletTransactionRecord[];
-        
-        // Calculate approximate balance from transactions
-        // Note: The actual balance is maintained by the database/API, this is just an informational calculation
-        // Transaction amounts are always stored as positive values; the type determines the direction
-        let hasReleaseTransactions = false;
-        
-        exportData.wallet.balance = transactions.reduce((sum: number, tx: WalletTransactionRecord) => {
-          const amount = tx.amount || 0;
-          
-          switch (tx.type) {
-            case WALLET_TRANSACTION_TYPES.DEPOSIT:   // Positive: money added to wallet
-            case WALLET_TRANSACTION_TYPES.REFUND:    // Positive: money returned from escrow
-              return sum + amount;
-              
-            case WALLET_TRANSACTION_TYPES.ESCROW:      // Negative: money locked in escrow
-            case WALLET_TRANSACTION_TYPES.WITHDRAWAL:  // Negative: money taken out
-              return sum - amount;
-              
-            case WALLET_TRANSACTION_TYPES.RELEASE:   // Context-dependent: depends on role
-              // Release increases balance for hunters, decreases for posters
-              // Mark that we have release transactions requiring role context
-              hasReleaseTransactions = true;
-              return sum; // Skip in calculation as it requires role context
-              
-            default:
-              // Unknown transaction type, skip it
-              console.warn(`[DataExport] Unknown transaction type: ${tx.type}`);
-              return sum;
-          }
-        }, 0);
-        
-        // Add note if balance calculation is incomplete due to release transactions
-        if (hasReleaseTransactions) {
-          exportData.wallet.balanceNote = 
-            'Balance calculation excludes "release" transactions which require role context. ' +
-            'The actual balance in your account may differ. This is an informational summary only.';
-        }
+        // Note: The actual current balance is retrieved from the profile table above
       }
     } catch (e) {
       console.warn('[DataExport] Wallet transactions fetch failed:', e);
     }
 
-    // 7. Get notifications
+    // 8. Get notifications
     try {
       const { data: notifications, error } = await supabase
         .from('notifications')
@@ -224,7 +236,7 @@ export async function exportUserData(userId: string): Promise<{
       console.warn('[DataExport] Notifications fetch failed:', e);
     }
 
-    // 8. Get completion submissions
+    // 9. Get completion submissions
     try {
       const { data: completions, error } = await supabase
         .from('completion_submissions')
@@ -238,9 +250,94 @@ export async function exportUserData(userId: string): Promise<{
       console.warn('[DataExport] Completions fetch failed:', e);
     }
 
+    // 10. Get skills
+    try {
+      const { data: skills, error } = await supabase
+        .from('skills')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (!error && skills) {
+        exportData.skills = skills;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Skills fetch failed:', e);
+    }
+
+    // 11. Get reports filed by the user
+    try {
+      const { data: reports, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (!error && reports) {
+        exportData.reports = reports;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Reports fetch failed:', e);
+    }
+
+    // 12. Get blocked users (where user is the blocker)
+    try {
+      const { data: blockedUsers, error } = await supabase
+        .from('blocked_users')
+        .select('*')
+        .eq('blocker_id', userId);
+      
+      if (!error && blockedUsers) {
+        exportData.blockedUsers = blockedUsers;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Blocked users fetch failed:', e);
+    }
+
+    // 13. Get bounty cancellations requested by the user
+    try {
+      const { data: cancellations, error } = await supabase
+        .from('bounty_cancellations')
+        .select('*')
+        .eq('requester_id', userId);
+      
+      if (!error && cancellations) {
+        exportData.cancellations = cancellations;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Cancellations fetch failed:', e);
+    }
+
+    // 14. Get bounty disputes initiated by the user
+    try {
+      const { data: disputes, error } = await supabase
+        .from('bounty_disputes')
+        .select('*')
+        .eq('initiator_id', userId);
+      
+      if (!error && disputes) {
+        exportData.disputes = disputes;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Disputes fetch failed:', e);
+    }
+
+    // 15. Get completion ready records for the user as hunter
+    try {
+      const { data: completionReady, error } = await supabase
+        .from('completion_ready')
+        .select('*')
+        .eq('hunter_id', userId);
+      
+      if (!error && completionReady) {
+        exportData.completionReady = completionReady;
+      }
+    } catch (e) {
+      console.warn('[DataExport] Completion ready fetch failed:', e);
+    }
+
     // Create JSON file
     const jsonString = JSON.stringify(exportData, null, 2);
-    const fileName = `bounty_data_export_${userId}_${Date.now()}.json`;
+    // Use generic filename without userId to protect privacy when sharing
+    const fileName = `bounty_data_export_${Date.now()}.json`;
     const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
     try {

@@ -87,12 +87,12 @@ describe('Data Export Service', () => {
         error: null,
       });
 
-      // Mock database queries
-      const mockFrom = jest.fn().mockReturnThis();
+      // Mock database queries with proper tracking
       const mockSelect = jest.fn().mockReturnThis();
       const mockEq = jest.fn().mockReturnThis();
+      const mockIn = jest.fn().mockReturnThis();
       const mockSingle = jest.fn().mockResolvedValue({
-        data: { id: mockUserId, username: 'testuser', email: 'test@example.com' },
+        data: { id: mockUserId, username: 'testuser', email: 'test@example.com', balance: 100 },
         error: null,
       });
 
@@ -100,7 +100,9 @@ describe('Data Export Service', () => {
         select: mockSelect.mockReturnValue({
           eq: mockEq.mockReturnValue({
             single: mockSingle,
+            in: mockIn,
           }),
+          in: mockIn,
         }),
       }));
 
@@ -115,6 +117,11 @@ describe('Data Export Service', () => {
       expect(result.data?.profile).toBeDefined();
       expect(result.filePath).toContain('bounty_data_export');
       expect(result.filePath).toContain('.json');
+      
+      // Verify correct queries are being made
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('profiles');
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('messages');
+      expect(mockEq).toHaveBeenCalledWith('user_id', mockUserId);
     });
 
     it('should export data structure with all required sections', async () => {
@@ -147,12 +154,47 @@ describe('Data Export Service', () => {
       expect(result.data?.bounties).toHaveProperty('created');
       expect(result.data?.bounties).toHaveProperty('accepted');
       expect(result.data?.bounties).toHaveProperty('applications');
+      expect(result.data).toHaveProperty('conversations');
+      expect(result.data?.conversations).toHaveProperty('conversations');
+      expect(result.data?.conversations).toHaveProperty('participants');
       expect(result.data).toHaveProperty('messages');
       expect(result.data).toHaveProperty('wallet');
       expect(result.data?.wallet).toHaveProperty('transactions');
-      expect(result.data?.wallet).toHaveProperty('balance');
+      expect(result.data?.wallet).toHaveProperty('currentBalance');
+      expect(result.data).toHaveProperty('skills');
+      expect(result.data).toHaveProperty('reports');
+      expect(result.data).toHaveProperty('blockedUsers');
+      expect(result.data).toHaveProperty('cancellations');
+      expect(result.data).toHaveProperty('disputes');
+      expect(result.data).toHaveProperty('completionReady');
       expect(result.data).toHaveProperty('notifications');
       expect(result.data).toHaveProperty('completions');
+    });
+
+    it('should not include userId in filename for privacy protection', async () => {
+      mockSupabaseClient.auth.getSession.mockResolvedValue({
+        data: { session: mockSession },
+        error: null,
+      });
+
+      mockSupabaseClient.from.mockImplementation(() => ({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: [],
+            error: null,
+          }),
+        }),
+      }));
+
+      FileSystem.writeAsStringAsync.mockResolvedValue(undefined);
+
+      const result = await exportUserData(mockUserId);
+
+      expect(result.success).toBe(true);
+      expect(result.filePath).toBeDefined();
+      // Filename should NOT contain the userId
+      expect(result.filePath).not.toContain(mockUserId);
+      expect(result.filePath).toContain('bounty_data_export');
     });
 
     it('should still succeed if file write fails but return data', async () => {
