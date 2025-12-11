@@ -200,6 +200,7 @@ export function AddressAutocomplete({
           editable={!disabled}
           accessibilityLabel="Address input"
           accessibilityHint="Type to search for addresses"
+          accessibilityRole="search"
           {...inputProps}
         />
         {isLoading && (
