@@ -101,7 +101,7 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
               {title && (
                 <View style={styles.header}>
                   <MaterialIcons name="info-outline" size={24} color="#059669" />
-                  <Text style={styles.title}>{title}</Text>
+                  <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                   <TouchableOpacity 
                     onPress={() => setIsOpen?.(false)}
                     accessibilityLabel="Close"
@@ -146,7 +146,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
       <TouchableOpacity
         onPress={() => {
           setIsOpen(true)
-          AccessibilityInfo.announceForAccessibility(`${title}: ${content}`)
+          AccessibilityInfo.announceForAccessibility(title)
         }}
         accessibilityLabel={`Help: ${title}`}
         accessibilityRole="button"
@@ -172,7 +172,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
             <View style={styles.content}>
               <View style={styles.header}>
                 <MaterialIcons name="info-outline" size={24} color="#059669" />
-                <Text style={styles.title}>{title}</Text>
+                <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                 <TouchableOpacity 
                   onPress={() => setIsOpen(false)}
                   accessibilityLabel="Close"
@@ -217,7 +217,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 8,
   },
   title: {
     flex: 1,

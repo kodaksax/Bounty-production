@@ -310,14 +310,16 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* For Honor Toggle */}
       <View style={styles.toggleContainer}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={styles.toggleLabel}>For Honor</Text>
-          <InfoTooltip
-            title="What are Honor Bounties?"
-            content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
-            iconSize={16}
-            iconColor="#10b981"
-          />
+          <View style={{ marginLeft: 6 }}>
+            <InfoTooltip
+              title="What are Honor Bounties?"
+              content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
+              iconSize={16}
+              iconColor="#10b981"
+            />
+          </View>
         </View>
         <TouchableOpacity
           onPress={() => setIsForHonor(!isForHonor)}
