@@ -139,8 +139,14 @@ export default function UploadIDScreen() {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+          <TouchableOpacity 
+            onPress={() => router.back()} 
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to previous screen"
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" accessibilityElementsHidden={true} />
           </TouchableOpacity>
           <BrandingLogo size="small" />
           <View style={{ width: 40 }} />
@@ -149,9 +155,9 @@ export default function UploadIDScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified-user" size={48} color="#a7f3d0" />
+            <MaterialIcons name="verified-user" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
           </View>
-          <Text style={styles.title}>Verify Your Identity</Text>
+          <Text style={styles.title} accessibilityRole="header">Verify Your Identity</Text>
           <Text style={styles.subtitle}>
             Upload a government-issued ID to get verified. Verified users gain access to premium features.
           </Text>
@@ -188,8 +194,12 @@ export default function UploadIDScreen() {
                 selectedDocType === 'driversLicense' && styles.docTypeButtonActive,
               ]}
               onPress={() => handleDocTypeSelect('driversLicense')}
+              accessibilityRole="radio"
+              accessibilityLabel="Driver's License"
+              accessibilityState={{ selected: selectedDocType === 'driversLicense' }}
+              accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} />
+              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'driversLicense' && styles.docTypeTextActive]}>
                 Driver's License
               </Text>
@@ -201,8 +211,12 @@ export default function UploadIDScreen() {
                 selectedDocType === 'passport' && styles.docTypeButtonActive,
               ]}
               onPress={() => handleDocTypeSelect('passport')}
+              accessibilityRole="radio"
+              accessibilityLabel="Passport"
+              accessibilityState={{ selected: selectedDocType === 'passport' }}
+              accessibilityHint="Select this document type for verification. Only front photo required"
             >
-              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? '#10b981' : '#a7f3d0'} />
+              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'passport' && styles.docTypeTextActive]}>
                 Passport
               </Text>
@@ -214,8 +228,12 @@ export default function UploadIDScreen() {
                 selectedDocType === 'nationalId' && styles.docTypeButtonActive,
               ]}
               onPress={() => handleDocTypeSelect('nationalId')}
+              accessibilityRole="radio"
+              accessibilityLabel="National ID"
+              accessibilityState={{ selected: selectedDocType === 'nationalId' }}
+              accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#10b981' : '#a7f3d0'} />
+              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'nationalId' && styles.docTypeTextActive]}>
                 National ID
               </Text>
@@ -232,12 +250,15 @@ export default function UploadIDScreen() {
           <TouchableOpacity
             style={styles.uploadBox}
             onPress={() => pickImage('front')}
+            accessibilityRole="button"
+            accessibilityLabel={frontImage ? "Front side photo uploaded" : "Upload front side of document"}
+            accessibilityHint="Opens camera or photo library to capture front side"
           >
             {frontImage ? (
-              <Image source={{ uri: frontImage }} style={styles.uploadedImage} />
+              <Image source={{ uri: frontImage }} style={styles.uploadedImage} accessibilityLabel="Front side of document photo" />
             ) : (
               <>
-                <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" />
+                <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
                 <Text style={styles.uploadText}>Tap to upload</Text>
               </>
             )}
@@ -250,12 +271,15 @@ export default function UploadIDScreen() {
               <TouchableOpacity
                 style={styles.uploadBox}
                 onPress={() => pickImage('back')}
+                accessibilityRole="button"
+                accessibilityLabel={backImage ? "Back side photo uploaded" : "Upload back side of document"}
+                accessibilityHint="Opens camera or photo library to capture back side"
               >
                 {backImage ? (
-                  <Image source={{ uri: backImage }} style={styles.uploadedImage} />
+                  <Image source={{ uri: backImage }} style={styles.uploadedImage} accessibilityLabel="Back side of document photo" />
                 ) : (
                   <>
-                    <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" />
+                    <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
                     <Text style={styles.uploadText}>Tap to upload</Text>
                   </>
                 )}
@@ -280,11 +304,15 @@ export default function UploadIDScreen() {
           style={[styles.submitButton, (!canSubmit || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={!canSubmit || isSubmitting}
+          accessibilityRole="button"
+          accessibilityLabel={isSubmitting ? 'Submitting verification' : 'Submit for verification'}
+          accessibilityHint="Submits your ID for review. Typically takes 24-48 hours"
+          accessibilityState={{ disabled: !canSubmit || isSubmitting }}
         >
           <Text style={styles.submitButtonText}>
             {isSubmitting ? 'Submitting...' : 'Submit for Verification'}
           </Text>
-          {!isSubmitting && <MaterialIcons name="check-circle" size={20} color="#052e1b" />}
+          {!isSubmitting && <MaterialIcons name="check-circle" size={20} color="#052e1b" accessibilityElementsHidden={true} />}
         </TouchableOpacity>
 
         {/* Implementation Note (for developers) */}
