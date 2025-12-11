@@ -72,10 +72,10 @@ function sanitizeNumber(input, allowNegative = false) {
   return num;
 }
 
-function sanitizePositiveNumber(input) {
+function sanitizeNonNegativeNumber(input) {
   const num = sanitizeNumber(input, false);
   if (num < 0) {
-    throw new Error('Number must be positive');
+    throw new Error('Number must be non-negative');
   }
   return num;
 }
