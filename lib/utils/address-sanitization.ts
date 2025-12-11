@@ -77,9 +77,20 @@ export function sanitizeSearchQuery(query: string): string {
 }
 
 /**
+ * Address suggestion structure (matches AddressSuggestion from service)
+ */
+export interface AddressSuggestionInput {
+  id: string;
+  description: string;
+  placeId: string;
+  mainText: string;
+  secondaryText?: string;
+}
+
+/**
  * Sanitize address suggestion from API response
  */
-export function sanitizeAddressSuggestion(suggestion: any): any {
+export function sanitizeAddressSuggestion(suggestion: AddressSuggestionInput): AddressSuggestionInput | null {
   if (!suggestion || typeof suggestion !== 'object') {
     return null;
   }

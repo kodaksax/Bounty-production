@@ -212,7 +212,6 @@ export function AddressAutocomplete({
           accessibilityLabel="Address input"
           accessibilityRole="search"
           accessibilityHint="Type to search for addresses"
-          accessibilityRole="search"
           {...inputProps}
         />
         {isLoading && (
