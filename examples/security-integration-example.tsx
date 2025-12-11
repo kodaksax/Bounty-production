@@ -158,7 +158,7 @@ export async function authenticationExample() {
   const storedToken = await getAuthToken();
   
   // Use token in API requests
-  const response = await fetch('https://api.example.com/me', {
+  await fetch('https://api.example.com/me', {
     headers: {
       'Authorization': `Bearer ${storedToken}`,
     },
@@ -191,12 +191,12 @@ export async function userPreferencesExample(userId: string) {
   );
 
   // Retrieve later
-  const preferences = await SecureStorage.getJSON(
+  await SecureStorage.getJSON(
     `preferences_${userId}`,
     DataSensitivity.PUBLIC
   );
 
-  const sensitiveData = await SecureStorage.getJSON(
+  await SecureStorage.getJSON(
     `sensitive_profile_${userId}`,
     DataSensitivity.SENSITIVE
   );

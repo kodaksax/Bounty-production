@@ -72,9 +72,9 @@ export async function hashData(data: string): Promise<string> {
  */
 
 /**
- * Encrypt data with a given key
+ * Obfuscate data with integrity checking
  * 
- * ⚠️ WARNING: This is NOT true encryption - it provides data obfuscation and integrity checking only.
+ * ⚠️ WARNING: This is NOT encryption - it provides data obfuscation and integrity checking only.
  * The data is base64-encoded (easily decoded) with an integrity hash.
  * 
  * For production use with actual encryption, use:
@@ -87,7 +87,7 @@ export async function hashData(data: string): Promise<string> {
  * - Verifying data integrity
  * - Development/testing
  */
-export async function encryptData(data: string, key: string): Promise<string> {
+export async function obfuscateData(data: string, key: string): Promise<string> {
   try {
     // Create integrity hash (NOT ENCRYPTION - data is visible)
     const keyHash = await hashData(key);
@@ -109,9 +109,11 @@ export async function encryptData(data: string, key: string): Promise<string> {
 }
 
 /**
- * Decrypt data with a given key
+ * Deobfuscate data with integrity verification
+ * 
+ * ⚠️ WARNING: This is NOT decryption - it reverses the obfuscation applied by obfuscateData.
  */
-export async function decryptData(encryptedData: string, key: string): Promise<string> {
+export async function deobfuscateData(encryptedData: string, key: string): Promise<string> {
   try {
     // Decode the payload
     const payloadStr = base64Decode(encryptedData);
@@ -138,9 +140,11 @@ export async function decryptData(encryptedData: string, key: string): Promise<s
 
 /**
  * E2E Message Encryption
- * Simplified implementation for demonstration
  * 
- * In a production app, use a proper E2E encryption library like:
+ * ⚠️ CRITICAL WARNING: These functions are DEMO-ONLY stubs and provide NO real security.
+ * They MUST NOT be used in production.
+ * 
+ * For production E2E encryption, use:
  * - @privacyresearch/olm (Matrix protocol)
  * - libsignal-protocol-javascript (Signal protocol)
  * 
@@ -159,13 +163,24 @@ export interface EncryptedMessage {
 }
 
 /**
- * Encrypt a message for E2E communication
- * This is a simplified implementation - see notes above for production use
+ * DEMO-ONLY: This function does NOT provide real E2E encryption.
+ * It must NOT be used in production. Throws error if NODE_ENV is production.
+ * 
+ * @throws {Error} Always throws in production environment
  */
 export async function encryptMessage(
   plaintext: string,
   recipientPublicKey: string
 ): Promise<EncryptedMessage> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[Encryption] encryptMessage is a DEMO-ONLY stub and must NOT be used in production. ' +
+      'Please implement proper E2E encryption using a secure library (e.g. libsignal, olm).'
+    );
+  }
+  
+  console.warn('[Encryption] Using DEMO-ONLY encryptMessage - DO NOT USE IN PRODUCTION');
+  
   try {
     // Generate IV for this message
     const iv = await generateIV();
@@ -174,14 +189,14 @@ export async function encryptMessage(
     // For now, we'll use a derived key (this is NOT secure for production)
     const derivedKey = await hashData(recipientPublicKey + iv);
     
-    // Encrypt the message
-    const ciphertext = await encryptData(plaintext, derivedKey);
+    // Obfuscate the message (NOT real encryption)
+    const ciphertext = await obfuscateData(plaintext, derivedKey);
     
     return {
       ciphertext,
       iv,
       timestamp: Date.now(),
-      version: '1.0'
+      version: '1.0-demo'
     };
   } catch (error) {
     console.error('[Encryption] Failed to encrypt message:', error);
@@ -190,18 +205,30 @@ export async function encryptMessage(
 }
 
 /**
- * Decrypt an E2E encrypted message
+ * DEMO-ONLY: This function does NOT provide real E2E decryption.
+ * It must NOT be used in production. Throws error if NODE_ENV is production.
+ * 
+ * @throws {Error} Always throws in production environment
  */
 export async function decryptMessage(
   encryptedMsg: EncryptedMessage,
   recipientPrivateKey: string
 ): Promise<string> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[Encryption] decryptMessage is a DEMO-ONLY stub and must NOT be used in production. ' +
+      'Please implement proper E2E decryption using a secure library (e.g. libsignal, olm).'
+    );
+  }
+  
+  console.warn('[Encryption] Using DEMO-ONLY decryptMessage - DO NOT USE IN PRODUCTION');
+  
   try {
     // Derive the key (same as encryption)
     const derivedKey = await hashData(recipientPrivateKey + encryptedMsg.iv);
     
-    // Decrypt the message
-    const plaintext = await decryptData(encryptedMsg.ciphertext, derivedKey);
+    // Deobfuscate the message (NOT real decryption)
+    const plaintext = await deobfuscateData(encryptedMsg.ciphertext, derivedKey);
     
     return plaintext;
   } catch (error) {
@@ -213,24 +240,34 @@ export async function decryptMessage(
 /**
  * Generate a key pair for E2E encryption
  * 
- * ⚠️ WARNING: This is a PLACEHOLDER implementation only.
- * Deriving a public key from a private key via hashing is NOT cryptographically secure.
+ * ⚠️ CRITICAL WARNING: This is a DEMO-ONLY stub that is cryptographically INSECURE.
+ * Deriving a public key from a private key via hashing is NOT how public-key crypto works.
+ * This function throws an error in production.
  * 
  * For production, use proper public-key cryptography:
  * - libsodium (via react-native-sodium)
  * - tweetnacl (via tweetnacl-react-native-randombytes)
  * - Web Crypto API when available
+ * 
+ * @throws {Error} Always throws in production environment
  */
 export async function generateKeyPair(): Promise<{
   publicKey: string;
   privateKey: string;
 }> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[Encryption] generateKeyPair is INSECURE and must NOT be used in production. ' +
+      'Use a proper crypto library (libsodium, tweetnacl) for real key pair generation.'
+    );
+  }
+  
+  console.warn('[Encryption] generateKeyPair is DEMO-ONLY and cryptographically INSECURE');
+  
   try {
     // PLACEHOLDER: Generate random keys (not actual key pair)
     const privateKey = await generateEncryptionKey();
     const publicKey = await hashData(privateKey); // NOT secure - placeholder only
-    
-    console.warn('[Encryption] generateKeyPair is a placeholder - use proper crypto library in production');
     
     return { publicKey, privateKey };
   } catch (error) {
@@ -251,17 +288,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-/**
- * Helper: Convert base64 to ArrayBuffer
- */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
+
 
 /**
  * Helper: Base64 encode string (UTF-8 safe)
@@ -355,7 +382,7 @@ export async function encryptForStorage<T>(
 ): Promise<EncryptedStorage<T>> {
   try {
     const jsonData = JSON.stringify(data);
-    const encrypted = await encryptData(jsonData, key);
+    const encrypted = await obfuscateData(jsonData, key);
     const integrity = await signData(encrypted, key);
     
     return {
@@ -380,8 +407,8 @@ export async function decryptFromStorage<T>(
       throw new Error('Data integrity check failed');
     }
     
-    // Decrypt
-    const decrypted = await decryptData(encrypted.value, key);
+    // Deobfuscate
+    const decrypted = await deobfuscateData(encrypted.value, key);
     return JSON.parse(decrypted);
   } catch (error) {
     console.error('[Encryption] Failed to decrypt from storage:', error);

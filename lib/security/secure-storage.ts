@@ -172,21 +172,31 @@ export class SecureStorage {
     this.KEY_REGISTRY.add(key);
   }
 
-  static async clearSecureData(): Promise<void> {
-    try {
-      console.warn('[SecureStorage] clearSecureData called - clearing registered keys');
-      
-      for (const key of this.KEY_REGISTRY) {
-        try {
-          await this.removeItem(key, DataSensitivity.CRITICAL);
-        } catch {
-          // Continue even if key doesn't exist
-        }
+  static async clearSecureData(): Promise<{ 
+    cleared: string[]; 
+    failed: Array<{ key: string; error: string }> 
+  }> {
+    console.warn('[SecureStorage] clearSecureData called - clearing registered keys');
+    
+    const cleared: string[] = [];
+    const failed: Array<{ key: string; error: string }> = [];
+    
+    for (const key of this.KEY_REGISTRY) {
+      try {
+        await this.removeItem(key, DataSensitivity.CRITICAL);
+        cleared.push(key);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[SecureStorage] Failed to clear key "${key}":`, errorMsg);
+        failed.push({ key, error: errorMsg });
       }
-    } catch (error) {
-      console.error('[SecureStorage] Failed to clear secure data:', error);
-      throw new Error('Failed to clear secure data');
     }
+    
+    if (failed.length > 0) {
+      console.warn(`[SecureStorage] ${failed.length} keys could not be cleared:`, failed);
+    }
+    
+    return { cleared, failed };
   }
 
   /**

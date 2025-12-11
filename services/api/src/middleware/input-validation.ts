@@ -106,8 +106,9 @@ export const bountySchema = z.object({
     .transform(val => sanitizeText(val, 5000)),
   
   amount: z.number()
-    .min(0, 'Amount must be non-negative')
-    .max(1000000, 'Amount must be less than 1,000,000')
+    .int('Amount must be an integer (in cents)')
+    .min(50, 'Amount must be at least $0.50 (50 cents)')
+    .max(1000000, 'Amount must be less than $10,000.00 (1,000,000 cents)')
     .optional(),
   
   isForHonor: z.boolean().optional(),
@@ -206,6 +207,9 @@ export const webhookSchema = z.object({
 
 /**
  * Generic validation middleware factory
+ * 
+ * Note: This modifies the request object to replace raw input with validated data.
+ * Type safety is maintained through Fastify's request decoration mechanism.
  */
 export function validateRequest<T extends ZodSchema>(
   schema: T,
@@ -217,7 +221,8 @@ export function validateRequest<T extends ZodSchema>(
       const validated = await schema.parseAsync(data);
       
       // Replace the original data with validated/sanitized version
-      (request as any)[source] = validated;
+      // Using Object.assign to maintain type structure
+      Object.assign(request[source] || {}, validated);
     } catch (error) {
       if (error instanceof ZodError) {
         return reply.code(400).send({
@@ -241,18 +246,19 @@ export function validateRequest<T extends ZodSchema>(
 /**
  * SQL Injection prevention
  * 
- * ⚠️ Note: When using ORMs like Drizzle or parameterized queries,
- * SQL injection is prevented at the database layer.
- * This function is provided for legacy/custom query scenarios only.
+ * @deprecated This function should NOT be used. When using ORMs like Drizzle or parameterized queries,
+ * SQL injection is prevented at the database layer. This function provides a false sense of security
+ * and may encourage bypassing proper ORM usage.
  * 
- * Prefer using the ORM's query builder or parameterized queries instead
- * of manual string sanitization.
+ * Use the ORM's query builder or parameterized queries instead of manual string sanitization.
+ * This function is marked as internal and will be removed in a future version.
+ * 
+ * @internal
  */
-export function preventSQLInjection(input: string): string {
-  if (!input || typeof input !== 'string') return '';
+function preventSQLInjection_DEPRECATED_DO_NOT_USE(input: string): string {
+  console.error('[Security] preventSQLInjection is DEPRECATED and should NOT be used. Use ORM parameterized queries instead.');
   
-  // For ORMs: This function should NOT be used
-  console.warn('[Security] preventSQLInjection called - ensure you are using parameterized queries');
+  if (!input || typeof input !== 'string') return '';
   
   // Remove null bytes and control characters
   let sanitized = input.replace(/\0/g, '');
@@ -379,8 +385,33 @@ export function cleanupRateLimits(): void {
   }
 }
 
-// Clean up every 5 minutes
-setInterval(cleanupRateLimits, 5 * 60 * 1000);
+// Cleanup interval handle for lifecycle management
+let cleanupIntervalHandle: NodeJS.Timeout | null = null;
+
+/**
+ * Start the rate limit cleanup process
+ * Should be called when the server starts
+ */
+export function startRateLimitCleanup(): void {
+  if (cleanupIntervalHandle) {
+    console.warn('[RateLimit] Cleanup already running');
+    return;
+  }
+  cleanupIntervalHandle = setInterval(cleanupRateLimits, 5 * 60 * 1000);
+  console.log('[RateLimit] Cleanup interval started');
+}
+
+/**
+ * Stop the rate limit cleanup process
+ * Should be called during graceful server shutdown
+ */
+export function stopRateLimitCleanup(): void {
+  if (cleanupIntervalHandle) {
+    clearInterval(cleanupIntervalHandle);
+    cleanupIntervalHandle = null;
+    console.log('[RateLimit] Cleanup interval stopped');
+  }
+}
 
 /**
  * Validation helpers
@@ -453,23 +484,5 @@ export async function securityHeadersMiddleware(
   reply.header('Content-Security-Policy', generateCSPHeader());
 }
 
-export default {
-  validateRequest,
-  sanitizeText,
-  sanitizeHTML,
-  sanitizeEmail,
-  sanitizeURL,
-  preventSQLInjection,
-  preventXSS,
-  preventPathTraversal,
-  preventCommandInjection,
-  checkRateLimit,
-  validators,
-  securityHeadersMiddleware,
-  // Schemas
-  bountySchema,
-  messageSchema,
-  userProfileSchema,
-  paymentIntentSchema,
-  webhookSchema,
-};
+// Note: Default export removed to encourage explicit named imports
+// This improves code clarity and makes dependencies more obvious

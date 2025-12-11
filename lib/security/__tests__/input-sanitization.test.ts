@@ -6,8 +6,6 @@ import {
   sanitizeText,
   sanitizeHTML,
   sanitizeEmail,
-  sanitizeURL,
-  sanitizeNumber,
 } from '../input-sanitization';
 
 describe('Input Sanitization', () => {

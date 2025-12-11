@@ -267,9 +267,10 @@ Backend should implement these headers (typically at reverse proxy level):
 ```
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-X-XSS-Protection: 1; mode=block
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 Content-Security-Policy: default-src 'self'
+
+Note: X-XSS-Protection header is deprecated and should not be used in modern applications. Use Content-Security-Policy instead.
 ```
 
 ### CSRF Protection
