@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
 import { supabase } from '../../lib/supabase';
@@ -9,7 +9,6 @@ import { supabase } from '../../lib/supabase';
 interface PrivacySecurityScreenProps { onBack: () => void }
 
 interface PrivacyState {
-  twoFactor: boolean;
   showProfilePublic: boolean;
   showCompletedBounties: boolean;
   passwordCurrent: string;
@@ -23,7 +22,6 @@ const STORAGE_KEY = 'settings:privacy';
 
 export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ onBack }) => {
   const [state, setState] = useState<PrivacyState>({
-    twoFactor: false,
     showProfilePublic: true,
     showCompletedBounties: true,
     passwordCurrent: '',
@@ -36,6 +34,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     exporting: false,
   });
   const [loading, setLoading] = useState(true);
+  
+  // 2FA state managed via Supabase
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [isEnabling2FA, setIsEnabling2FA] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -43,6 +46,18 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
           setState(s => ({ ...s, ...JSON.parse(raw) }));
+        }
+        
+        // Load 2FA status from Supabase
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          // Check email verification status
+          setEmailVerified(Boolean(session.user.email_confirmed_at));
+          
+          // Check if 2FA is enabled via Supabase MFA
+          const { data: factors } = await supabase.auth.mfa.listFactors();
+          setTwoFactorEnabled(factors?.totp?.length > 0);
         }
       } catch (e) {
         console.warn('Failed to load privacy settings', e);
@@ -81,9 +96,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     }
     
     try {
-      // Import supabase here to avoid circular dependencies
-      const { supabase } = require('../../lib/supabase');
-      
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
@@ -150,6 +162,163 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     }
   };
 
+  const handleEnable2FA = async () => {
+    // Check prerequisites
+    if (!emailVerified) {
+      Alert.alert(
+        'Email Verification Required',
+        'Please verify your email address before enabling two-factor authentication.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setIsEnabling2FA(true);
+
+    try {
+      // Enroll TOTP factor with Supabase MFA
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: 'totp',
+        friendlyName: 'Authenticator App',
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        // Show instructions for QR code setup
+        Alert.alert(
+          'Set Up Authenticator',
+          '1. Open Google Authenticator or Authy\n2. Scan the QR code shown on the next screen\n3. Enter the 6-digit code to verify\n\nNote: The QR code will be displayed in a secure screen.',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: async () => {
+                // Unenroll if cancelled
+                if (data.id) {
+                  await supabase.auth.mfa.unenroll({ factorId: data.id });
+                }
+                setIsEnabling2FA(false);
+              },
+            },
+            {
+              text: 'Continue',
+              onPress: () => {
+                // TODO: Navigate to dedicated QR code display screen
+                // For now, proceed to code entry
+                promptForVerificationCode(data.id);
+              },
+            },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('[privacy-security] Error enabling 2FA:', error);
+      Alert.alert('Error', error.message || 'Failed to enable 2FA. Please try again.');
+      setIsEnabling2FA(false);
+    }
+  };
+
+  const promptForVerificationCode = (factorId: string) => {
+    // TODO: Replace Alert.prompt with a proper modal/screen for better accessibility
+    // Alert.prompt is not accessible to screen readers and doesn't work on Android
+    // Consider creating a dedicated 2FA verification modal component
+    Alert.prompt(
+      'Enter Verification Code',
+      'Enter the 6-digit code from your authenticator app',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: async () => {
+            await supabase.auth.mfa.unenroll({ factorId });
+            setIsEnabling2FA(false);
+          },
+        },
+        {
+          text: 'Verify',
+          onPress: async (code) => {
+            if (!code) {
+              setIsEnabling2FA(false);
+              return;
+            }
+            await verifyAndEnable2FA(factorId, code);
+          },
+        },
+      ],
+      'plain-text'
+    );
+  };
+
+  const verifyAndEnable2FA = async (factorId: string, code: string) => {
+    try {
+      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId,
+        code,
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        setTwoFactorEnabled(true);
+        Alert.alert('Success', 'Two-factor authentication has been enabled!');
+      }
+    } catch (error: any) {
+      console.error('[privacy-security] Error verifying 2FA:', error);
+      Alert.alert(
+        'Verification Failed',
+        'Invalid code. Please try again or contact support.',
+        [
+          {
+            text: 'Try Again',
+            onPress: () => promptForVerificationCode(factorId),
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: async () => {
+              await supabase.auth.mfa.unenroll({ factorId });
+            },
+          },
+        ]
+      );
+    } finally {
+      setIsEnabling2FA(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    Alert.alert(
+      'Disable Two-Factor Authentication',
+      'Are you sure you want to disable 2FA? This will reduce your account security.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disable',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data: factors } = await supabase.auth.mfa.listFactors();
+              
+              if (factors?.totp?.length > 0) {
+                const factorId = factors.totp[0].id;
+                const { error } = await supabase.auth.mfa.unenroll({ factorId });
+                
+                if (error) throw error;
+                
+                setTwoFactorEnabled(false);
+                Alert.alert('Success', '2FA has been disabled');
+              }
+            } catch (error: any) {
+              console.error('[privacy-security] Error disabling 2FA:', error);
+              Alert.alert('Error', 'Failed to disable 2FA. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View className="flex-1 bg-emerald-600">
       <View className="flex-row justify-between items-center p-4 pt-8">
@@ -181,8 +350,27 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         <View className="bg-black/30 rounded-xl p-4 mb-5">
           <SectionHeader icon="security" title="Two-Factor Authentication" subtitle="Add an extra layer of protection." />
           <View className="flex-row items-center justify-between mt-1">
-            <Text className="text-emerald-100 text-xs mr-4 flex-1">Require a second factor when signing in on a new device.</Text>
-            <Switch value={state.twoFactor} onValueChange={v => persist({ twoFactor: v })} />
+            <View className="flex-1 mr-4">
+              <Text className="text-emerald-100 text-xs mb-1">Require a second factor when signing in on a new device.</Text>
+              {twoFactorEnabled && (
+                <View className="flex-row items-center mt-1">
+                  <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                  <Text className="text-emerald-400 text-[10px] ml-1">Enabled</Text>
+                </View>
+              )}
+              {!emailVerified && !twoFactorEnabled && (
+                <Text className="text-yellow-500 text-[10px] mt-1">Email verification required</Text>
+              )}
+            </View>
+            {isEnabling2FA ? (
+              <ActivityIndicator size="small" color="#10b981" />
+            ) : (
+              <Switch 
+                value={twoFactorEnabled} 
+                onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
+                disabled={isEnabling2FA}
+              />
+            )}
           </View>
         </View>
 

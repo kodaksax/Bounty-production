@@ -7,6 +7,8 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { API_BASE_URL } from '../lib/config/api';
 import { useStripe } from '../lib/stripe-context';
 import { useWallet } from '../lib/wallet-context';
+import { useEmailVerification } from '../hooks/use-email-verification';
+import { EmailVerificationBanner } from './ui/email-verification-banner';
 
 interface WithdrawScreenProps {
   onBack?: () => void;
@@ -25,6 +27,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   const { withdraw, balance: walletBalance, refresh } = useWallet();
   const { paymentMethods, isLoading } = useStripe();
   const { session } = useAuthContext();
+  const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
   
   // Use prop balance if provided, otherwise use wallet context balance
   const balance = propBalance ?? walletBalance;
@@ -135,6 +138,16 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   };
 
   const handleWithdraw = async () => {
+    // Email verification gate: Block withdrawals if email not verified
+    if (!canWithdrawFunds) {
+      Alert.alert(
+        'Email Verification Required',
+        'Please verify your email address before withdrawing funds. Check your inbox for the verification link.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     if (withdrawalAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
       return;
@@ -227,6 +240,11 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 
   return (
     <View style={styles.container}>
+      {/* Email Verification Banner */}
+      {!isEmailVerified && (
+        <EmailVerificationBanner email={userEmail} />
+      )}
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>

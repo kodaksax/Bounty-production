@@ -24,6 +24,7 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { sendPhoneOTP } from '../../lib/services/phone-verification-service';
 
 export default function PhoneScreen() {
   const router = useRouter();
@@ -48,11 +49,20 @@ export default function PhoneScreen() {
   }, [phone]);
 
   const handleNext = async () => {
+    // If phone is empty, just skip
+    if (!phone.trim()) {
+      router.push('/onboarding/done');
+      return;
+    }
+
     setSaving(true);
+    
+    // Trim phone once for consistency
+    const trimmedPhone = phone.trim();
     
     // Save to local storage
     const result = await updateProfile({
-      phone: phone.trim() || undefined,
+      phone: trimmedPhone || undefined,
     });
 
     if (!result.success) {
@@ -63,11 +73,33 @@ export default function PhoneScreen() {
 
     // Also sync to Supabase via AuthProfileService
     await updateAuthProfile({
-      phone: phone.trim() || undefined,
+      phone: trimmedPhone || undefined,
     });
 
-    setSaving(false);
-    router.push('/onboarding/done');
+    // Send OTP for verification
+    const otpResult = await sendPhoneOTP(trimmedPhone);
+
+    if (otpResult.success) {
+      setSaving(false);
+      // Navigate to verification screen with phone number
+      router.push({
+        pathname: '/onboarding/verify-phone',
+        params: { phone: trimmedPhone },
+      });
+    } else {
+      setSaving(false);
+      Alert.alert(
+        'Unable to Send Code',
+        `${otpResult.message}\n\nYou can still continue without verification.`,
+        [
+          { text: 'Try Again', style: 'cancel' },
+          { 
+            text: 'Continue Anyway', 
+            onPress: () => router.push('/onboarding/done'),
+          },
+        ]
+      );
+    }
   };
 
   const handleSkip = () => {
