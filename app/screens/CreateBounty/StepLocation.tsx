@@ -3,9 +3,12 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import { useAddressLibrary } from 'app/hooks/useAddressLibrary';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SavedAddress } from '../../../lib/types';
+import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
+import { addressAutocompleteService } from '../../../lib/services/address-autocomplete-service';
+import { sanitizeAddressText } from '../../../lib/utils/address-sanitization';
+import { useLocation } from 'app/hooks/useLocation';
 
 interface StepLocationProps {
   draft: BountyDraft;
@@ -20,10 +23,11 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
   
-  // Address library for autocomplete
-  const { addresses, isLoading: addressesLoading } = useAddressLibrary();
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [filteredAddresses, setFilteredAddresses] = useState<SavedAddress[]>([]);
+  // Address library for saved addresses
+  const { addresses } = useAddressLibrary();
+  
+  // Get user location for proximity-based suggestions
+  const { location: currentLocation } = useLocation();
 
   const validateLocation = (location: string, workType: string): string | null => {
     if (workType === 'in_person') {
@@ -47,35 +51,57 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
   const handleLocationChange = (value: string) => {
     onUpdate({ location: value });
+    setTouched({ ...touched, location: true });
+    
+    // Validate on change if already touched
     if (touched.location) {
       const error = validateLocation(value, draft.workType);
       setErrors({ ...errors, location: error || '' });
     }
-    
-    // Show suggestions when typing (min 2 characters)
-    if (value.length >= 2) {
-      const filtered = addresses.filter(
-        (addr) =>
-          addr.label.toLowerCase().includes(value.toLowerCase()) ||
-          addr.address.toLowerCase().includes(value.toLowerCase())
-      );
-      setFilteredAddresses(filtered);
-      setShowSuggestions(filtered.length > 0);
-    } else {
-      setShowSuggestions(false);
-    }
-  };
-  
-  const handleSelectAddress = (address: SavedAddress) => {
-    onUpdate({ location: address.address });
-    setShowSuggestions(false);
-    setTouched({ ...touched, location: true });
   };
 
   const handleLocationBlur = () => {
     setTouched({ ...touched, location: true });
     const error = validateLocation(draft.location, draft.workType);
     setErrors({ ...errors, location: error || '' });
+  };
+  
+  // Handle selecting an address from autocomplete
+  const handleSelectAddress = async (suggestion: any) => {
+    // Fetch detailed place information to get coordinates
+    try {
+      const details = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
+      if (details) {
+        // Sanitize the formatted address before storing
+        const sanitizedAddress = sanitizeAddressText(details.formattedAddress);
+        onUpdate({ 
+          location: sanitizedAddress,
+        });
+        setTouched({ ...touched, location: true });
+      } else {
+        // If place details fetch returns null, inform user and use fallback
+        Alert.alert(
+          'Address Details Unavailable',
+          'Could not fetch detailed information for this address. Using basic address information.',
+          [{ text: 'OK' }]
+        );
+        const sanitizedDescription = sanitizeAddressText(suggestion.description);
+        onUpdate({ location: sanitizedDescription });
+        setTouched({ ...touched, location: true });
+      }
+    } catch (err) {
+      console.error('Error fetching place details:', err);
+      // Inform user of the error and use fallback
+      Alert.alert(
+        'Connection Issue',
+        'Could not fetch detailed address information. Using basic address.',
+        [{ text: 'OK' }]
+      );
+      // Fallback to using the sanitized description
+      const sanitizedDescription = sanitizeAddressText(suggestion.description);
+      onUpdate({ location: sanitizedDescription });
+      setTouched({ ...touched, location: true });
+    }
   };
 
   const handleNext = () => {
@@ -179,48 +205,25 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
             <Text className="text-emerald-100 text-base font-semibold mb-2">
               Location *
             </Text>
-            <TextInput
+            
+            {/* Address Autocomplete Component */}
+            <AddressAutocomplete
               value={draft.location}
               onChangeText={handleLocationChange}
+              onSelectAddress={handleSelectAddress}
               onBlur={handleLocationBlur}
               placeholder="e.g., San Francisco, CA or 123 Main St"
-              placeholderTextColor="rgba(110, 231, 183, 0.4)"
-              className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
-              accessibilityLabel="Location input"
+              minChars={2}
+              debounceMs={500}
+              showSavedAddresses={true}
+              savedAddresses={addresses}
+              userLocation={currentLocation || undefined}
+              searchRadius={50000}
+              countryCode="us"
             />
+            
             {touched.location && errors.location && (
               <ValidationMessage message={errors.location} />
-            )}
-            
-            {/* Address Autocomplete Suggestions */}
-            {showSuggestions && filteredAddresses.length > 0 && (
-              <View className="mt-2 bg-emerald-700/50 rounded-lg border border-emerald-500/50 overflow-hidden">
-                <View className="px-3 py-2 bg-emerald-800/30 border-b border-emerald-500/30">
-                  <Text className="text-emerald-200/80 text-xs font-semibold">
-                    Saved Addresses
-                  </Text>
-                </View>
-                <FlatList
-                  data={filteredAddresses}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      onPress={() => handleSelectAddress(item)}
-                      className="px-3 py-3 border-b border-emerald-500/20"
-                      accessibilityLabel={`Select ${item.label}`}
-                      accessibilityRole="button"
-                    >
-                      <Text className="text-white font-semibold text-sm mb-1">
-                        {item.label}
-                      </Text>
-                      <Text className="text-emerald-200/70 text-xs" numberOfLines={1}>
-                        {item.address}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
             )}
             
             <View className="mt-3 bg-emerald-700/20 rounded-lg p-3 border border-emerald-500/30">
@@ -232,7 +235,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                   style={{ marginRight: 6, marginTop: 2 }}
                 />
                 <Text className="text-emerald-200/70 text-xs flex-1">
-                  Your exact address won't be shared until you accept someone for the job. Type to see saved addresses.
+                  Your exact address won't be shared until you accept someone for the job. Start typing to see suggestions from Google Places and your saved addresses.
                 </Text>
               </View>
             </View>

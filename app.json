@@ -77,6 +77,7 @@
     },
     "extra": {
       "API_BASE_URL": "https://bountyfinder.app",
+      "googlePlacesApiKey": "${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}",
       "router": {},
       "eas": {
         "projectId": "b5485f88-0b1f-4622-bbed-b1ae142dcb46"
