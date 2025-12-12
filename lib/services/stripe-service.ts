@@ -87,7 +87,7 @@ class StripeService {
         const stripeModule: any = await import('@stripe/stripe-react-native');
         if (stripeModule.initStripe && this.publishableKey) {
           // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
-          const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'com.bounty0.BOUNTYExpo';
+          const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'merchant.com.bounty.BOUNTYExpo';
           await stripeModule.initStripe({
             publishableKey: this.publishableKey,
             merchantIdentifier: merchantId,

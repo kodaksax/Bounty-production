@@ -2,7 +2,12 @@
 
 # dependencies
 node_modules/
+
+# Environment files - NEVER commit these!
 .env
+.env.production
+.env.staging
+.env*.local
 
 # Expo
 .expo/
@@ -30,9 +35,6 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
-
-# local env files
-.env*.local
 
 # typescript
 *.tsbuildinfo
@@ -62,11 +64,3 @@ tmp/
 .tmp/
 
 app-example
-
-.env.local
-
-.env.local
-
-.env.local
-
-.env.local

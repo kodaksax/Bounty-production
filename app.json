@@ -8,9 +8,16 @@
     "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "privacy": "public",
+    "privacyManifests": {
+      "NSPrivacyAccessedAPITypes": []
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture, attach images to posts,and add portfolio media.",
@@ -23,8 +30,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "app.bountyfinder.BOUNTYExpo"
+      "package": "app.bountyfinder.BOUNTYExpo",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
+    "description": "BOUNTY - Fast and safe micro-bounty marketplace. Create tasks, find hunters, coordinate via chat, and settle payments securely with escrow protection.",
+    "primaryColor": "#10b981",
+    "backgroundColor": "#ffffff",
+    "privacyPolicyUrl": "https://bountyfinder.app/legal/privacy",
+    "termsOfServiceUrl": "https://bountyfinder.app/legal/terms",
     "web": {
       "bundler": "metro",
       "output": "static",
