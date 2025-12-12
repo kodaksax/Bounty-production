@@ -91,8 +91,76 @@ function MyComponent() {
 )}
 ```
 
+## animation-showcase.tsx
+
+A comprehensive showcase of all animation and micro-interaction features added to BOUNTYExpo. Includes:
+
+- **Button Press Animations** - Scale to 0.95 with haptic feedback
+- **Success Animations** - Checkmark and confetti celebrations
+- **Skeleton Loaders** - Bounty cards with shimmer effects
+- **Empty State Animations** - Bounce entrance with floating effect
+- **Accessible Touchables** - Custom interactive components
+
+### Running the Animation Showcase
+
+To view the animation showcase:
+
+```tsx
+import AnimationShowcase from './examples/animation-showcase';
+
+// Add to your app navigation
+<AnimationShowcase />
+```
+
+### Testing Reduced Motion
+
+**iOS:** Settings > Accessibility > Motion > "Reduce Motion"  
+**Android:** Settings > Accessibility > "Remove animations"
+
+All animations automatically adapt to simpler appearances when reduced motion is enabled.
+
+### Animation Examples
+
+**Success animation:**
+```tsx
+import { SuccessAnimation } from 'components/ui/success-animation';
+
+const [showSuccess, setShowSuccess] = useState(false);
+
+<SuccessAnimation 
+  visible={showSuccess} 
+  icon="check-circle"
+  size={80}
+  color="#10b981"
+/>
+```
+
+**Skeleton loader:**
+```tsx
+import { SkeletonCard } from 'components/ui/skeleton-card';
+
+{loading ? <SkeletonCard /> : <BountyCard data={bounty} />}
+```
+
+**Accessible touchable:**
+```tsx
+import { AccessibleTouchable } from 'components/ui/accessible-touchable';
+
+<AccessibleTouchable 
+  onPress={handlePress}
+  haptic="light"
+  scaleOnPress={0.95}
+>
+  <View style={styles.customButton}>
+    <Text>Custom Button</Text>
+  </View>
+</AccessibleTouchable>
+```
+
 ## See Also
 
+- [ANIMATION_USAGE_GUIDE.md](../ANIMATION_USAGE_GUIDE.md) - Detailed usage instructions
+- [ANIMATION_VISUAL_GUIDE.md](../ANIMATION_VISUAL_GUIDE.md) - Visual specifications
 - [ANIMATION_GUIDE.md](../ANIMATION_GUIDE.md) - Complete documentation
 - [lib/theme.ts](../lib/theme.ts) - Theme token definitions
 - [components/theme-provider.tsx](../components/theme-provider.tsx) - Theme context

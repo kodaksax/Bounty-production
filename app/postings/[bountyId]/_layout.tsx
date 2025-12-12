@@ -13,7 +13,13 @@ export default function BountyDetailLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="review-and-verify" />
-      <Stack.Screen name="payout" />
+      <Stack.Screen 
+        name="payout"
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
     </Stack>
   );
 }
