@@ -47,6 +47,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
   ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
     const { triggerHaptic } = useHapticFeedback();
     const scaleAnim = React.useRef(new (require('react-native').Animated.Value)(1)).current;
+    const [isFocused, setIsFocused] = React.useState(false);
 
     const handlePress = React.useCallback((event: any) => {
       if (disabled) return;
@@ -63,6 +64,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 
     const handlePressIn = React.useCallback(() => {
       if (disabled) return;
+      setIsFocused(true);
       require('react-native').Animated.spring(scaleAnim, {
         toValue: 0.95,
         useNativeDriver: true,
@@ -73,6 +75,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 
     const handlePressOut = React.useCallback(() => {
       if (disabled) return;
+      setIsFocused(false);
       require('react-native').Animated.spring(scaleAnim, {
         toValue: 1,
         useNativeDriver: true,
@@ -80,6 +83,17 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         friction: 10,
       }).start();
     }, [disabled, scaleAnim]);
+
+    // Handle keyboard focus events for web/keyboard navigation
+    const handleFocus = React.useCallback(() => {
+      if (disabled) return;
+      setIsFocused(true);
+    }, [disabled]);
+
+    const handleBlur = React.useCallback(() => {
+      if (disabled) return;
+      setIsFocused(false);
+    }, [disabled]);
     
     const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -92,6 +106,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           buttonStyles[variant ?? "default"],
           buttonStyles[size ?? "default"],
           disabled && buttonStyles.disabled,
+          isFocused && buttonStyles.focused,
           {
             transform: [{ scale: scaleAnim }],
           },
@@ -100,6 +115,8 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         accessible={true}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
@@ -192,6 +209,17 @@ const buttonStyles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  // Focus state for keyboard navigation (WCAG 2.4.7)
+  focused: {
+    shadowColor: '#10b981', // Emerald color for focus ring
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 10,
+    // Add visible border for high contrast
+    borderWidth: 3,
+    borderColor: '#6ee7b7', // Light emerald for visibility
   },
   text: {
     fontSize: 15,

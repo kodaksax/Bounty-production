@@ -135,7 +135,7 @@ Features:
 
 ### Button Component
 
-Already includes comprehensive accessibility:
+Comprehensive accessibility features:
 - `accessibilityRole="button"`
 - Auto-derives label from text children
 - Supports custom `accessibilityLabel` and `accessibilityHint`
@@ -143,6 +143,10 @@ Already includes comprehensive accessibility:
 - Haptic feedback on press
 - Animated press states
 - Meets 48pt minimum height
+- **Focus indicators** (WCAG 2.4.7):
+  - Visible 3px emerald border on focus
+  - Shadow glow effect for enhanced visibility
+  - Works with keyboard navigation and touch interactions
 
 ## Best Practices
 
@@ -228,13 +232,23 @@ const styles = StyleSheet.create({
 ### 5. Indicate Selection States
 
 ```tsx
-// ✅ Good
+// ✅ Good - with selection state
 <TouchableOpacity
   accessibilityLabel="Online work filter"
   accessibilityState={{ selected: isSelected }}
   accessibilityHint={isSelected ? "Currently active" : "Tap to activate"}
 >
   <Text>Online</Text>
+</TouchableOpacity>
+
+// ✅ Good - radio button selection
+<TouchableOpacity
+  accessibilityRole="radio"
+  accessibilityLabel="Driver's License"
+  accessibilityState={{ selected: selectedDocType === 'driversLicense' }}
+  accessibilityHint="Select this document type for verification"
+>
+  <Text>Driver's License</Text>
 </TouchableOpacity>
 ```
 
@@ -320,7 +334,30 @@ npm run lint-a11y
 
 ## Changelog
 
-### 2024-12 (Current Release)
+### 2024-12 (Current Release - Phase 2)
+- **Button Component**: Added visible focus indicators for keyboard navigation (WCAG 2.4.7)
+  - 3px emerald border with high contrast
+  - Shadow glow effect for visibility
+  - Elevated appearance on focus
+- **Verification Screen**: Comprehensive accessibility labels and hints for all interactive elements
+  - Document type selection with radio roles and states
+  - Photo upload buttons with clear context
+  - Submit button with disabled state
+- **Search Screen**: Enhanced with semantic labels and context
+  - Bounty and user result cards with comprehensive descriptions
+  - Tab navigation with proper roles and selection states
+  - Search input with autocomplete hints
+  - Filter controls with active state indicators
+- **Hunter Flow**: Added accessibility to application tracking
+  - Progress timeline with stage status announcements
+  - Bounty card with combined label for context
+  - Action buttons with clear hints
+- **Message Actions**: Modal actions properly labeled
+  - Pin/unpin with state-aware labels
+  - Copy, report, block with clear purposes
+  - Menu role for action sheet container
+
+### 2024-12 (Initial Release)
 - Created centralized accessibility constants
 - Standardized spacing across all screens
 - Added comprehensive accessibility labels to navigation

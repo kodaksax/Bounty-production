@@ -37,18 +37,32 @@ export function MessageActions({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      accessibilityViewIsModal={true}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable 
+        style={styles.overlay} 
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close message actions"
+      >
         <View style={styles.container}>
-          <View style={styles.actionSheet}>
+          <View 
+            style={styles.actionSheet}
+            accessibilityRole="menu"
+            accessibilityLabel="Message actions"
+          >
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => handleAction(onPin)}
+              accessibilityRole="button"
+              accessibilityLabel={isPinned ? 'Unpin message' : 'Pin message'}
+              accessibilityHint={isPinned ? 'Removes message from pinned messages' : 'Pins message to top of conversation'}
             >
               <MaterialIcons 
                 name={isPinned ? 'push-pin' : 'push-pin'} 
                 size={22} 
                 color={isPinned ? '#fbbf24' : '#d1fae5'} 
+                accessibilityElementsHidden={true}
               />
               <Text style={styles.actionText}>
                 {isPinned ? 'Unpin Message' : 'Pin Message'}
@@ -60,8 +74,11 @@ export function MessageActions({
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => handleAction(onCopy)}
+              accessibilityRole="button"
+              accessibilityLabel="Copy message text"
+              accessibilityHint="Copies message text to clipboard"
             >
-              <MaterialIcons name="content-copy" size={22} color="#d1fae5" />
+              <MaterialIcons name="content-copy" size={22} color="#d1fae5" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Copy Text</Text>
             </TouchableOpacity>
 
@@ -70,8 +87,11 @@ export function MessageActions({
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => handleAction(onReport)}
+              accessibilityRole="button"
+              accessibilityLabel="Report message"
+              accessibilityHint="Reports this message for review"
             >
-              <MaterialIcons name="flag" size={22} color="#fca5a5" />
+              <MaterialIcons name="flag" size={22} color="#fca5a5" accessibilityElementsHidden={true} />
               <Text style={[styles.actionText, styles.dangerText]}>Report Message</Text>
             </TouchableOpacity>
 
@@ -96,8 +116,11 @@ export function MessageActions({
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              accessibilityHint="Closes message actions menu"
             >
-              <MaterialIcons name="close" size={22} color="#d1fae5" />
+              <MaterialIcons name="close" size={22} color="#d1fae5" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Cancel</Text>
             </TouchableOpacity>
           </View>

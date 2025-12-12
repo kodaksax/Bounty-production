@@ -256,84 +256,110 @@ export default function EnhancedSearchScreen() {
     });
   };
 
-  const renderBountyItem = ({ item }: { item: BountyRowItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/postings/${item.id}`)}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        {item.is_for_honor && (
-          <View style={styles.honorBadge}>
-            <Text style={styles.honorText}>Honor</Text>
+  const renderBountyItem = ({ item }: { item: BountyRowItem }) => {
+    const priceLabel = item.is_for_honor ? 'for honor' : item.amount != null ? `$${item.amount}` : '';
+    const locationLabel = item.location ? `, in ${item.location}` : '';
+    const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
+    
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push(`/postings/${item.id}`)}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint="Opens bounty details"
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          {item.is_for_honor && (
+            <View style={styles.honorBadge}>
+              <Text style={styles.honorText}>Honor</Text>
+            </View>
+          )}
+        </View>
+        {item.description ? (
+          <Text style={styles.cardDesc} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : null}
+        <View style={styles.metaRow}>
+          {item.amount != null && !item.is_for_honor && (
+            <Text style={styles.amount}>${item.amount}</Text>
+          )}
+          {item.location && (
+            <Text style={styles.location} numberOfLines={1}>
+              📍 {item.location}
+            </Text>
+          )}
+          {item.created_at && (
+            <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+          )}
+        </View>
+        {item.status && item.status !== 'open' && (
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{item.status}</Text>
           </View>
         )}
-      </View>
-      {item.description ? (
-        <Text style={styles.cardDesc} numberOfLines={2}>
-          {item.description}
-        </Text>
-      ) : null}
-      <View style={styles.metaRow}>
-        {item.amount != null && !item.is_for_honor && (
-          <Text style={styles.amount}>${item.amount}</Text>
-        )}
-        {item.location && (
-          <Text style={styles.location} numberOfLines={1}>
-            📍 {item.location}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderUserItem = ({ item }: { item: UserProfile }) => {
+    const verifiedLabel = item.verificationStatus === 'verified' ? ', verified user' : '';
+    const skillsLabel = item.skills && item.skills.length > 0 ? `, skills: ${item.skills.slice(0, 3).join(', ')}` : '';
+    const accessibilityLabel = `${item.username}${verifiedLabel}${skillsLabel}`;
+    
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push(`/profile/${item.id}`)}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint="Opens user profile"
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.username}</Text>
+          {item.verificationStatus === 'verified' && (
+            <MaterialIcons name="verified" size={16} color="#6ee7b7" accessibilityElementsHidden={true} />
+          )}
+        </View>
+        {item.bio && (
+          <Text style={styles.cardDesc} numberOfLines={2}>
+            {item.bio}
           </Text>
         )}
-        {item.created_at && (
-          <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+        {item.skills && item.skills.length > 0 && (
+          <View style={styles.skillsRow}>
+            {item.skills.slice(0, 3).map((skill, idx) => (
+              <View key={idx} style={styles.skillChip}>
+                <Text style={styles.skillText}>{skill}</Text>
+              </View>
+            ))}
+          </View>
         )}
-      </View>
-      {item.status && item.status !== 'open' && (
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>{item.status}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderUserItem = ({ item }: { item: UserProfile }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/profile/${item.id}`)}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.username}</Text>
-        {item.verificationStatus === 'verified' && (
-          <MaterialIcons name="verified" size={16} color="#6ee7b7" />
-        )}
-      </View>
-      {item.bio && (
-        <Text style={styles.cardDesc} numberOfLines={2}>
-          {item.bio}
-        </Text>
-      )}
-      {item.skills && item.skills.length > 0 && (
-        <View style={styles.skillsRow}>
-          {item.skills.slice(0, 3).map((skill, idx) => (
-            <View key={idx} style={styles.skillChip}>
-              <Text style={styles.skillText}>{skill}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderRecentSearch = ({ item }: { item: RecentSearch }) => (
     <View style={styles.recentSearchItem}>
       <TouchableOpacity
         style={styles.recentSearchContent}
         onPress={() => handleRecentSearchClick(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`Recent search: ${item.query}`}
+        accessibilityHint="Tap to repeat this search"
       >
-        <MaterialIcons name="history" size={18} color="#6ee7b7" />
+        <MaterialIcons name="history" size={18} color="#6ee7b7" accessibilityElementsHidden={true} />
         <Text style={styles.recentSearchText}>{item.query}</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => handleRemoveRecentSearch(item.id)}>
-        <MaterialIcons name="close" size={18} color="#93e5c7" />
+      <TouchableOpacity 
+        onPress={() => handleRemoveRecentSearch(item.id)}
+        accessibilityRole="button"
+        accessibilityLabel="Remove recent search"
+        accessibilityHint="Removes this search from history"
+      >
+        <MaterialIcons name="close" size={18} color="#93e5c7" accessibilityElementsHidden={true} />
       </TouchableOpacity>
     </View>
   );
@@ -349,10 +375,16 @@ export default function EnhancedSearchScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <MaterialIcons name="arrow-back" size={22} color="#fff" />
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to previous screen"
+        >
+          <MaterialIcons name="arrow-back" size={22} color="#fff" accessibilityElementsHidden={true} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Search</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Search</Text>
       </View>
 
       {/* Tab switcher */}
@@ -360,6 +392,10 @@ export default function EnhancedSearchScreen() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'bounties' && styles.tabActive]}
           onPress={() => setActiveTab('bounties')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search bounties"
+          accessibilityState={{ selected: activeTab === 'bounties' }}
+          accessibilityHint="Switches to bounty search"
         >
           <Text style={[styles.tabText, activeTab === 'bounties' && styles.tabTextActive]}>
             Bounties
@@ -368,6 +404,10 @@ export default function EnhancedSearchScreen() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'users' && styles.tabActive]}
           onPress={() => setActiveTab('users')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search users"
+          accessibilityState={{ selected: activeTab === 'users' }}
+          accessibilityHint="Switches to user search"
         >
           <Text style={[styles.tabText, activeTab === 'users' && styles.tabTextActive]}>
             Users
@@ -377,7 +417,7 @@ export default function EnhancedSearchScreen() {
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} />
+        <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} accessibilityElementsHidden={true} />
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
@@ -395,23 +435,41 @@ export default function EnhancedSearchScreen() {
           }}
           returnKeyType="search"
           style={styles.input}
+          accessibilityRole="search"
+          accessibilityLabel={activeTab === 'bounties' ? 'Search bounties' : 'Search users'}
+          accessibilityHint="Type to search with autocomplete suggestions"
         />
         {!!query && !isSearching && (
-          <TouchableOpacity onPress={() => { setQuery(''); setShowSuggestions(false); }} style={{ padding: 4 }}>
-            <MaterialIcons name="close" size={18} color="#6ee7b7" />
+          <TouchableOpacity 
+            onPress={() => { setQuery(''); setShowSuggestions(false); }} 
+            style={{ padding: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            accessibilityHint="Clears the search text"
+          >
+            <MaterialIcons name="close" size={18} color="#6ee7b7" accessibilityElementsHidden={true} />
           </TouchableOpacity>
         )}
-        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} />}
+        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} accessibilityLabel="Loading search results" />}
         {activeTab === 'bounties' && (
           <>
             <TouchableOpacity 
               onPress={() => router.push('/search/saved-searches')} 
               style={styles.filterBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Saved searches"
+              accessibilityHint="View and manage saved searches"
             >
-              <MaterialIcons name="bookmark-outline" size={20} color="#6ee7b7" />
+              <MaterialIcons name="bookmark-outline" size={20} color="#6ee7b7" accessibilityElementsHidden={true} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterBtn}>
-              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} />
+            <TouchableOpacity 
+              onPress={() => setShowFilters(true)} 
+              style={styles.filterBtn}
+              accessibilityRole="button"
+              accessibilityLabel={hasActiveFilters ? "Filter (active)" : "Filter"}
+              accessibilityHint="Opens filter options for bounty search"
+            >
+              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} accessibilityElementsHidden={true} />
               {hasActiveFilters && <View style={styles.filterDot} />}
             </TouchableOpacity>
           </>

@@ -145,10 +145,19 @@ export default function HunterApplyScreen() {
         <TouchableOpacity
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading"
+          accessibilityHint="Attempts to load the bounty data again"
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to previous screen"
+        >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -159,10 +168,16 @@ export default function HunterApplyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity 
+          style={styles.backIcon} 
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to previous screen"
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#fff" accessibilityElementsHidden={true} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hunter Dashboard</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Hunter Dashboard</Text>
       </View>
 
       <ScrollView
@@ -171,10 +186,15 @@ export default function HunterApplyScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Bounty Header Card */}
-        <View style={styles.bountyCard}>
+        <View 
+          style={styles.bountyCard}
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`Bounty: ${bounty.title}, ${bounty.is_for_honor ? 'for honor' : `$${bounty.amount}`}, posted ${formatTimeAgo(bounty.created_at)}`}
+        >
           <View style={styles.bountyHeader}>
             <View style={styles.avatarPlaceholder}>
-              <MaterialIcons name="person" size={32} color="#6ee7b7" />
+              <MaterialIcons name="person" size={32} color="#6ee7b7" accessibilityElementsHidden={true} />
             </View>
             <View style={styles.bountyInfo}>
               <Text style={styles.bountyTitle} numberOfLines={2}>
@@ -188,7 +208,7 @@ export default function HunterApplyScreen() {
           <View style={styles.amountContainer}>
             {bounty.is_for_honor ? (
               <View style={styles.honorBadge}>
-                <MaterialIcons name="favorite" size={16} color="#fff" />
+                <MaterialIcons name="favorite" size={16} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.honorText}>For Honor</Text>
               </View>
             ) : (
@@ -199,11 +219,12 @@ export default function HunterApplyScreen() {
 
         {/* Timeline */}
         <View style={styles.timelineContainer}>
-          <Text style={styles.sectionTitle}>Progress Timeline</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Progress Timeline</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.timeline}
+            accessibilityLabel="Progress timeline showing application stages"
           >
             {HUNTER_STAGES.map((stage, index) => {
               const isActive = stage.id === currentStage;
@@ -211,6 +232,8 @@ export default function HunterApplyScreen() {
               const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
               const isCompleted = stageIndex < currentIndex;
               const isAccessible = stageIndex <= currentIndex;
+              
+              const stageStatus = isCompleted ? 'completed' : isActive ? 'current' : !isAccessible ? 'locked' : 'upcoming';
 
               return (
                 <View
@@ -221,6 +244,9 @@ export default function HunterApplyScreen() {
                     isCompleted && styles.stageItemCompleted,
                     !isAccessible && styles.stageItemLocked,
                   ]}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Stage ${index + 1} of ${HUNTER_STAGES.length}: ${stage.label}, ${stageStatus}`}
                 >
                   <View
                     style={[
@@ -233,6 +259,7 @@ export default function HunterApplyScreen() {
                       name={stage.icon as any}
                       size={24}
                       color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      accessibilityElementsHidden={true}
                     />
                   </View>
                   <Text style={styles.stageLabel}>{stage.label}</Text>
@@ -244,8 +271,8 @@ export default function HunterApplyScreen() {
 
         {/* Waiting Room Panel */}
         <View style={styles.waitingPanel}>
-          <MaterialIcons name="hourglass-empty" size={32} color="#6ee7b7" />
-          <Text style={styles.waitingTitle}>Waiting for Selection</Text>
+          <MaterialIcons name="hourglass-empty" size={32} color="#6ee7b7" accessibilityElementsHidden={true} />
+          <Text style={styles.waitingTitle} accessibilityRole="header">Waiting for Selection</Text>
           <Text style={styles.waitingText}>
             Your application has been submitted. The poster is reviewing applications and will
             select a hunter soon. You'll be notified when a decision is made.
