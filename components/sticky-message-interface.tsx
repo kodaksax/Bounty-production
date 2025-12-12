@@ -207,7 +207,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                     onPress={handleSend}
                     style={{ backgroundColor: text.trim()? '#10b981':'rgba(16,185,129,0.35)', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
                     <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim()? '#052e1b':'#c7f9d7'} />
-                    <Text style={{ fontWeight:'600', color: text.trim()? '#052e1b':'#c7f9d7' }}>{isSending? 'Sending':'Send'}</Text>
+                    <Text style={{ fontWeight:'600', color: text.trim()? '#052e1b':'#c7f9d7' }}>{isSending? 'Sending':'Send Message'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

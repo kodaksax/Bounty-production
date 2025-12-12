@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { InfoTooltip } from './ui/tooltip';
 
 interface EscrowStatusCardProps {
   status: 'funded' | 'pending' | 'released' | 'none';
@@ -88,9 +89,17 @@ export function EscrowStatusCard({ status, amount, bountyTitle }: EscrowStatusCa
       {status === 'funded' && (
         <View style={styles.infoRow}>
           <MaterialIcons name="verified-user" size={16} color={config.iconColor} />
-          <Text style={[styles.infoText, { color: config.textColor }]}>
+          <Text style={[styles.infoText, { color: config.textColor, marginLeft: 6 }]}>
             Protected by BOUNTY escrow
           </Text>
+          <View style={{ marginLeft: 6 }}>
+            <InfoTooltip
+              title="What is Escrow?"
+              content="Escrow is a secure payment system that holds your funds safely until you confirm the work is complete. This protects both you and the hunter — you only pay for completed work, and hunters are guaranteed payment once you approve."
+              iconSize={16}
+              iconColor={config.iconColor}
+            />
+          </View>
         </View>
       )}
     </View>
@@ -140,7 +149,6 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    marginLeft: 6,
     fontWeight: '600',
   },
 });

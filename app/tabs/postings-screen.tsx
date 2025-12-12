@@ -1240,8 +1240,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     ) : (
                       <EmptyState
                         icon="work-outline"
-                        title="No Active Work"
-                        description="You haven't applied to any bounties yet. Browse the main feed to find opportunities!"
+                        title="No Active Work Yet"
+                        description="Ready to start earning? Browse available bounties and accept one to begin!"
                         actionLabel="Browse Bounties"
                         onAction={() => setActiveScreen('bounty')}
                       />
@@ -1293,8 +1293,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                     ) : (
                       <EmptyState
                         icon="inbox"
-                        title="No Requests Yet"
-                        description="When hunters apply to your bounties, you'll see their applications here."
+                        title="No Applications Yet"
+                        description="When hunters apply to your bounties, you'll review and accept them here. Post a bounty to get started!"
                         actionLabel="Post a Bounty"
                         onAction={() => setActiveTab('new')}
                       />

@@ -210,8 +210,8 @@ export function MessengerScreen({
     return (
       <EmptyState
         icon="chat-bubble-outline"
-        title="No Conversations Yet"
-        description="Start a conversation by applying to a bounty or posting one yourself."
+        title="No Messages Yet"
+        description="Start chatting by accepting a bounty or posting one. All your conversations will appear here."
         actionLabel="Browse Bounties"
         onAction={() => onNavigate?.('bounty')}
       />

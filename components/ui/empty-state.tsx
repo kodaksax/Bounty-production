@@ -300,26 +300,26 @@ export function BountyEmptyState({ filter = 'all', onClearFilter }: BountyEmptyS
       case 'open':
         return {
           icon: 'work-outline' as keyof typeof MaterialIcons.glyphMap,
-          title: 'No Open Bounties',
-          description: 'There are no open bounties at the moment. Check back later or create a new one!',
+          title: 'No Open Bounties Yet',
+          description: 'Check back soon for new opportunities, or post your first bounty to get started!',
         };
       case 'in_progress':
         return {
           icon: 'hourglass-empty' as keyof typeof MaterialIcons.glyphMap,
-          title: 'No Active Work',
-          description: 'You don\'t have any bounties in progress. Browse available bounties to get started!',
+          title: 'No Active Work Yet',
+          description: 'Ready to get started? Browse available bounties and accept one to begin earning!',
         };
       case 'completed':
         return {
           icon: 'check-circle-outline' as keyof typeof MaterialIcons.glyphMap,
-          title: 'No Completed Bounties',
-          description: 'Complete your first bounty to see it here!',
+          title: 'No Completed Bounties Yet',
+          description: 'Complete your first bounty to see it here and build your reputation!',
         };
       default:
         return {
           icon: 'search-off' as keyof typeof MaterialIcons.glyphMap,
-          title: 'No Bounties Found',
-          description: 'Start by creating your first bounty or browse available opportunities!',
+          title: 'No Bounties Yet',
+          description: 'Create your first bounty to get started, or browse available opportunities to earn!',
         };
     }
   };

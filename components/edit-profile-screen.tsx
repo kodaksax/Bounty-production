@@ -367,12 +367,12 @@ export function EditProfileScreen({
           onPress={handleSave} 
           disabled={isSaving}
           className={`px-4 py-2 bg-white rounded-full ${isSaving ? 'opacity-60' : ''}`}
-          accessibilityLabel="Save"
+          accessibilityLabel="Update Profile"
         >
           {isSaving ? (
             <ActivityIndicator size="small" color="#059669" />
           ) : (
-            <Text className="text-emerald-700 font-extrabold">Save</Text>
+            <Text className="text-emerald-700 font-extrabold">Update Profile</Text>
           )}
         </TouchableOpacity>
       </View>
