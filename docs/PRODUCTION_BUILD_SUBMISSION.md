@@ -231,9 +231,9 @@ See APP_STORE_ASSETS.md for specifications.
 
 **Sign-In Required:** Yes
 **Demo Account:**
-- **Username:** demo@bountyfinder.app
-- **Password:** Demo123!Bounty
-- **Notes:** Create this account with test data before submission
+- **Username:** [CREATE_DEMO_EMAIL] (e.g., demo@bountyfinder.app)
+- **Password:** [CREATE_DEMO_PASSWORD] (use a strong, unique password)
+- **Notes:** Create this test account with realistic test data before submission. DO NOT use production user credentials.
 
 **Contact Information:**
 - **First Name:** [Your name]

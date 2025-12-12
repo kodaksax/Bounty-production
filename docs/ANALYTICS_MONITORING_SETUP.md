@@ -226,13 +226,15 @@ Already configured:
         {
           "url": "https://sentry.io/",
           "project": "react-native",
-          "organization": "bounty-4e"
+          "organization": "bounty-4e"  // ⚠️ REPLACE with your Sentry organization slug
         }
       ]
     ]
   }
 }
 ```
+
+**Note:** The organization value "bounty-4e" is an example. Replace with your actual Sentry organization slug.
 
 #### 4. Update Organization/Project
 Edit `app.json` with your actual Sentry org/project:

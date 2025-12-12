@@ -6,10 +6,17 @@ This guide covers code cleanup tasks required before production launch, includin
 ## 🧹 Console Statement Cleanup
 
 ### Current State
-- **Total console statements found:** ~1,959
+**Note:** To get current counts, run:
+```bash
+# Total non-error console statements
+grep -r "console\.\(log\|warn\|debug\|info\)" app/ lib/ components/ hooks/ \
+  --include="*.ts" --include="*.tsx" | wc -l
+```
+
+- **Approximate total:** ~1,959 console statements (as of initial assessment)
 - **console.log statements:** ~1,500
 - **console.warn statements:** ~300
-- **console.error statements:** ~159 (keep these)
+- **console.error statements:** ~159 (keep these for error tracking)
 
 ### Cleanup Strategy
 

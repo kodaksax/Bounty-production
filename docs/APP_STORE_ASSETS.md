@@ -197,6 +197,7 @@ Launch Special: Post your first 3 bounties with zero platform fees! Find reliabl
 - **Format:** PNG (no alpha/transparency)
 - **Color Space:** RGB
 - **Current:** `./assets/images/brandmark-design (3).png`
+- **Recommendation:** Rename to production-ready filename (e.g., `app-icon-1024.png`)
 - **Ensure:** Icon looks good on all backgrounds (light/dark mode)
 
 ### Android

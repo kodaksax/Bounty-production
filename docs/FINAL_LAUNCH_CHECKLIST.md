@@ -89,9 +89,12 @@ This is the master checklist for preparing BOUNTY for production launch. Use thi
 **Actions needed:**
 ```bash
 # 1. Remove console statements (see CODE_CLEANUP_GUIDE.md)
-#    - ~1,959 console.log/warn statements found
+#    To get current count, run:
+#    grep -r "console\.\(log\|warn\|debug\|info\)" app/ lib/ components/ hooks/ \
+#      --include="*.ts" --include="*.tsx" | wc -l
+#    
 #    - Keep console.error for production
-#    - Priority files:
+#    - Priority files (as of initial assessment):
 #      - app/tabs/postings-screen.tsx (25+ statements)
 #      - app/_layout.tsx (debug logs)
 #      - app/tabs/bounty-app.tsx (init logs)
