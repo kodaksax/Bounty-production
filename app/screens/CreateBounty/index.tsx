@@ -73,7 +73,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           // Attempt to roll back: delete the bounty since funds could not be escrowed
           try {
             await bountyService.deleteBounty(result.id);
-            console.warn('Bounty creation rolled back due to failed fund deduction.');
+            console.error('Bounty creation rolled back due to failed fund deduction.');
           } catch (deleteErr) {
             console.error('Failed to delete bounty after withdrawal failure:', deleteErr);
             throw new Error('Failed to deduct funds and could not roll back bounty. Please contact support.');

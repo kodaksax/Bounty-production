@@ -47,7 +47,7 @@ export function sanitizePlaceId(placeId: string): string {
   const VALID_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
   
   if (!VALID_PLACE_ID_PATTERN.test(placeId)) {
-    console.warn('Invalid place ID format detected:', placeId.substring(0, 20));
+    console.error('Invalid place ID format detected:', placeId.substring(0, 20));
     return '';
   }
   

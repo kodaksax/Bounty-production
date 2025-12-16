@@ -121,7 +121,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.wallet.currentBalance = profile.balance || 0;
       }
     } catch (e) {
-      console.warn('[DataExport] Profile fetch failed:', e);
+      console.error('[DataExport] Profile fetch failed:', e);
     }
 
     // 2. Get bounties created by user
@@ -135,7 +135,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.bounties.created = bounties;
       }
     } catch (e) {
-      console.warn('[DataExport] Created bounties fetch failed:', e);
+      console.error('[DataExport] Created bounties fetch failed:', e);
     }
 
     // 3. Get bounties accepted by user
@@ -149,7 +149,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.bounties.accepted = bounties;
       }
     } catch (e) {
-      console.warn('[DataExport] Accepted bounties fetch failed:', e);
+      console.error('[DataExport] Accepted bounties fetch failed:', e);
     }
 
     // 4. Get bounty applications
@@ -163,7 +163,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.bounties.applications = applications;
       }
     } catch (e) {
-      console.warn('[DataExport] Applications fetch failed:', e);
+      console.error('[DataExport] Applications fetch failed:', e);
     }
 
     // 5. Get conversations the user participates in
@@ -190,7 +190,7 @@ export async function exportUserData(userId: string): Promise<{
         }
       }
     } catch (e) {
-      console.warn('[DataExport] Conversations fetch failed:', e);
+      console.error('[DataExport] Conversations fetch failed:', e);
     }
 
     // 6. Get messages sent by the user
@@ -204,7 +204,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.messages = messages;
       }
     } catch (e) {
-      console.warn('[DataExport] Messages fetch failed:', e);
+      console.error('[DataExport] Messages fetch failed:', e);
     }
 
     // 7. Get wallet transactions
@@ -219,7 +219,7 @@ export async function exportUserData(userId: string): Promise<{
         // Note: The actual current balance is retrieved from the profile table above
       }
     } catch (e) {
-      console.warn('[DataExport] Wallet transactions fetch failed:', e);
+      console.error('[DataExport] Wallet transactions fetch failed:', e);
     }
 
     // 8. Get notifications
@@ -233,7 +233,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.notifications = notifications;
       }
     } catch (e) {
-      console.warn('[DataExport] Notifications fetch failed:', e);
+      console.error('[DataExport] Notifications fetch failed:', e);
     }
 
     // 9. Get completion submissions
@@ -247,7 +247,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.completions = completions;
       }
     } catch (e) {
-      console.warn('[DataExport] Completions fetch failed:', e);
+      console.error('[DataExport] Completions fetch failed:', e);
     }
 
     // 10. Get skills
@@ -261,7 +261,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.skills = skills;
       }
     } catch (e) {
-      console.warn('[DataExport] Skills fetch failed:', e);
+      console.error('[DataExport] Skills fetch failed:', e);
     }
 
     // 11. Get reports filed by the user
@@ -275,7 +275,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.reports = reports;
       }
     } catch (e) {
-      console.warn('[DataExport] Reports fetch failed:', e);
+      console.error('[DataExport] Reports fetch failed:', e);
     }
 
     // 12. Get blocked users (where user is the blocker)
@@ -289,7 +289,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.blockedUsers = blockedUsers;
       }
     } catch (e) {
-      console.warn('[DataExport] Blocked users fetch failed:', e);
+      console.error('[DataExport] Blocked users fetch failed:', e);
     }
 
     // 13. Get bounty cancellations requested by the user
@@ -303,7 +303,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.cancellations = cancellations;
       }
     } catch (e) {
-      console.warn('[DataExport] Cancellations fetch failed:', e);
+      console.error('[DataExport] Cancellations fetch failed:', e);
     }
 
     // 14. Get bounty disputes initiated by the user
@@ -317,7 +317,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.disputes = disputes;
       }
     } catch (e) {
-      console.warn('[DataExport] Disputes fetch failed:', e);
+      console.error('[DataExport] Disputes fetch failed:', e);
     }
 
     // 15. Get completion ready records for the user as hunter
@@ -331,7 +331,7 @@ export async function exportUserData(userId: string): Promise<{
         exportData.completionReady = completionReady;
       }
     } catch (e) {
-      console.warn('[DataExport] Completion ready fetch failed:', e);
+      console.error('[DataExport] Completion ready fetch failed:', e);
     }
 
     // Create JSON file

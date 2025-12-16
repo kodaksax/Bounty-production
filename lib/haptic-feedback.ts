@@ -111,7 +111,6 @@ export function useHapticFeedback() {
       hapticFeedback[type]();
     } catch (error) {
       // Silently fail if haptics aren't supported
-      console.debug('Haptic feedback not available:', error);
     }
   };
 

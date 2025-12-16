@@ -65,7 +65,7 @@ class LocationService {
       const permissionStatus = await this.getPermissionStatus();
       
       if (!permissionStatus.granted) {
-        console.warn('Location permission not granted');
+        console.error('Location permission not granted');
         return null;
       }
 

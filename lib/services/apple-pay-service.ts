@@ -48,7 +48,6 @@ class ApplePayService {
     try {
       // Step 1: Create PaymentIntent on backend
       const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
-      console.log('[ApplePay] creating payment intent at', endpoint)
       const token = authToken || await getAuthToken()
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -132,7 +131,6 @@ class ApplePayService {
 
       // Step 4: Verify payment on backend
       const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
-      console.log('[ApplePay] confirming payment at', confirmEndpoint)
       const confirmResponse = await fetch(confirmEndpoint, {
         method: 'POST',
         headers: {
@@ -180,7 +178,7 @@ async function getAuthToken(): Promise<string> {
     const session = (data as any)?.session ?? (data as any);
     return session?.access_token ?? '';
   } catch (err) {
-    console.warn('[ApplePay] failed to read auth token from supabase storage', err);
+    console.error('[ApplePay] failed to read auth token from supabase storage', err);
     return '';
   }
 }

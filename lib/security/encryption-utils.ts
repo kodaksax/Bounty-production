@@ -179,7 +179,7 @@ export async function encryptMessage(
     );
   }
   
-  console.warn('[Encryption] Using DEMO-ONLY encryptMessage - DO NOT USE IN PRODUCTION');
+  console.error('[Encryption] Using DEMO-ONLY encryptMessage - DO NOT USE IN PRODUCTION');
   
   try {
     // Generate IV for this message
@@ -221,7 +221,7 @@ export async function decryptMessage(
     );
   }
   
-  console.warn('[Encryption] Using DEMO-ONLY decryptMessage - DO NOT USE IN PRODUCTION');
+  console.error('[Encryption] Using DEMO-ONLY decryptMessage - DO NOT USE IN PRODUCTION');
   
   try {
     // Derive the key (same as encryption)
@@ -262,7 +262,7 @@ export async function generateKeyPair(): Promise<{
     );
   }
   
-  console.warn('[Encryption] generateKeyPair is DEMO-ONLY and cryptographically INSECURE');
+  console.error('[Encryption] generateKeyPair is DEMO-ONLY and cryptographically INSECURE');
   
   try {
     // PLACEHOLDER: Generate random keys (not actual key pair)

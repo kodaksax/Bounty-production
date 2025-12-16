@@ -95,7 +95,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
             {
               text: 'Continue',
               onPress: () => {
-                // TODO: Navigate to dedicated QR code display screen
+                // TODO (Post-Launch): Navigate to dedicated QR code display screen
                 // For now, proceed to code entry
                 // The QR code URI can be generated from data.totp.qr_code or data.totp.uri
                 promptForVerificationCode(data.id);

@@ -107,7 +107,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     if (!profileLoading) {
       // Debug: log when we can't resolve a username
       if (posterId) {
-        console.log('[BountyDetailModal] Could not resolve username for poster_id:', posterId, 'Profile:', normalizedPoster)
       }
       setDisplayUsername('Anonymous')
     } else {
@@ -246,7 +245,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         }
       } catch (e) {
         // ignore resolution errors and continue with original uri
-        console.warn('Failed to resolve cached attachment uri', e)
+        console.error('Failed to resolve cached attachment uri', e)
       }
 
       const canOpen = await Linking.canOpenURL(uri);

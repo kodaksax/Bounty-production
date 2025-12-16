@@ -155,7 +155,6 @@ export const userProfileService = {
       if (!resolvedUserId) resolvedUserId = authProfileService.getAuthUserId() ?? undefined;
 
       const key = this.storageKey(resolvedUserId);
-      console.log('[userProfile] Resolving profile. resolvedUserId=', resolvedUserId, 'storageKey=', key);
       const profileJson = await AsyncStorage.getItem(key);
   if (!profileJson) {
         // No per-user profile found.
@@ -167,11 +166,9 @@ export const userProfileService = {
             // Persist a copy under the new per-user key so future loads
             // return the correct user-specific profile.
             await AsyncStorage.setItem(key, legacy);
-            console.log('[userProfile] Migrated legacy profile to per-user storage for user:', resolvedUserId, 'storageKey=', key);
-            console.log('[userProfile] Loaded profile for:', legacyProfile.username || 'unknown', sanitizePhone(legacyProfile.phone), 'for userId=', resolvedUserId);
             return legacyProfile;
           } catch (e) {
-            console.warn('[userProfile] Failed to migrate legacy profile:', e);
+            console.error('[userProfile] Failed to migrate legacy profile:', e);
             return null;
           }
         }
@@ -180,7 +177,7 @@ export const userProfileService = {
         // authenticated user. Returning a legacy profile here causes the app
         // to show another user's profile while auth is still initializing.
         if (!resolvedUserId) {
-          console.warn('[userProfile] No authenticated user resolved yet; not returning legacy profile. storageKey=', key);
+          console.error('[userProfile] No authenticated user resolved yet; not returning legacy profile. storageKey=', key);
           return null;
         }
 
@@ -190,7 +187,6 @@ export const userProfileService = {
         // falling back to 'Unknown Poster'. Cache the result locally for
         // subsequent loads.
         try {
-          console.log('[userProfile] No local profile; attempting remote fetch for user:', resolvedUserId);
 
           // First try the canonical 'profiles' table (may contain sensitive fields
           // and might only be accessible for the current user). If that fails or
@@ -222,7 +218,7 @@ export const userProfileService = {
                 .single();
               if (pub.error) {
                 // Both attempts failed; log and return null. Include error details and the select used.
-                console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, {
+                console.error('[userProfile] public_profiles fetch error for user', resolvedUserId, {
                   select: 'id,username,displayName:display_name,avatar,location',
                   errorCode: pub.error?.code,
                   errorMessage: pub.error?.message || pub.error,
@@ -231,12 +227,12 @@ export const userProfileService = {
                 remoteData = pub.data ?? null;
               }
             } catch (e) {
-              console.warn('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
+              console.error('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
             }
           }
 
           if (!remoteData) {
-            console.warn('[userProfile] No remote profile found (profiles/public_profiles) for user:', resolvedUserId, 'priorError=', remoteError);
+            console.error('[userProfile] No remote profile found (profiles/public_profiles) for user:', resolvedUserId, 'priorError=', remoteError);
             return null;
           }
 
@@ -251,9 +247,8 @@ export const userProfileService = {
           // Cache locally under the per-user key so future reads are fast
           try {
             await AsyncStorage.setItem(key, JSON.stringify(normalized));
-            console.log('[userProfile] Cached remote profile locally for user:', resolvedUserId);
           } catch (e) {
-            console.warn('[userProfile] Failed to cache remote profile locally:', e);
+            console.error('[userProfile] Failed to cache remote profile locally:', e);
           }
 
           return normalized;
@@ -264,7 +259,6 @@ export const userProfileService = {
       }
 
       const profile = JSON.parse(profileJson);
-      console.log('[userProfile] Loaded profile for:', profile.username || 'unknown', sanitizePhone(profile.phone), 'for userId=', resolvedUserId, 'storageKey=', this.storageKey(resolvedUserId));
       return profile;
     } catch (error) {
       console.error('[userProfile] Error loading profile:', error);
@@ -308,7 +302,6 @@ export const userProfileService = {
       profiles[currentUserId] = data;
       await AsyncStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
 
-      console.log('[userProfile] Profile saved:', data.username, sanitizePhone(data.phone));
       return { success: true };
     } catch (error) {
       console.error('[userProfile] Error saving profile:', error);
@@ -360,7 +353,6 @@ export const userProfileService = {
           }
         }
       }
-      console.log('[userProfile] Profile cleared');
     } catch (error) {
       console.error('[userProfile] Error clearing profile:', error);
     }

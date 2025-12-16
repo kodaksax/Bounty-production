@@ -27,7 +27,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   // Verify admin status with backend
   const verifyAdminStatus = async (): Promise<boolean> => {
     if (!isSupabaseConfigured) {
-      console.warn('[AdminContext] Supabase not configured - cannot verify admin status');
+      console.error('[AdminContext] Supabase not configured - cannot verify admin status');
       return false;
     }
 
@@ -36,7 +36,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
-        console.log('[AdminContext] No active session - user not admin');
         await setIsAdmin(false);
         return false;
       }

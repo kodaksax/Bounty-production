@@ -77,7 +77,6 @@ export default function DoneScreen() {
           if (error) {
             console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
           } else {
-            console.log('[Onboarding] Successfully marked onboarding as complete for user:', userId);
           }
         }
         
@@ -86,12 +85,10 @@ export default function DoneScreen() {
         try {
           const token = await notificationService.requestPermissionsAndRegisterToken();
           if (token) {
-            console.log('[Onboarding] Push notification token registered successfully');
           } else {
-            console.log('[Onboarding] User declined notification permissions or permissions not available');
           }
         } catch (notifError) {
-          console.warn('[Onboarding] Failed to request notification permissions:', notifError);
+          console.error('[Onboarding] Failed to request notification permissions:', notifError);
         }
       } catch (error) {
         console.error('[Onboarding] Error marking onboarding as complete:', error);

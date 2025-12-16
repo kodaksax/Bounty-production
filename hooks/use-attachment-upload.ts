@@ -298,7 +298,7 @@ async function pickFromCamera(): Promise<{
       size = info.size
     }
   } catch (e) {
-    console.warn('Failed to get file size:', e)
+    console.error('Failed to get file size:', e)
   }
 
   return {
@@ -347,7 +347,7 @@ async function pickFromPhotos(): Promise<{
       size = info.size
     }
   } catch (e) {
-    console.warn('Failed to get file size:', e)
+    console.error('Failed to get file size:', e)
   }
 
   // Type-safe extraction of fileName with fallback

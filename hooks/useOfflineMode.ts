@@ -85,9 +85,7 @@ export function useOfflineMode(): OfflineMode {
 
       // Log connectivity change
       if (wasOffline && isNowOnline) {
-        console.log('[useOfflineMode] Network reconnected');
       } else if (!wasOffline && !isNowOnline) {
-        console.log('[useOfflineMode] Network disconnected');
       }
     });
 

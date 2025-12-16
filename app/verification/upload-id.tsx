@@ -108,7 +108,7 @@ export default function UploadIDScreen() {
 
     setIsSubmitting(true);
 
-    // TODO: Integrate with actual verification service
+    // TODO (Post-Launch): Integrate with actual verification service
     // Options:
     // 1. Onfido: https://onfido.com/
     // 2. Stripe Identity: https://stripe.com/identity

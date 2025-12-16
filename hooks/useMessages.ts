@@ -108,7 +108,6 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const reportMessage = async (messageId: string) => {
     try {
       // Report functionality would need backend implementation
-      console.log('Report message:', messageId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to report message');
     }

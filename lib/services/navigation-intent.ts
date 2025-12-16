@@ -13,7 +13,7 @@ export const navigationIntent = {
       await AsyncStorage.setItem(PENDING_CONV_KEY, id)
     } catch (e) {
       // best-effort
-      console.warn('navigationIntent: failed to persist pending conversation id', e)
+      console.error('navigationIntent: failed to persist pending conversation id', e)
     }
   },
 
@@ -33,7 +33,7 @@ export const navigationIntent = {
       }
       return null
     } catch (e) {
-      console.warn('navigationIntent: failed to read/clear pending conversation id', e)
+      console.error('navigationIntent: failed to read/clear pending conversation id', e)
       return null
     }
   },

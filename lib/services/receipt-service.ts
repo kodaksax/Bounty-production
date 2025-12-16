@@ -91,7 +91,7 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
         });
         return true;
       } else {
-        console.warn('Sharing is not available on this device');
+        console.error('Sharing is not available on this device');
         return false;
       }
     } catch (error) {

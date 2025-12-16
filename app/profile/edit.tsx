@@ -143,7 +143,7 @@ export default function EditProfileScreen() {
         skills: skillsets,
         avatar: avatarUrl || undefined,
       }).catch(e => {
-        console.warn('[EditProfile] local profile update failed (non-critical):', e);
+        console.error('[EditProfile] local profile update failed (non-critical):', e);
       });
 
       // Update initial data after successful save

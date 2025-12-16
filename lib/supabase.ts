@@ -79,7 +79,7 @@ if (isSupabaseConfigured) {
   if (mismatch) reasons.push(`Project ref mismatch (url=${urlRef}, key=${keyRef})`)
   const msg = `[supabase] Not configured: ${reasons.join('; ')}`
   if (typeof __DEV__ !== 'undefined' && __DEV__) console.error(msg)
-  else console.warn(msg)
+  else console.error(msg)
   supabase = new Proxy({} as any, {
     get() {
       throw new Error(msg)

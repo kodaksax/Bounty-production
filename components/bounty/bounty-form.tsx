@@ -37,7 +37,7 @@ interface BountyFormProps {
 
 export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bountyId }: BountyFormProps) {
   const navigation = useNavigation()
-  // TODO: Replace with your own auth state management (e.g., a React Context)
+  // TODO (Post-Launch): Replace with your own auth state management (e.g., a React Context)
   // const { user } = useAuth();
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -71,7 +71,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
         return
       }
 
-      // TODO: Get the auth token you stored after login
+      // TODO (Post-Launch): Get the auth token you stored after login
       // const authToken = AsyncStorage.getItem('authToken');
       // if (!authToken) {
       //   setSubmitError("You must be signed in to post a bounty");
@@ -81,8 +81,8 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       setIsSubmitting(true)
 
       const endpoint = isEditMode
-        ? `https://your-hostinger-api.com/bounties/${bountyId}` // TODO: Hostinger API endpoint
-        : "https://your-hostinger-api.com/bounties" // TODO: Hostinger API endpoint
+        ? `https://your-hostinger-api.com/bounties/${bountyId}` // TODO (Post-Launch): Hostinger API endpoint
+        : "https://your-hostinger-api.com/bounties" // TODO (Post-Launch): Hostinger API endpoint
 
       const method = isEditMode ? "PUT" : "POST"
 

@@ -113,7 +113,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         try {
           await Promise.all([refreshAuthProfile(), refreshUserProfile()]);
         } catch (e) {
-          console.warn('[ProfileScreen] focus refresh failed:', e);
+          console.error('[ProfileScreen] focus refresh failed:', e);
         }
       };
       run();

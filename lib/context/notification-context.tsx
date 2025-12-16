@@ -111,7 +111,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       const response = await Notifications.getLastNotificationResponseAsync();
       if (response) {
-        console.log('App opened from notification:', response);
         initialNotificationHandled.current = true;
         // Small delay to ensure router is ready
         setTimeout(() => {
@@ -119,7 +118,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         }, ROUTER_READY_DELAY_MS);
       }
     } catch (error) {
-      console.warn('Error checking initial notification:', error);
+      console.error('Error checking initial notification:', error);
     }
   }, [handleNotificationTap]);
 
@@ -135,7 +134,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const listeners = notificationService.setupNotificationListeners(
       // On notification received (foreground)
       (notification) => {
-        console.log('Notification received in foreground:', notification);
         // Refresh notifications list
         fetchNotifications();
         refreshUnreadCount();
@@ -169,7 +167,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           const channel = (supabase as any).channel(`notifications:${userId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload: any) => {
               // Refresh notifications immediately
-              try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.warn('notif realtime fetch failed', e) }
+              try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
             })
             .subscribe();
 
@@ -179,13 +177,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         // Fallback: classic .from().on() subscription
         // @ts-ignore
         const sub = supabase.from(`notifications:user_id=eq.${userId}`).on('INSERT', (payload: any) => {
-          try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.warn('notif realtime fetch failed', e) }
+          try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
         }).subscribe();
 
         return () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} }
       } catch (e) {
         // Non-fatal: we'll still poll every 30s as a fallback
-        console.warn('Failed to setup realtime notifications subscription', e);
+        console.error('Failed to setup realtime notifications subscription', e);
       }
     })();
 
@@ -194,7 +192,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   // Poll for new notifications every 30 seconds when app is active
   useEffect(() => {
-    // TODO: Optimize by using app state listener to pause when backgrounded
+    // TODO (Post-Launch): Optimize by using app state listener to pause when backgrounded
     // import { AppState } from 'react-native';
     // const subscription = AppState.addEventListener('change', nextAppState => {
     //   if (nextAppState === 'active') refreshUnreadCount();

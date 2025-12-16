@@ -175,7 +175,7 @@ export function EditProfileScreen({
       } as any
       
       await updateProfile(updates).catch(e => {
-        console.warn('[EditProfile] local profile update failed (non-critical):', e)
+        console.error('[EditProfile] local profile update failed (non-critical):', e)
       })
 
       // Update the profile used by Profile screen (name/title/location/portfolio/bio/avatar)
@@ -189,7 +189,7 @@ export function EditProfileScreen({
           avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
         })
       } catch (e) {
-        console.warn('[EditProfile] useProfile update failed (non-critical):', e)
+        console.error('[EditProfile] useProfile update failed (non-critical):', e)
       }
       
       // Notify parent legacy state if provided
@@ -260,7 +260,7 @@ export function EditProfileScreen({
         processedUri = processed.uri;
         setUploadProgress(0.3);
       } catch (processError) {
-        console.warn('Avatar processing failed, using original:', processError);
+        console.error('Avatar processing failed, using original:', processError);
       }
 
       const attachment = {

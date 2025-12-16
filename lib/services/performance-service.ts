@@ -53,7 +53,6 @@ class PerformanceService {
         transaction,
       });
 
-      console.log(`[Performance] Started measurement: ${name}`);
     } catch (error) {
       console.error('[Performance] Failed to start measurement:', error);
       Sentry.captureException(error);
@@ -69,7 +68,7 @@ class PerformanceService {
     try {
       const timer = this.timers.get(name);
       if (!timer) {
-        console.warn(`[Performance] No measurement found for: ${name}`);
+        console.error(`[Performance] No measurement found for: ${name}`);
         return null;
       }
 
@@ -91,7 +90,7 @@ class PerformanceService {
 
       // Log slow operations (> 1 second)
       if (duration > 1000) {
-        console.warn(`[Performance] Slow operation detected: ${name} took ${duration}ms`);
+        console.error(`[Performance] Slow operation detected: ${name} took ${duration}ms`);
         Sentry.captureMessage(`Slow operation: ${name}`, {
           level: 'warning',
           extra: {
@@ -102,7 +101,6 @@ class PerformanceService {
       }
 
       this.timers.delete(name);
-      console.log(`[Performance] Ended measurement: ${name} (${duration}ms)`);
 
       return duration;
     } catch (error) {
@@ -162,7 +160,7 @@ class PerformanceService {
 
       // Log slow API calls
       if (duration > 3000) {
-        console.warn(`[Performance] Slow API call: ${method} ${endpoint} took ${duration}ms`);
+        console.error(`[Performance] Slow API call: ${method} ${endpoint} took ${duration}ms`);
         Sentry.captureMessage(`Slow API call: ${method} ${endpoint}`, {
           level: 'warning',
           extra: properties,
@@ -183,8 +181,6 @@ class PerformanceService {
       await analyticsService.trackTiming('screen_load', duration, {
         screen_name: screenName,
       });
-
-      console.log(`[Performance] Screen load: ${screenName} (${duration}ms)`);
     } catch (error) {
       console.error('[Performance] Failed to record screen load:', error);
     }
@@ -212,7 +208,6 @@ class PerformanceService {
 
       await analyticsService.trackEvent(name as any, properties);
 
-      console.log(`[Performance] Metric recorded: ${name} = ${value}${unit}`);
     } catch (error) {
       console.error('[Performance] Failed to record metric:', error);
     }
@@ -228,7 +223,6 @@ class PerformanceService {
       }
     });
     this.timers.clear();
-    console.log('[Performance] All timers cleared');
   }
 }
 

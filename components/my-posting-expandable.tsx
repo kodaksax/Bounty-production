@@ -7,6 +7,7 @@ import type { Bounty } from 'lib/services/database.types'
 import { disputeService } from 'lib/services/dispute-service'
 import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
+import { userProfileService } from 'lib/services/user-profile-service'
 import type { Attachment, Conversation } from 'lib/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
@@ -86,6 +87,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [proofItems, setProofItems] = useState<Array<{ id: string; type: 'image' | 'file'; name: string; size?: number }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionPending, setSubmissionPending] = useState(false)
+  const [hunterName, setHunterName] = useState<string>('Hunter')
 
   useEffect(() => {
     let mounted = true
@@ -94,6 +96,20 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const list = await messageService.getConversations()
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
         if (mounted) setConversation(match)
+
+        // Fetch hunter name if available
+        const hunterId = bounty.accepted_by || readyRecord?.hunter_id
+        if (hunterId) {
+          try {
+            const hunterProfile = await userProfileService.getProfile(hunterId)
+            if (mounted && hunterProfile?.username) {
+              setHunterName(hunterProfile.username)
+            }
+          } catch (error) {
+            // Fallback to default "Hunter" if profile fetch fails
+            console.error('[MyPosting] Failed to fetch hunter profile:', error)
+          }
+        }
 
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
@@ -877,7 +893,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           visible={showReviewModal}
           bountyId={String(bounty.id)}
           hunterId={bounty.accepted_by || readyRecord?.hunter_id || ''}
-          hunterName="Hunter" // TODO: Get actual hunter name
+          hunterName={hunterName}
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
           onClose={() => setShowReviewModal(false)}

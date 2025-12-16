@@ -52,7 +52,6 @@ export const messageService = {
 
     if (!isOnline) {
       // Queue for later if offline
-      console.log('📴 Offline: queueing message for later delivery');
       
       // Create a temporary message
       const tempMessage: Message = {
@@ -189,7 +188,6 @@ export const messageService = {
     // Note: Pinning functionality would require extending the persistent storage
     // For now, we'll keep this as a no-op that returns success
     // This maintains backward compatibility
-    console.log('Pin message:', messageId);
     return { success: true };
   },
 
@@ -197,7 +195,6 @@ export const messageService = {
    * Unpin a message
    */
   unpinMessage: async (messageId: string): Promise<{ success: boolean; error?: string }> => {
-    console.log('Unpin message:', messageId);
     return { success: true };
   },
 
@@ -224,7 +221,6 @@ export const messageService = {
     }
 
     // In a real app, this would send to a moderation queue
-    console.log(`Message ${messageId} reported${reason ? `: ${reason}` : ''}`);
     
     return { success: true };
   },

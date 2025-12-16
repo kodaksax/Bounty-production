@@ -15,7 +15,6 @@ export function initializeSentry() {
     // Avoid double-initialization: if a Sentry client already exists, skip init.
     const hub = (Sentry as any).getCurrentHub && (Sentry as any).getCurrentHub();
     if (hub && hub.getClient && hub.getClient()) {
-      console.log('[Sentry] Already initialized (skipping)');
       return;
     }
   } catch (e) {
@@ -23,7 +22,6 @@ export function initializeSentry() {
   }
   // Only initialize if DSN is provided and not in development
   if (!SENTRY_DSN || SENTRY_DSN === 'YOUR_SENTRY_DSN') {
-    console.log('[Sentry] DSN not configured, error tracking disabled');
     return;
   }
 
@@ -94,7 +92,6 @@ export function initializeSentry() {
       integrations,
     });
 
-    console.log('[Sentry] Initialized successfully');
   } catch (error) {
     console.error('[Sentry] Failed to initialize:', error);
   }
