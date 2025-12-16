@@ -281,7 +281,7 @@ class WebSocketAdapter {
   send(type: string, data: any): void {
     if (!this.connected || !this.ws) {
       console.error('[WebSocket] Not connected, message queued:', type);
-      // TODO: Queue messages for sending when reconnected
+      // TODO (Post-Launch): Queue messages for sending when reconnected
       return;
     }
 

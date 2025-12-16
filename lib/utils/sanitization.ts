@@ -110,7 +110,7 @@ export function sanitizeRichText(input: string | null | undefined): string {
   if (!input) return '';
   
   // For now, treat as plain text and escape HTML
-  // TODO: If rich text support is needed, integrate DOMPurify or similar
+  // TODO (Post-Launch): If rich text support is needed, integrate DOMPurify or similar
   return sanitizeText(input);
 }
 

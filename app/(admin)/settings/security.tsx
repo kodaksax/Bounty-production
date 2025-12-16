@@ -33,7 +33,7 @@ export default function AdminSecuritySettingsScreen() {
     Alert.alert(title, 'Select an option:', buttons);
   };
 
-  // TODO: In production, integrate with actual authentication service for 2FA setup.
+  // TODO (Post-Launch): In production, integrate with actual authentication service for 2FA setup.
   // This should validate user eligibility, generate QR codes, and verify TOTP codes.
   const handleEnable2FA = () => {
     Alert.alert(

@@ -877,7 +877,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           visible={showReviewModal}
           bountyId={String(bounty.id)}
           hunterId={bounty.accepted_by || readyRecord?.hunter_id || ''}
-          hunterName="Hunter" // TODO: Get actual hunter name
+          hunterName="Hunter" // TODO (Post-Launch): Get actual hunter name
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
           onClose={() => setShowReviewModal(false)}

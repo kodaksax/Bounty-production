@@ -34,7 +34,7 @@ function formatToE164(phone: string): string {
   }
   
   // Default to +1 (US/Canada) for backwards compatibility
-  // TODO(international-phone-support): Add country code selection in UI for international support
+  // TODO (Post-Launch - international-phone-support): Add country code selection in UI for international support
   // Track this enhancement: https://github.com/kodaksax/bountyexpo/issues/TBD
   return `+1${cleanPhone}`;
 }
@@ -73,7 +73,7 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
       if (error.message.includes('rate limit') || error.message.includes('too many')) {
         // Try to provide more specific timing if available
         const waitTime = 'a few minutes'; // Default message
-        // TODO: Extract retry-after information from error if available
+        // TODO (Post-Launch): Extract retry-after information from error if available
         return {
           success: false,
           message: `Too many attempts. Please wait ${waitTime} before trying again.`,

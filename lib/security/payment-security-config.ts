@@ -64,7 +64,7 @@ export const STRIPE_CSP_DIRECTIVES = {
    */
   'style-src': [
     "'self'",
-    // TODO: Replace with nonces in production for XSS prevention
+    // TODO (Post-Launch): Replace with nonces in production for XSS prevention
     // Generate unique nonce per request: crypto.randomBytes(16).toString('base64')
     // Add to inline styles: <style nonce="{nonce}">
     // For now, unsafe-inline is used for development only
@@ -496,7 +496,7 @@ export const NEGATIVE_BALANCE_POLICY = {
     checkFrequency: 'daily',
     // Send alerts to configured email addresses
     // Set via NEGATIVE_BALANCE_ALERT_EMAILS environment variable (comma-separated)
-    alertEmails: (process.env.NEGATIVE_BALANCE_ALERT_EMAILS || 'finance@bountyexpo.com').split(',').map(e => e.trim()),
+    alertEmails: (process.env.NEGATIVE_BALANCE_ALERT_EMAILS || 'finance@bountyexpo.com').split(',').map((e: string) => e.trim()),
   },
 };
 

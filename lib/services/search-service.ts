@@ -152,7 +152,7 @@ export const searchService = {
       const amountScore = bounty.amount ? Math.min(bounty.amount / 10, 50) : 10;
 
       // Placeholder engagement metrics (deterministic based on bounty id)
-      // TODO: Replace with real engagement tracking when analytics are available
+      // TODO (Post-Launch): Replace with real engagement tracking when analytics are available
       // These are simulated values for display purposes until real metrics are implemented
       const hash = String(bounty.id)
         .split('')
