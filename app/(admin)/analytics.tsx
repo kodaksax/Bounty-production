@@ -5,6 +5,7 @@ import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AnalyticsMetricsCard, AnalyticsMetrics } from '../../components/admin/AnalyticsMetricsCard';
+import { supabase } from '../../lib/supabase';
 
 export default function AnalyticsDashboard() {
   const router = useRouter();
@@ -20,12 +21,23 @@ export default function AnalyticsDashboard() {
 
       // Fetch analytics from API
       const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+      
+      // Get authentication token from current session
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token;
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add authentication header if token is available
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/admin/analytics/metrics`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          // TODO (Post-Launch): Add authentication header
-        },
+        headers,
       });
 
       if (!response.ok) {
