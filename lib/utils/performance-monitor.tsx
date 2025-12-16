@@ -218,7 +218,6 @@ export function trackAsyncPerformance<T>(
  * Note: performance.memory is a non-standard feature only available in Chrome-based browsers
  */
 export function logMemoryUsage(label?: string) {
-  // Memory logging disabled for production
   if (!__DEV__) return;
 
   // Check if performance.memory is available (non-standard, Chrome only)
@@ -226,7 +225,9 @@ export function logMemoryUsage(label?: string) {
     const memory = (performance as any).memory;
     if (memory && typeof memory.usedJSHeapSize === 'number') {
       const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } = memory;
-      // Memory details available in __DEV__ mode only
+      console.log(
+        `[Memory${label ? ` - ${label}` : ''}] Used: ${(usedJSHeapSize / 1048576).toFixed(2)}MB / Total: ${(totalJSHeapSize / 1048576).toFixed(2)}MB / Limit: ${(jsHeapSizeLimit / 1048576).toFixed(2)}MB`
+      );
     }
   }
 }

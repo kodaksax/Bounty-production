@@ -139,9 +139,10 @@ class ErrorLogger {
       case "info":
         // console.info is not always visible in some Metro/Terminal setups,
         // so also use console.log which is more reliable across environments.
+        console.log(`[INFO] ${message}`, normalizedContext)
         break
       case "warning":
-        console.error(`[WARNING] ${message}`, normalizedContext)
+        console.warn(`[WARNING] ${message}`, normalizedContext)
         break
       case "error":
       case "critical":

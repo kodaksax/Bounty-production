@@ -58,7 +58,10 @@ export async function logClientInfo(message: string, metadata?: Record<string, a
     }
     await supabase.from('client_logs').insert([{ level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() }])
   } catch (e) {}
-  // Client logging disabled for production
+  // Also log to console in development for debugging
+  if (__DEV__) {
+    console.log('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined)
+  }
 }
 
 export default { logClientError, logClientInfo }

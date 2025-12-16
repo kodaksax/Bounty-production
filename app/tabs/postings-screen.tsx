@@ -235,7 +235,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         )
       } catch (err) {
         measuringRef.current = false
-        // Silently fail measure/scroll operations
+        console.error("Error during measure/scroll operation in measurePendingAndScroll:", err)
       }
     })
   }

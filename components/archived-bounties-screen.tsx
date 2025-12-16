@@ -59,7 +59,9 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
       amount={item.amount}
       distance={item.distance || 0}
       avatarSrc={item.poster_avatar}
-      onMenuClick={() => {}}
+      onMenuClick={() => {
+        // TODO: Implement menu actions for archived bounties
+      }}
     />
   )
 

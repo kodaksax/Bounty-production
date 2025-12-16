@@ -112,7 +112,10 @@ class StripeService {
           this.stripeSDK = stripeModule;
         }
       } catch (sdkError) {
-        // SDK initialization may fail in non-native environments
+        // SDK initialization may fail in non-native environments (e.g., web, Node)
+        if (__DEV__) {
+          console.error('[StripeService] Unable to initialize SDK (expected in non-native environments):', sdkError);
+        }
       }
       
       this.isInitialized = true;
