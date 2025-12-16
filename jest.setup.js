@@ -1,14 +1,5 @@
 // Jest setup file for global test configuration
 
-// Mock React for JSX support
-jest.mock('react', () => ({
-  ...jest.requireActual('react'),
-  createElement: jest.fn((type, props, ...children) => ({ type, props, children })),
-  cloneElement: jest.fn((element, props) => ({ ...element, props: { ...element.props, ...props } })),
-  useEffect: jest.fn((cb) => cb()),
-  useLayoutEffect: jest.fn((cb) => cb()),
-  useRef: jest.fn(() => ({ current: null })),
-}));
 
 // Mock environment variables for tests
 process.env.SUPABASE_URL = 'https://test.supabase.co';
