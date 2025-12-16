@@ -5,9 +5,8 @@
  */
 
 import dotenv from 'dotenv';
-import { Pool } from 'pg';
-import fs from 'fs';
 import path from 'path';
+import { Pool } from 'pg';
 import { fileURLToPath } from 'url';
 
 // Load environment variables

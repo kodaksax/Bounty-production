@@ -8,8 +8,8 @@
  * while non-sensitive data (UI preferences, drafts) can use AsyncStorage for better performance.
  */
 
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 // SecureStore options for iOS - ensures background access works

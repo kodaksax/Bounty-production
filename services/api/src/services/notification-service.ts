@@ -1,7 +1,7 @@
-import { eq, and, desc } from 'drizzle-orm';
-import { db } from '../db/connection';
-import { notifications, pushTokens, notificationPreferences, users } from '../db/schema';
+import { and, desc, eq } from 'drizzle-orm';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { db } from '../db/connection';
+import { notificationPreferences, notifications, pushTokens, users } from '../db/schema';
 
 // Initialize Expo SDK
 const expo = new Expo();
