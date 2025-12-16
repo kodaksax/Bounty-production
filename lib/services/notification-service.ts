@@ -239,20 +239,52 @@ export class NotificationService {
         return [];
       }
 
-      const url = `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`
-      const controller = new AbortController()
+      // First try Supabase directly (more reliable for development)
+      const userId = session.user?.id;
+      if (userId) {
+        try {
+          const { data, error: sbErr } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+          
+          if (!sbErr && data) {
+            this.cachedNotifications = data as any;
+            await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+            await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
+            return this.cachedNotifications;
+          }
+        } catch (supabaseError) {
+          // If Supabase fails, try API as fallback
+          if (__DEV__) {
+            console.log('[NotificationService] Supabase query failed, trying API fallback');
+          }
+        }
+      }
+
+      // Fallback to API endpoint (with longer timeout for development)
+      const url = `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`;
+      const controller = new AbortController();
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, 8000),
+        signal: withTimeout(controller.signal, 15000), // Increased from 8s to 15s
       });
 
       if (!response.ok) {
-        const text = await safeReadResponseText(response)
-        console.error(`Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`)
-        throw new Error('Failed to fetch notifications')
+        // Don't spam console with errors in development when backend is unreachable
+        if (__DEV__) {
+          console.log('[NotificationService] API unreachable, using cached notifications');
+        } else {
+          const text = await safeReadResponseText(response);
+          console.error(`Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`);
+        }
+        // Return cached notifications instead of throwing
+        return this.getCachedNotifications();
       }
 
       const data = await response.json();
@@ -264,27 +296,18 @@ export class NotificationService {
 
       return this.cachedNotifications;
     } catch (error) {
-      console.error('Error fetching notifications:', error);
-      // Fallback: try reading directly from Supabase if our API is unreachable
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id
-        if (userId) {
-          const { data, error: sbErr } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1)
-          if (!sbErr && data) {
-            // Map data to our Notification type (Supabase returns snake_case already matching fields)
-            this.cachedNotifications = data as any
-            await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
-            await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
-            return this.cachedNotifications
-          }
+      // Silent failure in development when backend is unreachable
+      if (__DEV__) {
+        // Only log once every 5 minutes to reduce noise
+        const now = Date.now();
+        const lastLog = (global as any).__lastNotifFetchErrorLog || 0;
+        if (now - lastLog > 300000) {
+          console.log('[NotificationService] Backend unreachable - using cached notifications');
+          (global as any).__lastNotifFetchErrorLog = now;
         }
-      } catch {}
+      } else {
+        console.error('Error fetching notifications:', error);
+      }
       // Return cached notifications on error
       return this.getCachedNotifications();
     }
@@ -317,44 +340,67 @@ export class NotificationService {
         return 0;
       }
 
-      const url = `${API_BASE_URL}/notifications/unread-count`
-      const controller = new AbortController()
+      // First try Supabase directly (more reliable for development)
+      const userId = session.user?.id;
+      if (userId) {
+        try {
+          const { count, error: sbErr } = await supabase
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('read', false);
+          
+          if (!sbErr && typeof count === 'number') {
+            this.unreadCount = count;
+            return this.unreadCount;
+          }
+        } catch (supabaseError) {
+          // If Supabase fails, try API as fallback
+          if (__DEV__) {
+            console.log('[NotificationService] Supabase query failed, trying API fallback');
+          }
+        }
+      }
+
+      // Fallback to API endpoint (with longer timeout for development)
+      const url = `${API_BASE_URL}/notifications/unread-count`;
+      const controller = new AbortController();
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, 8000),
+        signal: withTimeout(controller.signal, 15000), // Increased from 8s to 15s
       });
 
       if (!response.ok) {
-        const text = await safeReadResponseText(response)
-        console.error(`Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`)
-        throw new Error('Failed to fetch unread count')
+        // Don't spam console with errors in development when backend is unreachable
+        if (__DEV__) {
+          console.log('[NotificationService] API unreachable, using cached count');
+        } else {
+          const text = await safeReadResponseText(response);
+          console.error(`Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`);
+        }
+        return this.unreadCount; // Return cached value instead of throwing
       }
 
       const data = await response.json();
       this.unreadCount = data.count || 0;
       return this.unreadCount;
     } catch (error) {
-      console.error('Error fetching unread count:', error);
-      // Supabase fallback: count unread directly
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id
-        if (userId) {
-          const { count, error: sbErr } = await supabase
-            .from('notifications')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId)
-            .eq('read', false)
-          if (!sbErr && typeof count === 'number') {
-            this.unreadCount = count
-            return this.unreadCount
-          }
+      // Silent failure in development when backend is unreachable
+      if (__DEV__) {
+        // Only log once every 5 minutes to reduce noise
+        const now = Date.now();
+        const lastLog = (global as any).__lastUnreadCountErrorLog || 0;
+        if (now - lastLog > 300000) {
+          console.log('[NotificationService] Backend unreachable - using cached unread count');
+          (global as any).__lastUnreadCountErrorLog = now;
         }
-      } catch {}
-      return 0;
+      } else {
+        console.error('Error fetching unread count:', error);
+      }
+      return this.unreadCount; // Return cached value
     }
   }
 
