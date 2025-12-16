@@ -35,7 +35,6 @@ export const blockingService = {
         return { success: false, error: error.message };
       }
 
-      console.log(`🚫 User ${blockedId} blocked by ${blockerId}`);
       return { success: true };
     } catch (error) {
       console.error('Error blocking user:', error);
@@ -67,7 +66,6 @@ export const blockingService = {
         return { success: false, error: error.message };
       }
 
-      console.log(`✅ User ${blockedId} unblocked by ${blockerId}`);
       return { success: true };
     } catch (error) {
       console.error('Error unblocking user:', error);

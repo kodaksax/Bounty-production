@@ -85,7 +85,7 @@ class StripeService {
     // Read from Expo public env (must be prefixed EXPO_PUBLIC_ to reach client bundle)
     const key = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
     if (!key) {
-      console.warn('[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.');
+      console.error('[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.');
       this.publishableKey = '';
     } else {
       this.publishableKey = key;
@@ -110,14 +110,15 @@ class StripeService {
             urlScheme: 'bountyexpo',
           });
           this.stripeSDK = stripeModule;
-          console.log('[StripeService] SDK initialized successfully');
         }
       } catch (sdkError) {
-        console.warn('[StripeService] Unable to initialize SDK (expected in non-native environments):', sdkError);
+        // SDK initialization may fail in non-native environments (e.g., web, Node)
+        if (__DEV__) {
+          console.error('[StripeService] Unable to initialize SDK (expected in non-native environments):', sdkError);
+        }
       }
       
       this.isInitialized = true;
-      console.log('[StripeService] Initialized with publishable key prefix:', this.publishableKey ? this.publishableKey.slice(0, 10) + '…' : 'NONE');
     } catch (error) {
       console.error('[StripeService] Failed to initialize:', error);
       throw new Error('Failed to initialize payment service');
@@ -355,7 +356,6 @@ class StripeService {
       
       // Handle requires_action status (3D Secure)
       if (paymentIntent.status === 'requires_action') {
-        console.log('[StripeService] 3D Secure authentication required');
         // The SDK should have already handled 3DS if native SDK is available
         // If we get here in fallback mode, we need to handle it manually
         if (!this.stripeSDK?.handleNextAction) {
@@ -405,7 +405,7 @@ class StripeService {
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
-          console.warn('[StripeService] Failed to notify backend of confirmation:', backendError);
+          console.error('[StripeService] Failed to notify backend of confirmation:', backendError);
         }
 
         // Track payment completed
@@ -492,9 +492,7 @@ class StripeService {
       });
 
       if (!response.ok) {
-        // Log warning for any error status including 404
-        // 404 could mean endpoint not deployed yet, which should be logged
-        console.warn('[StripeService] Failed to fetch payment methods:', response.status);
+        // Return empty array for any error status including 404
         return [];
       }
 
@@ -544,8 +542,6 @@ class StripeService {
           message: 'Failed to remove payment method',
         };
       }
-      
-      console.log('[StripeService] Payment method detached:', paymentMethodId);
     } catch (error) {
       console.error('[StripeService] Error detaching payment method:', error);
       throw this.handleStripeError(error);
@@ -565,7 +561,6 @@ class StripeService {
       
       if (!this.stripeSDK?.initPaymentSheet || !this.stripeSDK?.presentPaymentSheet) {
         // Fallback for non-native environments
-        console.warn('[StripeService] Payment sheet not available in this environment');
         return {
           success: false,
           error: {
@@ -841,7 +836,6 @@ class StripeService {
       await this.initialize();
 
       if (!this.stripeSDK?.initPaymentSheet || !this.stripeSDK?.presentPaymentSheet) {
-        console.warn('[StripeService] Payment sheet not available for setup intent');
         return {
           success: false,
           error: {

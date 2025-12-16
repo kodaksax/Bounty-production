@@ -235,7 +235,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         )
       } catch (err) {
         measuringRef.current = false
-        console.warn('measure/scroll failed', err)
+        console.error("Error during measure/scroll operation in measurePendingAndScroll:", err)
       }
     })
   }
@@ -449,8 +449,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Failed to create bounty. The server returned an empty response.")
       }
 
-      console.log("Bounty posted successfully:", bounty)
-
       // Create escrow for paid bounties (funds are held when bounty is posted)
       if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
         try {
@@ -460,7 +458,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             bounty.title,
             currentUserId
           )
-          console.log('✅ Escrow created for posted bounty:', bounty.id)
         } catch (escrowError) {
           console.error('Error creating escrow:', escrowError)
           // If escrow creation fails, delete the bounty to maintain consistency
@@ -532,17 +529,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         throw new Error("Request not found")
       }
 
-      // DEBUG: dump full request and preliminary identifiers to help diagnose update failures
-      try {
-        console.debug('DEBUG: handleAcceptRequest - request object:', JSON.parse(JSON.stringify(request)))
-      } catch (dumpErr) {
-        // JSON.stringify can fail for cyclic structures; fallback to shallow log
-        console.debug('DEBUG: handleAcceptRequest - request (shallow):', request)
-      }
-
-      const debugBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
-      console.debug('DEBUG: handleAcceptRequest - resolved bountyId:', debugBountyId, 'requestId:', requestId)
-
       // Prepare identifiers and hunter id early for optimistic UI updates
       const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
       const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
@@ -589,7 +575,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       }
 
   // ANNOTATION: This API call should be transactional on your backend.
-  console.log('Accept: calling bountyRequestService.acceptRequest for', requestId)
   const result = await bountyRequestService.acceptRequest(requestId)
 
       if (!result) {
@@ -609,10 +594,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       let bountyObj: Bounty | null = (request.bounty as unknown as Bounty) ?? null
       if (!bountyObj && bountyId != null) {
         try {
-          console.log('Accept: fetching bounty details for', bountyId)
           const fetched = await bountyService.getById(bountyId)
           if (fetched) bountyObj = fetched
-          else console.warn('Accept: bountyService.getById returned null for', bountyId)
         } catch (fetchErr) {
           console.error('Accept: failed to fetch bounty details', fetchErr)
           // continue: we still attempt update using bountyId, and skip escrow if bounty data missing
@@ -636,21 +619,16 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             // Diagnostic: fetch server bounty and log its current state
             try {
               const serverBounty = await bountyService.getById(bountyId)
-              console.debug('Diagnostic: server bounty state for', bountyId, serverBounty)
-              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}. Server bounty state logged to console.`)
+              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}.`)
             } catch (srvErr) {
               console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
               Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)} and failed to fetch server state.`)
             }
-          } else {
-            console.log('✅ Bounty status updated to in_progress:', bountyId)
           }
         } catch (statusError) {
           console.error('Error updating bounty status:', statusError)
           // Continue with the flow even if status update fails
         }
-      } else {
-        console.warn('Skipping server bounty update: missing bounty id on request', { request })
       }
 
       // Remove all competing requests for this bounty (cleanup)
@@ -663,7 +641,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           await Promise.all(
             competingRequests.map(req => bountyRequestService.delete((req.id as any)))
           )
-          console.log(`✅ Removed ${competingRequests.length} competing requests`)
         } catch (cleanupError) {
           console.error('Error cleaning up competing requests:', cleanupError)
           // Continue even if cleanup fails
@@ -696,12 +673,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               const supabaseMessaging = await import('lib/services/supabase-messaging')
               await supabaseMessaging.sendMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
             } catch (msgErr) {
-              console.warn('Failed to send initial message via supabase messaging:', msgErr)
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
 
             try { await navigationIntent.setPendingConversationId(String(convId)) } catch (e) {}
-            console.log('✅ Supabase RPC conversation created for accepted request:', convId)
             logClientInfo('Supabase RPC conversation created', { convId, bountyId })
           }
         } catch (rpcErr: any) {
@@ -733,12 +708,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               currentUserId
             )
           } catch (localMsgErr) {
-            console.warn('Failed to send initial local message:', localMsgErr)
             logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
           }
 
           try { await navigationIntent.setPendingConversationId(localConv.id) } catch (e) { /* best-effort */ }
-          console.warn('Falling back to local conversation due to supabase error; local conv id:', localConv.id)
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
           try {
@@ -802,7 +775,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             }
           })
         })
-        console.log('✅ Acceptance notification sent to hunter')
       } catch (notifError) {
         console.error('Failed to send acceptance notification:', notifError)
         // Don't block the flow if notification fails
@@ -918,7 +890,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
                 try {
                   await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
-                  console.log('✅ Escrowed funds refunded for deleted bounty:', bounty.id);
                 } catch (refundError) {
                   console.error('Error refunding escrow:', refundError);
                   Alert.alert(

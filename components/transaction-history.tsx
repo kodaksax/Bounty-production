@@ -69,7 +69,7 @@ export function TransactionHistory({
       }
       setError(null);
 
-      // TODO: Replace with actual API call
+      // TODO (Post-Launch): Replace with actual API call
       // const response = await fetch(`/api/wallet/transactions?userId=${userId}&limit=${limit}`, {
       //   headers: {
       //     Authorization: `Bearer ${authToken}`,

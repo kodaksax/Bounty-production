@@ -46,7 +46,6 @@ class OfflineQueueService {
       
       // If we just came back online, process the queue
       if (wasOffline && this.isOnline) {
-        console.log('📡 Network reconnected, processing offline queue');
         this.processQueue();
       }
     });
@@ -87,7 +86,6 @@ class OfflineQueueService {
               const hasAttachmentsJson = !!b?.attachments_json
               const attachmentsLen = Array.isArray(b?.attachments) ? b.attachments.length : 0
               if (!hasAttachmentsJson && attachmentsLen > 0) {
-                console.log(`[offlineQueue] loaded queued bounty ${q.id} MISSING attachments_json but has attachments array length=${attachmentsLen}`)
               }
             }
           })
@@ -173,7 +171,6 @@ class OfflineQueueService {
         return;
       }
 
-      console.log(`🔄 Processing ${pendingItems.length} queued items`);
 
       for (const item of pendingItems) {
         // Check if item has exceeded max retries
@@ -207,7 +204,6 @@ class OfflineQueueService {
 
           // Remove from queue on success
           this.queue = this.queue.filter(i => i.id !== item.id);
-          console.log(`✅ Successfully processed and removed item ${item.id}`);
         } catch (error) {
           // Mark as pending for retry
           item.status = 'pending';
@@ -276,7 +272,6 @@ class OfflineQueueService {
     
     if (this.queue.length < initialLength) {
       await this.saveQueue();
-      console.log(`🗑️ Removed item ${itemId} from queue`);
       return true;
     }
     
@@ -293,7 +288,6 @@ class OfflineQueueService {
     
     if (removed > 0) {
       await this.saveQueue();
-      console.log(`🗑️ Cleared ${removed} failed items from queue`);
     }
   }
 
@@ -314,7 +308,6 @@ class OfflineQueueService {
     item.error = undefined;
     
     await this.saveQueue();
-    console.log(`🔄 Retrying item ${itemId}`);
 
     // Process immediately if online
     if (this.isOnline) {

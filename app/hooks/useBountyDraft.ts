@@ -43,7 +43,7 @@ export function useBountyDraft() {
           setDraft(JSON.parse(savedDraft));
         }
       } catch (error) {
-        console.warn('Failed to load bounty draft:', error);
+        console.error('Failed to load bounty draft:', error);
       } finally {
         setIsLoading(false);
       }
@@ -57,7 +57,7 @@ export function useBountyDraft() {
       setDraft(updated);
       await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
     } catch (error) {
-      console.warn('Failed to save bounty draft:', error);
+      console.error('Failed to save bounty draft:', error);
     }
   }, [draft]);
 
@@ -67,7 +67,7 @@ export function useBountyDraft() {
       setDraft(defaultDraft);
       await AsyncStorage.removeItem(DRAFT_KEY);
     } catch (error) {
-      console.warn('Failed to clear bounty draft:', error);
+      console.error('Failed to clear bounty draft:', error);
     }
   }, []);
 

@@ -42,7 +42,7 @@ export default function ChoosePeopleScreen() {
         if (!mounted) return
         setMutuals(list)
       } catch (err) {
-        console.warn('ChoosePeople: failed to load mutuals', err)
+        console.error('ChoosePeople: failed to load mutuals', err)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -88,7 +88,7 @@ export default function ChoosePeopleScreen() {
         router.back()
       }
     } catch (err) {
-      console.warn('ChoosePeople: failed to create conversation', err)
+      console.error('ChoosePeople: failed to create conversation', err)
       router.back()
     }
   }

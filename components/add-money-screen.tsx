@@ -93,7 +93,6 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           const amountCents = Math.round(numAmount * 100)
         
           const endpoint = `${API_BASE_URL}/payments/create-payment-intent`
-          console.log('Creating PaymentIntent at', endpoint, { amountCents })
           const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -218,7 +217,6 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         )
       } else if (result.errorCode === 'cancelled') {
         // user cancelled - no alert
-        console.log('Apple Pay cancelled by user')
       } else {
         // Show error banner instead of alert
         setError({ message: result.error || 'Unable to process Apple Pay payment.', type: 'payment' })

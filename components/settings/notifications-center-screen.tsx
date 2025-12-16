@@ -93,7 +93,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
             return;
           }
         } catch (apiError) {
-          console.warn('Failed to load preferences from API, falling back to local:', apiError);
+          console.error('Failed to load preferences from API, falling back to local:', apiError);
         }
       }
 
@@ -104,7 +104,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
         setPrefs(prev => ({ ...prev, ...localPrefs }));
       }
     } catch (e) {
-      console.warn('Failed to load notification prefs', e);
+      console.error('Failed to load notification prefs', e);
     } finally {
       setLoaded(true);
     }
@@ -116,7 +116,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
       
       // Save locally immediately for responsive UI
       AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(next)).catch(err => 
-        console.warn('persist notif failed', err)
+        console.error('persist notif failed', err)
       );
       
       // Sync with backend
@@ -132,7 +132,6 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.access_token) {
-        console.log('No session, skipping backend sync');
         return;
       }
 
@@ -164,7 +163,6 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
         throw new Error('Failed to sync preferences with backend');
       }
 
-      console.log('✅ Notification preferences synced with backend');
     } catch (error) {
       console.error('Failed to sync preferences with backend:', error);
       // Continue silently, preferences are still saved locally

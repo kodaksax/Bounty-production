@@ -24,13 +24,11 @@ export function useFormSubmission<T = any>(
 
       // Prevent duplicate submissions within debounce window
       if (now - lastSubmitTimeRef.current < debounceMs) {
-        console.log('Submission debounced - too soon');
         return;
       }
 
       // Prevent concurrent submissions
       if (submitInProgressRef.current) {
-        console.log('Submission already in progress');
         return;
       }
 

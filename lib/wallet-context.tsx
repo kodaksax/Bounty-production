@@ -310,7 +310,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Refresh wallet data from the API (fetches real transaction history and balance)
   const refreshFromApi = useCallback(async (accessToken?: string) => {
     if (!accessToken) {
-      console.log('[wallet] No access token provided, skipping API refresh');
       return;
     }
 

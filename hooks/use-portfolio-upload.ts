@@ -115,7 +115,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
                     await copyTo(dest, assetUri)
                     assetUri = dest
                   } catch (e) {
-                    console.warn('[usePortfolioUpload] failed to copy content uri:', e)
+                    console.error('[usePortfolioUpload] failed to copy content uri:', e)
                   }
                 }
 
@@ -129,7 +129,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
                   }
                 } catch (e) {
                   // If base64 read fails, fallback to file URI
-                  console.warn('[usePortfolioUpload] preview base64 failed:', e)
+                  console.error('[usePortfolioUpload] preview base64 failed:', e)
                   previewUri = assetUri
                 }
 
@@ -163,7 +163,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
               await copyTo(dest, assetUri)
               assetUri = dest
             } catch (e) {
-              console.warn('[usePortfolioUpload] failed to copy document uri:', e)
+              console.error('[usePortfolioUpload] failed to copy document uri:', e)
             }
           }
           setLastPicked({ id: `local-${Date.now()}`, uri: assetUri, name, kind: assetKind === 'image' ? 'image' : assetKind === 'video' ? 'video' : 'file' })
@@ -189,7 +189,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
           })
           processedUri = processed.uri
         } catch (e) {
-          console.warn('[usePortfolioUpload] image processing failed, using original:', e)
+          console.error('[usePortfolioUpload] image processing failed, using original:', e)
         }
       }
 
@@ -200,7 +200,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         try {
           videoThumbnailUri = await generateVideoThumbnail(assetUri)
         } catch (e) {
-          console.warn('[usePortfolioUpload] video thumbnail generation failed:', e)
+          console.error('[usePortfolioUpload] video thumbnail generation failed:', e)
         }
       }
 

@@ -240,7 +240,7 @@ export async function logPaymentError(
     });
   } catch (analyticsError) {
     // Don't let analytics errors affect payment flow
-    console.warn('[PaymentError] Analytics tracking failed:', analyticsError);
+    console.error('[PaymentError] Analytics tracking failed:', analyticsError);
   }
 }
 
@@ -305,8 +305,6 @@ export async function withPaymentRetry<T>(
       if (paymentError.retryDelayMs) {
         delay = Math.min(paymentError.retryDelayMs, maxDelayMs);
       }
-
-      console.log(`[PaymentRetry] Attempt ${attempt + 1}/${maxRetries + 1} (retry ${attempt}/${maxRetries}) failed, retrying in ${delay}ms...`);
       
       // Wait before retry
       await new Promise(resolve => setTimeout(resolve, delay));

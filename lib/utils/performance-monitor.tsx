@@ -54,7 +54,7 @@ class PerformanceMonitor {
 
     const metric = this.metrics.get(name);
     if (!metric) {
-      console.warn(`[Performance] No metric found with name: ${name}`);
+      console.error(`[Performance] No metric found with name: ${name}`);
       return null;
     }
 
@@ -69,9 +69,7 @@ class PerformanceMonitor {
 
     // Log slow operations (>1000ms)
     if (duration > SLOW_OPERATION_THRESHOLD) {
-      console.warn(`[Performance] Slow operation detected: ${name} took ${duration.toFixed(2)}ms`, metric.metadata);
-    } else if (__DEV__) {
-      console.log(`[Performance] ${name}: ${duration.toFixed(2)}ms`, metric.metadata);
+      console.error(`[Performance] Slow operation detected: ${name} took ${duration.toFixed(2)}ms`, metric.metadata);
     }
 
     return duration;
@@ -149,7 +147,7 @@ export function useRenderPerformance(componentName: string, metadata?: Record<st
     renderCount.current += 1;
 
     if (__DEV__ && duration > SIXTY_FPS_THRESHOLD) { // Slower than 60fps
-      console.warn(
+      console.error(
         `[Performance] ${componentName} render #${renderCount.current} took ${duration.toFixed(2)}ms (slower than 60fps)`,
         metadata
       );

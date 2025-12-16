@@ -96,7 +96,7 @@ export function SignUpForm() {
         try {
           await supabase.auth.signOut()
         } catch (signOutError) {
-          console.warn('[sign-up] Unable to sign out newly created session', signOutError)
+          console.error('[sign-up] Unable to sign out newly created session', signOutError)
         }
       }
 

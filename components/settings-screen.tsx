@@ -213,7 +213,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 try {
                   await authProfileService.clearUserDraftData(currentUserId);
                 } catch (e) {
-                  console.warn('[Logout] Draft cleanup failed', e);
+                  console.error('[Logout] Draft cleanup failed', e);
                 }
               }
 
@@ -223,7 +223,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 await SecureStore.deleteItemAsync('sb-refresh-token');
               } catch (e) {
                 // Not critical; log and continue
-                console.warn('[Logout] SecureStore cleanup failed', e);
+                console.error('[Logout] SecureStore cleanup failed', e);
               }
 
               // Route to sign-in screen using expo-router
@@ -234,7 +234,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                   router.replace('/auth/sign-in-form');
                 }
               } catch (e) {
-                console.warn('[Logout] Router navigation failed', e);
+                console.error('[Logout] Router navigation failed', e);
               }
 
               Alert.alert('Logged Out', 'You have been signed out successfully.');
@@ -311,7 +311,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                               try {
                                 await authProfileService.clearUserDraftData(currentUserId);
                               } catch (e) {
-                                console.warn('[DeleteAccount] Draft cleanup failed', e);
+                                console.error('[DeleteAccount] Draft cleanup failed', e);
                               }
 
                               // Clear any stored tokens
@@ -319,14 +319,14 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                                 await SecureStore.deleteItemAsync('sb-access-token');
                                 await SecureStore.deleteItemAsync('sb-refresh-token');
                               } catch (e) {
-                                console.warn('[DeleteAccount] SecureStore cleanup failed', e);
+                                console.error('[DeleteAccount] SecureStore cleanup failed', e);
                               }
 
                               // Sign out (may already be done by deleteUserAccount)
                               try {
                                 await supabase.auth.signOut();
                               } catch (e) {
-                                console.warn('[DeleteAccount] Sign out failed', e);
+                                console.error('[DeleteAccount] Sign out failed', e);
                               }
 
                               // Route to sign-in screen
@@ -337,7 +337,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                                   router.replace('/auth/sign-in-form');
                                 }
                               } catch (e) {
-                                console.warn('[DeleteAccount] Router navigation failed', e);
+                                console.error('[DeleteAccount] Router navigation failed', e);
                               }
 
                               Alert.alert('Account Deleted', result.message || 'Your account has been permanently deleted.');

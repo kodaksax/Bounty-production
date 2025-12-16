@@ -358,7 +358,7 @@ export default function PayoutScreen() {
             <TouchableOpacity
               style={styles.receiptButton}
               onPress={() => {
-                // TODO: Implement actual receipt generation and download
+                // TODO (Post-Launch): Implement actual receipt generation and download
                 Alert.alert(
                   'Receipt',
                   `Transaction Receipt\n\nBounty: ${bounty.title}\nAmount: ${bounty.is_for_honor ? 'For Honor' : '$' + bounty.amount.toFixed(2)}\nStatus: Completed\nDate: ${bounty.created_at}\n\nReceipt download feature coming soon!`

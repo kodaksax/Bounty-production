@@ -23,7 +23,7 @@ const loadFromStorage = async () => {
       }
     }
   } catch (e) {
-    console.warn('[portfolio-service] failed to load from storage', e);
+    console.error('[portfolio-service] failed to load from storage', e);
   }
   // Initialize with empty store - no seed data for production readiness
   portfolioStore = {};
@@ -35,7 +35,7 @@ const saveToStorage = async () => {
     if (portfolioStore === null) portfolioStore = {};
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(portfolioStore));
   } catch (e) {
-    console.warn('[portfolio-service] failed to save to storage', e);
+    console.error('[portfolio-service] failed to save to storage', e);
   }
 };
 
@@ -215,7 +215,7 @@ export async function generateVideoThumbnail(
     });
     return uri;
   } catch (error) {
-    console.warn('[portfolio-service] Failed to generate video thumbnail:', error);
+    console.error('[portfolio-service] Failed to generate video thumbnail:', error);
     return undefined;
   }
 }

@@ -32,7 +32,7 @@ export async function logClientError(message: string, metadata?: Record<string, 
   } catch (e) {
     // swallow - we don't want monitoring failures to break app logic
     // still print to console for local debugging
-    // console.warn('monitoring: failed to send client log', e)
+    // console.error('monitoring: failed to send client log', e)
   }
 
   // Always output to console too - use the safe serialized metadata we built above
@@ -58,7 +58,10 @@ export async function logClientInfo(message: string, metadata?: Record<string, a
     }
     await supabase.from('client_logs').insert([{ level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() }])
   } catch (e) {}
-  try { console.log('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined) } catch {}
+  // Also log to console in development for debugging
+  if (__DEV__) {
+    console.log('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined)
+  }
 }
 
 export default { logClientError, logClientInfo }

@@ -709,7 +709,6 @@ export const bountyService = {
 
       // If offline, queue the bounty for later
       if (!isOnline) {
-        console.log('📴 Offline: queueing bounty for later submission');
         // Ensure attachments_json is included on the queued payload if attachments are present
         try {
           const attachmentsFromPayload = (bounty as any).attachments || (bounty as any).attachments_list || []

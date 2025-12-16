@@ -53,7 +53,7 @@ class AddressAutocompleteService {
                   null;
     
     if (!this.apiKey) {
-      console.warn('Google Places API key not configured. Address autocomplete will be disabled.');
+      console.error('Google Places API key not configured. Address autocomplete will be disabled.');
     }
   }
 
@@ -81,7 +81,7 @@ class AddressAutocompleteService {
     }
   ): Promise<AddressSuggestion[]> {
     if (!this.isConfigured()) {
-      console.warn('Address autocomplete not configured');
+      console.error('Address autocomplete not configured');
       return [];
     }
 
@@ -92,7 +92,7 @@ class AddressAutocompleteService {
     // Sanitize the query input
     const sanitizedQuery = sanitizeSearchQuery(query);
     if (!sanitizedQuery) {
-      console.warn('Invalid search query');
+      console.error('Invalid search query');
       return [];
     }
 
@@ -179,14 +179,14 @@ class AddressAutocompleteService {
    */
   async getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
     if (!this.isConfigured()) {
-      console.warn('Address autocomplete not configured');
+      console.error('Address autocomplete not configured');
       return null;
     }
 
     // Validate and sanitize place ID
     const sanitizedPlaceId = sanitizePlaceId(placeId);
     if (!sanitizedPlaceId) {
-      console.warn('Invalid place ID provided');
+      console.error('Invalid place ID provided');
       return null;
     }
 

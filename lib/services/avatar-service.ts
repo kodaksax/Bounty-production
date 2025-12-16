@@ -58,7 +58,7 @@ export const avatarService = {
 
         if (!updatedProfile) {
           // Upload succeeded but profile update failed
-          console.warn('Avatar uploaded but profile update failed')
+          console.error('Avatar uploaded but profile update failed')
         }
       }
 

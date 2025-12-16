@@ -44,7 +44,6 @@ async function clearLocalUserData(): Promise<void> {
     );
     
     await AsyncStorage.multiRemove([...keysToRemove, ...userSpecificKeys]);
-    console.log('[AccountDeletion] Cleared local user data');
   } catch (error) {
     console.error('[AccountDeletion] Error clearing local data:', error);
   }
@@ -77,7 +76,7 @@ async function getAccountDeletionInfo(userId: string): Promise<{
       activeBounties = count;
     }
   } catch (e) {
-    console.warn('[AccountDeletion] Failed to count created bounties:', e);
+    console.error('[AccountDeletion] Failed to count created bounties:', e);
   }
 
   // Count bounties user is working on
@@ -92,7 +91,7 @@ async function getAccountDeletionInfo(userId: string): Promise<{
       workingOnBounties = count;
     }
   } catch (e) {
-    console.warn('[AccountDeletion] Failed to count accepted bounties:', e);
+    console.error('[AccountDeletion] Failed to count accepted bounties:', e);
   }
 
   // Calculate escrow amount
@@ -108,7 +107,7 @@ async function getAccountDeletionInfo(userId: string): Promise<{
       escrowAmount = transactions.reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
     }
   } catch (e) {
-    console.warn('[AccountDeletion] Failed to calculate escrow:', e);
+    console.error('[AccountDeletion] Failed to calculate escrow:', e);
   }
 
   // Count pending applications
@@ -123,7 +122,7 @@ async function getAccountDeletionInfo(userId: string): Promise<{
       pendingApplications = count;
     }
   } catch (e) {
-    console.warn('[AccountDeletion] Failed to count applications:', e);
+    console.error('[AccountDeletion] Failed to count applications:', e);
   }
 
   return {
@@ -200,15 +199,13 @@ export async function deleteUserAccount(): Promise<{
     // The backend has the service role key to properly delete from auth.users
     const apiBaseUrl = getApiBaseUrl(3001); // Use port 3001 for the api server (matches server.js)
     
-    console.log('[AccountDeletion] API URL:', apiBaseUrl);
-    console.log('[AccountDeletion] User ID:', userId);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       try {
         controller.abort();
       } catch (abortErr) {
-        console.warn('[AccountDeletion] AbortController abort failed:', abortErr);
+        console.error('[AccountDeletion] AbortController abort failed:', abortErr);
       }
     }, 30000);
 
@@ -285,7 +282,7 @@ export async function deleteUserAccount(): Promise<{
       }
       
       // Fallback: Try to delete profile directly if API is not available
-      console.warn('[AccountDeletion] API not available, attempting fallback...');
+      console.error('[AccountDeletion] API not available, attempting fallback...');
       
       try {
         // Pre-fallback cleanup sequence (best-effort, each step non-fatal):
@@ -295,9 +292,9 @@ export async function deleteUserAccount(): Promise<{
             .from('completion_submissions')
             .delete()
             .eq('hunter_id', userId);
-          if (compErr) console.warn('[AccountDeletion] Fallback completion_submissions cleanup failed (continuing):', compErr);
+          if (compErr) console.error('[AccountDeletion] Fallback completion_submissions cleanup failed (continuing):', compErr);
         } catch (e) {
-          console.warn('[AccountDeletion] Fallback completion_submissions cleanup threw (continuing):', e);
+          console.error('[AccountDeletion] Fallback completion_submissions cleanup threw (continuing):', e);
         }
         // 2. Delete bounty requests by this user (hunter applications)
         try {
@@ -305,9 +302,9 @@ export async function deleteUserAccount(): Promise<{
             .from('bounty_requests')
             .delete()
             .eq('user_id', userId);
-          if (reqErr) console.warn('[AccountDeletion] Fallback bounty_requests cleanup failed (continuing):', reqErr);
+          if (reqErr) console.error('[AccountDeletion] Fallback bounty_requests cleanup failed (continuing):', reqErr);
         } catch (e) {
-          console.warn('[AccountDeletion] Fallback bounty_requests cleanup threw (continuing):', e);
+          console.error('[AccountDeletion] Fallback bounty_requests cleanup threw (continuing):', e);
         }
         // 3. Delete bounties created by this user to avoid NOT NULL poster_id violation
         try {
@@ -315,9 +312,9 @@ export async function deleteUserAccount(): Promise<{
             .from('bounties')
             .delete()
             .eq('poster_id', userId);
-          if (bntyErr) console.warn('[AccountDeletion] Fallback bounties cleanup failed (continuing):', bntyErr);
+          if (bntyErr) console.error('[AccountDeletion] Fallback bounties cleanup failed (continuing):', bntyErr);
         } catch (e) {
-          console.warn('[AccountDeletion] Fallback bounties cleanup threw (continuing):', e);
+          console.error('[AccountDeletion] Fallback bounties cleanup threw (continuing):', e);
         }
         // 4. Delete conversations created by this user, ensuring children removed first
         try {
@@ -327,7 +324,7 @@ export async function deleteUserAccount(): Promise<{
             .select('id')
             .eq('created_by', userId);
           if (convListErr) {
-            console.warn('[AccountDeletion] Fallback conversations list failed (continuing):', convListErr);
+            console.error('[AccountDeletion] Fallback conversations list failed (continuing):', convListErr);
           } else if (convs && convs.length > 0) {
             const ids = convs.map((c: any) => c.id);
             // Delete messages first
@@ -335,28 +332,28 @@ export async function deleteUserAccount(): Promise<{
               .from('messages')
               .delete()
               .in('conversation_id', ids);
-            if (msgErr) console.warn('[AccountDeletion] Fallback messages deletion failed (continuing):', msgErr);
+            if (msgErr) console.error('[AccountDeletion] Fallback messages deletion failed (continuing):', msgErr);
             // Delete participants
             const { error: partErr } = await supabase
               .from('conversation_participants')
               .delete()
               .in('conversation_id', ids);
-            if (partErr) console.warn('[AccountDeletion] Fallback participants deletion failed (continuing):', partErr);
+            if (partErr) console.error('[AccountDeletion] Fallback participants deletion failed (continuing):', partErr);
             // Delete conversations
             const { error: convDelErr } = await supabase
               .from('conversations')
               .delete()
               .in('id', ids);
-            if (convDelErr) console.warn('[AccountDeletion] Fallback conversations deletion failed (continuing):', convDelErr);
+            if (convDelErr) console.error('[AccountDeletion] Fallback conversations deletion failed (continuing):', convDelErr);
           }
           // Remove any participant rows for this user in other conversations
           const { error: partUserErr } = await supabase
             .from('conversation_participants')
             .delete()
             .eq('user_id', userId);
-          if (partUserErr) console.warn('[AccountDeletion] Fallback participant rows for user deletion failed (continuing):', partUserErr);
+          if (partUserErr) console.error('[AccountDeletion] Fallback participant rows for user deletion failed (continuing):', partUserErr);
         } catch (e) {
-          console.warn('[AccountDeletion] Fallback conversations cascade deletion threw (continuing):', e);
+          console.error('[AccountDeletion] Fallback conversations cascade deletion threw (continuing):', e);
         }
         const { error: profileError } = await supabase
           .from('profiles')

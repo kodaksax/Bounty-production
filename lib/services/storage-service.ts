@@ -42,7 +42,7 @@ export const storageService = {
       if (supabaseClient) {
         return await this._uploadToSupabase(fileUri, bucket, path, onProgress)
       } else {
-        console.warn('[StorageService] Supabase not configured, using AsyncStorage fallback')
+        console.error('[StorageService] Supabase not configured, using AsyncStorage fallback')
         return await this._saveToAsyncStorage(fileUri, path)
       }
     } catch (error) {
@@ -144,11 +144,11 @@ export const storageService = {
               if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
             }
           } catch (e) {
-            console.warn('[StorageService] fetch->blob->arrayBuffer failed:', e)
+            console.error('[StorageService] fetch->blob->arrayBuffer failed:', e)
           }
         }
       } catch (e) {
-        console.warn('[StorageService] fetch->arrayBuffer failed, falling back to base64:', e)
+        console.error('[StorageService] fetch->arrayBuffer failed, falling back to base64:', e)
       }
 
       // Fallback: read as base64 and construct ArrayBuffer

@@ -63,13 +63,12 @@ async function notifyAdminsOfReport(
 
     if (error) {
       // Log but don't throw - notification is non-critical
-      console.warn('Could not create admin notification:', error.message);
+      console.error('Could not create admin notification:', error.message);
     } else {
-      console.log(`📧 Admin notification sent for ${contentType} report`);
     }
   } catch (err) {
     // Silently fail for notifications - the report itself is what matters
-    console.warn('Admin notification failed:', err);
+    console.error('Admin notification failed:', err);
   }
 }
 
@@ -105,7 +104,6 @@ export const reportService = {
       // Send admin notification
       await notifyAdminsOfReport('bounty', String(bountyId), reason, userId);
 
-      console.log(`🚨 Bounty ${bountyId} reported`, { reason, details });
       return { success: true };
     } catch (error) {
       console.error('Error reporting bounty:', error);
@@ -147,7 +145,6 @@ export const reportService = {
       // Send admin notification
       await notifyAdminsOfReport('profile', userId, reason, reporterId);
 
-      console.log(`🚨 User ${userId} reported`, { reason, details });
       return { success: true };
     } catch (error) {
       console.error('Error reporting user:', error);
@@ -189,7 +186,6 @@ export const reportService = {
       // Send admin notification
       await notifyAdminsOfReport('message', messageId, reason, userId);
 
-      console.log(`🚨 Message ${messageId} reported`, { reason, details });
       return { success: true };
     } catch (error) {
       console.error('Error reporting message:', error);

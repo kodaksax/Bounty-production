@@ -34,7 +34,6 @@ state,
 
 // Open the browser window for user sign in
 const credentialState = await appleAuthAndroid.signIn();
-console.log('Apple sign in successful:', credentialState);
 
 if (credentialState.id_token && credentialState.code && credentialState.nonce) {
 const signInWithIdTokenCredentials: SignInWithIdTokenCredentials = {
@@ -49,7 +48,6 @@ const { data, error } = await supabase.auth.signInWithIdToken(signInWithIdTokenC
 if (error) {
 console.error('Error signing in with Apple:', error);
 } else {
-console.log('Apple sign in successful:', data);
 }
 }
 }

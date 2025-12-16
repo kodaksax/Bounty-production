@@ -114,14 +114,14 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         }
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.warn('[Mixpanel] init failed', e);
+        console.error('[Mixpanel] init failed', e);
       }
 
       try {
         await showNativeSplash();
         await Asset.loadAsync([ require('../assets/images/icon.png') ]);
       } catch (e) {
-        console.warn('[Splash] preparation error', e);
+        console.error('[Splash] preparation error', e);
       } finally {
         if (!cancelled) {
           setAppIsReady(true);

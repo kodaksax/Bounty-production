@@ -59,7 +59,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           setTwoFactorEnabled((factors?.totp?.length ?? 0) > 0);
         }
       } catch (e) {
-        console.warn('Failed to load privacy settings', e);
+        console.error('Failed to load privacy settings', e);
       } finally {
         setLoading(false);
       }
@@ -69,7 +69,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   const persist = async (patch: Partial<PrivacyState>) => {
     setState(prev => {
       const next = { ...prev, ...patch };
-      setSecureJSON(SecureKeys.PRIVACY_SETTINGS, next).catch(err => console.warn('persist failed', err));
+      setSecureJSON(SecureKeys.PRIVACY_SETTINGS, next).catch(err => console.error('persist failed', err));
       return next;
     });
   };
@@ -203,7 +203,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
             {
               text: 'Continue',
               onPress: () => {
-                // TODO: Navigate to dedicated QR code display screen
+                // TODO (Post-Launch): Navigate to dedicated QR code display screen
                 // For now, proceed to code entry
                 promptForVerificationCode(data.id);
               },
@@ -219,7 +219,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   const promptForVerificationCode = (factorId: string) => {
-    // TODO: Replace Alert.prompt with a proper modal/screen for better accessibility
+    // TODO (Post-Launch): Replace Alert.prompt with a proper modal/screen for better accessibility
     // Alert.prompt is not accessible to screen readers and doesn't work on Android
     // Consider creating a dedicated 2FA verification modal component
     Alert.prompt(

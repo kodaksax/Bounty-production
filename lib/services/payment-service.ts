@@ -85,7 +85,7 @@ class PaymentService {
 
       // Log security warnings
       if (securityCheck.warnings.length > 0) {
-        console.warn('[PaymentService] Security warnings:', securityCheck.warnings);
+        console.error('[PaymentService] Security warnings:', securityCheck.warnings);
         await analyticsService.trackEvent('payment_security_warning', {
           warnings: securityCheck.warnings.join(', '),
           userId: options.userId,
@@ -101,7 +101,6 @@ class PaymentService {
       });
 
       if (scaRequired) {
-        console.log('[PaymentService] SCA required for this transaction');
         await analyticsService.trackEvent('payment_sca_required', {
           amount: options.amount,
           currency: options.currency,
@@ -232,15 +231,15 @@ class PaymentService {
         exp_year: method.card.exp_year,
         fingerprint: method.card.fingerprint ?? undefined,
         // Use actual funding type if available, otherwise default to 'credit'
-        funding: method.card.funding ?? 'credit', // TODO: Extend StripePaymentMethod type if missing
+        funding: method.card.funding ?? 'credit', // TODO (Post-Launch): Extend StripePaymentMethod type if missing
         last4: method.card.last4,
       },
       created: method.created,
       customer: method.customer ?? null,
       // Use actual livemode if available, otherwise default to false
-      livemode: method.livemode ?? false, // TODO: Extend StripePaymentMethod type if missing
+      livemode: method.livemode ?? false, // TODO (Post-Launch): Extend StripePaymentMethod type if missing
       // Use actual metadata if available, otherwise default to empty object
-      metadata: method.metadata ?? {}, // TODO: Extend StripePaymentMethod type if missing
+      metadata: method.metadata ?? {}, // TODO (Post-Launch): Extend StripePaymentMethod type if missing
       type: (method.type ?? 'card') as unknown as import('stripe').Stripe.PaymentMethod.Type,
     };
   }
