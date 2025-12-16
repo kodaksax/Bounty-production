@@ -104,7 +104,7 @@ export function PaymentElementWrapper({
           setStripeModule(stripe);
         }
       } catch (err) {
-        console.warn('[PaymentElementWrapper] Stripe SDK not available:', err);
+        console.error('[PaymentElementWrapper] Stripe SDK not available:', err);
         if (mounted) {
           setError('Payment service not available on this platform');
           setIsLoading(false);

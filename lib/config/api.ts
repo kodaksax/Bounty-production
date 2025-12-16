@@ -36,5 +36,4 @@ export const API_BASE_URL = getApiBaseUrl()
 // Log the resolved API base URL at module load to help diagnose device network issues
 try {
   // eslint-disable-next-line no-console
-  console.log('[client-config] Resolved API_BASE_URL ->', API_BASE_URL)
 } catch (e) {}

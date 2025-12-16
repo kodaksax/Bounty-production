@@ -183,7 +183,6 @@ export default function UserProfileScreen() {
         undefined // no bounty context
       );
 
-      console.log('✅ Conversation created/retrieved:', conversation.id);
       
   // Navigate to messenger
   router.push(ROUTES.TABS.MESSENGER as any);

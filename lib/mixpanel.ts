@@ -36,9 +36,6 @@ export async function initMixpanel() {
       // Last-resort: use the module as-is
       _mixpanel = nativePkg;
     }
-
-    // eslint-disable-next-line no-console
-    console.log('[mixpanel] initialized (native)');
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[mixpanel] native init failed or not installed', e);
@@ -51,7 +48,7 @@ export const isMixpanelReady = () => !!_mixpanel;
 export const identify = (id: string, props?: Record<string, any>) => {
   try {
     if (!_mixpanel) {
-      if (__DEV__) console.warn('[mixpanel] identify called but SDK not initialized');
+      if (__DEV__) console.error('[mixpanel] identify called but SDK not initialized');
       return;
     }
     if (typeof _mixpanel.identify === 'function') {
@@ -68,14 +65,14 @@ export const identify = (id: string, props?: Record<string, any>) => {
     }
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('mixpanel identify failed', e);
+    console.error('mixpanel identify failed', e);
   }
 };
 
 export const track = (event: string, props?: Record<string, any>) => {
   try {
     if (!_mixpanel) {
-      if (__DEV__) console.warn('[mixpanel] track called but SDK not initialized. Event:', event, props);
+      if (__DEV__) console.error('[mixpanel] track called but SDK not initialized. Event:', event, props);
       return;
     }
     if (typeof _mixpanel.track === 'function') {
@@ -83,7 +80,7 @@ export const track = (event: string, props?: Record<string, any>) => {
     }
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('mixpanel track failed', e);
+    console.error('mixpanel track failed', e);
   }
 };
 

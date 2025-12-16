@@ -125,7 +125,6 @@ export const createBountyWithValidationUtil = async (
 
     // If user doesn't exist, create a default profile
     if (!user) {
-      console.log("User doesn't exist, creating default profile...")
       const defaultProfile = {
         id: bountyData.poster_id,
         username: "@Jon_Doe",
@@ -139,10 +138,10 @@ export const createBountyWithValidationUtil = async (
       try {
   user = await profileService.create(defaultProfile)
         if (!user) {
-          console.warn("Failed to create default profile, continuing anyway...")
+          console.error("Failed to create default profile, continuing anyway...")
         }
       } catch (err) {
-        console.warn("Error creating default profile:", err)
+        console.error("Error creating default profile:", err)
         // Continue with bounty creation even if profile creation fails
       }
     }

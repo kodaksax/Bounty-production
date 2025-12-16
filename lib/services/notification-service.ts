@@ -151,7 +151,6 @@ export class NotificationService {
       await AsyncStorage.setItem(PERMISSION_STATUS_KEY, finalStatus);
 
       if (finalStatus !== 'granted') {
-        console.log('Notification permissions not granted');
         return null;
       }
 
@@ -178,7 +177,6 @@ export class NotificationService {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        console.log('No active session, cannot register push token');
         return;
       }
 
@@ -201,7 +199,6 @@ export class NotificationService {
         throw new Error('Failed to register push token')
       }
 
-      console.log('Push token registered successfully')
     } catch (error) {
       console.error('Error registering push token:', error);
       // Fallback: try saving directly to Supabase if available (RLS should allow inserting own token)
@@ -211,7 +208,6 @@ export class NotificationService {
         if (userId) {
           const { error: sbErr } = await supabase.from('push_tokens').upsert({ user_id: userId, token, device_id: deviceId }).select('id').single()
           if (!sbErr) {
-            console.log('Push token saved via Supabase fallback')
             return
           }
         }
@@ -233,7 +229,6 @@ export class NotificationService {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        console.log('No active session, cannot fetch notifications');
         return [];
       }
 
@@ -447,7 +442,6 @@ export class NotificationService {
   ) {
     // Listener for notifications received while app is in foreground
     const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
       if (onNotificationReceived) {
         onNotificationReceived(notification);
       }
@@ -457,7 +451,6 @@ export class NotificationService {
 
     // Listener for when user taps on a notification
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification tapped:', response);
       if (onNotificationTapped) {
         onNotificationTapped(response);
       }

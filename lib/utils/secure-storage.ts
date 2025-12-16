@@ -147,14 +147,12 @@ export async function migrateToSecureStorage(key: string): Promise<boolean> {
     // Check if already in SecureStore
     const existingSecure = await getSecureItem(key);
     if (existingSecure) {
-      console.log(`[SecureStorage] Key ${key} already in SecureStore`);
       return true;
     }
     
     // Get from AsyncStorage
     const value = await getItem(key);
     if (!value) {
-      console.log(`[SecureStorage] No data to migrate for key ${key}`);
       return false;
     }
     
@@ -164,7 +162,6 @@ export async function migrateToSecureStorage(key: string): Promise<boolean> {
     // Remove from AsyncStorage
     await deleteItem(key);
     
-    console.log(`[SecureStorage] Successfully migrated ${key} to SecureStore`);
     return true;
   } catch (error) {
     console.error(`[SecureStorage] Migration failed for ${key}:`, error);

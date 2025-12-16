@@ -13,7 +13,6 @@ export async function clearProfileForTesting(): Promise<void> {
   try {
     await AsyncStorage.removeItem('BE:userProfile');
     await AsyncStorage.removeItem('BE:allProfiles');
-    console.log('[TestUtils] Profile cleared - onboarding should trigger');
   } catch (error) {
     console.error('[TestUtils] Error clearing profile:', error);
   }
@@ -37,7 +36,6 @@ export async function setTestProfile(): Promise<void> {
     const profiles = { 'current-user': testProfile };
     await AsyncStorage.setItem('BE:allProfiles', JSON.stringify(profiles));
     
-    console.log('[TestUtils] Test profile set - onboarding should be skipped');
   } catch (error) {
     console.error('[TestUtils] Error setting test profile:', error);
   }
@@ -48,8 +46,5 @@ if (__DEV__) {
   // Make these available globally in dev mode for easy access from console
   (global as any).clearProfileForTesting = clearProfileForTesting;
   (global as any).setTestProfile = setTestProfile;
-  
-  console.log('[TestUtils] Profile test utilities loaded');
-  console.log('  - Use clearProfileForTesting() to simulate new user');
-  console.log('  - Use setTestProfile() to simulate complete profile');
+  // Test utilities available: clearProfileForTesting(), setTestProfile()
 }

@@ -59,7 +59,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           setTwoFactorEnabled((factors?.totp?.length ?? 0) > 0);
         }
       } catch (e) {
-        console.warn('Failed to load privacy settings', e);
+        console.error('Failed to load privacy settings', e);
       } finally {
         setLoading(false);
       }
@@ -69,7 +69,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   const persist = async (patch: Partial<PrivacyState>) => {
     setState(prev => {
       const next = { ...prev, ...patch };
-      setSecureJSON(SecureKeys.PRIVACY_SETTINGS, next).catch(err => console.warn('persist failed', err));
+      setSecureJSON(SecureKeys.PRIVACY_SETTINGS, next).catch(err => console.error('persist failed', err));
       return next;
     });
   };

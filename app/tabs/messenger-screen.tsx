@@ -150,7 +150,7 @@ export function MessengerScreen({
          try { await markConversationReadSafe(after.id) } catch {}
         }
       } catch (e) {
-        console.warn('Messenger: failed to open pending conversation', e)
+        console.error('Messenger: failed to open pending conversation', e)
         try { _logClientError('Messenger failed to open pending conversation', { error: String(e) }) } catch {}
       }
     })()

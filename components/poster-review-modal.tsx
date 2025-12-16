@@ -238,7 +238,6 @@ export function PosterReviewModal({
           try {
             // Pass bountyId through as string (wallet now accepts string|number)
             await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
-            console.log('✅ Escrow released for bounty:', bountyId);
             // Trigger success haptic for successful payment release
             triggerHaptic('success');
           } catch (escrowError) {

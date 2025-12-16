@@ -176,7 +176,7 @@ export class SecureStorage {
     cleared: string[]; 
     failed: Array<{ key: string; error: string }> 
   }> {
-    console.warn('[SecureStorage] clearSecureData called - clearing registered keys');
+    console.error('[SecureStorage] clearSecureData called - clearing registered keys');
     
     const cleared: string[] = [];
     const failed: Array<{ key: string; error: string }> = [];
@@ -193,7 +193,7 @@ export class SecureStorage {
     }
     
     if (failed.length > 0) {
-      console.warn(`[SecureStorage] ${failed.length} keys could not be cleared:`, failed);
+      console.error(`[SecureStorage] ${failed.length} keys could not be cleared:`, failed);
     }
     
     return { cleared, failed };
@@ -226,7 +226,6 @@ export class SecureStorage {
         await AsyncStorage.removeItem(key);
       }
 
-      console.log(`[SecureStorage] Migrated ${key} to secure storage`);
       return true;
     } catch (error) {
       console.error(`[SecureStorage] Failed to migrate ${key}:`, error);

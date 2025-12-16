@@ -31,13 +31,13 @@ class ErrorLogger {
             }
           } catch (inner) {
             // avoid throwing during event handling
-            console.warn('[ErrorLogger] NetInfo handler error', inner)
+            console.error('[ErrorLogger] NetInfo handler error', inner)
           }
         })
       }
     } catch (e) {
       // NetInfo isn't available in this runtime; continue without online/offline tracking
-      console.warn('[ErrorLogger] NetInfo not available, skipping network listener')
+      console.error('[ErrorLogger] NetInfo not available, skipping network listener')
       this.isOnline = true
     }
 
@@ -45,7 +45,7 @@ class ErrorLogger {
     try {
       this.loadOfflineQueue()
     } catch (e) {
-      console.warn('[ErrorLogger] AsyncStorage not available, skipping offline queue load')
+      console.error('[ErrorLogger] AsyncStorage not available, skipping offline queue load')
     }
   }
 
@@ -82,7 +82,6 @@ class ErrorLogger {
       // In a real app, you would send these logs to your logging service
       // Use console.log for processing messages to ensure output appears in
       // Metro/terminal logs (console.info can be filtered in some setups).
-      console.log("Processing offline error logs:", this.offlineQueue)
 
       // Clear the queue after processing
       this.offlineQueue = []
@@ -140,10 +139,9 @@ class ErrorLogger {
       case "info":
         // console.info is not always visible in some Metro/Terminal setups,
         // so also use console.log which is more reliable across environments.
-        console.log(`[INFO] ${message}`, normalizedContext)
         break
       case "warning":
-        console.warn(`[WARNING] ${message}`, normalizedContext)
+        console.error(`[WARNING] ${message}`, normalizedContext)
         break
       case "error":
       case "critical":

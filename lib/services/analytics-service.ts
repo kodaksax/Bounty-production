@@ -58,7 +58,6 @@ class AnalyticsService {
    */
   async initialize(mixpanelToken: string): Promise<void> {
     if (this.initialized) {
-      console.log('[Analytics] Already initialized');
       return;
     }
 
@@ -67,9 +66,7 @@ class AnalyticsService {
       if (mixpanelToken && mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
         const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
         this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
-        console.log('[Analytics] Mixpanel initialized successfully');
       } else {
-        console.log('[Analytics] Mixpanel token not configured, analytics disabled');
       }
 
       this.initialized = true;
@@ -99,7 +96,6 @@ class AnalyticsService {
       // Set user in Sentry
       Sentry.setUser({ id: userId, ...properties });
 
-      console.log('[Analytics] User identified:', userId);
     } catch (error) {
       console.error('[Analytics] Failed to identify user:', error);
       Sentry.captureException(error);
@@ -133,7 +129,6 @@ class AnalyticsService {
         data: enrichedProperties,
       });
 
-      console.log('[Analytics] Event tracked:', event, enrichedProperties);
     } catch (error) {
       console.error('[Analytics] Failed to track event:', error);
       Sentry.captureException(error);
@@ -153,7 +148,6 @@ class AnalyticsService {
       // Update Sentry user context
       Sentry.setUser({ id: this.userId || undefined, ...properties });
 
-      console.log('[Analytics] User properties updated:', properties);
     } catch (error) {
       console.error('[Analytics] Failed to update user properties:', error);
       Sentry.captureException(error);
@@ -170,7 +164,6 @@ class AnalyticsService {
       if (this.mixpanel) {
         await this.mixpanel.getPeople().increment(property, value);
       }
-      console.log('[Analytics] User property incremented:', property, value);
     } catch (error) {
       console.error('[Analytics] Failed to increment user property:', error);
       Sentry.captureException(error);
@@ -200,7 +193,6 @@ class AnalyticsService {
         data: screenProperties,
       });
 
-      console.log('[Analytics] Screen view tracked:', screenName);
     } catch (error) {
       console.error('[Analytics] Failed to track screen view:', error);
       Sentry.captureException(error);
@@ -224,7 +216,6 @@ class AnalyticsService {
         await this.mixpanel.track(eventName, timingProperties);
       }
 
-      console.log('[Analytics] Timing tracked:', eventName, duration);
     } catch (error) {
       console.error('[Analytics] Failed to track timing:', error);
       Sentry.captureException(error);
@@ -244,7 +235,6 @@ class AnalyticsService {
 
       Sentry.setUser(null);
 
-      console.log('[Analytics] Analytics reset');
     } catch (error) {
       console.error('[Analytics] Failed to reset analytics:', error);
       Sentry.captureException(error);
@@ -259,7 +249,6 @@ class AnalyticsService {
       if (this.mixpanel) {
         await this.mixpanel.flush();
       }
-      console.log('[Analytics] Events flushed');
     } catch (error) {
       console.error('[Analytics] Failed to flush events:', error);
     }

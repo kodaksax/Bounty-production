@@ -123,7 +123,7 @@ export async function requestPasswordReset(
 
       // For security, we don't reveal whether the email exists or not
       // Instead, we log the actual error and return a generic success message
-      console.warn('[auth-service] Password reset error (returning success for security):', error.message)
+      console.error('[auth-service] Password reset error (returning success for security):', error.message)
     }
 
     // Always return success to prevent email enumeration attacks

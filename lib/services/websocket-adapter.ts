@@ -51,7 +51,7 @@ class WebSocketAdapter {
     // Get auth token
     const session = await supabase.auth.getSession();
     if (!session?.data?.session?.access_token) {
-      console.warn('[WebSocket] No auth token available, cannot connect');
+      console.error('[WebSocket] No auth token available, cannot connect');
       return;
     }
 
@@ -82,13 +82,12 @@ class WebSocketAdapter {
         const fallback = getApiBaseFallback();
         if (fallback && fallback !== apiUrl) {
           const fallbackWs = fallback.replace('http://', 'ws://').replace('https://', 'wss://');
-          if (this.verbose) console.log('[WebSocket] Preferred host unreachable; using fallback host:', fallbackWs);
           baseForWs = fallbackWs;
         }
       }
     } catch (e) {
       // ignore probing errors and continue with original host
-      if (this.verbose) console.warn('[WebSocket] Host probe failed:', e);
+      if (this.verbose) console.error('[WebSocket] Host probe failed:', e);
     }
 
     // Ensure the final WebSocket URL includes a ws:// or wss:// scheme.
@@ -100,11 +99,10 @@ class WebSocketAdapter {
 
     // If the resolved URL doesn't include a scheme, warn to help diagnose dev host issues
     if (!/^wss?:\/\//i.test(this.url)) {
-      console.warn('[WebSocket] Constructed URL missing ws/wss scheme:', this.url);
+      console.error('[WebSocket] Constructed URL missing ws/wss scheme:', this.url);
     }
 
     if (this.verbose || this.reconnectAttempts === 0 || this.reconnectAttempts % 3 === 0) {
-      console.log('[WebSocket] Connecting to:', this.url);
     }
     this.intentionalDisconnect = false;
 
@@ -112,7 +110,7 @@ class WebSocketAdapter {
       // Check network connectivity
       const netState = await NetInfo.fetch();
       if (!netState.isConnected) {
-        console.warn('[WebSocket] No network connection, delaying connect');
+        console.error('[WebSocket] No network connection, delaying connect');
         this.scheduleReconnect();
         return;
       }
@@ -124,7 +122,6 @@ class WebSocketAdapter {
         this.lastOpenTime = Date.now();
         this.lastPongTime = Date.now();
         if (this.verbose || this.reconnectAttempts === 0) {
-          console.log('[WebSocket] Connected successfully');
         }
         this.connected = true;
 
@@ -139,7 +136,7 @@ class WebSocketAdapter {
               // if we haven't received a pong in 2 intervals, consider connection stale
               const now = Date.now();
               if (this.lastPongTime && now - this.lastPongTime > this.pingIntervalMs * 2) {
-                if (this.verbose) console.warn('[WebSocket] No pong received - closing stale socket');
+                if (this.verbose) console.error('[WebSocket] No pong received - closing stale socket');
                 try { this.ws?.close(); } catch {};
               }
             } catch (e) { /* ignore ping errors */ }
@@ -155,11 +152,9 @@ class WebSocketAdapter {
           const data: MessageEvent = JSON.parse(event.data);
           if (data.type === 'pong') {
             this.lastPongTime = Date.now();
-            if (this.verbose) console.log('[WebSocket] Received pong');
             return;
           }
 
-          if (this.verbose) console.log('[WebSocket] Received:', data.type);
           // Emit specific event type
           this.emit(data.type, data);
           // Also emit generic 'message' event
@@ -189,7 +184,6 @@ class WebSocketAdapter {
       this.ws.onclose = (event) => {
         const uptime = this.lastOpenTime ? Date.now() - this.lastOpenTime : 0;
         if (this.verbose || this.reconnectAttempts === 0 || uptime < this.minStableConnectionMs) {
-          console.log('[WebSocket] Connection closed:', event.code, event.reason, `uptime=${uptime}ms`);
         }
         this.connected = false;
         this.emit('disconnect', { code: event.code, reason: event.reason, uptime });
@@ -230,7 +224,6 @@ class WebSocketAdapter {
     }
 
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
-    console.log(`[WebSocket] Scheduling reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
     
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
@@ -280,7 +273,6 @@ class WebSocketAdapter {
 
     this.connected = false;
     this.emit('disconnect', {});
-    console.log('[WebSocket] Disconnected');
   }
 
   /**
@@ -288,7 +280,7 @@ class WebSocketAdapter {
    */
   send(type: string, data: any): void {
     if (!this.connected || !this.ws) {
-      console.warn('[WebSocket] Not connected, message queued:', type);
+      console.error('[WebSocket] Not connected, message queued:', type);
       // TODO: Queue messages for sending when reconnected
       return;
     }
@@ -296,7 +288,6 @@ class WebSocketAdapter {
     try {
       const message = JSON.stringify({ type, ...data });
       this.ws.send(message);
-      console.log('[WebSocket] Sent:', type);
     } catch (error) {
       console.error('[WebSocket] Error sending message:', error);
     }
@@ -391,7 +382,6 @@ class WebSocketAdapter {
    * Force reconnect
    */
   reconnect(): void {
-    console.log('[WebSocket] Manual reconnect requested');
     this.disconnect();
     setTimeout(() => {
       this.reconnectAttempts = 0;
