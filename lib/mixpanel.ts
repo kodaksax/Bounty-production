@@ -14,31 +14,43 @@ export async function initMixpanel() {
   _initialized = true; // mark attempted to avoid repeated noisy logs
 
   try {
-    // runtime import; @ts-ignore because types may not exist in repo
+    const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+    if (isWeb) {
+      // web/browser environment: prefer `mixpanel-browser` when available
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      const webModule = await import('mixpanel-browser');
+      const webPkg: any = (webModule as any).default ?? webModule;
+      if (typeof webPkg.init === 'function') {
+        webPkg.init(MIXPANEL_TOKEN);
+      }
+      _mixpanel = webPkg;
+      return;
+    }
+
+    // runtime import for native package; @ts-ignore because types may not exist
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const nativeModule = await import('@mixpanel/react-native');
     const nativePkg: any = (nativeModule as any).default ?? nativeModule;
 
-    // Preferred pattern (per SDK docs): Mixpanel.init(token) returns an instance
     if (typeof nativePkg.init === 'function') {
       const instance = await nativePkg.init(MIXPANEL_TOKEN);
       _mixpanel = instance ?? nativePkg;
     } else if (typeof nativePkg.create === 'function') {
-      // alternate factory name
       _mixpanel = await nativePkg.create(MIXPANEL_TOKEN);
     } else if (typeof nativePkg === 'function') {
-      // constructor-like export
       const instance = new nativePkg(MIXPANEL_TOKEN);
       if (typeof instance.init === 'function') await instance.init();
       _mixpanel = instance;
     } else {
-      // Last-resort: use the module as-is
       _mixpanel = nativePkg;
     }
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[mixpanel] native init failed or not installed', e);
+    console.error('[mixpanel] To fix: install `@mixpanel/react-native` for native apps and rebuild, or `mixpanel-browser` for web.');
     _mixpanel = null;
   }
 }

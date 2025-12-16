@@ -25,14 +25,18 @@ async function safeReadResponseText(response: Response): Promise<string> {
 
 // Try fetching the given path, but if the server responds with a 404 HTML page
 // (common when the wrong server is bound to the port), attempt a fallback
-// by prefixing the path with `/api` and retrying once.
+// by prefixing the path with `/api` and retrying once. Accepts either relative
+// paths (preferred) or absolute URLs without double-prefixing the API base.
 async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<Response> {
-  const primary = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  const isAbsolute = /^https?:\/\//i.test(path)
+  const normalizedPath = isAbsolute ? path : `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+
   try {
-    const res = await fetch(primary, init)
+    const res = await fetch(normalizedPath, init)
+
     // If primary returned 404 with an HTML body like "Cannot GET /..." it's likely
     // the wrong server. In that case, try the /api prefixed path as a fallback.
-    if (res.status === 404) {
+    if (!isAbsolute && res.status === 404) {
       const text = await safeReadResponseText(res)
       if (typeof text === 'string' && /<html|Cannot GET|Cannot POST/i.test(text)) {
         const fallback = `${API_BASE_URL}/api${path.startsWith('/') ? path : `/${path}`}`
@@ -62,7 +66,10 @@ function withTimeout(signal: AbortSignal | undefined, ms = 8000) {
   const id = setTimeout(() => controller.abort(), ms)
   // @ts-ignore attach for cleanup by callers if needed
   controller.__timeoutId = id
-  return controller.signal
+  const wrapped = controller.signal
+  // Ensure we clear the timer on end consumers that await fetch
+  wrapped.addEventListener('abort', () => clearTimeout(id), { once: true })
+  return wrapped
 }
 
 // Configure how notifications should be handled when the app is in the foreground

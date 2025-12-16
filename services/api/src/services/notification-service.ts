@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { notifications, pushTokens, notificationPreferences } from '../db/schema';
+import { notifications, pushTokens, notificationPreferences, users } from '../db/schema';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 
 // Initialize Expo SDK
@@ -130,15 +130,20 @@ export class NotificationService {
    * Get unread notification count for a user
    */
   async getUnreadCount(userId: string): Promise<number> {
-    const results = await db
-      .select()
-      .from(notifications)
-      .where(and(
-        eq(notifications.user_id, userId),
-        eq(notifications.read, false)
-      ));
+    try {
+      const results = await db
+        .select()
+        .from(notifications)
+        .where(and(
+          eq(notifications.user_id, userId),
+          eq(notifications.read, false)
+        ));
 
-    return results.length;
+      return results.length;
+    } catch (error) {
+      console.error(`Error getting unread count for user ${userId}:`, error);
+      throw new Error(`Failed to get unread count: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -172,6 +177,14 @@ export class NotificationService {
    * Register push notification token
    */
   async registerPushToken(userId: string, token: string, deviceId?: string): Promise<void> {
+    // Ensure user exists (local dev often runs without Supabase auth; missing users cause FK errors)
+    const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+    if (userExists.length === 0) {
+      // Create a placeholder profile so the FK constraint passes. Handle is required on profiles.
+      const fallbackHandle = `user-${userId.substring(0, 8) || 'dev'}`;
+      await db.insert(users).values({ id: userId, handle: fallbackHandle }).onConflictDoNothing();
+    }
+
     // Check if token already exists for this user
     const existing = await db
       .select()

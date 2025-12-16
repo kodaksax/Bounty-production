@@ -19,12 +19,29 @@ const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
     : undefined;
 
 /**
+ * Sanitize keys for Expo SecureStore.
+ * SecureStore only accepts alphanumeric characters, '.', '-', and '_'.
+ * This helper replaces any other character with '_' and logs a warning
+ * so existing constants can be updated over time.
+ */
+function sanitizeSecureKey(key: string): string {
+  const sanitized = key.replace(/[^A-Za-z0-9._-]/g, '_');
+  if (!sanitized) throw new Error('Invalid secure storage key');
+  if (sanitized !== key) {
+    // eslint-disable-next-line no-console
+    console.warn(`[SecureStorage] Sanitized key "${key}" -> "${sanitized}" for SecureStore compatibility.`);
+  }
+  return sanitized;
+}
+
+/**
  * Store sensitive data securely (encrypted at rest)
  * Use this for: auth tokens, private keys, wallet data, passwords
  */
 export async function setSecureItem(key: string, value: string): Promise<void> {
   try {
-    await SecureStore.setItemAsync(key, value, SECURE_OPTS);
+    const secureKey = sanitizeSecureKey(key);
+    await SecureStore.setItemAsync(secureKey, value, SECURE_OPTS);
   } catch (error) {
     console.error(`[SecureStorage] Error storing secure item ${key}:`, error);
     throw new Error(`Failed to store secure data: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -36,7 +53,8 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
  */
 export async function getSecureItem(key: string): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(key);
+    const secureKey = sanitizeSecureKey(key);
+    return await SecureStore.getItemAsync(secureKey);
   } catch (error) {
     console.error(`[SecureStorage] Error retrieving secure item ${key}:`, error);
     return null;
@@ -48,7 +66,8 @@ export async function getSecureItem(key: string): Promise<string | null> {
  */
 export async function deleteSecureItem(key: string): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(key);
+    const secureKey = sanitizeSecureKey(key);
+    await SecureStore.deleteItemAsync(secureKey);
   } catch (error) {
     console.error(`[SecureStorage] Error deleting secure item ${key}:`, error);
     throw new Error(`Failed to delete secure data: ${error instanceof Error ? error.message : 'Unknown error'}`);

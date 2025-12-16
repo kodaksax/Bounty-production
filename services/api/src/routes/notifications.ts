@@ -47,10 +47,11 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
 
       return { count };
     } catch (error) {
-      console.error('Error fetching unread count:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Error fetching unread count:', errorMsg, error);
       return reply.code(500).send({ 
         error: 'Failed to fetch unread count',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: errorMsg
       });
     }
   });
@@ -122,10 +123,11 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
 
       return { success: true };
     } catch (error) {
-      console.error('Error registering push token:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Error registering push token:', errorMsg, error);
       return reply.code(500).send({ 
         error: 'Failed to register push token',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: errorMsg
       });
     }
   });
