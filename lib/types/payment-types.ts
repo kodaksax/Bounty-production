@@ -125,7 +125,7 @@ export interface RefundResponse {
   reason?: Stripe.Refund.Reason | null;
   receipt_number?: string | null;
   source_transfer_reversal?: string | null;
-  status: Stripe.Refund.Status;
+  status: string | null;
   transfer_reversal?: string | null;
 }
 

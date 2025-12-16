@@ -4,7 +4,7 @@
  * Provides a clean API for payment operations
  */
 
-import { stripeService } from './stripe-service';
+import { stripeService, StripePaymentMethod } from './stripe-service';
 import {
   PaymentMethodResponse,
   PaymentReceipt,
@@ -88,7 +88,7 @@ class PaymentService {
       if (securityCheck.warnings.length > 0) {
         console.warn('[PaymentService] Security warnings:', securityCheck.warnings);
         await analyticsService.trackEvent('payment_security_warning', {
-          warnings: securityCheck.warnings,
+          warnings: securityCheck.warnings.join(', '),
           userId: options.userId,
         });
       }
@@ -211,6 +211,37 @@ class PaymentService {
   }
 
   /**
+   * Convert StripePaymentMethod to PaymentMethodResponse
+   */
+  private convertToPaymentMethodResponse(method: StripePaymentMethod): PaymentMethodResponse {
+    return {
+      id: method.id,
+      object: 'payment_method',
+      billing_details: {
+        address: null,
+        email: null,
+        name: null,
+        phone: null,
+      },
+      card: {
+        brand: method.card.brand,
+        checks: undefined,
+        country: undefined,
+        exp_month: method.card.exp_month,
+        exp_year: method.card.exp_year,
+        fingerprint: undefined,
+        funding: 'credit',
+        last4: method.card.last4,
+      },
+      created: method.created,
+      customer: null,
+      livemode: false,
+      metadata: {},
+      type: 'card',
+    };
+  }
+
+  /**
    * List all saved payment methods for a user
    */
   async listPaymentMethods(authToken?: string): Promise<PaymentMethodListResult> {
@@ -219,7 +250,7 @@ class PaymentService {
 
       return {
         success: true,
-        paymentMethods: methods,
+        paymentMethods: methods.map(m => this.convertToPaymentMethodResponse(m)),
       };
     } catch (error: any) {
       console.error('[PaymentService] Error listing payment methods:', error);
@@ -363,10 +394,10 @@ class PaymentService {
     // and PaymentMethodResponse has these fields, map them accordingly.
     return {
       card: {
-        brand: paymentMethod.cardBrand || paymentMethod.brand,
-        last4: paymentMethod.last4,
-        exp_month: paymentMethod.expMonth || paymentMethod.exp_month,
-        exp_year: paymentMethod.expYear || paymentMethod.exp_year,
+        brand: paymentMethod.card?.brand || 'unknown',
+        last4: paymentMethod.card?.last4 || '0000',
+        exp_month: paymentMethod.card?.exp_month || 0,
+        exp_year: paymentMethod.card?.exp_year || 0,
       },
       id: paymentMethod.id,
       // Add other fields as needed

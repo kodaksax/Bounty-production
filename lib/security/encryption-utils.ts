@@ -17,7 +17,7 @@ export async function generateEncryptionKey(): Promise<string> {
   try {
     // Generate 256-bit (32 byte) random key
     const randomBytes = await Crypto.getRandomBytesAsync(32);
-    return arrayBufferToBase64(randomBytes);
+    return arrayBufferToBase64(randomBytes.buffer);
   } catch (error) {
     console.error('[Encryption] Failed to generate key:', error);
     throw new Error('Failed to generate encryption key');
@@ -31,7 +31,7 @@ export async function generateIV(): Promise<string> {
   try {
     // Generate 128-bit (16 byte) IV for AES
     const randomBytes = await Crypto.getRandomBytesAsync(16);
-    return arrayBufferToBase64(randomBytes);
+    return arrayBufferToBase64(randomBytes.buffer);
   } catch (error) {
     console.error('[Encryption] Failed to generate IV:', error);
     throw new Error('Failed to generate IV');
@@ -279,7 +279,7 @@ export async function generateKeyPair(): Promise<{
 /**
  * Helper: Convert ArrayBuffer to base64
  */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+function arrayBufferToBase64(buffer: ArrayBuffer | ArrayBufferLike): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {

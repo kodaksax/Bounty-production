@@ -115,7 +115,7 @@ class PerformanceMonitor {
     return {
       totalMetrics: this.metrics.size,
       slowMetrics: slow,
-      averageDuration,
+      averageDuration: avgDuration,
     };
   }
 }
