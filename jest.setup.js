@@ -1,5 +1,15 @@
 // Jest setup file for global test configuration
 
+// Mock React for JSX support
+jest.mock('react', () => ({
+  ...jest.requireActual('react'),
+  createElement: jest.fn((type, props, ...children) => ({ type, props, children })),
+  cloneElement: jest.fn((element, props) => ({ ...element, props: { ...element.props, ...props } })),
+  useEffect: jest.fn((cb) => cb()),
+  useLayoutEffect: jest.fn((cb) => cb()),
+  useRef: jest.fn(() => ({ current: null })),
+}));
+
 // Mock environment variables for tests
 process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_ANON_KEY = 'test-anon-key';
@@ -8,6 +18,9 @@ process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
 process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.NODE_ENV = 'test';
+
+// Define __DEV__ global for React Native code
+global.__DEV__ = true;
 
 // Global test timeout
 jest.setTimeout(10000);
