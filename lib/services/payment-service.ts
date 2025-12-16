@@ -399,10 +399,10 @@ class PaymentService {
     // and PaymentMethodResponse has these fields, map them accordingly.
     return {
       card: {
-        brand: paymentMethod.card?.brand || 'unknown',
-        last4: paymentMethod.card?.last4 || '0000',
-        exp_month: paymentMethod.card?.exp_month || 0,
-        exp_year: paymentMethod.card?.exp_year || 0,
+        brand: paymentMethod.card?.brand ?? '',
+        last4: paymentMethod.card?.last4 ?? '',
+        exp_month: paymentMethod.card?.exp_month ?? null,
+        exp_year: paymentMethod.card?.exp_year ?? null,
       },
       id: paymentMethod.id,
       // Add other fields as needed
