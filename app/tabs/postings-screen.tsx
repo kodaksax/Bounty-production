@@ -1027,7 +1027,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             <View className="flex-row justify-between items-center px-4">
             {/* Left: logo aligned like messenger (no back icon) */}
             <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
-              <BrandingLogo size="small" />
+              <BrandingLogo size="medium" />
             </View>
 
             {/* Right: Wallet balance pill and bookmark (inline) */}

@@ -261,7 +261,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   {/* Header — left: BOUNTY brand, right: back + settings */}
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
         <View className="flex-row items-center gap-2">
-          <BrandingLogo size="small" />
+          <BrandingLogo size="medium" />
         </View>
         <View className="flex-row items-center">
           <TouchableOpacity 

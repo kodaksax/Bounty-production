@@ -526,7 +526,7 @@ function BountyAppInner() {
   <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
         <View style={styles.headerRow}> 
           <View style={styles.headerLeft}> 
-            <BrandingLogo size="small" />
+            <BrandingLogo size="medium" />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <NotificationsBell />

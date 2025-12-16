@@ -98,7 +98,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <BrandingLogo size="small" />
+          <BrandingLogo size="medium" />
         </View>
       </View>
   

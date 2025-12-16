@@ -2,20 +2,20 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { BrandingLogo } from "components/ui/branding-logo"
 import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useCallback, useState } from "react"
-import { ActivityIndicator, Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
+import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
-import { HEADER_LAYOUT, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { messageService } from '../../lib/services/message-service'
 import { logClientError as _logClientError } from '../../lib/services/monitoring'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -230,22 +230,7 @@ export function MessengerScreen({
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
-            <MaterialIcons
-              name="my-location"
-              size={HEADER_LAYOUT.iconSize}
-              color="white"
-              style={{ marginRight: HEADER_LAYOUT.iconToTitleGap }}
-            />
-            <Text
-              style={{
-                fontSize: HEADER_LAYOUT.titleFontSize,
-                fontWeight: 'bold',
-                letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
-                color: '#ffffff',
-              }}
-            >
-              BOUNTY
-            </Text>
+            <BrandingLogo size="medium" />
           </View>
           <View style={{ transform: [{ translateX: -2 }, { translateY: 1 }] }}>
             <WalletBalanceButton onPress={() => onNavigate?.('wallet')} />
