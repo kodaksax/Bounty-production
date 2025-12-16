@@ -76,9 +76,6 @@ CREATE POLICY "notification_preferences_update_own" ON public.notification_prefe
   WITH CHECK (auth.uid() = user_id);
 "@
 
-# Build connection string
-$ConnectionString = "Server=$SUPABASE_HOST;Port=$DB_PORT;User Id=$DB_USER;Password=$DB_PASSWORD;Database=$DB_NAME;SSL Mode=Require;"
-
 Write-Host "🔐 Applying RLS policies to Supabase notifications tables..." -ForegroundColor Cyan
 
 # Check if psql is available
