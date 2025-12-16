@@ -7,4 +7,4 @@ export default {
   dbCredentials: {
     url: process.env.DATABASE_URL || 'postgresql://localhost:5432/bountyexpo',
   },
-} satisfies Config;
+} as unknown as Config;

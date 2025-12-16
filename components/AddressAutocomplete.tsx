@@ -1,13 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  type TextInputProps,
+    ActivityIndicator,
+    FlatList,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    type TextInputProps,
 } from 'react-native';
 import { addressAutocompleteService, type AddressSuggestion } from '../lib/services/address-autocomplete-service';
 import { sanitizeAddressText } from '../lib/utils/address-sanitization';
@@ -75,7 +75,7 @@ export function AddressAutocomplete({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestionCount, setSuggestionCount] = useState(0);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConfigured = addressAutocompleteService.isConfigured();
 
   // Fetch address suggestions with debouncing
@@ -124,7 +124,7 @@ export function AddressAutocomplete({
 
       // Clear existing timer
       if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
+        clearTimeout(debounceTimer.current as any);
       }
 
       // Set new timer
@@ -188,7 +188,7 @@ export function AddressAutocomplete({
   useEffect(() => {
     return () => {
       if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
+        clearTimeout(debounceTimer.current as any);
       }
     };
   }, []);

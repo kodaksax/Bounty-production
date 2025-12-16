@@ -4,17 +4,16 @@
  * Provides a clean API for payment operations
  */
 
-import { stripeService, StripePaymentMethod } from './stripe-service';
 import {
-  PaymentMethodResponse,
-  PaymentReceipt,
-} from '../types/payment-types';
-import {
-  validatePaymentSecurity,
-  isSCARequired,
-  PAYMENT_SECURITY_CONFIG,
+    isSCARequired,
+    PAYMENT_SECURITY_CONFIG,
+    validatePaymentSecurity,
 } from '../security/payment-security-config';
+import {
+    PaymentMethodResponse
+} from '../types/payment-types';
 import { analyticsService } from './analytics-service';
+import { StripePaymentMethod, stripeService } from './stripe-service';
 
 export interface CreatePaymentOptions {
   amount: number;
@@ -242,7 +241,7 @@ class PaymentService {
       livemode: method.livemode ?? false, // TODO: Extend StripePaymentMethod type if missing
       // Use actual metadata if available, otherwise default to empty object
       metadata: method.metadata ?? {}, // TODO: Extend StripePaymentMethod type if missing
-      type: method.type ?? 'card',
+      type: (method.type ?? 'card') as unknown as import('stripe').Stripe.PaymentMethod.Type,
     };
   }
 

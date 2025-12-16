@@ -42,7 +42,7 @@ class AddressAutocompleteService {
   private apiKey: string | null = null;
   private cache: Map<string, AddressSuggestion[]> = new Map();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
-  private cacheTimeoutIds: Map<string, NodeJS.Timeout> = new Map();
+  private cacheTimeoutIds: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private lastRequestTime = 0;
   private minRequestInterval = 300; // Rate limiting: 300ms between requests
   
@@ -277,7 +277,7 @@ class AddressAutocompleteService {
   clearCache(): void {
     // Clear all pending timeout callbacks
     for (const timeoutId of this.cacheTimeoutIds.values()) {
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutId as any);
     }
     this.cacheTimeoutIds.clear();
     this.cache.clear();
@@ -297,7 +297,7 @@ class AddressAutocompleteService {
     // Cancel any existing timeout for this key
     const existingTimeout = this.cacheTimeoutIds.get(key);
     if (existingTimeout) {
-      clearTimeout(existingTimeout);
+      clearTimeout(existingTimeout as any);
     }
     
     // Set new timeout and store its ID
@@ -306,7 +306,7 @@ class AddressAutocompleteService {
       this.cacheTimeoutIds.delete(key);
     }, this.cacheTimeout);
     
-    this.cacheTimeoutIds.set(key, timeoutId);
+    this.cacheTimeoutIds.set(key, timeoutId as any);
   }
 
   /**

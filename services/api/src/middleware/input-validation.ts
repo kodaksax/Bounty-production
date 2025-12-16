@@ -5,8 +5,8 @@
  * This is a critical security layer - never trust client-side validation alone
  */
 
-import type { FastifyRequest, FastifyReply } from 'fastify';
-import { z, ZodSchema, ZodError } from 'zod';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { z, ZodError, ZodSchema } from 'zod';
 
 /**
  * Sanitization utilities (server-side versions)
@@ -386,7 +386,7 @@ export function cleanupRateLimits(): void {
 }
 
 // Cleanup interval handle for lifecycle management
-let cleanupIntervalHandle: NodeJS.Timeout | null = null;
+let cleanupIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Start the rate limit cleanup process
@@ -397,7 +397,7 @@ export function startRateLimitCleanup(): void {
     console.warn('[RateLimit] Cleanup already running');
     return;
   }
-  cleanupIntervalHandle = setInterval(cleanupRateLimits, 5 * 60 * 1000);
+  cleanupIntervalHandle = setInterval(cleanupRateLimits, 5 * 60 * 1000) as any;
   console.log('[RateLimit] Cleanup interval started');
 }
 

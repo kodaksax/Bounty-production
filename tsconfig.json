@@ -26,6 +26,9 @@
   "exclude": [
     "node_modules",
     "**/.history/**",
-    "**/.git/**"
+    "**/.git/**",
+    "**/__tests__/**",
+    "**/*.test.*",
+    "**/*.spec.*"
   ]
 }

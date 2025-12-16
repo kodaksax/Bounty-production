@@ -4,19 +4,19 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useState, useRef, useEffect } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  ActivityIndicator,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -40,7 +40,7 @@ export default function VerifyPhoneScreen() {
 
   // Handle resend cooldown
   useEffect(() => {
-    let timer: NodeJS.Timeout | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     
     if (resendCooldown > 0) {
       timer = setTimeout(() => {
@@ -50,7 +50,7 @@ export default function VerifyPhoneScreen() {
     
     return () => {
       if (timer) {
-        clearTimeout(timer);
+        clearTimeout(timer as any);
       }
     };
   }, [resendCooldown]);

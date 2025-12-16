@@ -5,7 +5,53 @@
  * All user-generated content should be sanitized before storage and display.
  */
 
-import validator from 'validator';
+// Minimal, dependency-free sanitization helpers to avoid bundler issues
+// (replaces use of the `validator` npm package which doesn't bundle well for Expo)
+
+function stripLow(input: string): string {
+  // Remove ASCII control characters (0-31) and DEL (127)
+  return input.replace(/[\x00-\x1F\x7F]/g, '');
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeEmail(email: string): string | null {
+  if (!email) return null;
+  // Basic normalization: trim and lowercase. Avoid aggressive normalization.
+  return email.trim().toLowerCase();
+}
+
+function isEmail(email: string): boolean {
+  if (!email) return false;
+  // Simple, permissive email check
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isURL(input: string, opts?: { protocols?: string[]; require_protocol?: boolean }): boolean {
+  if (!input) return false;
+  const trimmed = input.trim();
+  try {
+    const u = new URL(trimmed);
+    if (opts?.protocols && opts.protocols.length > 0) {
+      return opts.protocols.includes(u.protocol.replace(':', ''));
+    }
+    return true;
+  } catch (e) {
+    // If require_protocol is false, allow schemeless URLs like example.com
+    if (!opts?.require_protocol) {
+      // Basic host-like pattern
+      return /^[^\s\/]+\.[^\s]{2,}$/.test(trimmed);
+    }
+    return false;
+  }
+}
 
 /**
  * Sanitize plain text input
@@ -14,11 +60,11 @@ import validator from 'validator';
 export function sanitizeText(input: string | null | undefined): string {
   if (!input) return '';
   
-  // Remove HTML tags
-  let sanitized = validator.stripLow(input);
-  
+  // Remove low/control characters
+  let sanitized = stripLow(input);
+
   // Escape HTML entities
-  sanitized = validator.escape(sanitized);
+  sanitized = escapeHtml(sanitized);
   
   // Trim whitespace
   sanitized = sanitized.trim();
@@ -31,13 +77,12 @@ export function sanitizeText(input: string | null | undefined): string {
  */
 export function sanitizeEmail(email: string | null | undefined): string {
   if (!email) return '';
-  
-  const sanitized = validator.normalizeEmail(email) || '';
-  
-  if (!validator.isEmail(sanitized)) {
+  const sanitized = normalizeEmail(email) || '';
+
+  if (!isEmail(sanitized)) {
     throw new Error('Invalid email format');
   }
-  
+
   return sanitized;
 }
 
@@ -49,13 +94,10 @@ export function sanitizeURL(url: string | null | undefined): string {
   
   const trimmed = url.trim();
   
-  if (!validator.isURL(trimmed, { 
-    protocols: ['http', 'https'],
-    require_protocol: true 
-  })) {
+  if (!isURL(trimmed, { protocols: ['http', 'https'], require_protocol: true })) {
     throw new Error('Invalid URL format');
   }
-  
+
   return trimmed;
 }
 

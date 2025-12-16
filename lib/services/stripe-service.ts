@@ -2,13 +2,29 @@
 // Stripe API types
 export interface StripePaymentMethod {
   id: string;
-  type: 'card';
+  type: 'card' | string;
   card: {
     brand: string;
     last4: string;
     exp_month: number;
     exp_year: number;
+    // Optional fields present in some SDK responses
+    checks?: any;
+    country?: string;
+    fingerprint?: string;
+    funding?: string;
   };
+  // Optional billing details (SDK may include this)
+  billing_details?: {
+    address?: any;
+    email?: string | null;
+    name?: string | null;
+    phone?: string | null;
+  } | null;
+  // Optional metadata and other properties that some SDKs return
+  customer?: string | null;
+  livemode?: boolean;
+  metadata?: Record<string, any>;
   created: number;
 }
 
@@ -50,13 +66,13 @@ export interface PaymentConfirmationResult {
 import { API_BASE_URL } from '../config/api';
 import { analyticsService } from './analytics-service';
 import {
-  checkDuplicatePayment,
-  completePaymentAttempt,
-  generateIdempotencyKey,
-  logPaymentError,
-  parsePaymentError,
-  recordPaymentAttempt,
-  withPaymentRetry,
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
