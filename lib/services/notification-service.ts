@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { API_BASE_URL } from 'lib/config/api';
+import { API_TIMEOUTS, ERROR_LOG_THROTTLE } from 'lib/config/network';
+import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
 
@@ -272,13 +274,15 @@ export class NotificationService {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, 15000), // Increased from 8s to 15s
+        signal: withTimeout(controller.signal, API_TIMEOUTS.DEFAULT),
       });
 
       if (!response.ok) {
         // Don't spam console with errors in development when backend is unreachable
         if (__DEV__) {
-          console.log('[NotificationService] API unreachable, using cached notifications');
+          if (shouldLog(LOG_KEYS.NOTIF_FETCH_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
+            console.log('[NotificationService] API unreachable, using cached notifications');
+          }
         } else {
           const text = await safeReadResponseText(response);
           console.error(`Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`);
@@ -298,12 +302,8 @@ export class NotificationService {
     } catch (error) {
       // Silent failure in development when backend is unreachable
       if (__DEV__) {
-        // Only log once every 5 minutes to reduce noise
-        const now = Date.now();
-        const lastLog = (global as any).__lastNotifFetchErrorLog || 0;
-        if (now - lastLog > 300000) {
+        if (shouldLog(LOG_KEYS.NOTIF_FETCH_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
           console.log('[NotificationService] Backend unreachable - using cached notifications');
-          (global as any).__lastNotifFetchErrorLog = now;
         }
       } else {
         console.error('Error fetching notifications:', error);
@@ -370,13 +370,15 @@ export class NotificationService {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, 15000), // Increased from 8s to 15s
+        signal: withTimeout(controller.signal, API_TIMEOUTS.DEFAULT),
       });
 
       if (!response.ok) {
         // Don't spam console with errors in development when backend is unreachable
         if (__DEV__) {
-          console.log('[NotificationService] API unreachable, using cached count');
+          if (shouldLog(LOG_KEYS.NOTIF_UNREAD_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
+            console.log('[NotificationService] API unreachable, using cached count');
+          }
         } else {
           const text = await safeReadResponseText(response);
           console.error(`Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`);
@@ -390,12 +392,8 @@ export class NotificationService {
     } catch (error) {
       // Silent failure in development when backend is unreachable
       if (__DEV__) {
-        // Only log once every 5 minutes to reduce noise
-        const now = Date.now();
-        const lastLog = (global as any).__lastUnreadCountErrorLog || 0;
-        if (now - lastLog > 300000) {
+        if (shouldLog(LOG_KEYS.NOTIF_UNREAD_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
           console.log('[NotificationService] Backend unreachable - using cached unread count');
-          (global as any).__lastUnreadCountErrorLog = now;
         }
       } else {
         console.error('Error fetching unread count:', error);
