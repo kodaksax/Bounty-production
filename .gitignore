@@ -3,6 +3,8 @@
 # dependencies
 node_modules/
 .env
+.env.production.template
+.env.example
 
 # Expo
 .expo/
