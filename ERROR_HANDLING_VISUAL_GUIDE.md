@@ -193,11 +193,8 @@ async getUnreadCount(): Promise<number> {
     if (!response.ok) {
       // ✅ Throttled logging in development
       if (__DEV__) {
-        const now = Date.now();
-        const lastLog = (global as any).__lastUnreadCountErrorLog || 0;
-        if (now - lastLog > 300000) { // Once per 5 min
+        if (shouldLog(LOG_KEYS.NOTIF_UNREAD_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
           console.log('[NotificationService] Backend unreachable');
-          (global as any).__lastUnreadCountErrorLog = now;
         }
       }
       return this.unreadCount; // ✅ Return cached
@@ -206,6 +203,11 @@ async getUnreadCount(): Promise<number> {
     return response.json().count;
   } catch (error) {
     // ✅ Silent failure, return cached
+    if (__DEV__) {
+      if (shouldLog(LOG_KEYS.NOTIF_UNREAD_ERROR, ERROR_LOG_THROTTLE.MODERATE)) {
+        console.log('[NotificationService] Backend unreachable - using cached unread count');
+      }
+    }
     return this.unreadCount;
   }
 }
@@ -238,16 +240,16 @@ private reconnectDelay = 1000; // Too fast!
 
 #### ✅ NEW CODE
 ```typescript
+import { shouldLog, LOG_KEYS } from 'lib/utils/log-throttle';
+import { ERROR_LOG_THROTTLE } from 'lib/config/network';
+
 ws.onerror = (error) => {
   const info = { /* error details */ };
   
   // ✅ Throttled logging in development
   if (__DEV__) {
-    const now = Date.now();
-    const lastLog = (global as any).__lastWsErrorLog || 0;
-    if (now - lastLog > 60000) { // Once per minute
-      console.log('[WebSocket] Connection unavailable - retrying');
-      (global as any).__lastWsErrorLog = now;
+    if (shouldLog(LOG_KEYS.WS_ERROR, ERROR_LOG_THROTTLE.FREQUENT)) {
+      console.log('[WebSocket] Connection unavailable - retrying in background');
     }
   } else {
     console.error('[WebSocket] Error event', info);

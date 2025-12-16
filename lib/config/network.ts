@@ -50,8 +50,8 @@ export const ERROR_LOG_THROTTLE = {
   /** Moderate errors (e.g., API timeouts) - 5 minutes */
   MODERATE: 5 * 60 * 1000,
   
-  /** Rare errors (e.g., max attempts reached) - 5 minutes */
-  RARE: 5 * 60 * 1000,
+  /** Rare errors (e.g., max attempts reached) - 15 minutes */
+  RARE: 15 * 60 * 1000,
 } as const;
 
 /**

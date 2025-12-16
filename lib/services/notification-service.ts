@@ -346,7 +346,7 @@ export class NotificationService {
         try {
           const { count, error: sbErr } = await supabase
             .from('notifications')
-            .select('id', { count: 'exact', head: true })
+            .select('*', { count: 'exact', head: true })
             .eq('user_id', userId)
             .eq('read', false);
           

@@ -49,14 +49,14 @@ jest.mock('../../../lib/config/api', () => ({
 }));
 
 import { notificationService } from '../../../lib/services/notification-service';
+import { clearAllThrottles } from '../../../lib/utils/log-throttle';
 const AsyncStorage = require('@react-native-async-storage/async-storage');
 
 describe('Error Handling Improvements', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Clear global error log tracking
-    delete (global as any).__lastUnreadCountErrorLog;
-    delete (global as any).__lastNotifFetchErrorLog;
+    // Clear centralized throttle state
+    clearAllThrottles();
   });
 
   describe('NotificationService - getUnreadCount', () => {

@@ -80,21 +80,6 @@ export function getTimeUntilNextLog(key: string): number {
   return Math.max(0, remaining);
 }
 
-// Predefined throttle intervals for common scenarios
-export const THROTTLE_INTERVALS = {
-  /** 1 minute - for frequent errors like network timeouts */
-  FREQUENT: 60 * 1000,
-  
-  /** 5 minutes - for recurring issues that don't need frequent notification */
-  MODERATE: 5 * 60 * 1000,
-  
-  /** 15 minutes - for rare or low-priority issues */
-  RARE: 15 * 60 * 1000,
-  
-  /** 1 hour - for informational messages that shouldn't spam */
-  INFORMATIONAL: 60 * 60 * 1000,
-} as const;
-
 // Predefined log keys for consistency across the codebase
 export const LOG_KEYS = {
   WS_ERROR: 'websocket-error',
