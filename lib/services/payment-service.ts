@@ -214,30 +214,35 @@ class PaymentService {
    * Convert StripePaymentMethod to PaymentMethodResponse
    */
   private convertToPaymentMethodResponse(method: StripePaymentMethod): PaymentMethodResponse {
+    // Use actual values from method if available, otherwise fall back to safe defaults.
+    // If the StripePaymentMethod type does not include these fields, consider extending it.
     return {
       id: method.id,
       object: 'payment_method',
       billing_details: {
-        address: null,
-        email: null,
-        name: null,
-        phone: null,
+        address: method.billing_details?.address ?? null,
+        email: method.billing_details?.email ?? null,
+        name: method.billing_details?.name ?? null,
+        phone: method.billing_details?.phone ?? null,
       },
       card: {
         brand: method.card.brand,
-        checks: undefined,
-        country: undefined,
+        checks: method.card.checks ?? undefined,
+        country: method.card.country ?? undefined,
         exp_month: method.card.exp_month,
         exp_year: method.card.exp_year,
-        fingerprint: undefined,
-        funding: 'credit',
+        fingerprint: method.card.fingerprint ?? undefined,
+        // Use actual funding type if available, otherwise default to 'credit'
+        funding: method.card.funding ?? 'credit', // TODO: Extend StripePaymentMethod type if missing
         last4: method.card.last4,
       },
       created: method.created,
-      customer: null,
-      livemode: false,
-      metadata: {},
-      type: 'card',
+      customer: method.customer ?? null,
+      // Use actual livemode if available, otherwise default to false
+      livemode: method.livemode ?? false, // TODO: Extend StripePaymentMethod type if missing
+      // Use actual metadata if available, otherwise default to empty object
+      metadata: method.metadata ?? {}, // TODO: Extend StripePaymentMethod type if missing
+      type: method.type ?? 'card',
     };
   }
 
