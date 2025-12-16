@@ -114,14 +114,14 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         }
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.warn('[Mixpanel] init failed', e);
+        console.error('[Mixpanel] init failed', e);
       }
 
       try {
         await showNativeSplash();
         await Asset.loadAsync([ require('../assets/images/icon.png') ]);
       } catch (e) {
-        console.warn('[Splash] preparation error', e);
+        console.error('[Splash] preparation error', e);
       } finally {
         if (!cancelled) {
           setAppIsReady(true);
@@ -152,23 +152,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
   const showBranded = phase === 'brand' || (phase !== 'app' && !fontsLoaded);
   // Runtime instrumentation: log presence of critical stubs once (development only)
-  if (__DEV__) {
-    try {
-      const slot = require('../stubs/radix-slot')
-      const sonner = require('../stubs/sonner')
-      const themes = require('../stubs/next-themes')
-      // Avoid verbose output; just confirm default/named exports shape.
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] radix-slot keys:', Object.keys(slot), 'default' in slot ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] sonner keys:', Object.keys(sonner), 'default' in sonner ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] next-themes keys:', Object.keys(themes), 'default' in themes ? 'hasDefault' : 'noDefault')
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[RuntimeCheck] instrumentation failed', e)
-    }
-  }
+  // Runtime checks removed for production
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
     
