@@ -156,7 +156,6 @@ function DefaultErrorFallback({
           <Text
             style={styles.title}
             accessibilityRole="header"
-            accessibilityLevel={1}
           >
             {error.title}
           </Text>

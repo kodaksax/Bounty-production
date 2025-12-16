@@ -4,7 +4,7 @@
  * Allows users to download all their personal data in JSON format
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../supabase';
 

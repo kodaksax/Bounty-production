@@ -47,8 +47,7 @@ const TooltipTrigger = ({ asChild = false, children, isOpen, setIsOpen, ...props
   }
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement, {
-      ...props,
+    return React.cloneElement(children as React.ReactElement<any>, {
       onPress: handlePress,
     })
   }

@@ -46,7 +46,7 @@ import { supabase } from '../../lib/supabase';
 describe('Bounty Creation Integration Tests', () => {
   const mockUserId = 'user_123';
   const mockBountyId = 123;
-  const mockSupabase = supabase as jest.Mocked<typeof supabase>;
+  const mockSupabase = supabase as any;
 
   beforeEach(() => {
     jest.clearAllMocks();

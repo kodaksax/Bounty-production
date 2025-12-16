@@ -43,7 +43,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
         
         // Check if 2FA is enabled via Supabase MFA
         const { data: factors } = await supabase.auth.mfa.listFactors();
-        setTwoFactorEnabled(factors?.totp?.length > 0);
+        setTwoFactorEnabled((factors?.totp?.length ?? 0) > 0);
       }
     } catch (error) {
       console.error('[security-settings] Error loading settings:', error);
@@ -126,7 +126,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
         },
         {
           text: 'Verify',
-          onPress: async (code) => {
+          onPress: async (code?: string) => {
             if (!code) {
               setIsEnabling2FA(false);
               return;
@@ -189,7 +189,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
             try {
               const { data: factors } = await supabase.auth.mfa.listFactors();
               
-              if (factors?.totp?.length > 0) {
+              if (factors && factors.totp && factors.totp.length > 0) {
                 const factorId = factors.totp[0].id;
                 const { error } = await supabase.auth.mfa.unenroll({ factorId });
                 

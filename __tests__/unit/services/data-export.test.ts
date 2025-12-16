@@ -20,7 +20,7 @@ jest.mock('expo-sharing', () => ({
 }));
 
 // Mock supabase
-const mockSupabaseClient = {
+const mockSupabaseClient: any = {
   auth: {
     getSession: jest.fn(),
     getUser: jest.fn(),
@@ -70,9 +70,9 @@ describe('Data Export Service', () => {
 
     it('should return error if session user does not match requested user', async () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
-        data: { session: { user: { id: 'different-user' }, access_token: 'token' } },
+        data: { session: { user: { id: 'different-user' }, access_token: 'token' } as any },
         error: null,
-      });
+      } as any);
 
       const result = await exportUserData(mockUserId);
 
@@ -85,16 +85,16 @@ describe('Data Export Service', () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
         data: { session: mockSession },
         error: null,
-      });
+      } as any);
 
       // Mock database queries with proper tracking
       const mockSelect = jest.fn().mockReturnThis();
       const mockEq = jest.fn().mockReturnThis();
       const mockIn = jest.fn().mockReturnThis();
-      const mockSingle = jest.fn().mockResolvedValue({
+      const mockSingle = jest.fn<any>().mockResolvedValue({
         data: { id: mockUserId, username: 'testuser', email: 'test@example.com', balance: 100 },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: mockSelect.mockReturnValue({
@@ -128,15 +128,15 @@ describe('Data Export Service', () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
         data: { session: mockSession },
         error: null,
-      });
+      } as any);
 
       // Mock all queries to return empty arrays
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
@@ -175,14 +175,14 @@ describe('Data Export Service', () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
         data: { session: mockSession },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
@@ -201,14 +201,14 @@ describe('Data Export Service', () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
         data: { session: mockSession },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
@@ -236,14 +236,14 @@ describe('Data Export Service', () => {
           } 
         },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
@@ -276,7 +276,7 @@ describe('Data Export Service', () => {
       mockSupabaseClient.auth.getSession.mockResolvedValue({
         data: { session: null },
         error: null,
-      });
+      } as any);
 
       const result = await exportAndShareUserData(mockUserId);
 
@@ -306,14 +306,14 @@ describe('Data Export Service', () => {
           } 
         },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
@@ -339,14 +339,14 @@ describe('Data Export Service', () => {
           } 
         },
         error: null,
-      });
+      } as any);
 
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({
+          eq: jest.fn<any>().mockResolvedValue({
             data: [],
             error: null,
-          }),
+          } as any),
         }),
       }));
 
