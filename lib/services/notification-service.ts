@@ -229,8 +229,17 @@ export class NotificationService {
 
     } catch (error) {
       // Only log actual errors (not expected failures like missing profile)
-      const errMsg = error instanceof Error ? error.message : String(error);
-      const isExpectedError = errMsg.includes('404') || errMsg.includes('409');
+      // Check the response status directly if available, otherwise parse error message
+      let statusCode: number | undefined;
+      
+      if (error instanceof Error) {
+        const statusMatch = error.message.match(/\((\d{3})\)/);
+        if (statusMatch) {
+          statusCode = parseInt(statusMatch[1], 10);
+        }
+      }
+      
+      const isExpectedError = statusCode === 404 || statusCode === 409;
       
       if (!isExpectedError) {
         console.error('Error registering push token:', error);

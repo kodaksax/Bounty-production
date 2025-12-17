@@ -121,8 +121,9 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'token is required and must be a string' });
       }
 
-      // Validate token format (Expo push tokens start with ExponentPushToken[)
-      if (!token.startsWith('ExponentPushToken[') && !token.startsWith('ExpoPushToken[')) {
+      // Validate token format (Expo push tokens follow specific patterns)
+      const expoTokenPattern = /^Expo(nent)?PushToken\[.+\]$/;
+      if (!expoTokenPattern.test(token)) {
         console.warn(`⚠️  Invalid Expo push token format for user ${request.userId}: ${token.substring(0, 20)}...`);
         return reply.code(400).send({ 
           error: 'Invalid token format',

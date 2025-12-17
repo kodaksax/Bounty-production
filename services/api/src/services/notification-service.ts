@@ -214,7 +214,11 @@ export class NotificationService {
       console.error(`❌ Error registering push token for user ${userId}:`, error);
       
       // Check if it's a foreign key constraint error
-      if (error instanceof Error && error.message.includes('foreign key constraint')) {
+      // Drizzle ORM and Postgres errors contain specific codes and constraint names
+      const err = error as any;
+      if (err?.code === '23503' || // Postgres FK violation code
+          err?.constraint_name?.includes('user_id') ||
+          (error instanceof Error && error.message.includes('foreign key constraint'))) {
         throw new Error(`User profile must be created before registering push tokens. Please ensure the user is authenticated and has called the /me endpoint.`);
       }
       
