@@ -6,6 +6,8 @@
  */
 
 import NetInfo from '@react-native-community/netinfo';
+import { WEBSOCKET_CONFIG, calculateRetryDelay, ERROR_LOG_THROTTLE, isVerboseLogging } from 'lib/config/network';
+import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
 import getApiBaseFallback from 'lib/utils/dev-host';
 import { Platform } from 'react-native';
 import { getApiBaseUrl } from '../config/api';
@@ -32,15 +34,15 @@ class WebSocketAdapter {
   private connected: boolean = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 10;
-  private reconnectDelay: number = 1000; // Start with 1 second
+  private maxReconnectAttempts: number = WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS;
+  private reconnectDelay: number = WEBSOCKET_CONFIG.INITIAL_RECONNECT_DELAY;
   private token: string | null = null;
   private url: string = '';
   private intentionalDisconnect: boolean = false;
   private lastOpenTime: number = 0;
-  private minStableConnectionMs: number = 5000; // Consider connection stable after 5s
-  private verbose: boolean = process.env.EXPO_PUBLIC_WS_VERBOSE === '1';
-  private pingIntervalMs: number = 20000; // 20s
+  private minStableConnectionMs: number = WEBSOCKET_CONFIG.MIN_STABLE_CONNECTION_MS;
+  private verbose: boolean = isVerboseLogging();
+  private pingIntervalMs: number = WEBSOCKET_CONFIG.PING_INTERVAL_MS;
   private pingTimer?: ReturnType<typeof setInterval>;
   private lastPongTime: number = 0;
 
@@ -173,18 +175,38 @@ class WebSocketAdapter {
             message: (error as any)?.message,
             type: (error as any)?.type,
           };
-          console.error('[WebSocket] Error event', info);
+          
+          // Reduce error spam in development - only log connection errors periodically
+          if (__DEV__) {
+            if (shouldLog(LOG_KEYS.WS_ERROR, ERROR_LOG_THROTTLE.FREQUENT)) {
+              console.log('[WebSocket] Connection unavailable - retrying in background');
+            }
+          } else {
+            console.error('[WebSocket] Error event', info);
+          }
+          
           this.emit('error', info);
         } catch (e) {
-          console.error('[WebSocket] Error (unserializable):', error);
+          if (!__DEV__) {
+            console.error('[WebSocket] Error (unserializable):', error);
+          }
           this.emit('error', { error });
         }
       };
 
       this.ws.onclose = (event) => {
         const uptime = this.lastOpenTime ? Date.now() - this.lastOpenTime : 0;
-        if (this.verbose || this.reconnectAttempts === 0 || uptime < this.minStableConnectionMs) {
+        
+        // Reduce close event spam in development
+        if (__DEV__) {
+          // Only log disconnects if we were actually connected for a meaningful duration
+          if (uptime > this.minStableConnectionMs && (this.verbose || this.reconnectAttempts === 0)) {
+            console.log('[WebSocket] Disconnected after', Math.round(uptime / 1000), 'seconds');
+          }
+        } else if (this.verbose || this.reconnectAttempts === 0 || uptime < this.minStableConnectionMs) {
+          console.log('[WebSocket] Connection closed');
         }
+        
         this.connected = false;
         this.emit('disconnect', { code: event.code, reason: event.reason, uptime });
         // clear heartbeat timer
@@ -200,7 +222,14 @@ class WebSocketAdapter {
         }
       };
     } catch (error) {
-      console.error('[WebSocket] Connection error:', error);
+      // Reduce error spam in development
+      if (__DEV__) {
+        if (shouldLog(LOG_KEYS.WS_CONNECT_ERROR, ERROR_LOG_THROTTLE.FREQUENT)) {
+          console.log('[WebSocket] Connection failed - will retry automatically');
+        }
+      } else {
+        console.error('[WebSocket] Connection error:', error);
+      }
       this.scheduleReconnect();
     }
   }
@@ -214,7 +243,14 @@ class WebSocketAdapter {
     }
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[WebSocket] Max reconnect attempts reached');
+      // Don't spam console in development when backend is unreachable
+      if (__DEV__) {
+        if (shouldLog(LOG_KEYS.WS_MAX_ATTEMPTS, ERROR_LOG_THROTTLE.RARE)) {
+          console.log('[WebSocket] Backend unreachable - will retry when network changes');
+        }
+      } else {
+        console.error('[WebSocket] Max reconnect attempts reached');
+      }
       this.emit('max_reconnect_attempts', { attempts: this.reconnectAttempts });
       return;
     }
@@ -223,7 +259,7 @@ class WebSocketAdapter {
       clearTimeout(this.reconnectTimer);
     }
 
-    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
+    const delay = calculateRetryDelay(this.reconnectAttempts, this.reconnectDelay);
     
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
