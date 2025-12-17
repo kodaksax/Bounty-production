@@ -84,7 +84,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
       {/* Header */}
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
-          <BrandingLogo size="small" />
+          <BrandingLogo size="medium" />
         </View>
         <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
