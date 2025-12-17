@@ -48,7 +48,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const count = await notificationService.getUnreadCount();
       setUnreadCount(count);
     } catch (error) {
-      console.error('Error refreshing unread count:', error);
+      // Silent failure - getUnreadCount already handles logging appropriately
+      // Don't spam console with additional error messages
     }
   }, []);
 

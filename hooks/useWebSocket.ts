@@ -79,7 +79,10 @@ export function useWebSocket() {
     });
 
     const unsubscribeError = wsAdapter.on('error', (error) => {
-      logClientError('WebSocket error', { error });
+      // Don't spam error logs in development when backend is unreachable
+      if (!__DEV__ || verboseClient) {
+        logClientError('WebSocket error', { error });
+      }
       updateState();
     });
 
