@@ -229,11 +229,19 @@ export class NotificationService {
 
     } catch (error) {
       // Only log actual errors (not expected failures like missing profile)
-      // Check the response status directly if available, otherwise parse error message
+      // Prefer structured status information on the error object over parsing strings
       let statusCode: number | undefined;
-      
-      if (error instanceof Error) {
-        const statusMatch = error.message.match(/\((\d{3})\)/);
+
+      const anyError = error as any;
+      if (anyError && typeof anyError.statusCode === 'number') {
+        statusCode = anyError.statusCode;
+      } else if (anyError && typeof anyError.status === 'number') {
+        statusCode = anyError.status;
+      } else if (anyError && anyError.response && typeof anyError.response.status === 'number') {
+        statusCode = anyError.response.status;
+      } else if (anyError instanceof Error) {
+        // Fallback to parsing status code from error message if no structured property exists
+        const statusMatch = anyError.message.match(/\((\d{3})\)/);
         if (statusMatch) {
           statusCode = parseInt(statusMatch[1], 10);
         }

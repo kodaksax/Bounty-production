@@ -2,6 +2,9 @@ import { FastifyInstance } from 'fastify';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { notificationService } from '../services/notification-service';
 
+// Regex pattern for validating Expo push tokens
+const EXPO_PUSH_TOKEN_PATTERN = /^Expo(nent)?PushToken\[.+\]$/;
+
 export async function registerNotificationRoutes(fastify: FastifyInstance) {
   // Get notifications for current user
   fastify.get<{
@@ -122,8 +125,7 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
       }
 
       // Validate token format (Expo push tokens follow specific patterns)
-      const expoTokenPattern = /^Expo(nent)?PushToken\[.+\]$/;
-      if (!expoTokenPattern.test(token)) {
+      if (!EXPO_PUSH_TOKEN_PATTERN.test(token)) {
         console.warn(`⚠️  Invalid Expo push token format for user ${request.userId}: ${token.substring(0, 20)}...`);
         return reply.code(400).send({ 
           error: 'Invalid token format',
@@ -143,13 +145,6 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ 
           error: 'User profile not found',
           details: errorMsg
-        });
-      }
-      
-      if (errorMsg.includes('foreign key constraint') || errorMsg.includes('violates foreign key')) {
-        return reply.code(409).send({ 
-          error: 'User profile must exist before registering push tokens',
-          details: 'Please ensure your profile is created by accessing the app first'
         });
       }
       

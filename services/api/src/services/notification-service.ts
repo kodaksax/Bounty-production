@@ -200,8 +200,11 @@ export class NotificationService {
         console.log(`✅ Updated push token for user ${userId}`);
       } else {
         // Insert new token
+        // Expected flow:
+        //   1) User authenticates with the auth provider
+        //   2) Backend /me (or equivalent auth) endpoint creates/ensures the user profile row
+        //   3) Client calls this registerPushToken method to save the device's push token
         // Note: This will fail if the user doesn't exist in the profiles table due to FK constraint.
-        // The user should be created via the /me endpoint or auth flow before registering push tokens.
         await db.insert(pushTokens).values({
           user_id: userId,
           token,
