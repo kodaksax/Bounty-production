@@ -177,40 +177,49 @@ export class NotificationService {
    * Register push notification token
    */
   async registerPushToken(userId: string, token: string, deviceId?: string): Promise<void> {
-    // Ensure user exists (local dev often runs without Supabase auth; missing users cause FK errors)
-    const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
-    if (userExists.length === 0) {
-      // Create a placeholder profile so the FK constraint passes. Handle is required on profiles.
-      const fallbackHandle = `user-${userId.substring(0, 8) || 'dev'}`;
-      await db.insert(users).values({ id: userId, handle: fallbackHandle }).onConflictDoNothing();
-    }
+    try {
+      // Check if token already exists for this user
+      const existing = await db
+        .select()
+        .from(pushTokens)
+        .where(and(
+          eq(pushTokens.user_id, userId),
+          eq(pushTokens.token, token)
+        ))
+        .limit(1);
 
-    // Check if token already exists for this user
-    const existing = await db
-      .select()
-      .from(pushTokens)
-      .where(and(
-        eq(pushTokens.user_id, userId),
-        eq(pushTokens.token, token)
-      ))
-      .limit(1);
-
-    if (existing.length > 0) {
-      // Update the existing token's timestamp
-      await db
-        .update(pushTokens)
-        .set({ 
-          updated_at: new Date(),
-          device_id: deviceId || existing[0].device_id
-        })
-        .where(eq(pushTokens.id, existing[0].id));
-    } else {
-      // Insert new token
-      await db.insert(pushTokens).values({
-        user_id: userId,
-        token,
-        device_id: deviceId,
-      });
+      if (existing.length > 0) {
+        // Update the existing token's timestamp
+        await db
+          .update(pushTokens)
+          .set({ 
+            updated_at: new Date(),
+            device_id: deviceId || existing[0].device_id
+          })
+          .where(eq(pushTokens.id, existing[0].id));
+        console.log(`✅ Updated push token for user ${userId}`);
+      } else {
+        // Insert new token
+        // Note: This will fail if the user doesn't exist in the profiles table due to FK constraint.
+        // The user should be created via the /me endpoint or auth flow before registering push tokens.
+        await db.insert(pushTokens).values({
+          user_id: userId,
+          token,
+          device_id: deviceId,
+        });
+        console.log(`✅ Registered new push token for user ${userId}`);
+      }
+    } catch (error) {
+      // Log detailed error information for debugging
+      console.error(`❌ Error registering push token for user ${userId}:`, error);
+      
+      // Check if it's a foreign key constraint error
+      if (error instanceof Error && error.message.includes('foreign key constraint')) {
+        throw new Error(`User profile must be created before registering push tokens. Please ensure the user is authenticated and has called the /me endpoint.`);
+      }
+      
+      // Re-throw the error so the caller can handle it
+      throw error;
     }
   }
 

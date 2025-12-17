@@ -186,6 +186,9 @@ export class NotificationService {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
+        if (__DEV__) {
+          console.log('[NotificationService] No active session - skipping push token registration');
+        }
         return;
       }
 
@@ -198,18 +201,41 @@ export class NotificationService {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ token, deviceId }),
-        // add an 8s timeout so we don’t hang forever on mobile when the dev API isn’t reachable
+        // add an 8s timeout so we don't hang forever on mobile when the dev API isn't reachable
         signal: withTimeout(controller.signal, 8000),
       });
 
       if (!response.ok) {
         const text = await safeReadResponseText(response)
-        console.error(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
-        throw new Error('Failed to register push token')
+        
+        // Log different levels based on status code
+        if (response.status === 404 || response.status === 409) {
+          // User profile doesn't exist yet - this is expected on first launch
+          if (__DEV__) {
+            console.log(`[NotificationService] User profile not yet created (${response.status}). Will retry after profile creation.`)
+          }
+        } else if (response.status >= 500) {
+          console.error(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
+        } else {
+          console.warn(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
+        }
+        
+        throw new Error(`Failed to register push token (${response.status})`)
+      } else {
+        if (__DEV__) {
+          console.log('[NotificationService] Successfully registered push token with backend');
+        }
       }
 
     } catch (error) {
-      console.error('Error registering push token:', error);
+      // Only log actual errors (not expected failures like missing profile)
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isExpectedError = errMsg.includes('404') || errMsg.includes('409');
+      
+      if (!isExpectedError) {
+        console.error('Error registering push token:', error);
+      }
+      
       // Fallback: try saving directly to Supabase if available (RLS should allow inserting own token)
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -217,16 +243,22 @@ export class NotificationService {
         if (userId) {
           const { error: sbErr } = await supabase.from('push_tokens').upsert({ user_id: userId, token, device_id: deviceId }).select('id').single()
           if (!sbErr) {
+            if (__DEV__) {
+              console.log('[NotificationService] Successfully registered push token via Supabase fallback');
+            }
             return
           }
         }
       } catch {}
-      // As a last resort, cache and retry later so the user isn’t blocked
+      // As a last resort, cache and retry later so the user isn't blocked
       try {
         const pendingStr = await AsyncStorage.getItem('notifications:pending_tokens')
         const pending = pendingStr ? JSON.parse(pendingStr) as Array<{token:string, deviceId?:string}> : []
         pending.push({ token, deviceId })
         await AsyncStorage.setItem('notifications:pending_tokens', JSON.stringify(pending))
+        if (__DEV__) {
+          console.log('[NotificationService] Cached push token for later registration');
+        }
       } catch {}
     }
   }

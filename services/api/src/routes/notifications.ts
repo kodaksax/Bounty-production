@@ -110,13 +110,24 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
   }, async (request: AuthenticatedRequest, reply) => {
     try {
       if (!request.userId) {
+        console.warn('⚠️  Push token registration attempted without userId');
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
       const { token, deviceId } = request.body as { token: string; deviceId?: string };
 
       if (!token || typeof token !== 'string') {
-        return reply.code(400).send({ error: 'token is required' });
+        console.warn(`⚠️  Invalid push token provided by user ${request.userId}`);
+        return reply.code(400).send({ error: 'token is required and must be a string' });
+      }
+
+      // Validate token format (Expo push tokens start with ExponentPushToken[)
+      if (!token.startsWith('ExponentPushToken[') && !token.startsWith('ExpoPushToken[')) {
+        console.warn(`⚠️  Invalid Expo push token format for user ${request.userId}: ${token.substring(0, 20)}...`);
+        return reply.code(400).send({ 
+          error: 'Invalid token format',
+          details: 'Token must be a valid Expo push token'
+        });
       }
 
       await notificationService.registerPushToken(request.userId, token, deviceId);
@@ -124,7 +135,23 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
       return { success: true };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('Error registering push token:', errorMsg, error);
+      console.error(`❌ Error registering push token for user ${request.userId}:`, errorMsg);
+      
+      // Provide more specific error codes based on the error type
+      if (errorMsg.includes('User profile must be created')) {
+        return reply.code(404).send({ 
+          error: 'User profile not found',
+          details: errorMsg
+        });
+      }
+      
+      if (errorMsg.includes('foreign key constraint') || errorMsg.includes('violates foreign key')) {
+        return reply.code(409).send({ 
+          error: 'User profile must exist before registering push tokens',
+          details: 'Please ensure your profile is created by accessing the app first'
+        });
+      }
+      
       return reply.code(500).send({ 
         error: 'Failed to register push token',
         details: errorMsg
