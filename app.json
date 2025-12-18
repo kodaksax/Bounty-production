@@ -7,7 +7,7 @@
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
@@ -38,9 +38,7 @@
           "merchantIdentifier": "merchant.com.bountyexpo-workspace"
         }
       ],
-      [
-        "@react-native-google-signin/google-signin"
-      ],
+      "@react-native-google-signin/google-signin",
       [
         "expo-splash-screen",
         {
