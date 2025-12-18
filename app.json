@@ -70,7 +70,8 @@
           "organization": "bounty-4e"
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true
