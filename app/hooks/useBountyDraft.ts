@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
+import { storage } from '../../lib/storage';
 import type { Attachment } from '../../lib/types';
 
 const DRAFT_KEY = 'bounty-draft-v1';
@@ -38,7 +38,7 @@ export function useBountyDraft() {
   useEffect(() => {
     (async () => {
       try {
-        const savedDraft = await AsyncStorage.getItem(DRAFT_KEY);
+        const savedDraft = await storage.getItem(DRAFT_KEY);
         if (savedDraft) {
           setDraft(JSON.parse(savedDraft));
         }
@@ -55,7 +55,7 @@ export function useBountyDraft() {
     try {
       const updated = { ...draft, ...draftData };
       setDraft(updated);
-      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
+      await storage.setItem(DRAFT_KEY, JSON.stringify(updated));
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
@@ -65,7 +65,7 @@ export function useBountyDraft() {
   const clearDraft = useCallback(async () => {
     try {
       setDraft(defaultDraft);
-      await AsyncStorage.removeItem(DRAFT_KEY);
+      await storage.removeItem(DRAFT_KEY);
     } catch (error) {
       console.error('Failed to clear bounty draft:', error);
     }

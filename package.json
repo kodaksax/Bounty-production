@@ -134,7 +134,6 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.17",
     "uuid": "^13.0.0",
-    "vexo-analytics": "^1.5.3",
     "zod": "^4.1.7"
   },
   "devDependencies": {

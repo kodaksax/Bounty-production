@@ -5,7 +5,7 @@ import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import "../global.css";
@@ -22,12 +22,6 @@ import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
-import { vexo } from 'vexo-analytics'; 
-import { identifyDevice } from 'vexo-analytics';
-
-
-identifyDevice('john@example.com');
-vexo('88368b3e-2c06-4bf0-a5fe-2e3ef22df365')
 
 // Load test utilities in development
 if (__DEV__) {

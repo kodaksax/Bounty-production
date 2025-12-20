@@ -1,14 +1,13 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { makeRedirectUri, ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
+import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { Image } from 'expo-image'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
 import { Checkbox } from '../../components/ui/checkbox'
@@ -16,6 +15,7 @@ import { useFormSubmission } from '../../hooks/useFormSubmission'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
+import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 
@@ -92,9 +92,9 @@ export function SignInForm() {
       // Handle remember me preference
       try {
         if (rememberMe) {
-          await AsyncStorage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
+          await storage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
         } else {
-          await AsyncStorage.removeItem('rememberMeEmail')
+          await storage.removeItem('rememberMeEmail')
         }
       } catch (error) {
         console.error('[sign-in] Failed to save remember me preference:', error)
@@ -166,7 +166,7 @@ export function SignInForm() {
   useEffect(() => {
     const loadSavedEmail = async () => {
       try {
-        const savedEmail = await AsyncStorage.getItem('rememberMeEmail')
+        const savedEmail = await storage.getItem('rememberMeEmail')
         if (savedEmail) {
           setIdentifier(savedEmail)
           setRememberMe(true)

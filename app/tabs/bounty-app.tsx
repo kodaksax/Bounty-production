@@ -1,5 +1,4 @@
 import { MaterialIcons } from "@expo/vector-icons"
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocation } from 'app/hooks/useLocation'
 import { MessengerScreen } from "app/tabs/messenger-screen"
 import { PostingsScreen } from "app/tabs/postings-screen"
@@ -8,6 +7,7 @@ import { WalletScreen } from "app/tabs/wallet-screen"
 import { BountyListItem } from 'components/bounty-list-item'
 import { ConnectionStatus } from 'components/connection-status'
 import { NotificationsBell } from 'components/notifications-bell'
+import { storage } from '../../lib/storage'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
@@ -25,11 +25,11 @@ import { useAdmin } from '../../lib/admin-context'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
 import { bountyRequestService } from '../../lib/services/bounty-request-service'
 import { bountyService } from '../../lib/services/bounty-service'
-import { searchService } from '../../lib/services/search-service'
 import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
-import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { searchService } from '../../lib/services/search-service'
 import type { TrendingBounty } from '../../lib/types'
+import { WalletProvider, useWallet } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
 // Use the proper Bounty type from database types
@@ -300,7 +300,7 @@ function BountyAppInner() {
         setHasCheckedOnboarding(true);
         
         // Check if onboarding was completed
-        const onboardingComplete = await AsyncStorage.getItem('@bounty_onboarding_completed');
+        const onboardingComplete = await storage.getItem('@bounty_onboarding_completed');
         
         // Redirect to onboarding if:
         // 1. Profile is incomplete (no username), OR
@@ -319,7 +319,7 @@ function BountyAppInner() {
   useEffect(() => {
     (async () => {
       try {
-        const saved = await AsyncStorage.getItem('BE:lastFilter')
+        const saved = await storage.getItem('BE:lastFilter')
         if (saved) setActiveCategory(saved as any)
       } catch {}
     })()
@@ -329,7 +329,7 @@ function BountyAppInner() {
   useEffect(() => {
     (async () => {
       try {
-        await AsyncStorage.setItem('BE:lastFilter', String(activeCategory))
+        await storage.setItem('BE:lastFilter', String(activeCategory))
       } catch {}
     })()
   }, [activeCategory])
