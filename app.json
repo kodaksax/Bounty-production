@@ -53,21 +53,12 @@
         {
           "icon": "./assets/images/bounty-icon.png",
           "color": "#10b981",
-          "sounds": [
-            "./assets/sounds/notification.wav"
-          ]
+          
         }
       ],
       "expo-secure-store",
       "expo-web-browser",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "bounty-4e"
-        }
-      ],
+      
       "expo-video",
       "expo-build-properties"
     ],

@@ -13,7 +13,10 @@
     },
     "production": {
       "distribution": "store",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "SENTRY_SKIP_UPLOAD": "1"
+      }
     }
   },
   "submit": {
