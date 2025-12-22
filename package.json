@@ -141,7 +141,7 @@
     "@esbuild-kit/core-utils": "^3.3.2",
     "@esbuild-kit/esm-loader": "^2.6.5",
     "@testing-library/react-native": "^13.3.3",
-    "@types/jest": "29.5.14",
+    "@types/jest": "^29.5.14",
     "@types/react": "^19.1.13",
     "@types/react-native-vector-icons": "^6.4.18",
     "@types/supertest": "^6.0.3",
@@ -156,7 +156,7 @@
     "nock": "^14.0.10",
     "prettier": "^3.1.0",
     "supertest": "^7.1.4",
-    "ts-jest": "^29.4.5",
+    "ts-jest": "^29.4.6",
     "typescript": "~5.9.2"
   },
   "private": true,
