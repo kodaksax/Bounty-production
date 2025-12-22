@@ -42,7 +42,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       return
     }
 
-    const expiresAt = session.expires_at * 1000 // Convert to milliseconds
+    // Supabase returns expires_at as Unix timestamp in seconds, convert to milliseconds
+    const expiresAt = session.expires_at * 1000
     const now = Date.now()
     const timeUntilExpiry = expiresAt - now
 
@@ -115,8 +116,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           console.error('[AuthProvider] Error fetching session:', error)
           setSession(null)
           await authProfileService.setSession(null)
-        } else {
-          console.log('[AuthProvider] Session loaded:', session ? 'authenticated' : 'not authenticated')
+        } else if (session) {
+          // Valid session found
+          console.log('[AuthProvider] Session loaded: authenticated')
           setSession(session)
           
           // Sync session with auth profile service
@@ -125,15 +127,18 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Email verification gate: Check if email is verified
           // Priority: session.user?.email_confirmed_at > profile.email_verified > false
           const verified = Boolean(
-            session?.user?.email_confirmed_at ||
-            session?.user?.confirmed_at
+            session.user?.email_confirmed_at ||
+            session.user?.confirmed_at
           )
           setIsEmailVerified(verified)
 
           // Schedule automatic token refresh
-          if (session) {
-            scheduleTokenRefresh(session)
-          }
+          scheduleTokenRefresh(session)
+        } else {
+          // No error but also no session (user not logged in)
+          console.log('[AuthProvider] Session loaded: not authenticated')
+          setSession(null)
+          await authProfileService.setSession(null)
         }
       } catch (error) {
         console.error('[AuthProvider] Unexpected error fetching session:', error)
