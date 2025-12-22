@@ -24,7 +24,6 @@
     "@sentry/node": "^10.25.0",
     "@supabase/supabase-js": "^2.38.5",
     "dotenv": "^16.3.1",
-    "drizzle-orm": "^0.29.0",
     "expo-server-sdk": "^4.0.0",
     "fastify": "^4.24.3",
     "mixpanel": "^0.19.0",
@@ -39,10 +38,12 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.8.10",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.10.9",
     "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.1",
     "tsx": "^4.6.0",
     "typescript": "~5.9.2"
   }
