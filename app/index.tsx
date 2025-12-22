@@ -35,12 +35,17 @@ export default function Index() {
             .eq('id', session.user.id)
             .single()
 
+          // Helper to navigate to main app
+          const navigateToMainApp = () => {
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          }
+
           if (!profileData || !profileData.username) {
             // User needs to complete onboarding
             router.replace('/onboarding/username')
           } else {
             // User has completed onboarding, go to main app
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            navigateToMainApp()
           }
         } catch (error) {
           console.error('[index] Error checking profile:', error)

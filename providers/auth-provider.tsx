@@ -28,6 +28,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
   /**
    * Schedule automatic token refresh before expiration
+   * @param session - The session to schedule refresh for. If null or missing expires_at, no refresh is scheduled.
    */
   const scheduleTokenRefresh = (session: Session | null) => {
     // Clear any existing timer
@@ -36,7 +37,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       refreshTimerRef.current = null
     }
 
-    // If no session, nothing to refresh
+    // If no session or no expiration timestamp, nothing to refresh
     if (!session?.expires_at) {
       return
     }
@@ -53,6 +54,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     }
 
     // Schedule refresh 5 minutes before expiration
+    // If token expires sooner than threshold, refreshIn will be 0 (immediate refresh)
     const refreshIn = Math.max(0, timeUntilExpiry - TOKEN_REFRESH_THRESHOLD_MS)
     
     console.log('[AuthProvider] Scheduling token refresh in', Math.floor(refreshIn / 1000), 'seconds')
