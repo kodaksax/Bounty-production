@@ -27,6 +27,7 @@ export interface AuthProfile {
   balance: number;
   created_at?: string;
   updated_at?: string;
+  onboarding_completed?: boolean; // Track if user has completed onboarding flow
 }
 
 interface CachedProfile {
@@ -139,6 +140,7 @@ export class AuthProfileService {
         balance: data.balance || 0,
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
+        onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
       };
 
       if (!bypassCache) {
@@ -237,6 +239,7 @@ export class AuthProfileService {
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
+          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         };
 
         this.currentProfile = profile;
@@ -354,6 +357,7 @@ export class AuthProfileService {
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
+          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         };
 
         this.currentProfile = profile;
@@ -410,6 +414,7 @@ export class AuthProfileService {
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
+          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         };
 
         this.currentProfile = profile;
