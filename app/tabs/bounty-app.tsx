@@ -78,11 +78,8 @@ function BountyAppInner() {
   const { location: userLocation, permission } = useLocation()
   const [distanceFilter, setDistanceFilter] = useState<number | null>(null) // Max distance in miles, null = no filter
   
-  // Check if onboarding is needed (useUserProfile provides completeness)
-  const { isComplete, loading: profileLoading } = useUserProfile()
   // Use normalized profile for display in the UI where needed
   const { profile: normalizedProfile } = useNormalizedProfile()
-  const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false)
 
   // Collapsing header config (using standardized constants)
   const HEADER_EXPANDED = HEADER_LAYOUT.expandedHeight
@@ -292,28 +289,6 @@ function BountyAppInner() {
       loadTrendingBounties()
     }
   }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
-
-  // Check if onboarding is needed and redirect
-  useEffect(() => {
-    const checkOnboarding = async () => {
-      if (!profileLoading && !hasCheckedOnboarding) {
-        setHasCheckedOnboarding(true);
-        
-        // Check if onboarding was completed
-        const onboardingComplete = await storage.getItem('@bounty_onboarding_completed');
-        
-        // Redirect to onboarding if:
-        // 1. Profile is incomplete (no username), OR
-        // 2. Onboarding was never marked as complete
-        if (!isComplete || onboardingComplete !== 'true') {
-          // Profile is incomplete, redirect to onboarding
-          router.push('/onboarding/username');
-        }
-      }
-    };
-    
-    checkOnboarding();
-  }, [profileLoading, isComplete, hasCheckedOnboarding, router]);
 
   // Restore last-selected chip on mount
   useEffect(() => {

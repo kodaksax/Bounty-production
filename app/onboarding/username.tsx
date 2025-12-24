@@ -181,12 +181,14 @@ export default function UsernameScreen() {
           // Don't block navigation since Supabase profile was updated
         }
       } else {
+        // Create new profile during onboarding - set onboarding_completed = false
         const { error: insertError } = await supabase
           .from('profiles')
           .insert({
             id: userId,
             username,
             balance: 0,
+            onboarding_completed: false, // User is in onboarding, not yet completed
           });
 
         if (insertError) {
