@@ -641,3 +641,93 @@ async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promis
   customerIds.set(userId, customer.id);
   return customer.id;
 }
+
+  /**
+   * Add bank account (ACH) as a payment method
+   * Creates a bank account token and attaches it to the customer
+   */
+  fastify.post('/payments/bank-accounts', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      const { 
+        accountHolderName, 
+        routingNumber, 
+        accountNumber, 
+        accountType 
+      } = request.body as {
+        accountHolderName: string;
+        routingNumber: string;
+        accountNumber: string;
+        accountType: 'checking' | 'savings';
+      };
+
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Validate input
+      if (!accountHolderName || !routingNumber || !accountNumber || !accountType) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+
+      if (routingNumber.length !== 9) {
+        return reply.code(400).send({ error: 'Invalid routing number' });
+      }
+
+      if (accountNumber.length < 4 || accountNumber.length > 17) {
+        return reply.code(400).send({ error: 'Invalid account number' });
+      }
+
+      if (accountType !== 'checking' && accountType !== 'savings') {
+        return reply.code(400).send({ error: 'Account type must be checking or savings' });
+      }
+
+      // Get or create Stripe customer
+      const customerId = await getStripeCustomerId(request.userId);
+
+      // Create bank account token
+      const token = await stripe.tokens.create({
+        bank_account: {
+          country: 'US',
+          currency: 'usd',
+          account_holder_name: accountHolderName,
+          account_holder_type: 'individual',
+          routing_number: routingNumber,
+          account_number: accountNumber,
+        },
+      });
+
+      // Attach bank account to customer
+      const bankAccount = await stripe.customers.createSource(customerId, {
+        source: token.id,
+      });
+
+      logger.info(`[payments] Added bank account for user ${request.userId}`);
+
+      return {
+        success: true,
+        bankAccount: {
+          id: bankAccount.id,
+          last4: (bankAccount as any).last4,
+          bankName: (bankAccount as any).bank_name,
+          accountType,
+        },
+      };
+    } catch (error: any) {
+      logger.error('[payments] Error adding bank account:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to add bank account';
+      if (error.type === 'StripeInvalidRequestError') {
+        if (error.message?.includes('routing number')) {
+          errorMessage = 'Invalid routing number';
+        } else if (error.message?.includes('account number')) {
+          errorMessage = 'Invalid account number';
+        }
+      }
+      
+      return reply.code(400).send({ error: errorMessage });
+    }
+  });
+}
