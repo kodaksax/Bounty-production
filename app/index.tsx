@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router"
-import React, { useEffect } from "react"
+import React, { useEffect, useRef } from "react"
 import { ActivityIndicator, View, Text } from "react-native"
-import { useAuthContext } from "../hooks/use-auth-context"
+import { useAuthContext } from "app/hooks/use-auth-context"
 import { SignInForm } from "./auth/sign-in-form"
-import { supabase } from "../lib/supabase"
-import { ROUTES } from "../lib/routes"
+import { ROUTES } from "app/lib/routes"
+import { authProfileService } from "app/lib/services/auth-profile-service"
 
 /**
  * Root Index - Auth Gate
@@ -15,41 +15,71 @@ import { ROUTES } from "../lib/routes"
  * - If not logged in: show sign-in form
  */
 export default function Index() {
-  const { session, isLoading, profile } = useAuthContext()
+  const { session, isLoading } = useAuthContext()
   const router = useRouter()
+  const latestSessionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
+    let isActive = true
+
+    // Track the latest session id for this effect run
+    latestSessionIdRef.current = session?.user?.id ?? null
+    const startingSessionId = latestSessionIdRef.current
+
     // Wait for auth state to be determined
     if (isLoading) {
-      return
+      return () => {
+        isActive = false
+      }
     }
 
     // If user is authenticated, check their profile and redirect
     if (session?.user) {
       const checkProfileAndRedirect = async () => {
         try {
-          // Check if user has completed onboarding (has profile in Supabase)
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', session.user.id)
-            .single()
+          // Check if user has completed username setup (required for onboarding completion)
+          // Use authProfileService to avoid duplicate queries
+          const profileData = authProfileService.getCurrentProfile()
+
+          // If component has unmounted or session has changed, abort navigation
+          if (!isActive || latestSessionIdRef.current !== startingSessionId) {
+            return
+          }
 
           if (!profileData || !profileData.username) {
             // User needs to complete onboarding
-            router.replace('/onboarding/username')
+            try {
+              router.replace('/onboarding/username')
+            } catch (navError) {
+              console.error('[index] Navigation error to onboarding:', navError)
+            }
           } else {
             // User has completed onboarding, go to main app
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            try {
+              router.replace(ROUTES.TABS.BOUNTY_APP)
+            } catch (navError) {
+              console.error('[index] Navigation error to main app:', navError)
+            }
           }
         } catch (error) {
           console.error('[index] Error checking profile:', error)
           // On error, still redirect to app and let other guards handle it
-          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          if (!isActive || latestSessionIdRef.current !== startingSessionId) {
+            return
+          }
+          try {
+            router.replace(ROUTES.TABS.BOUNTY_APP)
+          } catch (navError) {
+            console.error('[index] Navigation error in fallback redirect:', navError)
+          }
         }
       }
 
       checkProfileAndRedirect()
+    }
+
+    return () => {
+      isActive = false
     }
   }, [session, isLoading, router])
 

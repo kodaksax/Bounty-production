@@ -91,6 +91,41 @@ describe('Authentication State Persistence', () => {
       });
     });
 
+    it('should clean up subscription on unmount', async () => {
+      const unsubscribeMock = jest.fn();
+      
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(() => ({
+        data: {
+          subscription: {
+            unsubscribe: unsubscribeMock,
+          },
+        },
+      }));
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      
+      const { unmount } = render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(supabase.auth.onAuthStateChange).toHaveBeenCalled();
+      });
+
+      // Unmount the component
+      unmount();
+
+      // Verify unsubscribe was called
+      expect(unsubscribeMock).toHaveBeenCalled();
+    });
+
     it('should handle missing session gracefully', async () => {
       (supabase.auth.getSession as jest.Mock).mockResolvedValue({
         data: { session: null },
@@ -298,7 +333,6 @@ describe('Authentication State Persistence', () => {
     });
 
     it('should trigger SIGNED_OUT event on token expiration', async () => {
-      const signOutCallback = jest.fn();
       let authStateCallback: any;
 
       (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
