@@ -53,7 +53,7 @@ export default function Index() {
           // 3. onboarding_completed flag is explicitly false
           // Note: onboarding_completed will be true for existing users (via migration)
           // and undefined for very old profiles, so we treat undefined as completed
-          const hasUsername = profileData && profileData.username
+          const hasUsername = profileData?.username
           const onboardingComplete = profileData?.onboarding_completed !== false
           
           if (!hasUsername || !onboardingComplete) {
