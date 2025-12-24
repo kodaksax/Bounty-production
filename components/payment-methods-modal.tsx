@@ -26,7 +26,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
 
   // Use shared timeout helper for retryable fetches with exponential backoff
   const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
-    let lastErr: any
+    let lastErr: unknown
     setLoadFailed(false)
     for (let i = 0; i <= retries; i++) {
       try {
@@ -37,7 +37,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
         await withTimeout(loadPaymentMethods(), timeout)
         // If loadPaymentMethods resolved, success
         return
-      } catch (e: any) {
+      } catch (e: unknown) {
         lastErr = e
         // Exponential backoff: 1s, 2s, 4s
         const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)

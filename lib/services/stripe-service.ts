@@ -563,21 +563,25 @@ class StripeService {
         }
 
         const data = await response.json();
-        return (data.paymentMethods || []).map((pm: any) => ({
-          id: pm.id,
-          type: 'card' as const,
-          card: {
-            brand: pm.card?.brand || pm.card_brand || 'unknown',
-            last4: pm.card?.last4 || pm.card_last4 || '****',
-            exp_month: pm.card?.exp_month || pm.card_exp_month || 0,
-            exp_year: pm.card?.exp_year || pm.card_exp_year || 0,
-          },
-          created: pm.created || Math.floor(Date.now() / 1000),
-        }));
-      } catch (fetchError: any) {
+        return (data.paymentMethods || []).map((pm: unknown) => {
+          // Type guard for payment method data
+          const pmData = pm as Record<string, unknown>;
+          return {
+            id: (pmData.id as string) || '',
+            type: 'card' as const,
+            card: {
+              brand: ((pmData.card as Record<string, unknown>)?.brand || pmData.card_brand || 'unknown') as string,
+              last4: ((pmData.card as Record<string, unknown>)?.last4 || pmData.card_last4 || '****') as string,
+              exp_month: ((pmData.card as Record<string, unknown>)?.exp_month || pmData.card_exp_month || 0) as number,
+              exp_year: ((pmData.card as Record<string, unknown>)?.exp_year || pmData.card_exp_year || 0) as number,
+            },
+            created: (pmData.created as number) || Math.floor(Date.now() / 1000),
+          };
+        });
+      } catch (fetchError: unknown) {
         clearTimeout(timeoutId);
         // Handle abort error specifically
-        if (fetchError.name === 'AbortError') {
+        if (fetchError && typeof fetchError === 'object' && 'name' in fetchError && fetchError.name === 'AbortError') {
           throw { type: 'network_error', code: 'timeout', message: 'Network request timed out' };
         }
         throw fetchError;
