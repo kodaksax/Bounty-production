@@ -3,6 +3,11 @@ import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { logger } from '../services/logger';
 import { walletService } from '../services/wallet-service';
+import { stripeConnectService } from '../services/stripe-connect-service';
+
+// Platform account ID for fee collection
+// In production, this should be stored in environment variables
+const PLATFORM_ACCOUNT_ID = process.env.PLATFORM_ACCOUNT_ID || '00000000-0000-0000-0000-000000000000';
 
 // Idempotency tracking for duplicate payment prevention
 // NOTE: In production, this should be stored in a persistent database (e.g., Redis or PostgreSQL)
@@ -494,9 +499,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       const bountyId = paymentIntent.metadata.bounty_id;
 
       // Get hunter's Stripe Connect account
-      // TODO: Fetch from database users table: SELECT stripe_connect_account_id FROM users WHERE id = hunterId
-      // For now, we'll need to import and use the stripeConnectService
-      const { stripeConnectService } = await import('../services/stripe-connect-service');
       const hunterConnectStatus = await stripeConnectService.getConnectStatus(hunterId);
 
       if (!hunterConnectStatus.stripeAccountId || !hunterConnectStatus.payoutsEnabled) {
@@ -532,7 +534,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       });
 
       // Record platform fee
-      const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
       await walletService.createTransaction({
         user_id: PLATFORM_ACCOUNT_ID,
         type: 'platform_fee',

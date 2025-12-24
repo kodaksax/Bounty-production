@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { API_BASE_URL } from './config/api';
 import { getSecureJSON, setSecureJSON, SecureKeys } from './utils/secure-storage';
+import { paymentService } from './services/payment-service';
+import { bountyService } from './services/bounty-service';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -205,10 +207,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Calls the backend API to capture PaymentIntent and transfer to hunter's Connect account
   const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
     try {
-      // Import payment service dynamically
-      const { paymentService } = await import('./services/payment-service');
-      const { bountyService } = await import('./services/bounty-service');
-      
       // Find the local escrow transaction for this bounty
       const bountyIdStr = String(bountyId);
       const escrowTx = transactions.find(

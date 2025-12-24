@@ -2,6 +2,7 @@ import type { Bounty, BountyRequest, Profile } from "lib/services/database.types
 import { isSupabaseConfigured, supabase } from 'lib/supabase'
 import { getApiBase } from 'lib/utils/dev-host'
 import { logger } from "lib/utils/error-logger"
+import { paymentService } from './payment-service'
 
 export type BountyRequestWithDetails = BountyRequest & {
   bounty: Bounty
@@ -413,9 +414,6 @@ export const bountyRequestService = {
         const bountyData = await this.getBountyForRequest(result.bounty_id);
         
         if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-          // Import payment service to create escrow
-          const { paymentService } = await import('./payment-service');
-          
           // Create escrow PaymentIntent with manual capture
           const escrowResult = await paymentService.createEscrow({
             bountyId: String(result.bounty_id),
