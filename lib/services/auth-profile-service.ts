@@ -304,12 +304,14 @@ export class AuthProfileService {
       }
 
       // Create new minimal profile - only include age_verified_at if age is verified
+      // NEW USERS: Set onboarding_completed = false so they go through onboarding
       const insertData: Record<string, any> = {
         id: userId,
         username: username,
         email: email,
         balance: 0,
         age_verified: age_verified,
+        onboarding_completed: false, // New users haven't completed onboarding yet
       };
       if (age_verified_at) {
         insertData.age_verified_at = age_verified_at;
