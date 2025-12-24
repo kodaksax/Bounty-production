@@ -62,12 +62,14 @@ export default function DoneScreen() {
       }),
     ]).start();
     
-    // Mark onboarding as complete in AsyncStorage
+    // Mark onboarding as complete
     const markComplete = async () => {
       try {
+        // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
         
-        // Also update the Supabase profile to mark onboarding as complete
+        // IMPORTANT: Update the Supabase profile to mark onboarding as complete
+        // This is the source of truth for determining if a user should see onboarding
         if (userId) {
           const { error } = await supabase
             .from('profiles')
@@ -76,8 +78,17 @@ export default function DoneScreen() {
             
           if (error) {
             console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
+            // Don't throw - we still want to proceed
           } else {
+            console.log('[Onboarding] Successfully marked onboarding as complete in database');
           }
+        }
+        
+        // Clean up temporary onboarding state from carousel flow
+        try {
+          await AsyncStorage.removeItem('@bounty_onboarding_complete');
+        } catch (e) {
+          // Ignore cleanup errors
         }
         
         // Request notification permissions at the end of onboarding
@@ -85,7 +96,9 @@ export default function DoneScreen() {
         try {
           const token = await notificationService.requestPermissionsAndRegisterToken();
           if (token) {
+            console.log('[Onboarding] Notification permissions granted');
           } else {
+            console.log('[Onboarding] Notification permissions denied or unavailable');
           }
         } catch (notifError) {
           console.error('[Onboarding] Failed to request notification permissions:', notifError);

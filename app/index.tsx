@@ -51,14 +51,29 @@ export default function Index() {
           // 1. No profile exists, OR
           // 2. Profile has no username, OR
           // 3. onboarding_completed flag is explicitly false
-          // Note: onboarding_completed will be true for existing users (via migration)
-          // and undefined for very old profiles, so we treat undefined as completed
+          // 
+          // IMPORTANT: For returning users:
+          // - onboarding_completed should be true (set when they completed onboarding)
+          // - If undefined, treat as completed (legacy profiles from before this flag existed)
+          // - Only redirect to onboarding if explicitly false OR no username exists
           const hasUsername = profileData?.username
-          const onboardingComplete = profileData?.onboarding_completed !== false
+          const onboardingFlag = profileData?.onboarding_completed
           
-          if (!hasUsername || !onboardingComplete) {
+          // Explicit check: only go to onboarding if no username OR flag is explicitly false
+          // undefined means old profile (completed before flag existed) - let them through
+          const needsOnboarding = !hasUsername || onboardingFlag === false
+          
+          console.log('[index] Routing decision:', {
+            hasUsername,
+            onboardingFlag,
+            needsOnboarding,
+            userId: session.user.id
+          })
+          
+          if (needsOnboarding) {
             // User needs to complete onboarding
             try {
+              console.log('[index] Redirecting to onboarding')
               router.replace('/onboarding/username')
             } catch (navError) {
               console.error('[index] Navigation error to onboarding:', navError)
@@ -66,6 +81,7 @@ export default function Index() {
           } else {
             // User has completed onboarding, go to main app
             try {
+              console.log('[index] Redirecting to main app')
               router.replace(ROUTES.TABS.BOUNTY_APP)
             } catch (navError) {
               console.error('[index] Navigation error to main app:', navError)
