@@ -212,7 +212,7 @@ describe('Authentication State Persistence', () => {
 
       const TestComponent = () => <></>;
       
-      const { rerender } = render(
+      render(
         <AuthProvider>
           <TestComponent />
         </AuthProvider>

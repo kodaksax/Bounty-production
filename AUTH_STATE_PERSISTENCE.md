@@ -161,11 +161,6 @@ Test coverage includes:
    - Handling of profile fetch failures
    - Proper synchronization of session and profile loading
 
-2. **Profile Loading Race Condition:**
-   - Verification that `isLoading` waits for profile load
-   - Handling of profile fetch failures
-   - Proper synchronization of session and profile loading
-
 3. **Automatic Token Refresh:**
    - Scheduled refresh before expiration
    - Immediate refresh for expired tokens
