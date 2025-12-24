@@ -279,7 +279,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Error releasing funds:', error);
       return false;
     }
-  }, [transactions, logTransaction, persistTransactions, persist]);
+  }, [transactions, logTransaction, persistTransactions]);
 
   // Refund escrowed funds back to poster when bounty is cancelled
   const refundEscrow = useCallback(async (bountyId: string | number, title: string, refundPercentage: number = 100) => {

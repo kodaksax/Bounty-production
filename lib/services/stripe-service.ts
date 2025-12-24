@@ -85,6 +85,8 @@ export interface StripeEscrowCreateResponse {
 export interface StripeEscrowReleaseResponse {
   transferId?: string;
   paymentIntentId?: string;
+  hunterAmount?: number; // Amount transferred to hunter (after fees)
+  platformFee?: number; // Platform fee deducted
   status?: 'released' | 'failed';
 }
 

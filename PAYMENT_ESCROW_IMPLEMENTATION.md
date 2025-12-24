@@ -279,6 +279,7 @@ See `PAYMENT_ESCROW_TESTING_GUIDE.md` for comprehensive testing scenarios.
 ```bash
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+PLATFORM_ACCOUNT_ID=00000000-0000-0000-0000-000000000000  # Platform's internal user UUID for fee tracking
 ```
 
 ### Frontend (`.env`)

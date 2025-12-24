@@ -420,7 +420,7 @@ export const bountyRequestService = {
             amount: bountyData.amount,
             posterId: bountyData.user_id || bountyData.poster_id,
             hunterId: result.hunter_id,
-            userId: result.hunter_id,
+            userId: bountyData.user_id || bountyData.poster_id, // Attribution should be to poster
           });
           
           if (!escrowResult.success) {

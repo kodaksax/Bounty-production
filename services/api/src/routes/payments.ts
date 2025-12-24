@@ -57,6 +57,12 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     return;
   }
 
+  // Validate PLATFORM_ACCOUNT_ID in production
+  if (process.env.NODE_ENV === 'production' && !process.env.PLATFORM_ACCOUNT_ID) {
+    logger.error('[payments] PLATFORM_ACCOUNT_ID environment variable is required in production');
+    throw new Error('PLATFORM_ACCOUNT_ID environment variable must be set in production');
+  }
+
   const stripe = new Stripe(stripeKey, {
     apiVersion: '2025-08-27.basil',
   });
@@ -387,6 +393,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Authorization: ensure the authenticated user is the poster
+      if (request.userId !== posterId) {
+        logger.warn(
+          { authenticatedUserId: request.userId, posterId, bountyId },
+          '[payments] User attempted to create escrow for another poster'
+        );
+        return reply.code(403).send({ error: 'Forbidden: cannot create escrow for another user' });
+      }
+
       // Get or create Stripe customer for the poster
       const customerId = await getOrCreateStripeCustomer(stripe, posterId);
 
@@ -486,19 +501,10 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Capture the PaymentIntent (confirms the charge)
-      const capturedIntent = await stripe.paymentIntents.capture(escrowId);
-
-      // Calculate platform fee (10%)
-      const platformFeePercentage = 10;
-      const amountCents = capturedIntent.amount;
-      const platformFeeCents = Math.round((amountCents * platformFeePercentage) / 100);
-      const hunterAmountCents = amountCents - platformFeeCents;
-
       const hunterId = paymentIntent.metadata.hunter_id;
       const bountyId = paymentIntent.metadata.bounty_id;
 
-      // Get hunter's Stripe Connect account
+      // Get hunter's Stripe Connect account BEFORE capturing funds
       const hunterConnectStatus = await stripeConnectService.getConnectStatus(hunterId);
 
       if (!hunterConnectStatus.stripeAccountId || !hunterConnectStatus.payoutsEnabled) {
@@ -507,6 +513,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           error: 'Hunter does not have a valid payout account. Funds remain in escrow.' 
         });
       }
+
+      // Capture the PaymentIntent (confirms the charge)
+      const capturedIntent = await stripe.paymentIntents.capture(escrowId);
+
+      // Calculate platform fee (10%)
+      const platformFeePercentage = 10;
+      const amountCents = capturedIntent.amount;
+      const platformFeeCents = Math.round((amountCents * platformFeePercentage) / 100);
+      const hunterAmountCents = amountCents - platformFeeCents;
 
       // Create transfer to hunter's Connect account
       const transfer = await stripe.transfers.create({
