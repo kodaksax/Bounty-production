@@ -537,35 +537,51 @@ class StripeService {
         return [];
       }
 
-      // Fetch payment methods from backend
-      const response = await fetch(`${API_BASE_URL}/payments/methods`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+      // Create an AbortController for timeout (15 seconds for payment methods)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      if (!response.ok) {
-        // Treat non-OK responses as errors so callers can distinguish
-        // between an empty list and an API failure.
-        const text = await response.text().catch(() => null);
-        const message = text ? `Failed to fetch payment methods: ${text}` : `Failed to fetch payment methods (status ${response.status})`;
-        throw { type: 'api_error', code: response.status.toString(), message };
+      try {
+        // Fetch payment methods from backend
+        const response = await fetch(`${API_BASE_URL}/payments/methods`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          // Treat non-OK responses as errors so callers can distinguish
+          // between an empty list and an API failure.
+          const text = await response.text().catch(() => null);
+          const message = text ? `Failed to fetch payment methods: ${text}` : `Failed to fetch payment methods (status ${response.status})`;
+          throw { type: 'api_error', code: response.status.toString(), message };
+        }
+
+        const data = await response.json();
+        return (data.paymentMethods || []).map((pm: any) => ({
+          id: pm.id,
+          type: 'card' as const,
+          card: {
+            brand: pm.card?.brand || pm.card_brand || 'unknown',
+            last4: pm.card?.last4 || pm.card_last4 || '****',
+            exp_month: pm.card?.exp_month || pm.card_exp_month || 0,
+            exp_year: pm.card?.exp_year || pm.card_exp_year || 0,
+          },
+          created: pm.created || Math.floor(Date.now() / 1000),
+        }));
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        // Handle abort error specifically
+        if (fetchError.name === 'AbortError') {
+          throw { type: 'network_error', code: 'timeout', message: 'Network request timed out' };
+        }
+        throw fetchError;
       }
-
-      const data = await response.json();
-      return (data.paymentMethods || []).map((pm: any) => ({
-        id: pm.id,
-        type: 'card' as const,
-        card: {
-          brand: pm.card?.brand || pm.card_brand || 'unknown',
-          last4: pm.card?.last4 || pm.card_last4 || '****',
-          exp_month: pm.card?.exp_month || pm.card_exp_month || 0,
-          exp_year: pm.card?.exp_year || pm.card_exp_year || 0,
-        },
-        created: pm.created || Math.floor(Date.now() / 1000),
-      }));
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
       // Rethrow a handled error so upstream callers (context/services) can
