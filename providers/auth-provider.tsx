@@ -24,7 +24,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const refreshTimerRef = useRef<number | null>(null)
   const isRefreshingRef = useRef<boolean>(false)
   const isMountedRef = useRef<boolean>(true)
   const isInitializingRef = useRef<boolean>(true)

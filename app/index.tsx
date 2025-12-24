@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router"
 import React, { useEffect, useRef } from "react"
-import { ActivityIndicator, View, Text } from "react-native"
-import { useAuthContext } from "app/hooks/use-auth-context"
+import { ActivityIndicator, Text, View } from "react-native"
+import { useAuthContext } from "../hooks/use-auth-context"
+import { ROUTES } from "../lib/routes"
+import { authProfileService } from "../lib/services/auth-profile-service"
 import { SignInForm } from "./auth/sign-in-form"
-import { ROUTES } from "app/lib/routes"
-import { authProfileService } from "app/lib/services/auth-profile-service"
 
 /**
  * Root Index - Auth Gate
