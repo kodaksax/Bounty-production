@@ -420,7 +420,7 @@ export const bountyRequestService = {
           const escrowResult = await paymentService.createEscrow({
             bountyId: String(result.bounty_id),
             amount: bountyData.amount,
-            posterId: bountyData.user_id,
+            posterId: bountyData.user_id || bountyData.poster_id,
             hunterId: result.hunter_id,
             userId: result.hunter_id,
           });
@@ -439,6 +439,17 @@ export const bountyRequestService = {
               bountyId: result.bounty_id,
               escrowId: escrowResult.escrowId,
             });
+            
+            // Update the bounty record with the payment_intent_id
+            try {
+              await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId!);
+            } catch (updateError) {
+              logger.error('Failed to update bounty with payment_intent_id', {
+                bountyId: result.bounty_id,
+                escrowId: escrowResult.escrowId,
+                error: updateError,
+              });
+            }
           }
         }
       } catch (error) {
@@ -476,6 +487,36 @@ export const bountyRequestService = {
     } catch (error) {
       logger.error('Error fetching bounty for request', { bountyId, error });
       return null;
+    }
+  },
+
+  /**
+   * Update bounty record with payment_intent_id
+   */
+  async updateBountyPaymentIntent(bountyId: string | number, paymentIntentId: string): Promise<void> {
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('bounties')
+          .update({ payment_intent_id: paymentIntentId })
+          .eq('id', String(bountyId));
+        
+        if (error) throw error;
+      } else {
+        // Fallback to API
+        const response = await fetch(`${API_BASE_URL}/api/bounties/${bountyId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to update bounty: ${response.statusText}`);
+        }
+      }
+    } catch (error) {
+      logger.error('Error updating bounty payment_intent_id', { bountyId, paymentIntentId, error });
+      throw error;
     }
   },
 

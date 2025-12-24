@@ -30,6 +30,8 @@ export type Bounty = {
   is_stale?: boolean
   stale_reason?: string
   stale_detected_at?: string
+  // Stripe payment fields for escrow
+  payment_intent_id?: string // Stripe PaymentIntent ID for escrow
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

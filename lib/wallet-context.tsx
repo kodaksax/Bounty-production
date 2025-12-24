@@ -207,8 +207,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       // Import payment service dynamically
       const { paymentService } = await import('./services/payment-service');
+      const { bountyService } = await import('./services/bounty-service');
       
-      // Find the local escrow transaction for this bounty to get the escrowId
+      // Find the local escrow transaction for this bounty
       const bountyIdStr = String(bountyId);
       const escrowTx = transactions.find(
         tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
@@ -219,15 +220,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
 
-      // For now, we'll need to get the escrowId from the bounty record
-      // In a production system, this would be stored in the escrow transaction
-      // Let's use a mock escrowId for now - in reality this should come from the bounty
-      // TODO: Store escrowId in transaction details when creating escrow
-      const mockEscrowId = `pi_mock_${bountyId}`;
+      // Get the bounty to retrieve the payment_intent_id (escrowId)
+      const bountyData = await bountyService.getById(bountyId);
+      
+      if (!bountyData || !bountyData.payment_intent_id) {
+        console.error('No payment_intent_id found for bounty:', bountyId);
+        return false;
+      }
       
       // Call the backend API to release escrow
       // This will capture the PaymentIntent and transfer to hunter's Connect account
-      const releaseResult = await paymentService.releaseEscrow(mockEscrowId);
+      const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
       
       if (!releaseResult.success) {
         console.error('Failed to release escrow:', releaseResult.error);
