@@ -53,6 +53,37 @@ export interface PaymentMethodListResult {
   };
 }
 
+export interface CreateEscrowOptions {
+  bountyId: string;
+  amount: number; // dollars
+  posterId: string;
+  hunterId: string;
+  userId: string; // for logging/attribution
+  currency?: string;
+  paymentMethodId?: string; // if provided, confirm immediately
+}
+
+export interface EscrowCreateResult {
+  success: boolean;
+  escrowId?: string;
+  paymentIntentId?: string;
+  clientSecret?: string;
+  status?: string;
+  requiresAction?: boolean;
+  error?: {
+    type: string;
+    message: string;
+    code?: string;
+  };
+}
+
+export interface EscrowReleaseResult {
+  success: boolean;
+  transferId?: string;
+  paymentIntentId?: string;
+  error?: { message: string };
+}
+
 /**
  * Payment Service
  * Centralizes all payment operations with business logic
@@ -137,6 +168,134 @@ class PaymentService {
           message: error.message || 'Failed to create payment',
           code: error.code,
         },
+      };
+    }
+  }
+
+  /**
+   * Create an escrow with manual capture. Optionally confirm immediately if a payment method is provided.
+   * Server will create PaymentIntent (capture_method: manual) and escrow record, returning client secret.
+   */
+  async createEscrow(
+    options: CreateEscrowOptions,
+    authToken?: string
+  ): Promise<EscrowCreateResult> {
+    try {
+      // Create escrow on backend and get client secret
+      const escrow = await stripeService.createEscrow(
+        {
+          bountyId: options.bountyId,
+          amount: options.amount,
+          posterId: options.posterId,
+          hunterId: options.hunterId,
+          currency: options.currency || 'usd',
+        },
+        authToken
+      );
+
+      // If a payment method is provided, confirm to place the hold
+      if (options.paymentMethodId) {
+        const confirmed = await stripeService.confirmPaymentSecure(
+          escrow.paymentIntentClientSecret,
+          options.paymentMethodId,
+          authToken,
+          { userId: options.userId }
+        );
+
+        if (confirmed.status === 'requires_action') {
+          // Attempt to complete 3DS via native SDK
+          try {
+            const next = await stripeService.handleNextAction(escrow.paymentIntentClientSecret);
+
+            if (next.status === 'succeeded' || next.status === 'requires_capture') {
+              return {
+                success: true,
+                escrowId: escrow.escrowId,
+                paymentIntentId: next.id,
+                clientSecret: escrow.paymentIntentClientSecret,
+                status: next.status,
+              };
+            }
+
+            return {
+              success: false,
+              escrowId: escrow.escrowId,
+              paymentIntentId: next.id,
+              clientSecret: escrow.paymentIntentClientSecret,
+              status: next.status,
+              requiresAction: true,
+              error: {
+                type: 'authentication_required',
+                message: 'Additional authentication required',
+              },
+            };
+          } catch (err: any) {
+            // Provide specific feedback for authentication/3DS failures
+            console.error('[PaymentService] Error completing 3DS authentication:', err);
+            return {
+              success: false,
+              escrowId: escrow.escrowId,
+              clientSecret: escrow.paymentIntentClientSecret,
+              status: 'requires_action',
+              requiresAction: true,
+              error: {
+                type: err?.type || 'authentication_error',
+                message: err?.message || 'Failed to complete authentication. Please try again or use a different payment method.',
+                code: err?.code,
+              },
+            };
+          }
+        }
+
+        return {
+          success: confirmed.status === 'succeeded' || confirmed.status === 'requires_capture',
+          escrowId: escrow.escrowId,
+          paymentIntentId: confirmed.id,
+          clientSecret: escrow.paymentIntentClientSecret,
+          status: confirmed.status,
+        };
+      }
+
+      // If not confirmed here, return client secret to allow caller to confirm later
+      return {
+        success: true,
+        escrowId: escrow.escrowId,
+        paymentIntentId: escrow.paymentIntentId,
+        clientSecret: escrow.paymentIntentClientSecret,
+        status: escrow.status,
+      };
+    } catch (error: any) {
+      console.error('[PaymentService] Error creating escrow:', error);
+      return {
+        success: false,
+        error: {
+          type: error.type || 'unknown_error',
+          message: error.message || 'Failed to create escrow',
+          code: error.code,
+        },
+      };
+    }
+  }
+
+  /**
+   * Release an escrow: server captures PaymentIntent and transfers funds to hunter
+   */
+  async releaseEscrow(
+    escrowId: string,
+    authToken?: string
+  ): Promise<EscrowReleaseResult> {
+    try {
+      const res = await stripeService.releaseEscrow(escrowId, authToken);
+      return {
+        success: true,
+        transferId: res.transferId,
+        paymentIntentId: res.paymentIntentId,
+      };
+    } catch (error: any) {
+      console.error('[PaymentService] Error releasing escrow:', error);
+      return {
+        success: false,
+        error: { message: error.message || 'Failed to release escrow' },
       };
     }
   }

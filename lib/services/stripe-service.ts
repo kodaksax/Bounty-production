@@ -63,6 +63,37 @@ export interface PaymentConfirmationResult {
   error?: StripeError;
 }
 
+// Minimal shape for Connect account responses from backend
+export interface StripeConnectAccountResponse {
+  accountId: string;
+}
+
+// Minimal shape for Connect onboarding link response
+export interface StripeConnectAccountLinkResponse {
+  url: string;
+}
+
+// Escrow creation response from backend
+export interface StripeEscrowCreateResponse {
+  escrowId: string;
+  paymentIntentClientSecret: string;
+  paymentIntentId: string;
+  status: StripePaymentIntent['status'];
+}
+
+// Escrow release response from backend
+export interface StripeEscrowReleaseResponse {
+  transferId?: string;
+  paymentIntentId?: string;
+  status?: 'released' | 'failed';
+}
+
+// Connect account verification response from backend
+export interface StripeConnectVerificationResponse {
+  detailsSubmitted: boolean;
+  capabilities?: Record<string, string>;
+}
+
 import { API_BASE_URL } from '../config/api';
 import { analyticsService } from './analytics-service';
 import {
@@ -104,10 +135,12 @@ class StripeService {
         if (stripeModule.initStripe && this.publishableKey) {
           // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
           const merchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'com.bounty0.BOUNTYExpo';
+          // Use centralized deep link scheme constant
+          const { DEEP_LINK_SCHEME } = await import('../config/app');
           await stripeModule.initStripe({
             publishableKey: this.publishableKey,
             merchantIdentifier: merchantId,
-            urlScheme: 'bountyexpo',
+            urlScheme: DEEP_LINK_SCHEME,
           });
           this.stripeSDK = stripeModule;
         }
@@ -133,8 +166,11 @@ class StripeService {
     try {
       await this.initialize();
       
-      // Try to use the native Stripe SDK if available
-      if (this.stripeSDK?.createPaymentMethod) {
+      // Detect manual entry usage: when explicit card fields are provided, avoid SDK path
+      const isManualEntry = !!cardData.cardNumber && !!cardData.expiryDate && !!cardData.securityCode;
+
+      // Try to use the native Stripe SDK if available, only when not using manual entry
+      if (this.stripeSDK?.createPaymentMethod && !isManualEntry) {
         const { paymentMethod, error } = await this.stripeSDK.createPaymentMethod({
           paymentMethodType: 'Card',
           paymentMethodData: {
@@ -169,14 +205,33 @@ class StripeService {
       
       // Fallback: Create payment method using card details (for development/testing)
       // In production, this should use CardField or PaymentSheet
+      // Validate basic card inputs for fallback
+      const cleanNumber = cardData.cardNumber.replace(/\s/g, '');
+      if (!this.validateCardNumber(cleanNumber)) {
+        throw {
+          type: 'validation_error',
+          code: 'incorrect_number',
+          message: 'Please enter a valid card number',
+        };
+      }
+      const [mm, yy] = cardData.expiryDate.split('/');
+      const expMonth = parseInt(mm, 10);
+      const expYear = parseInt('20' + yy, 10);
+      if (!expMonth || expMonth < 1 || expMonth > 12 || !expYear) {
+        throw {
+          type: 'validation_error',
+          code: 'expired_card',
+          message: 'Please enter a valid expiry date',
+        };
+      }
       const paymentMethod: StripePaymentMethod = {
         id: `pm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'card',
         card: {
           brand: this.detectCardBrand(cardData.cardNumber),
-          last4: cardData.cardNumber.replace(/\s/g, '').slice(-4),
-          exp_month: parseInt(cardData.expiryDate.split('/')[0]),
-          exp_year: parseInt('20' + cardData.expiryDate.split('/')[1]),
+          last4: cleanNumber.slice(-4),
+          exp_month: expMonth,
+          exp_year: expYear,
         },
         created: Math.floor(Date.now() / 1000),
       };
@@ -492,8 +547,11 @@ class StripeService {
       });
 
       if (!response.ok) {
-        // Return empty array for any error status including 404
-        return [];
+        // Treat non-OK responses as errors so callers can distinguish
+        // between an empty list and an API failure.
+        const text = await response.text().catch(() => null);
+        const message = text ? `Failed to fetch payment methods: ${text}` : `Failed to fetch payment methods (status ${response.status})`;
+        throw { type: 'api_error', code: response.status.toString(), message };
       }
 
       const data = await response.json();
@@ -510,8 +568,10 @@ class StripeService {
       }));
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
-      // Return empty array instead of throwing to prevent UI breakage
-      return [];
+      // Rethrow a handled error so upstream callers (context/services) can
+      // present a clear error message to the user instead of silently
+      // treating an error as "no payment methods".
+      throw this.handleStripeError(error);
     }
   }
 
@@ -572,6 +632,7 @@ class StripeService {
       }
 
       // Initialize the payment sheet
+      const { DEEP_LINK_SCHEME } = await import('../config/app');
       const { error: initError } = await this.stripeSDK.initPaymentSheet({
         paymentIntentClientSecret: clientSecret,
         merchantDisplayName: 'BountyExpo',
@@ -584,7 +645,7 @@ class StripeService {
           merchantCountryCode: 'US',
         },
         defaultBillingDetails: {},
-        returnURL: 'bountyexpo://payment-complete',
+        returnURL: `${DEEP_LINK_SCHEME}://payment-complete`,
       });
 
       if (initError) {
@@ -631,6 +692,343 @@ class StripeService {
         success: false,
         error: this.handleStripeError(error) as StripeError,
       };
+    }
+  }
+
+  /**
+   * Create a Stripe Connect Account (server-side via backend API)
+   * SECURITY: Never use secret keys in the client. This calls your backend,
+   * which should use the Stripe SDK with STRIPE_SECRET_KEY to create accounts.
+   */
+  async createConnectAccount(
+    userId: string,
+    email: string,
+    authToken?: string
+  ): Promise<StripeConnectAccountResponse> {
+    performanceService.startMeasurement('connect_account_create', 'payment_process', {
+      userId,
+    });
+
+    try {
+      await this.initialize();
+
+      if (!userId || !email) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'userId and email are required' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/create-connect-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ userId, email }),
+      });
+
+      if (!response.ok) {
+        await performanceService.endMeasurement('connect_account_create', {
+          success: false,
+          status: response.status,
+        });
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to create Connect account' };
+      }
+
+      const data = (await response.json()) as Partial<StripeConnectAccountResponse> & { account?: { id?: string } };
+      const accountId = data.accountId || data?.account?.id;
+
+      if (!accountId) {
+        throw { type: 'api_error', code: 'invalid_response', message: 'Missing accountId in response' };
+      }
+
+      await performanceService.endMeasurement('connect_account_create', { success: true, accountId });
+
+      return { accountId };
+    } catch (error) {
+      console.error('[StripeService] Error creating connect account:', error);
+
+      await performanceService.endMeasurement('connect_account_create', {
+        success: false,
+        error: String(error),
+      });
+
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Create a Stripe Connect onboarding Account Link (server-side via backend API)
+   */
+  async createConnectAccountLink(
+    accountId: string,
+    authToken?: string
+  ): Promise<string> {
+    performanceService.startMeasurement('connect_account_link', 'payment_process', { accountId });
+
+    try {
+      await this.initialize();
+
+      if (!accountId) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'accountId is required' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/create-account-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (!response.ok) {
+        await performanceService.endMeasurement('connect_account_link', {
+          success: false,
+          status: response.status,
+        });
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to create account link' };
+      }
+
+      const data = (await response.json()) as StripeConnectAccountLinkResponse & { accountLink?: { url?: string } };
+      const url = data.url || data?.accountLink?.url;
+
+      if (!url) {
+        throw { type: 'api_error', code: 'invalid_response', message: 'Missing url in response' };
+      }
+
+      await performanceService.endMeasurement('connect_account_link', { success: true });
+
+      return url;
+    } catch (error) {
+      console.error('[StripeService] Error creating connect account link:', error);
+
+      await performanceService.endMeasurement('connect_account_link', {
+        success: false,
+        error: String(error),
+      });
+
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Create an escrow PaymentIntent on the backend with manual capture and record the escrow
+   * Returns the escrowId plus PaymentIntent identifiers and client secret for confirmation
+   */
+  async createEscrow(
+    params: {
+      bountyId: string;
+      amount: number; // dollars
+      posterId: string;
+      hunterId: string;
+      currency?: string;
+    },
+    authToken?: string
+  ): Promise<StripeEscrowCreateResponse> {
+    const { bountyId, amount, posterId, hunterId, currency = 'usd' } = params;
+
+    performanceService.startMeasurement('escrow_create', 'payment_process', {
+      bountyId,
+      amount,
+    });
+
+    try {
+      await this.initialize();
+
+      if (!bountyId || !posterId || !hunterId || !amount || amount <= 0) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'Invalid escrow parameters' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/escrows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          bountyId,
+          amountCents: Math.round(amount * 100),
+          posterId,
+          hunterId,
+          currency,
+        }),
+      });
+
+      if (!response.ok) {
+        await performanceService.endMeasurement('escrow_create', { success: false, status: response.status });
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to create escrow' };
+      }
+
+      const data = (await response.json()) as Partial<StripeEscrowCreateResponse> & {
+        escrow?: { id?: string };
+        clientSecret?: string;
+      };
+
+      const escrowId = data.escrowId || data.escrow?.id;
+
+      // Prefer explicit string values; avoid casting undefined to string.
+      const paymentIntentClientSecret: string | undefined =
+        (typeof data.paymentIntentClientSecret === 'string' && data.paymentIntentClientSecret.trim() !== '')
+          ? data.paymentIntentClientSecret
+          : (typeof data.clientSecret === 'string' && data.clientSecret.trim() !== '')
+            ? data.clientSecret
+            : undefined;
+
+      const paymentIntentId = data.paymentIntentId || (paymentIntentClientSecret ? paymentIntentClientSecret.split('_secret_')[0] : undefined);
+      const status = (data.status as StripePaymentIntent['status']) || 'requires_payment_method';
+
+      if (!escrowId || !paymentIntentClientSecret || !paymentIntentId) {
+        throw { type: 'api_error', code: 'invalid_response', message: 'Missing escrowId or client secret' };
+      }
+
+      await performanceService.endMeasurement('escrow_create', {
+        success: true,
+        escrowId,
+        paymentIntentId,
+      });
+
+      return { escrowId, paymentIntentClientSecret, paymentIntentId, status };
+    } catch (error) {
+      console.error('[StripeService] Error creating escrow:', error);
+      await performanceService.endMeasurement('escrow_create', { success: false, error: String(error) });
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Release an escrow by capturing the PaymentIntent and transferring to hunter
+   */
+  async releaseEscrow(
+    escrowId: string,
+    authToken?: string
+  ): Promise<StripeEscrowReleaseResponse> {
+    performanceService.startMeasurement('escrow_release', 'payment_process', { escrowId });
+
+    try {
+      await this.initialize();
+
+      if (!escrowId) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'escrowId is required' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/escrows/${encodeURIComponent(escrowId)}/release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        await performanceService.endMeasurement('escrow_release', { success: false, status: response.status });
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to release escrow' };
+      }
+
+      const data = (await response.json()) as StripeEscrowReleaseResponse & { transfer?: { id?: string }, paymentIntent?: { id?: string } };
+
+      const transferId = data.transferId || data.transfer?.id;
+      const paymentIntentId = data.paymentIntentId || data.paymentIntent?.id;
+
+      await performanceService.endMeasurement('escrow_release', { success: true, transferId, paymentIntentId });
+
+      return { transferId, paymentIntentId, status: data.status };
+    } catch (error) {
+      console.error('[StripeService] Error releasing escrow:', error);
+      await performanceService.endMeasurement('escrow_release', { success: false, error: String(error) });
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Handle 3D Secure / next actions for a PaymentIntent client secret using the native SDK.
+   * Returns the updated PaymentIntent status when available.
+   */
+  async handleNextAction(
+    clientSecret: string
+  ): Promise<StripePaymentIntent> {
+    performanceService.startMeasurement('payment_next_action', 'payment_process', {});
+
+    try {
+      await this.initialize();
+
+      if (!clientSecret) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'clientSecret is required' };
+      }
+
+      if (!this.stripeSDK?.handleNextAction) {
+        // Fallback: assume succeeded for dev environments
+        const fallback: StripePaymentIntent = {
+          id: clientSecret.split('_secret_')[0],
+          client_secret: clientSecret,
+          amount: 0,
+          currency: 'usd',
+          status: 'succeeded',
+        };
+        await performanceService.endMeasurement('payment_next_action', { success: true, status: fallback.status });
+        return fallback;
+      }
+
+      const { paymentIntent, error } = await this.stripeSDK.handleNextAction(clientSecret);
+
+      if (error) {
+        await performanceService.endMeasurement('payment_next_action', { success: false, error: String(error) });
+        throw this.handleStripeError(error);
+      }
+
+      if (paymentIntent) {
+        const mapped: StripePaymentIntent = {
+          id: paymentIntent.id,
+          client_secret: clientSecret,
+          amount: paymentIntent.amount ?? 0,
+          currency: paymentIntent.currency ?? 'usd',
+          status: this.mapPaymentIntentStatus(paymentIntent.status),
+        };
+        await performanceService.endMeasurement('payment_next_action', { success: true, status: mapped.status });
+        return mapped;
+      }
+
+      // No intent returned
+      await performanceService.endMeasurement('payment_next_action', { success: false });
+      throw { type: 'api_error', message: 'No payment intent returned from handleNextAction' };
+    } catch (error) {
+      console.error('[StripeService] Error handling next action:', error);
+      await performanceService.endMeasurement('payment_next_action', { success: false, error: String(error) });
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Verify a Stripe Connect account status via backend (details_submitted/capabilities)
+   */
+  async verifyConnectAccount(
+    accountId: string,
+    authToken?: string
+  ): Promise<StripeConnectVerificationResponse> {
+    try {
+      await this.initialize();
+
+      if (!accountId) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'accountId is required' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/connect/accounts/${encodeURIComponent(accountId)}/verify`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to verify account' };
+      }
+
+      const data = (await response.json()) as StripeConnectVerificationResponse & { account?: { details_submitted?: boolean; capabilities?: any } };
+      const detailsSubmitted = data.detailsSubmitted ?? data.account?.details_submitted ?? false;
+      const capabilities = data.capabilities ?? data.account?.capabilities ?? {};
+      return { detailsSubmitted, capabilities };
+    } catch (error) {
+      console.error('[StripeService] Error verifying connect account:', error);
+      throw this.handleStripeError(error);
     }
   }
 
@@ -847,6 +1245,7 @@ class StripeService {
       }
 
       // Initialize payment sheet for setup
+      const { DEEP_LINK_SCHEME } = await import('../config/app');
       const { error: initError } = await this.stripeSDK.initPaymentSheet({
         setupIntentClientSecret: clientSecret,
         merchantDisplayName: 'BountyExpo',
@@ -858,7 +1257,7 @@ class StripeService {
           merchantCountryCode: 'US',
           testEnv: !this.publishableKey.startsWith('pk_live'),
         },
-        returnURL: 'bountyexpo://setup-complete',
+        returnURL: `${DEEP_LINK_SCHEME}://setup-complete`,
       });
 
       if (initError) {

@@ -12,6 +12,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import { stripeService } from '../lib/services/stripe-service';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { DEEP_LINK_SCHEME } from '../lib/config/app';
 
 // Types for the payment element wrapper
 export interface PaymentElementWrapperProps {
@@ -103,6 +105,12 @@ export function PaymentElementWrapper({
         if (mounted) {
           setStripeModule(stripe);
         }
+        // Ensure SDK is initialized with publishable key before using PaymentSheet
+        try {
+          await stripeService.initialize();
+        } catch (e) {
+          console.warn('[PaymentElementWrapper] Stripe SDK initialize failed (continuing):', e);
+        }
       } catch (err) {
         console.error('[PaymentElementWrapper] Stripe SDK not available:', err);
         if (mounted) {
@@ -134,7 +142,7 @@ export function PaymentElementWrapper({
         const paymentSheetConfig: any = {
           merchantDisplayName,
           style: 'automatic', // Adapts to dark/light mode
-          returnURL: 'bountyexpo://payment-complete',
+          returnURL: `${DEEP_LINK_SCHEME}://payment-complete`,
           defaultBillingDetails: {},
         };
 

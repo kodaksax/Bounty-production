@@ -5,6 +5,7 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
+import { withTimeout } from '../lib/utils/withTimeout'
 import { AddCardModal } from "./add-card-modal"
 
 
@@ -20,7 +21,36 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
   const [initialY, setInitialY] = useState(0)
   const [showAddCard, setShowAddCard] = useState(false)
   
-  const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods } = useStripe()
+  const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  // Use shared timeout helper for retryable fetches
+  const refreshWithRetry = async (retries = 2, timeoutMs = 3000) => {
+    let lastErr: any
+    setLoadFailed(false)
+    for (let i = 0; i <= retries; i++) {
+      try {
+        // Clear previous errors before attempt
+        clearError()
+        await withTimeout(loadPaymentMethods(), timeoutMs)
+        // If loadPaymentMethods resolved, success
+        return
+      } catch (e) {
+        lastErr = e
+        // brief backoff
+        await new Promise(r => setTimeout(r, 600))
+      }
+    }
+    console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed:', lastErr)
+    setLoadFailed(true)
+  }
+
+  // Auto-refresh methods when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      refreshWithRetry(2, 3000)
+    }
+  }, [isOpen])
 
   const handleRemovePaymentMethod = (paymentMethodId: string) => {
     Alert.alert(
@@ -156,7 +186,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               // Card already added through Stripe service in AddCardModal
               setShowAddCard(false)
               // Refresh payment methods
-              loadPaymentMethods()
+              refreshWithRetry(2, 3000)
             }}
           />
         ) : (
@@ -194,6 +224,22 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                 <Text style={{ color: 'white', fontSize: 16 }}>Loading payment methods...</Text>
               </View>
             ) : paymentMethods.length === 0 ? (
+              // Show error state if load ultimately failed
+              loadFailed || stripeError ? (
+                <View style={{ alignItems: 'center', padding: 20 }}>
+                  <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
+                  <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15 }}>
+                    {stripeError || 'Failed to load payment methods. Please check your connection.'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => refreshWithRetry(2, 3000)}
+                    style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 }}
+                    accessibilityRole="button"
+                  >
+                    <Text style={{ color: 'white', fontWeight: '600' }}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="credit-card" size={56} color="rgba(255,255,255,0.4)" />
                 <Text style={{ 
@@ -206,6 +252,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                   No payment methods added yet.{'\n'}Add your first card to get started.
                 </Text>
               </View>
+              )
             ) : (
               <FlatList
                 data={paymentMethods}

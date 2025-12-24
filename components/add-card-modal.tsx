@@ -8,6 +8,7 @@ import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
+import { withTimeout } from "../lib/utils/withTimeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -43,16 +44,66 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const [cardErrors, setCardErrors] = useState<{[key: string]: string}>({})
   const [setupIntentSecret, setSetupIntentSecret] = useState<string | null>(null)
   const [isCreatingSetupIntent, setIsCreatingSetupIntent] = useState(false)
+  const [isSDKAvailable, setIsSDKAvailable] = useState<boolean>(false)
+  const [paymentElementFailed, setPaymentElementFailed] = useState<boolean>(false)
   
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session } = useAuthContext()
 
+  // Use shared timeout helper for retryable fetches
+
+  const refreshPaymentMethodsWithRetry = async (retries = 2, timeoutMs = 3000): Promise<void> => {
+    let lastErr: any
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        await withTimeout(loadPaymentMethods(), timeoutMs)
+        return
+      } catch (e) {
+        lastErr = e
+        // brief backoff
+        await new Promise(r => setTimeout(r, 600))
+      }
+    }
+    // Swallow final error but log for diagnostics
+    console.warn('[AddCardModal] loadPaymentMethods retry failed:', lastErr)
+  }
+
+  // Determine if native Stripe SDK is available; prefer Payment Element when available
+  useEffect(() => {
+    let mounted = true
+    const init = async () => {
+      try {
+        await stripeService.initialize()
+        if (mounted) setIsSDKAvailable(stripeService.isSDKAvailable())
+      } catch (e) {
+        if (mounted) setIsSDKAvailable(false)
+      }
+    }
+    init()
+    return () => { mounted = false }
+  }, [])
+
+  const shouldUsePaymentElement = usePaymentElement || isSDKAvailable
+
   // Create SetupIntent for Payment Element mode
   useEffect(() => {
-    if (usePaymentElement && !setupIntentSecret) {
+    if (shouldUsePaymentElement && !paymentElementFailed && !setupIntentSecret) {
       createSetupIntent()
     }
-  }, [usePaymentElement])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldUsePaymentElement, paymentElementFailed])
+
+  // Helper to timeout fetch
+  const fetchWithTimeout = async (resource: RequestInfo | URL, options: RequestInit = {}, timeoutMs = 10000) => {
+    const controller = new AbortController()
+    const id = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(resource, { ...options, signal: controller.signal })
+      return response
+    } finally {
+      clearTimeout(id)
+    }
+  }
 
   const createSetupIntent = async () => {
     if (!session?.access_token) {
@@ -62,26 +113,37 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/payments/create-setup-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          usage: 'off_session',
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to initialize payment setup')
+      let response: Response | null = null
+      let lastErr: any
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              usage: 'off_session',
+            }),
+          }, 10000)
+          if (response.ok) break
+          lastErr = new Error(`HTTP ${response.status}`)
+        } catch (e) {
+          lastErr = e
+        }
+        await new Promise(r => setTimeout(r, 700))
       }
-
+      if (!response || !response.ok) {
+        throw lastErr || new Error('Failed to initialize payment setup')
+      }
       const { clientSecret } = await response.json()
       setSetupIntentSecret(clientSecret)
     } catch (error) {
       console.error('[AddCardModal] SetupIntent creation error:', error)
       Alert.alert('Error', 'Failed to initialize payment setup. Please try again.')
+      // Fallback to manual form if setup creation fails
+      setPaymentElementFailed(true)
     } finally {
       setIsCreatingSetupIntent(false)
     }
@@ -89,7 +151,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   const handlePaymentElementSuccess = async () => {
     // Refresh payment methods after successful save
-    await loadPaymentMethods()
+    await refreshPaymentMethodsWithRetry(2, 3000)
     
     Alert.alert('Success', 'Payment method added successfully!', [
       { text: 'OK', onPress: onBack }
@@ -121,7 +183,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     
     // Clear error when user starts typing
     if (cardErrors.cardNumber) {
-      setCardErrors(prev => ({ ...prev, cardNumber: '' }))
+      setCardErrors(prev => {
+        const { cardNumber, ...rest } = prev
+        return rest
+      })
     }
     
     // Basic validation
@@ -145,7 +210,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       
       // Clear error when user starts typing
       if (cardErrors.expiryDate) {
-        setCardErrors(prev => ({ ...prev, expiryDate: '' }))
+        setCardErrors(prev => {
+          const { expiryDate, ...rest } = prev
+          return rest
+        })
       }
       
       // Validate expiry date
@@ -231,7 +299,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     Object.keys(cardErrors).length === 0
 
   // Render Payment Element mode
-  if (usePaymentElement) {
+  if (shouldUsePaymentElement && !paymentElementFailed) {
     if (isCreatingSetupIntent || !setupIntentSecret) {
       return (
         <View style={embedded ? embeddedStyles.container : styles.overlayContainer}>
@@ -380,7 +448,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               value={cardholderName}
               onChangeText={(text) => {
                 setCardholderName(text)
-                if (cardErrors.cardholderName) setCardErrors(prev => ({ ...prev, cardholderName: '' }))
+                if (cardErrors.cardholderName) setCardErrors(prev => {
+                  const { cardholderName, ...rest } = prev
+                  return rest
+                })
               }}
               placeholder="Yessie"
               style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
@@ -410,7 +481,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 onChangeText={(text) => {
                   const cleaned = text.replace(/\D/g, '').slice(0, 4)
                   setSecurityCode(cleaned)
-                  if (cardErrors.securityCode) setCardErrors(prev => ({ ...prev, securityCode: '' }))
+                  if (cardErrors.securityCode) setCardErrors(prev => {
+                    const { securityCode, ...rest } = prev
+                    return rest
+                  })
                 }}
                 placeholder="•••"
                 maxLength={4}
@@ -515,7 +589,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               value={cardholderName}
               onChangeText={(text) => {
                 setCardholderName(text)
-                if (cardErrors.cardholderName) setCardErrors(prev => ({ ...prev, cardholderName: '' }))
+                if (cardErrors.cardholderName) setCardErrors(prev => {
+                  const { cardholderName, ...rest } = prev
+                  return rest
+                })
               }}
               placeholder="Yessie"
               style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
@@ -545,7 +622,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 onChangeText={(text) => {
                   const cleaned = text.replace(/\D/g, '').slice(0, 4)
                   setSecurityCode(cleaned)
-                  if (cardErrors.securityCode) setCardErrors(prev => ({ ...prev, securityCode: '' }))
+                  if (cardErrors.securityCode) setCardErrors(prev => {
+                    const { securityCode, ...rest } = prev
+                    return rest
+                  })
                 }}
                 placeholder="•••"
                 maxLength={4}
