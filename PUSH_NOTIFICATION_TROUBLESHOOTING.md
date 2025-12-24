@@ -63,8 +63,7 @@ As of the latest fix, the backend automatically creates a minimal user profile i
      ```typescript
      {
        id: userId,
-       username: "user_12345678",
-       balance: 0
+       handle: "user_12345678", // Property maps to 'username' column
      }
      ```
 

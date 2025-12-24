@@ -50,8 +50,7 @@ private async ensureUserProfile(userId: string): Promise<boolean> {
     
     await db.insert(users).values({
       id: userId,
-      username: username,
-      balance: 0,
+      handle: username, // Property 'handle' maps to database column 'username'
     });
     
     console.log(`✅ Created minimal profile for user ${userId}`);
