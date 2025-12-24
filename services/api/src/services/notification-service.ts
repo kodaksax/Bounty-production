@@ -198,8 +198,7 @@ export class NotificationService {
       
       await db.insert(users).values({
         id: userId,
-        username: username,
-        balance: 0,
+        handle: username, // Maps to 'username' column in database
       });
       
       console.log(`✅ Created minimal profile for user ${userId}`);
