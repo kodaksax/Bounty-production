@@ -141,16 +141,16 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
       console.error(`❌ Error registering push token for user ${request.userId}:`, errorMsg);
       
       // Provide more specific error codes based on the error type
-      if (errorMsg.includes('User profile must be created')) {
-        return reply.code(404).send({ 
-          error: 'User profile not found',
-          details: errorMsg
+      if (errorMsg.includes('User profile issue') || errorMsg.includes('Unable to register push token')) {
+        return reply.code(500).send({ 
+          error: 'Profile setup error',
+          details: 'Unable to complete push token registration. This may resolve on app restart.'
         });
       }
       
       return reply.code(500).send({ 
         error: 'Failed to register push token',
-        details: errorMsg
+        details: 'An unexpected error occurred. Please try again later.'
       });
     }
   });

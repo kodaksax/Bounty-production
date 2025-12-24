@@ -209,11 +209,18 @@ export class NotificationService {
         const text = await safeReadResponseText(response)
         
         // Log different levels based on status code
-        if (response.status === 404 || response.status === 409) {
-          // User profile doesn't exist yet - this is expected on first launch
+        if (response.status === 404) {
+          // User profile doesn't exist yet - this is expected during signup flow
+          // The backend will create a minimal profile automatically on retry
           if (__DEV__) {
-            console.log(`[NotificationService] User profile not yet created (${response.status}). Will retry after profile creation.`)
+            console.log(`[NotificationService] User profile not yet created. Backend will create it on next attempt.`)
           }
+        } else if (response.status === 409) {
+          // Conflict - token already registered, which is fine
+          if (__DEV__) {
+            console.log(`[NotificationService] Push token already registered (${response.status}).`)
+          }
+          return; // Don't throw for 409, it means the token is already registered
         } else if (response.status >= 500) {
           console.error(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
         } else {
