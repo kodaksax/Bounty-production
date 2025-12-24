@@ -83,7 +83,7 @@ const testCases = [
 
 // Run tests
 console.log('🧪 Testing Onboarding Redirect Logic\n')
-console.log('='*60)
+console.log('='.repeat(60))
 
 let passed = 0
 let failed = 0
@@ -109,7 +109,7 @@ testCases.forEach((test, index) => {
   console.log('')
 })
 
-console.log('='*60)
+console.log('='.repeat(60))
 console.log(`\n📊 Results: ${passed} passed, ${failed} failed out of ${testCases.length} tests`)
 
 if (failed === 0) {

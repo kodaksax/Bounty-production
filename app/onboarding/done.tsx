@@ -87,8 +87,8 @@ export default function DoneScreen() {
         // Clean up temporary onboarding state from carousel flow
         try {
           await AsyncStorage.removeItem('@bounty_onboarding_complete');
-        } catch (e) {
-          // Ignore cleanup errors
+        } catch (cleanupError) {
+          console.warn('[Onboarding] Error cleaning up carousel state:', cleanupError);
         }
         
         // Request notification permissions at the end of onboarding
