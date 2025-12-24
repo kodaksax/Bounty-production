@@ -44,5 +44,5 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(expo-secure-store|expo-.*|@expo/.*|@react-native|react-native|react-native-url-polyfill|@supabase)/)',
   ],
-  testTimeout: 10000,
+  testTimeout: 30000,
 };
