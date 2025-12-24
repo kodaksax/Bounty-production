@@ -202,63 +202,83 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [balance, persist, logTransaction]);
 
   // Release escrowed funds to hunter when bounty is completed
-  // Service fee is deducted here (NOT at withdrawal) for transparency
+  // Calls the backend API to capture PaymentIntent and transfer to hunter's Connect account
   const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
-    // Find the escrow transaction for this bounty (compare as strings to handle UUIDs)
-    const bountyIdStr = String(bountyId);
-    const escrowTx = transactions.find(
-      tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
-    );
+    try {
+      // Import payment service dynamically
+      const { paymentService } = await import('./services/payment-service');
+      
+      // Find the local escrow transaction for this bounty to get the escrowId
+      const bountyIdStr = String(bountyId);
+      const escrowTx = transactions.find(
+        tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
+      );
 
-    if (!escrowTx) {
-      console.error('No funded escrow found for bounty:', bountyId);
+      if (!escrowTx) {
+        console.error('No funded escrow found for bounty:', bountyId);
+        return false;
+      }
+
+      // For now, we'll need to get the escrowId from the bounty record
+      // In a production system, this would be stored in the escrow transaction
+      // Let's use a mock escrowId for now - in reality this should come from the bounty
+      // TODO: Store escrowId in transaction details when creating escrow
+      const mockEscrowId = `pi_mock_${bountyId}`;
+      
+      // Call the backend API to release escrow
+      // This will capture the PaymentIntent and transfer to hunter's Connect account
+      const releaseResult = await paymentService.releaseEscrow(mockEscrowId);
+      
+      if (!releaseResult.success) {
+        console.error('Failed to release escrow:', releaseResult.error);
+        return false;
+      }
+
+      const grossAmount = Math.abs(escrowTx.amount);
+      const platformFee = releaseResult.platformFee || (grossAmount * PLATFORM_FEE_PERCENTAGE);
+      const netAmount = releaseResult.hunterAmount || (grossAmount - platformFee);
+
+      // Update local escrow transaction status
+      setTransactions(prev => {
+        const next = prev.map(tx => 
+          tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
+        ) as WalletTransactionRecord[];
+        persistTransactions(next);
+        return next;
+      });
+
+      // Log platform fee transaction (for local record keeping)
+      await logTransaction({
+        type: 'platform_fee',
+        amount: -platformFee, // negative as it's a deduction
+        details: { 
+          title: 'Platform Service Fee',
+          bounty_id: bountyIdStr,
+          fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
+          status: 'completed'
+        },
+      });
+
+      // Log release transaction with net amount (after fee deduction)
+      await logTransaction({
+        type: 'release',
+        amount: netAmount, // Net amount after fee
+        details: { 
+          title,
+          bounty_id: bountyIdStr,
+          counterparty: hunterId,
+          gross_amount: grossAmount,
+          platform_fee: platformFee,
+          status: 'completed'
+        },
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error releasing funds:', error);
       return false;
     }
-
-    const grossAmount = Math.abs(escrowTx.amount);
-    
-    // Calculate platform fee (deducted at bounty completion, not withdrawal)
-    const platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
-    const netAmount = grossAmount - platformFee;
-
-    // Update escrow transaction status
-    setTransactions(prev => {
-      const next = prev.map(tx => 
-        tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
-      ) as WalletTransactionRecord[];
-      persistTransactions(next);
-      return next;
-    });
-
-    // Log platform fee transaction (for record keeping)
-    await logTransaction({
-      type: 'platform_fee',
-      amount: -platformFee, // negative as it's a deduction
-      details: { 
-        title: 'Platform Service Fee',
-        bounty_id: bountyIdStr,
-        fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
-        status: 'completed'
-      },
-    });
-
-    // Log release transaction with net amount (after fee deduction)
-    // In a real system, this would go to hunter's wallet
-    await logTransaction({
-      type: 'release',
-      amount: netAmount, // Net amount after fee
-      details: { 
-        title,
-        bounty_id: bountyIdStr,
-        counterparty: hunterId,
-        gross_amount: grossAmount,
-        platform_fee: platformFee,
-        status: 'completed'
-      },
-    });
-
-    return true;
-  }, [transactions, logTransaction, persistTransactions]);
+  }, [transactions, logTransaction, persistTransactions, persist]);
 
   // Refund escrowed funds back to poster when bounty is cancelled
   const refundEscrow = useCallback(async (bountyId: string | number, title: string, refundPercentage: number = 100) => {

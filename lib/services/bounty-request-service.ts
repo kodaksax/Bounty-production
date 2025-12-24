@@ -400,15 +400,83 @@ export const bountyRequestService = {
 
   /**
    * Accept a bounty request
+   * Creates escrow PaymentIntent to hold funds
    */
   async acceptRequest(requestId: string | number): Promise<BountyRequest | null> {
     
     const result = await this.updateStatus(requestId, "accepted");
     
     if (result) {
+      // After accepting the request, create escrow to hold funds
+      try {
+        // Get the bounty details to create escrow
+        const bountyData = await this.getBountyForRequest(result.bounty_id);
+        
+        if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
+          // Import payment service to create escrow
+          const { paymentService } = await import('./payment-service');
+          
+          // Create escrow PaymentIntent with manual capture
+          const escrowResult = await paymentService.createEscrow({
+            bountyId: String(result.bounty_id),
+            amount: bountyData.amount,
+            posterId: bountyData.user_id,
+            hunterId: result.hunter_id,
+            userId: result.hunter_id,
+          });
+          
+          if (!escrowResult.success) {
+            logger.error('Failed to create escrow for accepted bounty request', {
+              requestId,
+              bountyId: result.bounty_id,
+              error: escrowResult.error,
+            });
+            // Don't fail the acceptance, but log the error
+            // The escrow can be created later or manually
+          } else {
+            logger.info('Escrow created successfully for accepted bounty', {
+              requestId,
+              bountyId: result.bounty_id,
+              escrowId: escrowResult.escrowId,
+            });
+          }
+        }
+      } catch (error) {
+        logger.error('Error creating escrow after accepting bounty request', {
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Don't fail the acceptance - escrow can be created later
+      }
     }
     
     return result;
+  },
+
+  /**
+   * Helper to get bounty details for a request
+   */
+  async getBountyForRequest(bountyId: string | number): Promise<Bounty | null> {
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('bounties')
+          .select('*')
+          .eq('id', String(bountyId))
+          .single();
+        
+        if (error) throw error;
+        return data as unknown as Bounty;
+      }
+      
+      // Fallback to API
+      const response = await fetch(`${API_BASE_URL}/api/bounties/${bountyId}`);
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      logger.error('Error fetching bounty for request', { bountyId, error });
+      return null;
+    }
   },
 
   /**
