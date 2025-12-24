@@ -32,17 +32,20 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
       try {
         // Clear previous errors before attempt
         clearError()
-        // Use exponentially increasing timeout: 10s, 15s, 20s
+        // Use exponentially increasing timeout: 10s, 15s, 20s, 25s
         const timeout = initialTimeoutMs + (i * 5000)
         await withTimeout(loadPaymentMethods(), timeout)
         // If loadPaymentMethods resolved, success
         return
       } catch (e: unknown) {
         lastErr = e
-        // Exponential backoff: 1s, 2s, 4s
-        const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
-        console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${retries + 1} failed, waiting ${backoffMs}ms before retry`)
-        await new Promise(r => setTimeout(r, backoffMs))
+        // Skip backoff after the last retry
+        if (i < retries) {
+          // Exponential backoff: 1s, 2s, 4s (between attempts)
+          const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
+          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${retries + 1} failed, waiting ${backoffMs}ms before retry`)
+          await new Promise(r => setTimeout(r, backoffMs))
+        }
       }
     }
     console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed after all attempts:', lastErr)
@@ -233,13 +236,21 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                 <View style={{ alignItems: 'center', padding: 20 }}>
                   <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
                   <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
-                    {stripeError 
-                      ? (stripeError.includes('timed out') || stripeError.includes('timeout')
-                          ? 'Connection timed out. Please check your internet connection and try again.'
-                          : stripeError.includes('Network')
-                            ? 'Unable to connect. Please check your internet connection.'
-                            : stripeError)
-                      : 'Unable to load payment methods. Please check your connection and try again.'}
+                    {(() => {
+                      if (!stripeError) {
+                        return 'Unable to load payment methods. Please check your connection and try again.';
+                      }
+
+                      if (stripeError.includes('timed out') || stripeError.includes('timeout')) {
+                        return 'Connection timed out. Please check your internet connection and try again.';
+                      }
+
+                      if (stripeError.includes('Network')) {
+                        return 'Unable to connect. Please check your internet connection.';
+                      }
+
+                      return stripeError;
+                    })()}
                   </Text>
                   <TouchableOpacity
                     onPress={() => refreshWithRetry(3, 10000)}

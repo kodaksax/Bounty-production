@@ -104,8 +104,10 @@ Attempt 4:
        
 If Failed ↓
        
-Show Error with Retry Button
+Show Error with Retry Button (max ~77s total)
 ```
+
+Note: The backoff delay after the final attempt has been removed in the latest implementation, keeping the total maximum wait time at 77 seconds instead of 81 seconds.
 
 ## Network Condition Handling
 

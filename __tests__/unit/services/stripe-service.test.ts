@@ -199,7 +199,7 @@ describe('Stripe Service', () => {
         .toMatchObject({
           message: expect.stringContaining('timed out')
         });
-    }, 20000); // Allow jest to wait longer than the timeout
+    }, 25000); // Allow Jest to wait longer than the AbortController and mock delay
 
     it('should handle AbortError specifically', async () => {
       // Mock fetch to throw AbortError
@@ -277,7 +277,7 @@ describe('Stripe Service', () => {
       await expect(stripeService.listPaymentMethods(authToken))
         .rejects
         .toMatchObject({
-          message: expect.stringContaining('connect')
+          message: expect.stringContaining('Unable to connect')
         });
     });
   });

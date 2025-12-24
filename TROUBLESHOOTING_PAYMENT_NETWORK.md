@@ -5,13 +5,14 @@ This guide helps diagnose and resolve network connectivity issues when adding pa
 ## Common Error Messages
 
 ### "Connection timed out"
-**Cause:** The app cannot reach the payment server within the allowed time (15 seconds).
+**Cause:** The app uses escalating timeouts with automatic retry. Each API request to the payment server has a 15-second timeout. The payment modal implements retry logic with exponentially increasing timeouts (10s, 15s, 20s, 25s) across 4 attempts, with a maximum total wait time of approximately 77 seconds before showing an error.
 
 **Solutions:**
 1. Check your internet connection
 2. Try switching between Wi-Fi and cellular data
 3. Restart your app
 4. If using a VPN, try disabling it temporarily
+5. The app will automatically retry - wait for all attempts to complete
 
 ### "Unable to connect"
 **Cause:** Network request failed completely - the app cannot establish a connection to the payment server.
@@ -226,7 +227,11 @@ Expected response:
 
 ### Network Speed Test
 
-Slow networks may cause timeouts. The app allows up to 15 seconds for payment method loading with automatic retry.
+Slow networks may cause timeouts. The app implements a comprehensive retry strategy:
+- Base API timeout: 15 seconds (in StripeService)
+- Modal retry logic: 4 attempts with escalating timeouts (10s, 15s, 20s, 25s)
+- Exponential backoff between retries: 1s, 2s, 4s
+- Maximum total wait time: approximately 77 seconds before showing an error
 
 If your network is consistently slower:
 1. Close background apps using bandwidth
