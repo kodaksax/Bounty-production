@@ -174,4 +174,110 @@ describe('Stripe Service', () => {
       expect(stripeService).toHaveProperty('createPaymentMethod');
     });
   });
+
+  describe('listPaymentMethods with network timeout', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should timeout after 15 seconds and throw network error', async () => {
+      // Mock a slow response that never resolves within timeout
+      (global.fetch as jest.Mock).mockImplementation(() => 
+        new Promise((resolve) => {
+          // Never resolve within the timeout period
+          setTimeout(() => resolve({
+            ok: true,
+            json: async () => ({ paymentMethods: [] })
+          }), 20000); // 20 seconds
+        })
+      );
+
+      const authToken = 'test_token';
+
+      // Expect any error to be thrown (timeout or network error)
+      await expect(stripeService.listPaymentMethods(authToken))
+        .rejects
+        .toThrow();
+    }, 30000); // Allow Jest to wait longer than the AbortController and mock delay
+
+    it('should handle AbortError specifically', async () => {
+      // Mock fetch to throw AbortError
+      (global.fetch as jest.Mock).mockImplementation(() => {
+        const error = new Error('The user aborted a request.');
+        error.name = 'AbortError';
+        return Promise.reject(error);
+      });
+
+      const authToken = 'test_token';
+
+      await expect(stripeService.listPaymentMethods(authToken))
+        .rejects
+        .toMatchObject({
+          message: expect.stringMatching(/Network request timed out|timed out/i)
+        });
+    });
+
+    it('should successfully fetch payment methods within timeout', async () => {
+      // Mock a fast successful response
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          paymentMethods: [
+            {
+              id: 'pm_test123',
+              card: {
+                brand: 'visa',
+                last4: '4242',
+                exp_month: 12,
+                exp_year: 2025
+              },
+              created: 1234567890
+            }
+          ]
+        })
+      });
+
+      const authToken = 'test_token';
+      const methods = await stripeService.listPaymentMethods(authToken);
+
+      expect(methods).toHaveLength(1);
+      expect(methods[0].id).toBe('pm_test123');
+      expect(methods[0].card.last4).toBe('4242');
+    });
+
+    it('should return empty array when no auth token provided', async () => {
+      const methods = await stripeService.listPaymentMethods();
+      expect(methods).toEqual([]);
+    });
+
+    it('should handle API errors correctly', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => 'Unauthorized'
+      });
+
+      const authToken = 'invalid_token';
+
+      await expect(stripeService.listPaymentMethods(authToken))
+        .rejects
+        .toMatchObject({
+          message: expect.stringMatching(/Failed to fetch payment methods|fetch|payment/i)
+        });
+    });
+
+    it('should handle network errors with friendly messages', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(
+        new Error('Network request failed')
+      );
+
+      const authToken = 'test_token';
+
+      await expect(stripeService.listPaymentMethods(authToken))
+        .rejects
+        .toMatchObject({
+          message: expect.stringMatching(/Unable to connect|connect|network/i)
+        });
+    });
+  });
 });

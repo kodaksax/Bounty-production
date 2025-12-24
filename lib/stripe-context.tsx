@@ -99,8 +99,23 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       setPaymentMethods(methods);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load payment methods';
+    } catch (err: unknown) {
+      // Improve error messaging for network issues
+      let errorMessage = 'Failed to load payment methods';
+      
+      if (err && typeof err === 'object' && 'message' in err) {
+        const message = (err as { message: string }).message;
+        if (message.includes('timed out') || message.includes('timeout')) {
+          errorMessage = 'Connection timed out. Please check your internet connection and try again.';
+        } else if (message.includes('Network') || message.includes('fetch')) {
+          errorMessage = 'Unable to connect. Please check your internet connection.';
+        } else if ('type' in err && (err as { type: string }).type === 'api_error') {
+          errorMessage = 'Payment service temporarily unavailable. Please try again.';
+        } else {
+          errorMessage = message;
+        }
+      }
+      
       setError(errorMessage);
       console.error('Error loading payment methods:', err);
       // Rethrow so callers (who may implement retry logic) can detect failures
@@ -161,38 +176,6 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
         success: false, 
         error: errorMessage 
       };
-
-      // Track the last access token for which we loaded payment methods
-      const lastLoadedAccessTokenRef = React.useRef<string | null>(null);
-
-      // Initialize on mount
-      useEffect(() => {
-        initialize();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, []);
-
-      // Reload payment methods when auth token becomes available/changes,
-      // avoid redundant calls for repeated token refreshes and debounce slightly.
-      useEffect(() => {
-        const currentToken = session?.access_token || null;
-
-        if (!isInitialized || !currentToken) return;
-
-        // Skip if we've already loaded payment methods for this token
-        if (lastLoadedAccessTokenRef.current === currentToken) return;
-
-        lastLoadedAccessTokenRef.current = currentToken;
-
-        const timeoutId = setTimeout(() => {
-          loadPaymentMethods().catch(err => {
-            // loadPaymentMethods already sets error; swallow here to avoid unhandled rejection
-            console.error('Failed to reload payment methods on token change:', err);
-          });
-        }, 300);
-
-        return () => clearTimeout(timeoutId);
-      // Only re-run when initialization state or the access token value changes
-      }, [isInitialized, session?.access_token]);
     } finally {
       setIsLoading(false);
     }
@@ -284,12 +267,13 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
     lastLoadedAccessTokenRef.current = currentToken;
 
+    // Longer debounce (1 second) to avoid rapid re-fetches during auth flows
     const timeoutId = setTimeout(() => {
       loadPaymentMethods().catch(err => {
         // loadPaymentMethods already sets error; swallow here to avoid unhandled rejection
         console.error('Failed to reload payment methods on token change:', err);
       });
-    }, 300);
+    }, 1000);
 
     return () => clearTimeout(timeoutId);
   }, [isInitialized, session?.access_token]);

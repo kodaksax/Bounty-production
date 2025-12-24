@@ -24,31 +24,38 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
   const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
   const [loadFailed, setLoadFailed] = useState(false)
 
-  // Use shared timeout helper for retryable fetches
-  const refreshWithRetry = async (retries = 2, timeoutMs = 3000) => {
-    let lastErr: any
+  // Use shared timeout helper for retryable fetches with exponential backoff
+  const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
+    let lastErr: unknown
     setLoadFailed(false)
     for (let i = 0; i <= retries; i++) {
       try {
         // Clear previous errors before attempt
         clearError()
-        await withTimeout(loadPaymentMethods(), timeoutMs)
+        // Use exponentially increasing timeout: 10s, 15s, 20s, 25s
+        const timeout = initialTimeoutMs + (i * 5000)
+        await withTimeout(loadPaymentMethods(), timeout)
         // If loadPaymentMethods resolved, success
         return
-      } catch (e) {
+      } catch (e: unknown) {
         lastErr = e
-        // brief backoff
-        await new Promise(r => setTimeout(r, 600))
+        // Skip backoff after the last retry
+        if (i < retries) {
+          // Exponential backoff: 1s, 2s, 4s (between attempts)
+          const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
+          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${retries + 1} failed, waiting ${backoffMs}ms before retry`)
+          await new Promise(r => setTimeout(r, backoffMs))
+        }
       }
     }
-    console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed:', lastErr)
+    console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed after all attempts:', lastErr)
     setLoadFailed(true)
   }
 
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      refreshWithRetry(2, 3000)
+      refreshWithRetry(3, 10000)
     }
   }, [isOpen])
 
@@ -185,8 +192,8 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
             onSave={(cardData) => {
               // Card already added through Stripe service in AddCardModal
               setShowAddCard(false)
-              // Refresh payment methods
-              refreshWithRetry(2, 3000)
+              // Refresh payment methods with longer timeout
+              refreshWithRetry(3, 10000)
             }}
           />
         ) : (
@@ -228,15 +235,30 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               loadFailed || stripeError ? (
                 <View style={{ alignItems: 'center', padding: 20 }}>
                   <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
-                  <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15 }}>
-                    {stripeError || 'Failed to load payment methods. Please check your connection.'}
+                  <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
+                    {(() => {
+                      if (!stripeError) {
+                        return 'Unable to load payment methods. Please check your connection and try again.';
+                      }
+
+                      if (stripeError.includes('timed out') || stripeError.includes('timeout')) {
+                        return 'Connection timed out. Please check your internet connection and try again.';
+                      }
+
+                      if (stripeError.includes('Network')) {
+                        return 'Unable to connect. Please check your internet connection.';
+                      }
+
+                      return stripeError;
+                    })()}
                   </Text>
                   <TouchableOpacity
-                    onPress={() => refreshWithRetry(2, 3000)}
-                    style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 }}
+                    onPress={() => refreshWithRetry(3, 10000)}
+                    style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
                     accessibilityRole="button"
+                    accessibilityLabel="Retry loading payment methods"
                   >
-                    <Text style={{ color: 'white', fontWeight: '600' }}>Retry</Text>
+                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retry</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
