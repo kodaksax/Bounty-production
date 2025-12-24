@@ -5,7 +5,7 @@ import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
 import { authProfileService } from "../lib/services/auth-profile-service"
 import { SignInForm } from "./auth/sign-in-form"
-import { ROUTES } from "app/lib/routes"
+
 
 /**
  * Root Index - Auth Gate
