@@ -47,7 +47,16 @@ export default function Index() {
             return
           }
 
-          if (!profileData || !profileData.username) {
+          // User needs to complete onboarding if:
+          // 1. No profile exists, OR
+          // 2. Profile has no username, OR
+          // 3. onboarding_completed flag is explicitly false
+          // Note: onboarding_completed will be true for existing users (via migration)
+          // and undefined for very old profiles, so we treat undefined as completed
+          const hasUsername = profileData && profileData.username
+          const onboardingComplete = profileData?.onboarding_completed !== false
+          
+          if (!hasUsername || !onboardingComplete) {
             // User needs to complete onboarding
             try {
               router.replace('/onboarding/username')
