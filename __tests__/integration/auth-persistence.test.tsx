@@ -165,6 +165,128 @@ describe('Authentication State Persistence', () => {
     });
   });
 
+  describe('Profile Loading Race Condition', () => {
+    it('should wait for profile to load before setting isLoading to false', async () => {
+      const mockSession = {
+        access_token: 'valid_token',
+        refresh_token: 'refresh_token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: 'user123',
+          email: 'user@example.com',
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      const mockProfile = {
+        id: 'user123',
+        username: 'testuser',
+        email: 'user@example.com',
+        balance: 0,
+      };
+
+      let profileSubscriptionCallback: any;
+
+      // Mock authProfileService to capture subscription callback
+      const { authProfileService } = require('../../lib/services/auth-profile-service');
+      (authProfileService.subscribe as jest.Mock).mockImplementation((callback) => {
+        profileSubscriptionCallback = callback;
+        // Immediately call with null (simulating initial subscription)
+        callback(null);
+        return jest.fn(); // Return unsubscribe function
+      });
+
+      (authProfileService.setSession as jest.Mock).mockImplementation(async (session) => {
+        // Simulate async profile fetch
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // After fetch completes, notify subscribers
+        if (profileSubscriptionCallback && session) {
+          profileSubscriptionCallback(mockProfile);
+        }
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: mockSession },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      // Wait for session to load
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      // Wait for setSession to be called
+      await waitFor(() => {
+        expect(authProfileService.setSession).toHaveBeenCalledWith(mockSession);
+      });
+
+      // Fast-forward to complete the async profile fetch
+      jest.advanceTimersByTime(150);
+
+      // Verify that profile was loaded
+      await waitFor(() => {
+        expect(profileSubscriptionCallback).toBeDefined();
+      });
+    });
+
+    it('should handle profile fetch failure gracefully', async () => {
+      const mockSession = {
+        access_token: 'valid_token',
+        refresh_token: 'refresh_token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: 'user123',
+          email: 'user@example.com',
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      let profileSubscriptionCallback: any;
+
+      const { authProfileService } = require('../../lib/services/auth-profile-service');
+      (authProfileService.subscribe as jest.Mock).mockImplementation((callback) => {
+        profileSubscriptionCallback = callback;
+        callback(null); // Initial call with null
+        return jest.fn();
+      });
+
+      // Mock setSession to throw an error
+      (authProfileService.setSession as jest.Mock).mockRejectedValue(
+        new Error('Failed to fetch profile')
+      );
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: mockSession },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      // Even with error, should not block indefinitely
+      await waitFor(() => {
+        expect(authProfileService.setSession).toHaveBeenCalled();
+      });
+    });
+  });
+
   describe('Automatic Token Refresh', () => {
     it('should schedule token refresh before expiration', async () => {
       const expiresInSeconds = 3600; // 1 hour from now

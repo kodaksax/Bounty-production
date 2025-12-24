@@ -4,7 +4,6 @@ import { ActivityIndicator, View, Text } from "react-native"
 import { useAuthContext } from "app/hooks/use-auth-context"
 import { SignInForm } from "./auth/sign-in-form"
 import { ROUTES } from "app/lib/routes"
-import { authProfileService } from "app/lib/services/auth-profile-service"
 
 /**
  * Root Index - Auth Gate
@@ -15,7 +14,7 @@ import { authProfileService } from "app/lib/services/auth-profile-service"
  * - If not logged in: show sign-in form
  */
 export default function Index() {
-  const { session, isLoading } = useAuthContext()
+  const { session, profile, isLoading } = useAuthContext()
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
 
@@ -38,8 +37,8 @@ export default function Index() {
       const checkProfileAndRedirect = async () => {
         try {
           // Check if user has completed username setup (required for onboarding completion)
-          // Use authProfileService to avoid duplicate queries
-          const profileData = authProfileService.getCurrentProfile()
+          // Use profile from auth context to ensure it's properly loaded
+          const profileData = profile
 
           // If component has unmounted or session has changed, abort navigation
           if (!isActive || latestSessionIdRef.current !== startingSessionId) {
@@ -81,7 +80,7 @@ export default function Index() {
     return () => {
       isActive = false
     }
-  }, [session, isLoading, router])
+  }, [session, profile, isLoading, router])
 
   // Show loading spinner while checking authentication state
   if (isLoading) {
