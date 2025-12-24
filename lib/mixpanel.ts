@@ -29,10 +29,10 @@ export async function initMixpanel() {
       return;
     }
 
-    // runtime import for native package; @ts-ignore because types may not exist
+    // runtime import for native package; use the installed 'mixpanel-react-native'
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    const nativeModule = await import('@mixpanel/react-native');
+    const nativeModule = await import('mixpanel-react-native');
     const nativePkg: any = (nativeModule as any).default ?? nativeModule;
 
     if (typeof nativePkg.init === 'function') {

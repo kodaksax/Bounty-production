@@ -3,5 +3,12 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "chat.mcp.serverSampling": {
+    "Bounty-production/.vscode/mcp.json: mcpServers": {
+      "allowedModels": [
+        "copilot/auto"
+      ]
+    }
   }
 }
