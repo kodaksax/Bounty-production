@@ -28,6 +28,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const isRefreshingRef = useRef<boolean>(false)
   const isMountedRef = useRef<boolean>(true)
   const isInitializingRef = useRef<boolean>(true)
+  const profileFetchCompletedRef = useRef<boolean>(false)
+  const sessionIdRef = useRef<string | null>(null)
 
   /**
    * Manually refresh the session token
@@ -166,9 +168,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     isMountedRef.current = true
     isInitializingRef.current = true
+    profileFetchCompletedRef.current = false
 
     const fetchSession = async () => {
       setIsLoading(true)
+      let sessionFound = false
 
       try {
         const {
@@ -188,14 +192,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           }
         } else if (session) {
           // Valid session found
+          sessionFound = true
           console.log('[AuthProvider] Session loaded: authenticated')
           setSession(session)
+          sessionIdRef.current = session.user.id
           
           // Sync session with auth profile service
           try {
             await authProfileService.setSession(session)
+            // Mark that profile fetch has completed (successfully or not)
+            profileFetchCompletedRef.current = true
           } catch (e) {
             console.error('[AuthProvider] Error setting session in profile service:', e)
+            // Even on error, mark as completed to avoid blocking
+            profileFetchCompletedRef.current = true
           }
           
           // Email verification gate: Check if email is verified
@@ -231,7 +241,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } finally {
         if (isMountedRef.current) {
-          setIsLoading(false)
+          // Only set isLoading to false if there's no session
+          // If there is a session, wait for the profile to load via subscription
+          if (!sessionFound) {
+            setIsLoading(false)
+          }
           isInitializingRef.current = false
         }
       }
@@ -253,12 +267,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       if (!isMountedRef.current) return
       
       setSession(session)
+      sessionIdRef.current = session?.user?.id || null
+      
+      // Reset profile fetch flag for events that trigger profile fetch
+      profileFetchCompletedRef.current = false
       
       // Sync session with auth profile service
       try {
         await authProfileService.setSession(session)
+        // Mark profile fetch as completed after setSession finishes
+        profileFetchCompletedRef.current = true
       } catch (e) {
         console.error('[AuthProvider] Error syncing session in profile service:', e)
+        // Mark as completed even on error to avoid blocking
+        profileFetchCompletedRef.current = true
       }
       
       // Email verification gate: Check if email is verified
@@ -323,7 +345,21 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const unsubscribe = authProfileService.subscribe((authProfile) => {
       setProfile(authProfile)
-      setIsLoading(false)
+      
+      // Only set isLoading to false if:
+      // 1. No session exists (immediate subscription callback with null), OR
+      // 2. Profile fetch has completed (after setSession finishes)
+      const currentSessionId = sessionIdRef.current
+      if (!currentSessionId || profileFetchCompletedRef.current) {
+        console.log('[AuthProvider] Profile update received, setting isLoading to false:', {
+          hasSession: Boolean(currentSessionId),
+          hasProfile: Boolean(authProfile),
+          username: authProfile?.username
+        })
+        setIsLoading(false)
+      } else {
+        console.log('[AuthProvider] Profile update received but waiting for fetch to complete')
+      }
       
       // Email verification gate: Also check profile for email_verified flag (some profile shapes include this field)
       if (authProfile && (('email_verified' in authProfile) || (authProfile as any).email_verified !== undefined)) {
