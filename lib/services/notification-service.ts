@@ -210,8 +210,8 @@ export class NotificationService {
         
         // Log different levels based on status code
         if (response.status === 404) {
-          // User profile doesn't exist yet - this is expected during signup flow
-          // The backend will create a minimal profile automatically on retry
+          // User profile doesn't exist yet - retained for backward compatibility with older backend versions
+          // With the current backend fix, this should not occur as profiles are auto-created
           if (__DEV__) {
             console.log(`[NotificationService] User profile not yet created. Backend will create it on next attempt.`)
           }

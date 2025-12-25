@@ -176,6 +176,10 @@ export class NotificationService {
   /**
    * Ensure user profile exists before operations that require it
    * Creates a minimal profile if one doesn't exist
+   * 
+   * Note: This adds an extra SELECT query for all token registrations, but the performance
+   * impact is minimal for this operation and ensures correctness. For existing users (the 
+   * vast majority after initial rollout), this check will pass immediately.
    */
   private async ensureUserProfile(userId: string): Promise<boolean> {
     try {
@@ -193,12 +197,13 @@ export class NotificationService {
       // Profile doesn't exist - create a minimal one
       console.log(`📝 Creating minimal profile for user ${userId} (triggered by push token registration)`);
       
-      // Generate a temporary username from user ID
-      const username = `user_${userId.slice(0, 8)}`;
+      // Generate a temporary username from user ID (use full UUID without hyphens to avoid collisions)
+      // This is a temporary username that will be replaced during onboarding
+      const username = `user_${userId.replace(/-/g, '')}`;
       
       await db.insert(users).values({
         id: userId,
-        handle: username, // Property 'handle' maps to database column 'username'
+        handle: username, // Using 'handle' (maps to 'username' column in DB)
       });
       
       console.log(`✅ Created minimal profile for user ${userId}`);
@@ -265,6 +270,8 @@ export class NotificationService {
       
       // Check if it's a foreign key constraint error
       // Drizzle ORM and Postgres errors contain specific codes and constraint names
+      // Note: This should be unreachable now with ensureUserProfile(), but kept as a defensive
+      // safeguard in case the profile is deleted between the check and insert (race condition)
       const err = error as any;
       if (err?.code === '23503' || // Postgres FK violation code
           err?.constraint_name?.includes('user_id') ||

@@ -144,7 +144,7 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
       if (errorMsg.includes('User profile issue') || errorMsg.includes('Unable to register push token')) {
         return reply.code(500).send({ 
           error: 'Profile setup error',
-          details: 'Unable to complete push token registration. This may resolve on app restart.'
+          details: 'Unable to complete push token registration due to profile setup issues. Please try again or contact support if this persists.'
         });
       }
       

@@ -100,8 +100,8 @@ CREATE TABLE push_tokens (
 │    │                                                           ││
 │    │ 4c. If profile missing:                                  ││
 │    │     📝 Create minimal profile:                           ││
-│    │     INSERT INTO profiles (id, username, balance)         ││
-│    │     VALUES ('user-uuid', 'user_12345678', 0)            ││
+│    │     INSERT INTO profiles (id, username)                  ││
+│    │     VALUES ('user-uuid', 'user_1234567890abcdef...')    ││
 │    │     ✅ Return true, proceed to step 5                    ││
 │    └──────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
@@ -151,12 +151,11 @@ private async ensureUserProfile(userId: string): Promise<boolean> {
 
     // 2. Create minimal profile
     console.log(`📝 Creating minimal profile for user ${userId}`);
-    const username = `user_${userId.slice(0, 8)}`;
+    const handle = `user_${userId.replace(/-/g, '')}`;
     
     await db.insert(users).values({
       id: userId,
-      username: username,
-      balance: 0,
+      handle: handle,
     });
     
     console.log(`✅ Created minimal profile for user ${userId}`);
