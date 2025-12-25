@@ -165,7 +165,7 @@ export function SignInForm() {
             console.error('[sign-in] Profile check timeout or error:', profileCheckError)
             // On timeout, assume user needs to go through onboarding
             // The AuthProvider will handle profile syncing in the background
-            if (profileCheckError.message?.includes('timed out')) {
+            if (profileCheckError.message?.includes('Network request timed out')) {
               console.log('[sign-in] Profile check timed out, redirecting to app')
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             } else {
@@ -177,7 +177,7 @@ export function SignInForm() {
         }
       } catch (timeoutError: any) {
         console.error('[sign-in] Operation timeout:', timeoutError)
-        if (timeoutError.message?.includes('timed out')) {
+        if (timeoutError.message?.includes('Network request timed out')) {
           throw new Error('Sign-in request timed out. Please check your internet connection and try again.')
         }
         throw timeoutError

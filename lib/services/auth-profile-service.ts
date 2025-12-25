@@ -88,7 +88,7 @@ export class AuthProfileService {
         data = res.data ?? null;
         error = res.error ?? null;
       } catch (e: any) {
-        if (e.message?.includes('timed out')) {
+        if (e.message?.includes('Network request timed out')) {
           logger.warning('Profile fetch timed out', { userId });
         }
         data = null;
@@ -266,7 +266,7 @@ export class AuthProfileService {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
       const msg = (error && (error.message || String(error))) || '';
-      if (msg.includes('timed out')) {
+      if (msg.includes('Network request timed out')) {
         logger.error('Profile fetch timed out. Check network connection and Supabase configuration.', { userId, supabaseEnv });
       } else if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
         logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
