@@ -49,8 +49,16 @@ export function SignInForm() {
       
       // Check Supabase configuration first
       if (!isSupabaseConfigured) {
+        console.error('[sign-in] Supabase is not configured!')
         throw new Error('Authentication service is not configured. Please contact support.')
       }
+      
+      // Log Supabase configuration status for debugging
+      console.log('[sign-in] Supabase configured:', {
+        hasUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
+        hasKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
+        urlPrefix: process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
+      })
       
       // Check for lockout
       if (lockoutUntil && Date.now() < lockoutUntil) {
@@ -76,7 +84,9 @@ export function SignInForm() {
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
           try {
-            console.log(`[sign-in] Auth attempt ${attempt}/${MAX_ATTEMPTS}`)
+            console.log(`[sign-in] Auth attempt ${attempt}/${MAX_ATTEMPTS} with timeout ${AUTH_TIMEOUT}ms`)
+            console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`)
+            
             const res = await withTimeout(
               supabase.auth.signInWithPassword({
                 email: identifier.trim().toLowerCase(),
@@ -84,6 +94,13 @@ export function SignInForm() {
               }),
               AUTH_TIMEOUT
             )
+            
+            console.log(`[sign-in] Auth response received:`, {
+              hasData: Boolean(res.data),
+              hasError: Boolean(res.error),
+              errorMessage: res.error?.message,
+            })
+            
             data = res.data
             error = res.error
             // break out on success or server-side auth error
@@ -91,13 +108,24 @@ export function SignInForm() {
           } catch (e: any) {
             lastErr = e
             console.error(`[sign-in] Attempt ${attempt} failed:`, e.message || e)
+            console.error(`[sign-in] Error details:`, {
+              name: e.name,
+              message: e.message,
+              stack: e.stack?.substring(0, 200),
+            })
             
             // If last attempt, rethrow below
             if (attempt < MAX_ATTEMPTS) {
               // Only check network if error suggests connectivity issue
               // This avoids unnecessary NetInfo calls on every retry
               if (isNetworkError(e)) {
+                console.log(`[sign-in] Network error detected, checking connectivity...`)
                 const net = await NetInfo.fetch()
+                console.log(`[sign-in] Network status:`, {
+                  isConnected: net.isConnected,
+                  isInternetReachable: net.isInternetReachable,
+                  type: net.type,
+                })
                 if (!net.isConnected) {
                   throw new Error('No internet connection. Please check your network and try again.')
                 }
