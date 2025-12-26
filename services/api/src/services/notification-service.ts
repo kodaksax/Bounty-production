@@ -174,10 +174,67 @@ export class NotificationService {
   }
 
   /**
+   * Ensure user profile exists before operations that require it
+   * Creates a minimal profile if one doesn't exist
+   * 
+   * Note: This adds an extra SELECT query for all token registrations, but the performance
+   * impact is minimal for this operation and ensures correctness. For existing users (the 
+   * vast majority after initial rollout), this check will pass immediately.
+   */
+  private async ensureUserProfile(userId: string): Promise<boolean> {
+    try {
+      // Check if profile exists
+      const existingProfile = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (existingProfile.length > 0) {
+        return true;
+      }
+
+      // Profile doesn't exist - create a minimal one
+      console.log(`📝 Creating minimal profile for user ${userId} (triggered by push token registration)`);
+      
+      // Generate a temporary username from user ID (use full UUID without hyphens to avoid collisions)
+      // This is a temporary username that will be replaced during onboarding
+      const username = `user_${userId.replace(/-/g, '')}`;
+      
+      await db.insert(users).values({
+        id: userId,
+        handle: username, // Using 'handle' (maps to 'username' column in DB)
+      });
+      
+      console.log(`✅ Created minimal profile for user ${userId}`);
+      return true;
+    } catch (error) {
+      // If error is due to duplicate key, profile was created concurrently - this is OK
+      const err = error as any;
+      if (err?.code === '23505') {
+        console.log(`ℹ️  Profile for user ${userId} already exists (concurrent creation)`);
+        return true;
+      }
+      
+      console.error(`❌ Error ensuring user profile exists for ${userId}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Register push notification token
    */
   async registerPushToken(userId: string, token: string, deviceId?: string): Promise<void> {
     try {
+      // Ensure user profile exists before registering push token
+      // This prevents foreign key constraint violations when tokens are registered
+      // before the user profile is created during the signup flow
+      const profileExists = await this.ensureUserProfile(userId);
+      
+      if (!profileExists) {
+        throw new Error(`Failed to ensure user profile exists for ${userId}`);
+      }
+
       // Check if token already exists for this user
       const existing = await db
         .select()
@@ -200,11 +257,6 @@ export class NotificationService {
         console.log(`✅ Updated push token for user ${userId}`);
       } else {
         // Insert new token
-        // Expected flow:
-        //   1) User authenticates with the auth provider
-        //   2) Backend /me (or equivalent auth) endpoint creates/ensures the user profile row
-        //   3) Client calls this registerPushToken method to save the device's push token
-        // Note: This will fail if the user doesn't exist in the profiles table due to FK constraint.
         await db.insert(pushTokens).values({
           user_id: userId,
           token,
@@ -218,11 +270,13 @@ export class NotificationService {
       
       // Check if it's a foreign key constraint error
       // Drizzle ORM and Postgres errors contain specific codes and constraint names
+      // Note: This should be unreachable now with ensureUserProfile(), but kept as a defensive
+      // safeguard in case the profile is deleted between the check and insert (race condition)
       const err = error as any;
       if (err?.code === '23503' || // Postgres FK violation code
           err?.constraint_name?.includes('user_id') ||
           (error instanceof Error && error.message.includes('foreign key constraint'))) {
-        throw new Error(`User profile must be created before registering push tokens. Please ensure the user is authenticated and has called the /me endpoint.`);
+        throw new Error(`User profile issue: Unable to register push token. Please contact support if this persists.`);
       }
       
       // Re-throw the error so the caller can handle it
