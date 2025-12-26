@@ -18,7 +18,7 @@ import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { AUTH_RETRY_CONFIG, getAuthErrorMessage, isNetworkError, isTimeoutError } from '../../lib/utils/auth-errors'
+import { AUTH_RETRY_CONFIG, getAuthErrorMessage, getBackoffDelay, isNetworkError, isTimeoutError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
@@ -53,12 +53,14 @@ export function SignInForm() {
         throw new Error('Authentication service is not configured. Please contact support.')
       }
       
-      // Log Supabase configuration status for debugging
-      console.log('[sign-in] Supabase configured:', {
-        hasUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
-        hasKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
-        urlPrefix: process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
-      })
+      // Log Supabase configuration status for debugging (development only to avoid leaking env details)
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[sign-in] Supabase configured:', {
+          hasUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
+          hasKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
+          urlPrefix: process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 15) + '...',
+        })
+      }
       
       // Check for lockout
       if (lockoutUntil && Date.now() < lockoutUntil) {
@@ -73,7 +75,11 @@ export function SignInForm() {
       try {
         // If identifier may be username, your backend should resolve username -> email.
         // Here we assume email sign-in
-        console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
+        } else {
+          console.log('[sign-in] Attempting to sign in (email redacted for production)')
+        }
 
         // Attempt sign-in with optimized timeout and retry strategy
         // Using constants from AUTH_RETRY_CONFIG for consistency
@@ -108,11 +114,15 @@ export function SignInForm() {
           } catch (e: any) {
             lastErr = e
             console.error(`[sign-in] Attempt ${attempt} failed:`, e.message || e)
-            console.error(`[sign-in] Error details:`, {
-              name: e.name,
-              message: e.message,
-              stack: e.stack?.substring(0, 200),
-            })
+            
+            // Only include stack trace in development to avoid leaking internals in production logs
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+              console.error(`[sign-in] Error details:`, {
+                name: e.name,
+                message: e.message,
+                stack: e.stack?.substring(0, 200),
+              })
+            }
             
             // If last attempt, rethrow below
             if (attempt < MAX_ATTEMPTS) {
@@ -131,8 +141,8 @@ export function SignInForm() {
                 }
               }
               
-              // Exponential backoff using utility function
-              const backoff = 1000 * attempt
+              // Use exponential backoff for better retry handling
+              const backoff = getBackoffDelay(attempt)
               console.log(`[sign-in] Retrying in ${backoff}ms...`)
               await new Promise((r) => setTimeout(r, backoff))
               continue
@@ -242,10 +252,17 @@ export function SignInForm() {
             }
           } catch (profileCheckError: any) {
             console.error('[sign-in] Profile check timeout or error:', profileCheckError)
-            // On any error (including timeout), proceed to app
-            // The AuthProvider will handle profile syncing in the background
-            console.log('[sign-in] Proceeding to app despite profile check error. AuthProvider will sync.')
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            
+            // Distinguish between different error types to route appropriately
+            if (isTimeoutError(profileCheckError) || isNetworkError(profileCheckError)) {
+              // Network/timeout issues - assume profile exists and let AuthProvider sync
+              console.log('[sign-in] Network/timeout error during profile check. Proceeding to app, AuthProvider will sync.')
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            } else {
+              // Other errors (like profile not found) - redirect to onboarding to be safe
+              console.log('[sign-in] Profile check failed, redirecting to onboarding')
+              router.replace('/onboarding/username')
+            }
           }
         } else {
           throw new Error('Authentication failed. Please try again.')
@@ -378,10 +395,22 @@ export function SignInForm() {
               // User has completed onboarding, go to app
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
-          } catch (profileError) {
-            console.error('[google] Profile check failed, proceeding to app:', profileError)
-            // On error, proceed to app and let AuthProvider handle it
-            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          } catch (profileError: any) {
+            console.error('[google] Profile check failed during Google sign-in:', profileError)
+
+            // Do NOT proceed to the app on profile check failure if it's not a timeout/network issue
+            if (isTimeoutError(profileError) || isNetworkError(profileError)) {
+              // Network/timeout issues - proceed to app, AuthProvider will sync
+              console.log('[google] Network/timeout error during profile check. Proceeding to app.')
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            } else {
+              // Other errors - show error and keep user on auth screen
+              const friendlyMessage = getUserFriendlyError(profileError)
+              setSocialAuthError(
+                friendlyMessage ||
+                'We could not verify your profile. Please try again in a moment or contact support if this continues.'
+              )
+            }
           }
         } else {
           setSocialAuthError('No session returned after Google sign-in.')
@@ -558,9 +587,19 @@ export function SignInForm() {
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                             }
-                          } catch (profileError) {
-                            console.error('[apple] Profile check failed, proceeding to app:', profileError)
-                            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                          } catch (profileError: any) {
+                            console.error('[apple] Profile check failed during Apple sign-in:', profileError)
+                            
+                            // Do NOT proceed to the app on profile check failure if it's not a timeout/network issue
+                            if (isTimeoutError(profileError) || isNetworkError(profileError)) {
+                              // Network/timeout issues - proceed to app, AuthProvider will sync
+                              console.log('[apple] Network/timeout error during profile check. Proceeding to app.')
+                              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                            } else {
+                              // Other errors - redirect to onboarding to be safe
+                              console.log('[apple] Profile check failed, redirecting to onboarding')
+                              router.replace('/onboarding/username')
+                            }
                           }
                         }
                       } catch (e: any) {
