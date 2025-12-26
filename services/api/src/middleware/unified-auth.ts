@@ -231,6 +231,10 @@ export function shouldBypassRateLimit(request: AuthenticatedRequest): boolean {
 /**
  * Express-compatible authentication middleware wrapper
  * For compatibility with legacy Express endpoints during migration
+ * 
+ * NOTE: This is a temporary solution during migration. Uses console.*
+ * for logging as structured logger may not be available on Express req/res.
+ * This wrapper will be removed after migration is complete.
  */
 export function expressAuthMiddleware(req: any, res: any, next: any): void {
   const fastifyStyleRequest = {
@@ -304,6 +308,10 @@ export function createUserSupabaseClient(request: AuthenticatedRequest): Supabas
 /**
  * Test helper to create authenticated request for testing
  * Only use in test environment
+ * 
+ * NOTE: This creates a minimal mock with only user, userId, headers, and log.
+ * It does not include other FastifyRequest properties like body, query, params,
+ * method, url, etc. Tests using this helper should not access those properties.
  */
 export function createTestAuthRequest(userId: string, email: string): AuthenticatedRequest {
   if (config.service.env === 'production') {

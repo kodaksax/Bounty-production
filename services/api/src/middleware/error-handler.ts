@@ -418,7 +418,7 @@ export function handleError(error: any): AppError {
   }
   
   // Stripe error
-  if (error.type && error.type.startsWith('Stripe')) {
+  if (error.type && typeof error.type === 'string' && error.type.startsWith('Stripe')) {
     return handleStripeError(error);
   }
   

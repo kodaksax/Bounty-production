@@ -8,7 +8,6 @@ import Stripe from 'stripe';
 import { config } from '../config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
-  AppError,
   ValidationError,
   ExternalServiceError,
   handleStripeError,
@@ -179,8 +178,16 @@ export async function createPaymentIntent(
       },
     });
     
+    const clientSecret = paymentIntent.client_secret;
+    if (!clientSecret) {
+      throw new ExternalServiceError(
+        'Stripe',
+        'Payment intent created but no client secret returned'
+      );
+    }
+    
     return {
-      clientSecret: paymentIntent.client_secret!,
+      clientSecret,
       paymentIntentId: paymentIntent.id,
       amount: paymentIntent.amount,
       currency: paymentIntent.currency,
@@ -240,11 +247,18 @@ export async function confirmPaymentIntent(
     
     // Handle 3D Secure / requires_action
     if (confirmedIntent.status === 'requires_action') {
+      const clientSecret = confirmedIntent.client_secret;
+      if (!clientSecret) {
+        throw new ValidationError(
+          'Payment requires additional authentication, but Stripe did not provide a client secret'
+        );
+      }
+      
       return {
         success: false,
         status: 'requires_action',
         requiresAction: true,
-        clientSecret: confirmedIntent.client_secret!,
+        clientSecret,
         nextAction: confirmedIntent.next_action,
       };
     }
@@ -390,8 +404,15 @@ export async function createSetupIntent(userId: string): Promise<{
       metadata: { user_id: userId },
     });
     
+    if (!setupIntent.client_secret) {
+      throw new ExternalServiceError(
+        'Stripe',
+        'Setup intent created but no client secret returned'
+      );
+    }
+    
     return {
-      clientSecret: setupIntent.client_secret!,
+      clientSecret: setupIntent.client_secret,
       setupIntentId: setupIntent.id,
     };
   } catch (error) {
@@ -419,8 +440,21 @@ export async function cancelPaymentIntent(
     if (paymentIntent.status === 'requires_payment_method' || 
         paymentIntent.status === 'requires_confirmation' ||
         paymentIntent.status === 'requires_action') {
+      
+      // Map reason to Stripe's allowed cancellation reasons
+      let cancellationReason: Stripe.PaymentIntentCancelParams.CancellationReason | undefined;
+      if (reason) {
+        const validReasons = ['duplicate', 'fraudulent', 'requested_by_customer', 'abandoned'];
+        if (validReasons.includes(reason)) {
+          cancellationReason = reason as Stripe.PaymentIntentCancelParams.CancellationReason;
+        } else {
+          // Default to 'requested_by_customer' for any other reason
+          cancellationReason = 'requested_by_customer';
+        }
+      }
+      
       await stripe.paymentIntents.cancel(paymentIntentId, {
-        cancellation_reason: reason as any,
+        cancellation_reason: cancellationReason,
       });
     } else {
       throw new ValidationError(

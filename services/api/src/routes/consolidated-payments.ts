@@ -3,9 +3,9 @@
  * Unified payment endpoints consolidating logic from multiple servers
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { asyncHandler, ValidationError } from '../middleware/error-handler';
+import { asyncHandler } from '../middleware/error-handler';
 import * as PaymentService from '../services/consolidated-payment-service';
 import { z } from 'zod';
 
@@ -53,12 +53,16 @@ export async function registerConsolidatedPaymentRoutes(
         description: 'Create a payment intent for processing a payment',
         body: createPaymentIntentSchema,
         response: {
-          200: z.object({
-            clientSecret: z.string(),
-            paymentIntentId: z.string(),
-            amount: z.number(),
-            currency: z.string(),
-          }),
+          200: {
+            type: 'object',
+            properties: {
+              clientSecret: { type: 'string' },
+              paymentIntentId: { type: 'string' },
+              amount: { type: 'number' },
+              currency: { type: 'string' },
+            },
+            required: ['clientSecret', 'paymentIntentId', 'amount', 'currency'],
+          },
         },
       },
     },
@@ -71,7 +75,7 @@ export async function registerConsolidatedPaymentRoutes(
         currency: body.currency,
         metadata: {
           ...body.metadata,
-          bounty_id: body.bountyId || '',
+          ...(body.bountyId && { bounty_id: body.bountyId }),
         },
         description: body.description,
       });

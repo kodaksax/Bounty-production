@@ -173,6 +173,9 @@ export const config = {
     secretKey: getOptional('SECRET_KEY', 'dev-fallback-secret'),
     allowedOrigins: getOptional('ALLOWED_ORIGINS', 'http://localhost:8081,http://localhost:19000,http://localhost:19006').split(','),
     sessionSecret: getOptional('SESSION_SECRET', 'dev-session-secret'),
+    // Flag to track if using insecure defaults
+    usingDefaultSecretKey: !process.env.SECRET_KEY,
+    usingDefaultSessionSecret: !process.env.SESSION_SECRET,
   },
 
   // Rate Limiting Configuration
@@ -252,6 +255,16 @@ export function validateConfig(): void {
   // Validate Stripe configuration
   if (!config.stripe.secretKey) {
     errors.push('Stripe secret key missing');
+  }
+  
+  // Validate security configuration in production
+  if (config.service.env === 'production') {
+    if (config.security.usingDefaultSecretKey || config.security.secretKey === 'dev-fallback-secret') {
+      errors.push('SECRET_KEY must be set to a secure value in production (not using default dev-fallback-secret)');
+    }
+    if (config.security.usingDefaultSessionSecret || config.security.sessionSecret === 'dev-session-secret') {
+      errors.push('SESSION_SECRET must be set to a secure value in production (not using default dev-session-secret)');
+    }
   }
 
   if (errors.length > 0) {
