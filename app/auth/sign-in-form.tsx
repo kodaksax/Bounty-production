@@ -46,6 +46,11 @@ export function SignInForm() {
     async () => {
       console.log('[sign-in] Starting sign-in process')
       
+      // Check Supabase configuration first
+      if (!isSupabaseConfigured) {
+        throw new Error('Authentication service is not configured. Please contact support.')
+      }
+      
       // Check for lockout
       if (lockoutUntil && Date.now() < lockoutUntil) {
         const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
@@ -56,30 +61,22 @@ export function SignInForm() {
         throw new Error('Please fix the form errors')
       }
 
-      if (!isSupabaseConfigured) {
-        throw new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
-      }
-
       try {
         // If identifier may be username, your backend should resolve username -> email.
-        // Here we assume email sign-in with 15 second timeout
+        // Here we assume email sign-in
         console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
 
-        // Quick network pre-check to fail fast when offline
-        const net = await NetInfo.fetch()
-        if (!net.isConnected) {
-          throw new Error('No internet connection')
-        }
-
-        // Attempt sign-in with retry/backoff for transient failures
-        const AUTH_TIMEOUT = 30000 // 30s
-        const MAX_ATTEMPTS = 2
+        // Attempt sign-in with optimized timeout and retry strategy
+        // Reduced timeout to 20s per attempt for faster feedback
+        const AUTH_TIMEOUT = 20000 // 20s per attempt
+        const MAX_ATTEMPTS = 2 // Total max time: ~40s with backoff
         let lastErr: any = null
         let data: any = null
         let error: any = null
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
           try {
+            console.log(`[sign-in] Auth attempt ${attempt}/${MAX_ATTEMPTS}`)
             const res = await withTimeout(
               supabase.auth.signInWithPassword({
                 email: identifier.trim().toLowerCase(),
@@ -93,20 +90,34 @@ export function SignInForm() {
             break
           } catch (e: any) {
             lastErr = e
+            console.error(`[sign-in] Attempt ${attempt} failed:`, e.message || e)
+            
             // If last attempt, rethrow below
             if (attempt < MAX_ATTEMPTS) {
-              const backoff = 500 * attempt
-              console.log(`[sign-in] Attempt ${attempt} failed, retrying in ${backoff}ms`, e.message || e)
+              // Check if this is a network connectivity issue
+              const net = await NetInfo.fetch()
+              if (!net.isConnected) {
+                throw new Error('No internet connection. Please check your network and try again.')
+              }
+              
+              // Exponential backoff: 1s, 2s, etc.
+              const backoff = 1000 * attempt
+              console.log(`[sign-in] Retrying in ${backoff}ms...`)
               await new Promise((r) => setTimeout(r, backoff))
               continue
             }
           }
         }
 
+        // Handle errors after all retry attempts
         if (error) {
           console.error('[sign-in] Authentication error:', error)
         } else if (lastErr) {
           console.error('[sign-in] Authentication failed after retries:', lastErr)
+          // Provide more specific error message based on error type
+          if (lastErr.message?.includes('Network request timed out')) {
+            throw new Error('Sign-in is taking longer than expected. This might be due to slow network or server issues. Please try again.')
+          }
           throw lastErr
         }
 
@@ -165,7 +176,7 @@ export function SignInForm() {
           }
 
           // Check if user has completed onboarding (has profile in Supabase)
-          // Add timeout to profile check to prevent hanging
+          // Use shorter timeout for faster feedback, with graceful fallback
           console.log('[sign-in] Checking user profile for:', data.session.user.id)
           
           try {
@@ -175,7 +186,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              10000 // 10 second timeout for profile check
+              8000 // 8 second timeout for profile check - faster feedback
             )
 
             if (profileError) {
@@ -186,8 +197,10 @@ export function SignInForm() {
                 router.replace('/onboarding/username')
                 return
               }
-              // For other errors, log but continue to try navigation
-              console.warn('[sign-in] Profile check failed, attempting navigation anyway')
+              // For other errors, log but continue - let AuthProvider handle it
+              console.warn('[sign-in] Profile check failed, proceeding to app. AuthProvider will sync.')
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+              return
             }
 
             if (!profile || !profile.username) {
@@ -201,24 +214,28 @@ export function SignInForm() {
             }
           } catch (profileCheckError: any) {
             console.error('[sign-in] Profile check timeout or error:', profileCheckError)
-            // On timeout, assume user needs to go through onboarding
+            // On any error (including timeout), proceed to app
             // The AuthProvider will handle profile syncing in the background
-            if (profileCheckError.message?.includes('Network request timed out')) {
-              console.log('[sign-in] Profile check timed out, redirecting to app')
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
-            } else {
-              throw profileCheckError
-            }
+            console.log('[sign-in] Proceeding to app despite profile check error. AuthProvider will sync.')
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
           throw new Error('Authentication failed. Please try again.')
         }
-      } catch (timeoutError: any) {
-        console.error('[sign-in] Operation timeout:', timeoutError)
-        if (timeoutError.message?.includes('Network request timed out')) {
-          throw new Error('Sign-in request timed out. Please check your internet connection and try again.')
+      } catch (err: any) {
+        console.error('[sign-in] Sign-in error:', err)
+        
+        // Provide user-friendly error messages
+        if (err.message?.includes('No internet connection')) {
+          throw err // Pass through network errors as-is
         }
-        throw timeoutError
+        
+        if (err.message?.includes('Network request timed out')) {
+          throw new Error('Sign-in is taking longer than expected. This might be due to slow network or server issues. Please try again.')
+        }
+        
+        // For other errors, pass through or wrap with generic message
+        throw err
       }
     },
     {
@@ -309,31 +326,54 @@ export function SignInForm() {
       }
       try {
         setSocialAuthLoading(true)
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
-        })
+        console.log('[google] Starting Google sign-in with id_token')
+        
+        // Add timeout to Google sign-in
+        const { data, error } = await withTimeout(
+          supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: idToken,
+          }),
+          15000 // 15 second timeout for social auth
+        )
+        
         if (error) throw error
         if (data.session) {
-          // Check if user has completed onboarding (has profile in Supabase)
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', data.session.user.id)
-            .single()
+          console.log('[google] Sign-in successful, checking profile')
+          
+          // Check if user has completed onboarding with timeout
+          try {
+            const { data: profile } = await withTimeout(
+              supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', data.session.user.id)
+                .single(),
+              8000 // 8 second timeout
+            )
 
-          if (!profile || !profile.username) {
-            // User needs to complete onboarding
-            router.replace('/onboarding/username')
-          } else {
-            // User has completed onboarding, go to app
+            if (!profile || !profile.username) {
+              // User needs to complete onboarding
+              router.replace('/onboarding/username')
+            } else {
+              // User has completed onboarding, go to app
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            }
+          } catch (profileError) {
+            console.error('[google] Profile check failed, proceeding to app:', profileError)
+            // On error, proceed to app and let AuthProvider handle it
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
           setSocialAuthError('No session returned after Google sign-in.')
         }
       } catch (e: any) {
-        setSocialAuthError(e?.message || 'Google sign-in failed')
+        const errorMsg = e?.message || 'Google sign-in failed'
+        if (errorMsg.includes('Network request timed out')) {
+          setSocialAuthError('Google sign-in timed out. Please try again.')
+        } else {
+          setSocialAuthError(errorMsg)
+        }
         console.error('[google] Error:', e)
       } finally {
         setSocialAuthLoading(false)
@@ -458,6 +498,7 @@ export function SignInForm() {
                     style={{ width: '100%', height: 44 }}
                     onPress={async () => {
                       try {
+                        console.log('[apple] Starting Apple sign-in')
                         const credential = await AppleAuthentication.signInAsync({
                           requestedScopes: [
                             AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -465,36 +506,57 @@ export function SignInForm() {
                           ],
                         })
                         if (!credential.identityToken) {
-                          setSocialAuthError('No Apple identity token')
+                          setSocialAuthError('No Apple identity token received')
                           return
                         }
                         if (!isSupabaseConfigured) {
-                          setSocialAuthError('Supabase is not configured.')
+                          setSocialAuthError('Authentication service is not configured.')
                           return
                         }
-                        const { data, error } = await supabase.auth.signInWithIdToken({
-                          provider: 'apple',
-                          token: credential.identityToken,
-                        })
+                        
+                        console.log('[apple] Exchanging token with Supabase')
+                        const { data, error } = await withTimeout(
+                          supabase.auth.signInWithIdToken({
+                            provider: 'apple',
+                            token: credential.identityToken,
+                          }),
+                          15000 // 15 second timeout
+                        )
+                        
                         if (error) throw error
                         if (data.session) {
-                          // Check if user has completed onboarding
-                          const { data: profile } = await supabase
-                            .from('profiles')
-                            .select('username')
-                            .eq('id', data.session.user.id)
-                            .single()
+                          console.log('[apple] Sign-in successful, checking profile')
+                          
+                          // Check if user has completed onboarding with timeout
+                          try {
+                            const { data: profile } = await withTimeout(
+                              supabase
+                                .from('profiles')
+                                .select('username')
+                                .eq('id', data.session.user.id)
+                                .single(),
+                              8000 // 8 second timeout
+                            )
 
-                          if (!profile || !profile.username) {
-                            router.replace('/onboarding/username')
-                          } else {
+                            if (!profile || !profile.username) {
+                              router.replace('/onboarding/username')
+                            } else {
+                              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                            }
+                          } catch (profileError) {
+                            console.error('[apple] Profile check failed, proceeding to app:', profileError)
                             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                           }
                         }
                       } catch (e: any) {
                         if (e?.code !== 'ERR_REQUEST_CANCELED') {
-                          setSocialAuthError('Apple sign-in failed')
-                          console.error(e)
+                          const errorMsg = e?.message || 'Apple sign-in failed'
+                          if (errorMsg.includes('Network request timed out')) {
+                            setSocialAuthError('Apple sign-in timed out. Please try again.')
+                          } else {
+                            setSocialAuthError('Apple sign-in failed')
+                          }
+                          console.error('[apple] Error:', e)
                         }
                       }
                     }}

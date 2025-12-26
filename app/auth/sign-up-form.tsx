@@ -9,6 +9,7 @@ import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { validateEmail } from '../../lib/utils/auth-validation'
+import { withTimeout } from '../../lib/utils/withTimeout'
 
 export default function SignUpRoute() {
   return <SignUpForm />
@@ -67,19 +68,30 @@ export function SignUpForm() {
     setFieldErrors({})
 
     if (!validateForm()) return
-    if (!isSupabaseConfigured) return setAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+    if (!isSupabaseConfigured) {
+      setAuthError('Authentication service is not configured. Please contact support.')
+      return
+    }
 
     try {
       setIsLoading(true)
+      console.log('[sign-up] Starting sign-up process')
+      
       // Pass age verification into user_metadata so backend can persist it
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(), // Normalize email
-        password,
-        options: {
-          data: { age_verified: ageVerified }
-        }
-      })
+      // Add timeout to prevent hanging on slow networks
+      const { data, error } = await withTimeout(
+        supabase.auth.signUp({
+          email: email.trim().toLowerCase(), // Normalize email
+          password,
+          options: {
+            data: { age_verified: ageVerified }
+          }
+        }),
+        20000 // 20 second timeout
+      )
+      
       if (error) {
+        console.error('[sign-up] Error:', error)
         // Handle specific error cases
         if (error.message.includes('already registered')) {
           setAuthError('This email is already registered. Please sign in instead.')
@@ -106,11 +118,17 @@ export function SignUpForm() {
       setAgeVerified(false)
       setTermsAccepted(false)
 
+      console.log('[sign-up] Sign-up successful, navigating to email confirmation')
       // Navigate to the email confirmation screen with clear instructions
       router.replace('/auth/email-confirmation' as Href)
     } catch (e: any) {
-      setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
-      console.error('[sign-up] Error:', e)
+      console.error('[sign-up] Unexpected error:', e)
+      
+      if (e?.message?.includes('Network request timed out')) {
+        setAuthError('Sign-up is taking longer than expected. Please check your internet connection and try again.')
+      } else {
+        setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
+      }
     } finally {
       setIsLoading(false)
     }
