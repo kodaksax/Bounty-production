@@ -602,45 +602,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
     return { received: true };
   });
-}
-
-// Helper functions
-
-/**
- * Customer ID storage
- * 
- * IMPORTANT: This in-memory Map is for development/testing only.
- * In production, customer IDs should be stored in the database (users table)
- * with the stripe_customer_id field. The users schema already has this field.
- * 
- * TODO: Replace this with database queries when deploying to production:
- * - On lookup: SELECT stripe_customer_id FROM users WHERE id = userId
- * - On create: UPDATE users SET stripe_customer_id = customerId WHERE id = userId
- */
-const customerIds = new Map<string, string>();
-
-async function getStripeCustomerId(userId: string): Promise<string | null> {
-  return customerIds.get(userId) || null;
-}
-
-async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promise<string> {
-  // Check cache first
-  const existingId = customerIds.get(userId);
-  if (existingId) {
-    return existingId;
-  }
-
-  // In production, check database first
-  // For now, create a new customer
-  const customer = await stripe.customers.create({
-    metadata: {
-      user_id: userId,
-    },
-  });
-
-  customerIds.set(userId, customer.id);
-  return customer.id;
-}
 
   /**
    * Add bank account (ACH) as a payment method
@@ -684,7 +645,7 @@ async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promis
       }
 
       // Get or create Stripe customer
-      const customerId = await getStripeCustomerId(request.userId);
+      const customerId = await getOrCreateStripeCustomer(stripe, request.userId);
 
       // Create bank account token
       const token = await stripe.tokens.create({
@@ -703,26 +664,42 @@ async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promis
         source: token.id,
       });
 
-      logger.info(`[payments] Added bank account for user ${request.userId}`);
+      // Type guard to safely access Stripe bank account properties
+      interface StripeBankAccount {
+        id: string;
+        object: string;
+        last4?: string;
+        bank_name?: string;
+        [key: string]: any;
+      }
+
+      const typedBankAccount = bankAccount as StripeBankAccount;
+      const last4 = typedBankAccount.last4 || accountNumber.slice(-4);
+      const bankName = typedBankAccount.bank_name;
+
+      logger.info(`[payments] Added bank account (last4: ${last4}) for user ${request.userId}`);
 
       return {
         success: true,
         bankAccount: {
           id: bankAccount.id,
-          last4: (bankAccount as any).last4,
-          bankName: (bankAccount as any).bank_name,
+          last4,
+          bankName,
           accountType,
         },
       };
     } catch (error: any) {
       logger.error('[payments] Error adding bank account:', error);
       
-      // Provide user-friendly error messages
+      // Use Stripe error codes for reliable error handling
       let errorMessage = 'Failed to add bank account';
-      if (error.type === 'StripeInvalidRequestError') {
-        if (error.message?.includes('routing number')) {
+      const stripeError = error as Stripe.StripeError;
+      
+      if (stripeError.type === 'StripeInvalidRequestError') {
+        // Check error code or param for more reliable error detection
+        if (stripeError.code === 'invalid_routing_number' || stripeError.param === 'bank_account[routing_number]') {
           errorMessage = 'Invalid routing number';
-        } else if (error.message?.includes('account number')) {
+        } else if (stripeError.code === 'invalid_account_number' || stripeError.param === 'bank_account[account_number]') {
           errorMessage = 'Invalid account number';
         }
       }
@@ -730,4 +707,42 @@ async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promis
       return reply.code(400).send({ error: errorMessage });
     }
   });
+}
+
+// Helper functions
+
+/**
+ * Customer ID storage
+ * 
+ * IMPORTANT: This in-memory Map is for development/testing only.
+ * In production, customer IDs should be stored in the database (users table)
+ * with the stripe_customer_id field. The users schema already has this field.
+ * 
+ * TODO: Replace this with database queries when deploying to production:
+ * - On lookup: SELECT stripe_customer_id FROM users WHERE id = userId
+ * - On create: UPDATE users SET stripe_customer_id = customerId WHERE id = userId
+ */
+const customerIds = new Map<string, string>();
+
+async function getStripeCustomerId(userId: string): Promise<string | null> {
+  return customerIds.get(userId) || null;
+}
+
+async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promise<string> {
+  // Check cache first
+  const existingId = customerIds.get(userId);
+  if (existingId) {
+    return existingId;
+  }
+
+  // In production, check database first
+  // For now, create a new customer
+  const customer = await stripe.customers.create({
+    metadata: {
+      user_id: userId,
+    },
+  });
+
+  customerIds.set(userId, customer.id);
+  return customer.id;
 }

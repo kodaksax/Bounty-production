@@ -159,12 +159,16 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
         throw new Error(errorData.error || 'Failed to add bank account')
       }
 
-      // Call onSave callback
+      // Parse response to get tokenized data
+      const responseData = await response.json()
+
+      // Call onSave callback with non-sensitive tokenized data only
       if (onSave) {
         onSave({
           accountHolderName,
-          accountNumber,
-          routingNumber,
+          // Only pass non-sensitive fields - no raw account or routing numbers
+          accountNumber: '', // Empty string for interface compatibility
+          routingNumber: '', // Empty string for interface compatibility
           accountType,
         })
       }

@@ -25,10 +25,17 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   const [initialY, setInitialY] = useState(0)
   const [showAddCard, setShowAddCard] = useState(false)
   const [showAddBankAccount, setShowAddBankAccount] = useState(false)
-  const [selectedMethodType, setSelectedMethodType] = useState<PaymentMethodType>('card')
+  const [selectedMethodType, setSelectedMethodType] = useState<PaymentMethodType>(preferredType || 'card')
   
   const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
   const [loadFailed, setLoadFailed] = useState(false)
+
+  // Initialize selected method type when modal opens, honoring preferredType if provided
+  React.useEffect(() => {
+    if (isOpen && preferredType) {
+      setSelectedMethodType(preferredType)
+    }
+  }, [isOpen, preferredType])
 
   // Use shared timeout helper for retryable fetches with exponential backoff
   const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
@@ -349,7 +356,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
               </View>
               )
             ) : selectedMethodType === 'bank_account' ? (
-              // Bank accounts placeholder (to be implemented with backend support)
+              // Bank accounts - UI for listing will be added in future iteration
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="account-balance" size={56} color="rgba(255,255,255,0.4)" />
                 <Text style={{ 
