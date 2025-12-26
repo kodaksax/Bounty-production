@@ -18,6 +18,7 @@ import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import { withTimeout } from '../../lib/utils/withTimeout'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -42,6 +43,8 @@ export function SignInForm() {
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
     async () => {
+      console.log('[sign-in] Starting sign-in process')
+      
       // Check for lockout
       if (lockoutUntil && Date.now() < lockoutUntil) {
         const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
@@ -56,79 +59,128 @@ export function SignInForm() {
         throw new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
       }
 
-      // If identifier may be username, your backend should resolve username -> email.
-      // Here we assume email sign-in:
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: identifier.trim().toLowerCase(), // Normalize email
-        password,
-      })
-
-      if (error) {
-        // Track failed login attempts
-        const newAttempts = loginAttempts + 1
-        setLoginAttempts(newAttempts)
-
-        // Lock out after 5 failed attempts for 5 minutes
-        if (newAttempts >= 5) {
-          const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
-          setLockoutUntil(lockout)
-          throw new Error('Too many failed attempts. Please try again in 5 minutes.')
-        }
-
-        // Handle specific error cases with user-friendly messages
-        if (error.message.includes('Invalid login credentials')) {
-          throw new Error('Invalid email or password. Please try again.')
-        } else if (error.message.includes('Email not confirmed')) {
-          throw new Error('Please confirm your email address before signing in.')
-        } else {
-          throw error
-        }
-      }
-
-      // Reset login attempts on success
-      setLoginAttempts(0)
-      setLockoutUntil(null)
-
-      // Handle remember me preference
       try {
-        if (rememberMe) {
-          await storage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
-        } else {
-          await storage.removeItem('rememberMeEmail')
-        }
-      } catch (error) {
-        console.error('[sign-in] Failed to save remember me preference:', error)
-      }
+        // If identifier may be username, your backend should resolve username -> email.
+        // Here we assume email sign-in with 15 second timeout
+        console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
+        
+        const { data, error } = await withTimeout(
+          supabase.auth.signInWithPassword({
+            email: identifier.trim().toLowerCase(), // Normalize email
+            password,
+          }),
+          15000 // 15 second timeout for auth request
+        )
 
-      if (data.session) {
-        // Ensure Mixpanel initialized and identify user (safe no-op if SDK not initialized)
+        if (error) {
+          console.error('[sign-in] Authentication error:', error)
+          
+          // Track failed login attempts
+          const newAttempts = loginAttempts + 1
+          setLoginAttempts(newAttempts)
+
+          // Lock out after 5 failed attempts for 5 minutes
+          if (newAttempts >= 5) {
+            const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
+            setLockoutUntil(lockout)
+            throw new Error('Too many failed attempts. Please try again in 5 minutes.')
+          }
+
+          // Handle specific error cases with user-friendly messages
+          if (error.message.includes('Invalid login credentials')) {
+            throw new Error('Invalid email or password. Please try again.')
+          } else if (error.message.includes('Email not confirmed')) {
+            throw new Error('Please confirm your email address before signing in.')
+          } else {
+            throw error
+          }
+        }
+
+        // Reset login attempts on success
+        setLoginAttempts(0)
+        setLockoutUntil(null)
+
+        console.log('[sign-in] Authentication successful')
+
+        // Handle remember me preference
         try {
-          await initMixpanel();
-          identify(data.session.user.id, {
-            $email: data.session.user.email,
-            $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
-          })
-          try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) { }
-        } catch (e) {
-          // swallow analytics errors
+          if (rememberMe) {
+            await storage.setItem('rememberMeEmail', identifier.trim().toLowerCase())
+          } else {
+            await storage.removeItem('rememberMeEmail')
+          }
+        } catch (error) {
+          console.error('[sign-in] Failed to save remember me preference:', error)
         }
 
-        // Check if user has completed onboarding (has profile in Supabase)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', data.session.user.id)
-          .single()
+        if (data.session) {
+          // Ensure Mixpanel initialized and identify user (safe no-op if SDK not initialized)
+          try {
+            await initMixpanel();
+            identify(data.session.user.id, {
+              $email: data.session.user.email,
+              $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
+            })
+            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) { }
+          } catch (e) {
+            // swallow analytics errors
+          }
 
-        if (!profile || !profile.username) {
-          // User needs to complete onboarding
-          router.replace('/onboarding/username')
+          // Check if user has completed onboarding (has profile in Supabase)
+          // Add timeout to profile check to prevent hanging
+          console.log('[sign-in] Checking user profile for:', data.session.user.id)
+          
+          try {
+            const { data: profile, error: profileError } = await withTimeout(
+              supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', data.session.user.id)
+                .single(),
+              10000 // 10 second timeout for profile check
+            )
+
+            if (profileError) {
+              console.error('[sign-in] Profile check error:', profileError)
+              // If profile doesn't exist (PGRST116), user needs onboarding
+              if (profileError.code === 'PGRST116') {
+                console.log('[sign-in] No profile found, redirecting to onboarding')
+                router.replace('/onboarding/username')
+                return
+              }
+              // For other errors, log but continue to try navigation
+              console.warn('[sign-in] Profile check failed, attempting navigation anyway')
+            }
+
+            if (!profile || !profile.username) {
+              // User needs to complete onboarding
+              console.log('[sign-in] Profile incomplete, redirecting to onboarding')
+              router.replace('/onboarding/username')
+            } else {
+              // User has completed onboarding, go to app
+              console.log('[sign-in] Profile complete, redirecting to app')
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            }
+          } catch (profileCheckError: any) {
+            console.error('[sign-in] Profile check timeout or error:', profileCheckError)
+            // On timeout, assume user needs to go through onboarding
+            // The AuthProvider will handle profile syncing in the background
+            if (profileCheckError.message?.includes('Network request timed out')) {
+              console.log('[sign-in] Profile check timed out, redirecting to app')
+              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            } else {
+              throw profileCheckError
+            }
+          }
         } else {
-          // User has completed onboarding, go to app
-          router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+          throw new Error('Authentication failed. Please try again.')
         }
-      } else {
-        throw new Error('Authentication failed. Please try again.')
+      } catch (timeoutError: any) {
+        console.error('[sign-in] Operation timeout:', timeoutError)
+        if (timeoutError.message?.includes('Network request timed out')) {
+          throw new Error('Sign-in request timed out. Please check your internet connection and try again.')
+        }
+        throw timeoutError
       }
     },
     {

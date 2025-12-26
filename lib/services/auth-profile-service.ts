@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
+import { withTimeout } from '../utils/withTimeout';
 
 const PROFILE_CACHE_KEY_PREFIX = 'BE:authProfile';
 const PROFILE_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
@@ -76,14 +77,20 @@ export class AuthProfileService {
       let error: any = null;
 
       try {
-        const res = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
+        const res = await withTimeout(
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle(),
+          10000 // 10 second timeout
+        );
         data = res.data ?? null;
         error = res.error ?? null;
-      } catch (e) {
+      } catch (e: any) {
+        if (e.message?.includes('Network request timed out')) {
+          logger.warning('Profile fetch timed out', { userId });
+        }
         data = null;
         error = e;
       }
@@ -91,13 +98,16 @@ export class AuthProfileService {
       // If profiles returned an error or no data, attempt public_profiles fallback
       if (!data) {
         try {
-          const pub = await supabase
-            .from('public_profiles')
-            // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
-            // to a camelCase property so the app can read `displayName` safely.
-            .select('id,username,displayName:display_name,avatar,location')
-            .eq('id', userId)
-            .maybeSingle();
+          const pub = await withTimeout(
+            supabase
+              .from('public_profiles')
+              // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
+              // to a camelCase property so the app can read `displayName` safely.
+              .select('id,username,displayName:display_name,avatar,location')
+              .eq('id', userId)
+              .maybeSingle(),
+            10000 // 10 second timeout
+          );
           if (pub.error) {
             // If both attempts fail, surface a warning and return null
             // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
@@ -210,12 +220,15 @@ export class AuthProfileService {
     }
 
     try {
-      // Try to get profile from Supabase
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Try to get profile from Supabase with timeout to prevent hanging
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        10000 // 10 second timeout
+      );
 
       if (error) {
         // If profile doesn't exist, create a minimal one
@@ -253,14 +266,16 @@ export class AuthProfileService {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
       const msg = (error && (error.message || String(error))) || '';
-      if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
+      if (msg.includes('Network request timed out')) {
+        logger.error('Profile fetch timed out. Check network connection and Supabase configuration.', { userId, supabaseEnv });
+      } else if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
         logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
       } else {
         logger.error('Error fetching profile', { userId, error });
       }
       
       // Try to load from cache
-  const cached = await this.loadFromCache(userId);
+      const cached = await this.loadFromCache(userId);
       if (cached && cached.id === userId) {
         this.currentProfile = cached;
         this.notifyListeners(cached);
@@ -317,11 +332,14 @@ export class AuthProfileService {
         insertData.age_verified_at = age_verified_at;
       }
       
-      const { data, error } = await supabase
-        .from('profiles')
-        .insert(insertData)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .insert(insertData)
+          .select()
+          .single(),
+        10000 // 10 second timeout
+      );
 
       if (error) {
         // If error is due to duplicate key, profile was created concurrently
@@ -392,12 +410,15 @@ export class AuthProfileService {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', userId)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single(),
+        10000 // 10 second timeout
+      );
 
       if (error) {
         throw error;
