@@ -81,6 +81,8 @@ export interface EscrowReleaseResult {
   success: boolean;
   transferId?: string;
   paymentIntentId?: string;
+  hunterAmount?: number; // Amount transferred to hunter (after fees)
+  platformFee?: number; // Platform fee deducted
   error?: { message: string };
 }
 

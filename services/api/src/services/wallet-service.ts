@@ -6,9 +6,12 @@ import { walletRiskIntegration } from './wallet-risk-integration';
 // Define types locally to avoid import issues
 export interface CreateWalletTransactionInput {
   user_id: string;
-  bountyId?: string;
+  bounty_id?: string;
+  bountyId?: string; // Keep for backwards compatibility
   type: string;
   amount: number;
+  stripe_transfer_id?: string;
+  platform_fee_cents?: number;
 }
 
 export interface WalletTransaction {
@@ -42,11 +45,14 @@ export class WalletService {
     }
 
     // STEP 2: Create the transaction
+    const bountyId = input.bounty_id || input.bountyId; // Support both naming conventions
     const transaction = await db.insert(walletTransactions).values({
       user_id: input.user_id,
-      bounty_id: input.bountyId,
+      bounty_id: bountyId,
       type: input.type,
       amount_cents: Math.round(input.amount * 100), // Convert to cents
+      stripe_transfer_id: input.stripe_transfer_id,
+      platform_fee_cents: input.platform_fee_cents,
     }).returning();
 
     const transactionId = transaction[0].id;

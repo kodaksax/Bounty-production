@@ -2,6 +2,7 @@ import type { Bounty, BountyRequest, Profile } from "lib/services/database.types
 import { isSupabaseConfigured, supabase } from 'lib/supabase'
 import { getApiBase } from 'lib/utils/dev-host'
 import { logger } from "lib/utils/error-logger"
+import { paymentService } from './payment-service'
 
 export type BountyRequestWithDetails = BountyRequest & {
   bounty: Bounty
@@ -400,15 +401,121 @@ export const bountyRequestService = {
 
   /**
    * Accept a bounty request
+   * Creates escrow PaymentIntent to hold funds
    */
   async acceptRequest(requestId: string | number): Promise<BountyRequest | null> {
     
     const result = await this.updateStatus(requestId, "accepted");
     
     if (result) {
+      // After accepting the request, create escrow to hold funds
+      try {
+        // Get the bounty details to create escrow
+        const bountyData = await this.getBountyForRequest(result.bounty_id);
+        
+        if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
+          // Create escrow PaymentIntent with manual capture
+          const escrowResult = await paymentService.createEscrow({
+            bountyId: String(result.bounty_id),
+            amount: bountyData.amount,
+            posterId: bountyData.user_id || bountyData.poster_id,
+            hunterId: result.hunter_id,
+            userId: bountyData.user_id || bountyData.poster_id, // Attribution should be to poster
+          });
+          
+          if (!escrowResult.success) {
+            logger.error('Failed to create escrow for accepted bounty request', {
+              requestId,
+              bountyId: result.bounty_id,
+              error: escrowResult.error,
+            });
+            // Don't fail the acceptance, but log the error
+            // The escrow can be created later or manually
+          } else {
+            logger.info('Escrow created successfully for accepted bounty', {
+              requestId,
+              bountyId: result.bounty_id,
+              escrowId: escrowResult.escrowId,
+            });
+            
+            // Update the bounty record with the payment_intent_id
+            try {
+              await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId!);
+            } catch (updateError) {
+              logger.error('Failed to update bounty with payment_intent_id', {
+                bountyId: result.bounty_id,
+                escrowId: escrowResult.escrowId,
+                error: updateError,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        logger.error('Error creating escrow after accepting bounty request', {
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Don't fail the acceptance - escrow can be created later
+      }
     }
     
     return result;
+  },
+
+  /**
+   * Helper to get bounty details for a request
+   */
+  async getBountyForRequest(bountyId: string | number): Promise<Bounty | null> {
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('bounties')
+          .select('*')
+          .eq('id', String(bountyId))
+          .single();
+        
+        if (error) throw error;
+        return data as unknown as Bounty;
+      }
+      
+      // Fallback to API
+      const response = await fetch(`${API_BASE_URL}/api/bounties/${bountyId}`);
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      logger.error('Error fetching bounty for request', { bountyId, error });
+      return null;
+    }
+  },
+
+  /**
+   * Update bounty record with payment_intent_id
+   */
+  async updateBountyPaymentIntent(bountyId: string | number, paymentIntentId: string): Promise<void> {
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('bounties')
+          .update({ payment_intent_id: paymentIntentId })
+          .eq('id', String(bountyId));
+        
+        if (error) throw error;
+      } else {
+        // Fallback to API
+        const response = await fetch(`${API_BASE_URL}/api/bounties/${bountyId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to update bounty: ${response.statusText}`);
+        }
+      }
+    } catch (error) {
+      logger.error('Error updating bounty payment_intent_id', { bountyId, paymentIntentId, error });
+      throw error;
+    }
   },
 
   /**

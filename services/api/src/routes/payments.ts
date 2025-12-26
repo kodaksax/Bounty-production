@@ -3,6 +3,11 @@ import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { logger } from '../services/logger';
 import { walletService } from '../services/wallet-service';
+import { stripeConnectService } from '../services/stripe-connect-service';
+
+// Platform account ID for fee collection
+// In production, this should be stored in environment variables
+const PLATFORM_ACCOUNT_ID = process.env.PLATFORM_ACCOUNT_ID || '00000000-0000-0000-0000-000000000000';
 
 // Idempotency tracking for duplicate payment prevention
 // NOTE: In production, this should be stored in a persistent database (e.g., Redis or PostgreSQL)
@@ -50,6 +55,12 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     });
 
     return;
+  }
+
+  // Validate PLATFORM_ACCOUNT_ID in production
+  if (process.env.NODE_ENV === 'production' && !process.env.PLATFORM_ACCOUNT_ID) {
+    logger.error('[payments] PLATFORM_ACCOUNT_ID environment variable is required in production');
+    throw new Error('PLATFORM_ACCOUNT_ID environment variable must be set in production');
   }
 
   const stripe = new Stripe(stripeKey, {
@@ -344,6 +355,229 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       logger.error('[payments] Error confirming payment:', error);
       return reply.code(500).send({
         error: 'Failed to confirm payment'
+      });
+    }
+  });
+
+  /**
+   * Create escrow PaymentIntent for bounty
+   * Uses manual capture to hold funds until bounty completion
+   */
+  fastify.post('/payments/escrows', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      const body = request.body as {
+        bountyId: string;
+        amountCents: number;
+        posterId: string;
+        hunterId: string;
+        currency?: string;
+      };
+      const { bountyId, amountCents, posterId, hunterId, currency = 'usd' } = body;
+
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Validate request
+      if (!bountyId || !amountCents || !posterId || !hunterId) {
+        return reply.code(400).send({ 
+          error: 'Missing required fields: bountyId, amountCents, posterId, hunterId' 
+        });
+      }
+
+      if (amountCents < 50) {
+        return reply.code(400).send({ 
+          error: 'Amount must be at least $0.50 (50 cents)' 
+        });
+      }
+
+      // Authorization: ensure the authenticated user is the poster
+      if (request.userId !== posterId) {
+        logger.warn(
+          { authenticatedUserId: request.userId, posterId, bountyId },
+          '[payments] User attempted to create escrow for another poster'
+        );
+        return reply.code(403).send({ error: 'Forbidden: cannot create escrow for another user' });
+      }
+
+      // Get or create Stripe customer for the poster
+      const customerId = await getOrCreateStripeCustomer(stripe, posterId);
+
+      // Create PaymentIntent with manual capture for escrow
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountCents,
+        currency,
+        customer: customerId,
+        capture_method: 'manual', // Critical: Manual capture enables escrow
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
+        metadata: {
+          bounty_id: bountyId,
+          poster_id: posterId,
+          hunter_id: hunterId,
+          type: 'bounty_escrow',
+        },
+        description: `Escrow for bounty ${bountyId}`,
+      });
+
+      // Create escrow transaction record in wallet
+      await walletService.createTransaction({
+        user_id: posterId,
+        type: 'escrow',
+        amount: amountCents / 100,
+        bounty_id: bountyId,
+      });
+
+      logger.info(`[payments] Created escrow PaymentIntent ${paymentIntent.id} for bounty ${bountyId}`);
+
+      return {
+        escrowId: paymentIntent.id, // Use PaymentIntent ID as escrow ID
+        paymentIntentId: paymentIntent.id,
+        paymentIntentClientSecret: paymentIntent.client_secret,
+        status: paymentIntent.status,
+      };
+    } catch (error: any) {
+      logger.error('[payments] Error creating escrow:', error);
+      
+      if (error.type === 'StripeInvalidRequestError') {
+        return reply.code(400).send({
+          error: 'Invalid escrow request',
+          code: error.code,
+        });
+      }
+
+      return reply.code(500).send({
+        error: 'Failed to create escrow'
+      });
+    }
+  });
+
+  /**
+   * Release escrow funds to hunter
+   * Captures the PaymentIntent and transfers to hunter's Connect account
+   */
+  fastify.post('/payments/escrows/:escrowId/release', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      const { escrowId } = request.params as { escrowId: string };
+
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      if (!escrowId || !escrowId.startsWith('pi_')) {
+        return reply.code(400).send({ error: 'Invalid escrow ID' });
+      }
+
+      // Retrieve the PaymentIntent to get metadata
+      const paymentIntent = await stripe.paymentIntents.retrieve(escrowId);
+
+      if (!paymentIntent) {
+        return reply.code(404).send({ error: 'Escrow not found' });
+      }
+
+      // Verify the poster is the one releasing funds
+      if (paymentIntent.metadata.poster_id !== request.userId) {
+        return reply.code(403).send({ 
+          error: 'Only the bounty poster can release funds' 
+        });
+      }
+
+      // Check if already captured/released
+      if (paymentIntent.status === 'succeeded') {
+        return reply.code(400).send({ 
+          error: 'Funds already released for this escrow' 
+        });
+      }
+
+      if (paymentIntent.status !== 'requires_capture') {
+        return reply.code(400).send({ 
+          error: `Cannot release escrow in status: ${paymentIntent.status}. Must be 'requires_capture'` 
+        });
+      }
+
+      const hunterId = paymentIntent.metadata.hunter_id;
+      const bountyId = paymentIntent.metadata.bounty_id;
+
+      // Get hunter's Stripe Connect account BEFORE capturing funds
+      const hunterConnectStatus = await stripeConnectService.getConnectStatus(hunterId);
+
+      if (!hunterConnectStatus.stripeAccountId || !hunterConnectStatus.payoutsEnabled) {
+        logger.error(`[payments] Hunter ${hunterId} does not have a valid Connect account`);
+        return reply.code(400).send({ 
+          error: 'Hunter does not have a valid payout account. Funds remain in escrow.' 
+        });
+      }
+
+      // Capture the PaymentIntent (confirms the charge)
+      const capturedIntent = await stripe.paymentIntents.capture(escrowId);
+
+      // Calculate platform fee (10%)
+      const platformFeePercentage = 10;
+      const amountCents = capturedIntent.amount;
+      const platformFeeCents = Math.round((amountCents * platformFeePercentage) / 100);
+      const hunterAmountCents = amountCents - platformFeeCents;
+
+      // Create transfer to hunter's Connect account
+      const transfer = await stripe.transfers.create({
+        amount: hunterAmountCents,
+        currency: capturedIntent.currency,
+        destination: hunterConnectStatus.stripeAccountId,
+        metadata: {
+          bounty_id: bountyId,
+          hunter_id: hunterId,
+          poster_id: paymentIntent.metadata.poster_id,
+          payment_intent_id: escrowId,
+          platform_fee_cents: platformFeeCents.toString(),
+        },
+        description: `Bounty payment for ${bountyId}`,
+      });
+
+      // Create release transaction for hunter
+      await walletService.createTransaction({
+        user_id: hunterId,
+        type: 'release',
+        amount: hunterAmountCents / 100,
+        bounty_id: bountyId,
+        stripe_transfer_id: transfer.id,
+        platform_fee_cents: platformFeeCents,
+      });
+
+      // Record platform fee
+      await walletService.createTransaction({
+        user_id: PLATFORM_ACCOUNT_ID,
+        type: 'platform_fee',
+        amount: platformFeeCents / 100,
+        bounty_id: bountyId,
+      });
+
+      logger.info(`[payments] Released escrow ${escrowId}, transferred ${hunterAmountCents} cents to hunter ${hunterId}`);
+
+      return {
+        success: true,
+        transferId: transfer.id,
+        paymentIntentId: escrowId,
+        hunterAmount: hunterAmountCents / 100,
+        platformFee: platformFeeCents / 100,
+        status: 'released',
+      };
+    } catch (error: any) {
+      logger.error('[payments] Error releasing escrow:', error);
+
+      if (error.type === 'StripeInvalidRequestError') {
+        return reply.code(400).send({
+          error: error.message || 'Invalid release request',
+          code: error.code,
+        });
+      }
+
+      return reply.code(500).send({
+        error: 'Failed to release escrow'
       });
     }
   });

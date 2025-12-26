@@ -85,6 +85,8 @@ export interface StripeEscrowCreateResponse {
 export interface StripeEscrowReleaseResponse {
   transferId?: string;
   paymentIntentId?: string;
+  hunterAmount?: number; // Amount transferred to hunter (after fees)
+  platformFee?: number; // Platform fee deducted
   status?: 'released' | 'failed';
 }
 
@@ -539,7 +541,11 @@ class StripeService {
 
       // Create an AbortController for timeout (15 seconds for payment methods)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      let didTimeout = false;
+      const timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, 15000);
 
       try {
         // Fetch payment methods from backend
@@ -552,6 +558,11 @@ class StripeService {
           signal: controller.signal,
         });
 
+        // Check if we timed out even if fetch didn't abort properly
+        if (didTimeout) {
+          throw { type: 'network_error', code: 'timeout', message: 'Network request timed out' };
+        }
+
         if (!response.ok) {
           // Treat non-OK responses as errors so callers can distinguish
           // between an empty list and an API failure.
@@ -561,6 +572,12 @@ class StripeService {
         }
 
         const data = await response.json();
+        
+        // Final timeout check before returning data
+        if (didTimeout) {
+          throw { type: 'network_error', code: 'timeout', message: 'Network request timed out' };
+        }
+        
         return (data.paymentMethods || []).map((pm: unknown) => {
           // Type guard for payment method data
           const pmData = pm as Record<string, unknown>;
