@@ -156,9 +156,25 @@ if (isSupabaseConfigured) {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s global timeout
         
+        // If options already has a signal, we need to handle both signals
+        const originalSignal = options.signal
+        let combinedSignal = controller.signal
+        
+        // If there's an existing signal, listen to both
+        if (originalSignal) {
+          // Create a new controller that aborts when either signal aborts
+          const combinedController = new AbortController()
+          const abortBoth = () => combinedController.abort()
+          
+          originalSignal.addEventListener('abort', abortBoth, { once: true })
+          controller.signal.addEventListener('abort', abortBoth, { once: true })
+          
+          combinedSignal = combinedController.signal
+        }
+        
         return fetch(url, {
           ...options,
-          signal: controller.signal,
+          signal: combinedSignal,
         }).finally(() => clearTimeout(timeoutId))
       },
     },

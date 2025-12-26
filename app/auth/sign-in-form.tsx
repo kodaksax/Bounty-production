@@ -18,6 +18,7 @@ import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { AUTH_RETRY_CONFIG, getAuthErrorMessage, isNetworkError, isTimeoutError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
@@ -67,9 +68,8 @@ export function SignInForm() {
         console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
 
         // Attempt sign-in with optimized timeout and retry strategy
-        // Reduced timeout to 20s per attempt for faster feedback
-        const AUTH_TIMEOUT = 20000 // 20s per attempt
-        const MAX_ATTEMPTS = 2 // Total max time: ~40s with backoff
+        // Using constants from AUTH_RETRY_CONFIG for consistency
+        const { AUTH_TIMEOUT, MAX_ATTEMPTS } = AUTH_RETRY_CONFIG
         let lastErr: any = null
         let data: any = null
         let error: any = null
@@ -94,13 +94,16 @@ export function SignInForm() {
             
             // If last attempt, rethrow below
             if (attempt < MAX_ATTEMPTS) {
-              // Check if this is a network connectivity issue
-              const net = await NetInfo.fetch()
-              if (!net.isConnected) {
-                throw new Error('No internet connection. Please check your network and try again.')
+              // Only check network if error suggests connectivity issue
+              // This avoids unnecessary NetInfo calls on every retry
+              if (isNetworkError(e)) {
+                const net = await NetInfo.fetch()
+                if (!net.isConnected) {
+                  throw new Error('No internet connection. Please check your network and try again.')
+                }
               }
               
-              // Exponential backoff: 1s, 2s, etc.
+              // Exponential backoff using utility function
               const backoff = 1000 * attempt
               console.log(`[sign-in] Retrying in ${backoff}ms...`)
               await new Promise((r) => setTimeout(r, backoff))
@@ -114,11 +117,8 @@ export function SignInForm() {
           console.error('[sign-in] Authentication error:', error)
         } else if (lastErr) {
           console.error('[sign-in] Authentication failed after retries:', lastErr)
-          // Provide more specific error message based on error type
-          if (lastErr.message?.includes('Network request timed out')) {
-            throw new Error('Sign-in is taking longer than expected. This might be due to slow network or server issues. Please try again.')
-          }
-          throw lastErr
+          // Provide more specific error message using shared utility
+          throw new Error(getAuthErrorMessage(lastErr))
         }
 
         if (error) {
@@ -176,7 +176,7 @@ export function SignInForm() {
           }
 
           // Check if user has completed onboarding (has profile in Supabase)
-          // Use shorter timeout for faster feedback, with graceful fallback
+          // Use optimized timeout from config
           console.log('[sign-in] Checking user profile for:', data.session.user.id)
           
           try {
@@ -186,7 +186,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              8000 // 8 second timeout for profile check - faster feedback
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
             )
 
             if (profileError) {
@@ -225,17 +225,8 @@ export function SignInForm() {
       } catch (err: any) {
         console.error('[sign-in] Sign-in error:', err)
         
-        // Provide user-friendly error messages
-        if (err.message?.includes('No internet connection')) {
-          throw err // Pass through network errors as-is
-        }
-        
-        if (err.message?.includes('Network request timed out')) {
-          throw new Error('Sign-in is taking longer than expected. This might be due to slow network or server issues. Please try again.')
-        }
-        
-        // For other errors, pass through or wrap with generic message
-        throw err
+        // Use shared error message utility for consistent messaging
+        throw new Error(getAuthErrorMessage(err))
       }
     },
     {
@@ -328,13 +319,13 @@ export function SignInForm() {
         setSocialAuthLoading(true)
         console.log('[google] Starting Google sign-in with id_token')
         
-        // Add timeout to Google sign-in
+        // Add timeout to Google sign-in using config constant
         const { data, error } = await withTimeout(
           supabase.auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
           }),
-          15000 // 15 second timeout for social auth
+          AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT
         )
         
         if (error) throw error
@@ -349,7 +340,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              8000 // 8 second timeout
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
             )
 
             if (!profile || !profile.username) {
@@ -368,12 +359,8 @@ export function SignInForm() {
           setSocialAuthError('No session returned after Google sign-in.')
         }
       } catch (e: any) {
-        const errorMsg = e?.message || 'Google sign-in failed'
-        if (errorMsg.includes('Network request timed out')) {
-          setSocialAuthError('Google sign-in timed out. Please try again.')
-        } else {
-          setSocialAuthError(errorMsg)
-        }
+        const errorMsg = getAuthErrorMessage(e)
+        setSocialAuthError(errorMsg)
         console.error('[google] Error:', e)
       } finally {
         setSocialAuthLoading(false)
@@ -520,7 +507,7 @@ export function SignInForm() {
                             provider: 'apple',
                             token: credential.identityToken,
                           }),
-                          15000 // 15 second timeout
+                          AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT
                         )
                         
                         if (error) throw error
@@ -535,7 +522,7 @@ export function SignInForm() {
                                 .select('username')
                                 .eq('id', data.session.user.id)
                                 .single(),
-                              8000 // 8 second timeout
+                              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
                             )
 
                             if (!profile || !profile.username) {
@@ -550,12 +537,8 @@ export function SignInForm() {
                         }
                       } catch (e: any) {
                         if (e?.code !== 'ERR_REQUEST_CANCELED') {
-                          const errorMsg = e?.message || 'Apple sign-in failed'
-                          if (errorMsg.includes('Network request timed out')) {
-                            setSocialAuthError('Apple sign-in timed out. Please try again.')
-                          } else {
-                            setSocialAuthError('Apple sign-in failed')
-                          }
+                          const errorMsg = getAuthErrorMessage(e)
+                          setSocialAuthError(errorMsg)
                           console.error('[apple] Error:', e)
                         }
                       }

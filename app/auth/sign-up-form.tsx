@@ -8,6 +8,7 @@ import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { AUTH_RETRY_CONFIG, getAuthErrorMessage } from '../../lib/utils/auth-errors'
 import { validateEmail } from '../../lib/utils/auth-validation'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
@@ -87,7 +88,7 @@ export function SignUpForm() {
             data: { age_verified: ageVerified }
           }
         }),
-        20000 // 20 second timeout
+        AUTH_RETRY_CONFIG.SIGNUP_TIMEOUT
       )
       
       if (error) {
@@ -124,11 +125,8 @@ export function SignUpForm() {
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e)
       
-      if (e?.message?.includes('Network request timed out')) {
-        setAuthError('Sign-up is taking longer than expected. Please check your internet connection and try again.')
-      } else {
-        setAuthError(e?.message || 'An unexpected error occurred. Please try again.')
-      }
+      // Use shared error message utility for consistent messaging
+      setAuthError(getAuthErrorMessage(e))
     } finally {
       setIsLoading(false)
     }
