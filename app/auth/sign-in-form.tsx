@@ -1,5 +1,6 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import NetInfo from '@react-native-community/netinfo'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { makeRedirectUri, ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
@@ -63,14 +64,51 @@ export function SignInForm() {
         // If identifier may be username, your backend should resolve username -> email.
         // Here we assume email sign-in with 15 second timeout
         console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
-        
-        const { data, error } = await withTimeout(
-          supabase.auth.signInWithPassword({
-            email: identifier.trim().toLowerCase(), // Normalize email
-            password,
-          }),
-          15000 // 15 second timeout for auth request
-        )
+
+        // Quick network pre-check to fail fast when offline
+        const net = await NetInfo.fetch()
+        if (!net.isConnected) {
+          throw new Error('No internet connection')
+        }
+
+        // Attempt sign-in with retry/backoff for transient failures
+        const AUTH_TIMEOUT = 30000 // 30s
+        const MAX_ATTEMPTS = 2
+        let lastErr: any = null
+        let data: any = null
+        let error: any = null
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            const res = await withTimeout(
+              supabase.auth.signInWithPassword({
+                email: identifier.trim().toLowerCase(),
+                password,
+              }),
+              AUTH_TIMEOUT
+            )
+            data = res.data
+            error = res.error
+            // break out on success or server-side auth error
+            break
+          } catch (e: any) {
+            lastErr = e
+            // If last attempt, rethrow below
+            if (attempt < MAX_ATTEMPTS) {
+              const backoff = 500 * attempt
+              console.log(`[sign-in] Attempt ${attempt} failed, retrying in ${backoff}ms`, e.message || e)
+              await new Promise((r) => setTimeout(r, backoff))
+              continue
+            }
+          }
+        }
+
+        if (error) {
+          console.error('[sign-in] Authentication error:', error)
+        } else if (lastErr) {
+          console.error('[sign-in] Authentication failed after retries:', lastErr)
+          throw lastErr
+        }
 
         if (error) {
           console.error('[sign-in] Authentication error:', error)

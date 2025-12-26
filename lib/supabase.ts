@@ -15,11 +15,89 @@ type StorageAdapter = {
 const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
   Platform.OS === 'ios' ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined;
 
+// Chunking adapter: expo-secure-store may warn/fail when storing values larger
+// than ~2048 bytes. Supabase stores a session object that can exceed this size
+// (user metadata). To avoid failures, split large values into smaller chunks.
+const CHUNK_SIZE = 1900 // safe chunk size below 2048
+const CHUNK_META_SUFFIX = '__chunkCount'
+
 const ExpoSecureStoreAdapter: StorageAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value, SECURE_OPTS),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
+  getItem: async (key: string) => {
+    try {
+      const val = await SecureStore.getItemAsync(key)
+      // If marker value indicates chunked payload, reassemble
+      if (val === '__chunked__') {
+        const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX)
+        const count = parseInt(countStr || '0', 10)
+        let out = ''
+        for (let i = 0; i < count; i++) {
+          const part = await SecureStore.getItemAsync(`${key}__${i}`)
+          out += part ?? ''
+        }
+        return out
+      }
+      return val
+    } catch (e) {
+      // Bubble up the error to caller
+      throw e
+    }
+  },
+
+  setItem: async (key: string, value: string) => {
+    try {
+      if (typeof value !== 'string') value = String(value)
+
+      // If value fits in one item, store directly and clean up any old chunks
+      if (value.length <= CHUNK_SIZE) {
+        await SecureStore.setItemAsync(key, value, SECURE_OPTS)
+
+        // Remove previously stored chunks (if any)
+        const prevCountStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX)
+        if (prevCountStr) {
+          const prevCount = parseInt(prevCountStr, 10) || 0
+          for (let i = 0; i < prevCount; i++) {
+            await SecureStore.deleteItemAsync(`${key}__${i}`)
+          }
+          await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX)
+        }
+
+        return
+      }
+
+      // Chunk the value
+      const chunks = Math.ceil(value.length / CHUNK_SIZE)
+      for (let i = 0; i < chunks; i++) {
+        const part = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        await SecureStore.setItemAsync(`${key}__${i}`, part, SECURE_OPTS)
+      }
+
+      // Write marker and metadata
+      await SecureStore.setItemAsync(key, '__chunked__', SECURE_OPTS)
+      await SecureStore.setItemAsync(key + CHUNK_META_SUFFIX, String(chunks), SECURE_OPTS)
+    } catch (e) {
+      throw e
+    }
+  },
+
+  removeItem: async (key: string) => {
+    try {
+      const val = await SecureStore.getItemAsync(key)
+      if (val === '__chunked__') {
+        const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX)
+        const count = parseInt(countStr || '0', 10)
+        for (let i = 0; i < count; i++) {
+          await SecureStore.deleteItemAsync(`${key}__${i}`)
+        }
+        await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX)
+        await SecureStore.deleteItemAsync(key)
+      } else {
+        await SecureStore.deleteItemAsync(key)
+      }
+    } catch (e) {
+      throw e
+    }
+  },
+}
 
 // Public (client) env vars MUST be prefixed with EXPO_PUBLIC_ to be inlined by Expo.
 // Never expose the service role key here – that belongs ONLY on the backend.

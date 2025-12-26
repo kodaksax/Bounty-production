@@ -30,6 +30,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const isInitializingRef = useRef<boolean>(true)
   const profileFetchCompletedRef = useRef<boolean>(false)
   const sessionIdRef = useRef<string | null>(null)
+  const lastProfileLogRef = useRef<string | null>(null)
 
   /**
    * Manually refresh the session token
@@ -345,20 +346,34 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const unsubscribe = authProfileService.subscribe((authProfile) => {
       setProfile(authProfile)
-      
+
       // Only set isLoading to false if:
       // 1. No session exists (immediate subscription callback with null), OR
       // 2. Profile fetch has completed (after setSession finishes)
       const currentSessionId = sessionIdRef.current
-      if (!currentSessionId || profileFetchCompletedRef.current) {
-        console.log('[AuthProvider] Profile update received, setting isLoading to false:', {
-          hasSession: Boolean(currentSessionId),
-          hasProfile: Boolean(authProfile),
-          username: authProfile?.username
-        })
+      const shouldSetLoadingFalse = !currentSessionId || profileFetchCompletedRef.current
+
+      // Only log profile updates in development and only when the username changes
+      try {
+        const username = authProfile?.username ?? null
+        if (__DEV__ && lastProfileLogRef.current !== username) {
+          lastProfileLogRef.current = username
+          if (shouldSetLoadingFalse) {
+            console.log('[AuthProvider] Profile update received, setting isLoading to false:', {
+              hasSession: Boolean(currentSessionId),
+              hasProfile: Boolean(authProfile),
+              username,
+            })
+          } else {
+            console.log('[AuthProvider] Profile update received but waiting for fetch to complete')
+          }
+        }
+      } catch (e) {
+        // swallow logging errors
+      }
+
+      if (shouldSetLoadingFalse) {
         setIsLoading(false)
-      } else {
-        console.log('[AuthProvider] Profile update received but waiting for fetch to complete')
       }
       
       // Email verification gate: Also check profile for email_verified flag (some profile shapes include this field)
