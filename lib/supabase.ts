@@ -149,6 +149,19 @@ if (isSupabaseConfigured) {
       persistSession: true,
       detectSessionInUrl: false,
     },
+    global: {
+      // Add custom fetch with timeout to prevent hanging requests
+      // This applies to all Supabase operations (auth, database, storage, etc.)
+      fetch: (url, options = {}) => {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s global timeout
+        
+        return fetch(url, {
+          ...options,
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId))
+      },
+    },
   })
 } else {
   const reasons: string[] = []
