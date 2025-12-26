@@ -7,22 +7,35 @@ import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
 import { withTimeout } from '../lib/utils/withTimeout'
 import { AddCardModal } from "./add-card-modal"
+import { AddBankAccountModal } from "./add-bank-account-modal"
 
+type PaymentMethodType = 'card' | 'bank_account'
 
 interface PaymentMethodsModalProps {
   isOpen: boolean
   onClose: () => void
+  /** Preferred method type to show (optional) */
+  preferredType?: PaymentMethodType
 }
 
-export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProps) {
+export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentMethodsModalProps) {
   const modalRef = useRef<View>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState(0)
   const [initialY, setInitialY] = useState(0)
   const [showAddCard, setShowAddCard] = useState(false)
+  const [showAddBankAccount, setShowAddBankAccount] = useState(false)
+  const [selectedMethodType, setSelectedMethodType] = useState<PaymentMethodType>(preferredType || 'card')
   
   const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
   const [loadFailed, setLoadFailed] = useState(false)
+
+  // Initialize selected method type when modal opens, honoring preferredType if provided
+  React.useEffect(() => {
+    if (isOpen && preferredType) {
+      setSelectedMethodType(preferredType)
+    }
+  }, [isOpen, preferredType])
 
   // Use shared timeout helper for retryable fetches with exponential backoff
   const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
@@ -81,7 +94,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
   }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !showAddCard) {
+    if (e.target === e.currentTarget && !showAddCard && !showAddBankAccount) {
       onClose()
     }
   }
@@ -196,9 +209,72 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               refreshWithRetry(3, 10000)
             }}
           />
+        ) : showAddBankAccount ? (
+          <AddBankAccountModal
+            embedded={true}
+            onBack={() => setShowAddBankAccount(false)}
+            onSave={(bankData) => {
+              // Bank account added through backend
+              setShowAddBankAccount(false)
+              // Refresh payment methods
+              refreshWithRetry(3, 10000)
+            }}
+          />
         ) : (
           <View style={{ padding: 20, paddingBottom: 32, minHeight: 400 }}>
-            {/* Add Card Button - larger touch target for iPhone */}
+            {/* Method Type Tabs */}
+            <View style={{
+              flexDirection: 'row',
+              marginBottom: 20,
+              backgroundColor: '#047857',
+              borderRadius: 12,
+              padding: 4,
+            }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  backgroundColor: selectedMethodType === 'card' ? '#059669' : 'transparent',
+                }}
+                onPress={() => setSelectedMethodType('card')}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: selectedMethodType === 'card' }}
+                accessibilityLabel="Cards"
+              >
+                <Text style={{
+                  color: 'white',
+                  textAlign: 'center',
+                  fontWeight: selectedMethodType === 'card' ? '600' : '400',
+                  fontSize: 15,
+                }}>
+                  Cards
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  backgroundColor: selectedMethodType === 'bank_account' ? '#059669' : 'transparent',
+                }}
+                onPress={() => setSelectedMethodType('bank_account')}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: selectedMethodType === 'bank_account' }}
+                accessibilityLabel="Bank Accounts"
+              >
+                <Text style={{
+                  color: 'white',
+                  textAlign: 'center',
+                  fontWeight: selectedMethodType === 'bank_account' ? '600' : '400',
+                  fontSize: 15,
+                }}>
+                  Bank Accounts
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Add Method Button */}
             <TouchableOpacity
               style={{ 
                 flexDirection: 'row', 
@@ -207,14 +283,16 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                 borderRadius: 14,
                 padding: 18,
                 marginBottom: 20,
-                minHeight: 56, // Comfortable touch target
+                minHeight: 56,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.1,
                 shadowRadius: 4,
                 elevation: 3
               }}
-              onPress={() => setShowAddCard(true)}
+              onPress={() => selectedMethodType === 'card' ? setShowAddCard(true) : setShowAddBankAccount(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Add new ${selectedMethodType === 'card' ? 'card' : 'bank account'}`}
             >
               <MaterialIcons name="add" size={26} color="#ffffff" />
               <Text style={{ 
@@ -222,7 +300,9 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                 fontWeight: '600', 
                 marginLeft: 10,
                 fontSize: 16 
-              }}>Add New Card</Text>
+              }}>
+                {selectedMethodType === 'card' ? 'Add New Card' : 'Add Bank Account'}
+              </Text>
             </TouchableOpacity>
 
             {/* Payment Methods List */}
@@ -230,7 +310,7 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <Text style={{ color: 'white', fontSize: 16 }}>Loading payment methods...</Text>
               </View>
-            ) : paymentMethods.length === 0 ? (
+            ) : selectedMethodType === 'card' && paymentMethods.length === 0 ? (
               // Show error state if load ultimately failed
               loadFailed || stripeError ? (
                 <View style={{ alignItems: 'center', padding: 20 }}>
@@ -275,6 +355,20 @@ export function PaymentMethodsModal({ isOpen, onClose }: PaymentMethodsModalProp
                 </Text>
               </View>
               )
+            ) : selectedMethodType === 'bank_account' ? (
+              // Bank accounts - UI for listing will be added in future iteration
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <MaterialIcons name="account-balance" size={56} color="rgba(255,255,255,0.4)" />
+                <Text style={{ 
+                  color: 'rgba(255,255,255,0.8)', 
+                  textAlign: 'center', 
+                  marginTop: 16,
+                  fontSize: 16,
+                  lineHeight: 24
+                }}>
+                  No bank accounts added yet.{'\n'}Add a bank account for ACH payments.
+                </Text>
+              </View>
             ) : (
               <FlatList
                 data={paymentMethods}

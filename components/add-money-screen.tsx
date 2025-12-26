@@ -68,7 +68,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       if (paymentMethods.length === 0) {
         Alert.alert(
           'No Payment Method', 
-          'You need to add a payment method before you can add money to your wallet.',
+          'You need to add a payment method before you can add money to your wallet. Choose from cards or bank accounts.',
           [
             { text: 'Cancel', style: 'cancel' },
             { 
