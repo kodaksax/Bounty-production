@@ -1,5 +1,9 @@
 # Sign-In Timeout Fix - Visual Flow Diagram
 
+> **⚠️ DOCUMENTATION NOTE:** This document shows the conceptual flow with initial timeout values (20s).
+> **ACTUAL IMPLEMENTATION:** AUTH_TIMEOUT = 30s for better reliability.
+> Focus: Improved error handling, structured error detection, and true exponential backoff.
+
 ## Before Fix - Problematic Flow
 
 ```

@@ -1,5 +1,9 @@
 # Sign-In Timeout Issue - Resolution Summary
 
+> **⚠️ DOCUMENTATION NOTE:** The timeout values in this document were updated after initial implementation.
+> **ACTUAL VALUES:** AUTH_TIMEOUT = 30s (not 20s), Total max time = ~62s (not 41s)
+> Focus was on **reliability and better error handling** rather than speed improvements.
+
 ## Problem Statement
 
 Users were experiencing timeout errors during sign-in despite having strong internet connections. The error message displayed:
@@ -51,10 +55,10 @@ const MAX_ATTEMPTS = 2
 
 **After:**
 ```typescript
-const AUTH_TIMEOUT = 20000 // 20s per attempt
+const AUTH_TIMEOUT = 30000 // 30s per attempt (maintained for reliability)
 const MAX_ATTEMPTS = 2
-// Total possible time: 20s + 1s + 20s = ~41s
-// 32% faster failure feedback
+// Total possible time: 30s + exponential backoff + 30s = ~62s max
+// Improved: Better error detection and exponential backoff
 ```
 
 **Profile Check:**
@@ -217,19 +221,24 @@ console.log('[sign-in] Profile complete, redirecting to app')
 
 ### Performance Improvements
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Max timeout (auth) | 30s | 20s | 33% faster |
-| Max timeout (profile) | 10s | 8s | 20% faster |
-| Total max time | 60.5s | 41s | 32% faster |
-| Retry backoff | 500ms, 1s | 1s, 2s | More aggressive |
-| Global fetch timeout | None | 30s | Prevents hanging |
+| Metric | Before | After | Notes |
+|--------|--------|-------|-------|
+| Max timeout (auth) | 30s | 30s | Maintained for reliability (not reduced) |
+| Max timeout (profile) | 10s | 10s | Maintained for reliability |
+| Total max time | 60.5s | ~62s | Similar; focus on reliability over speed |
+| Retry backoff | 500ms, 1s | 1s, 2s, 4s, 8s | True exponential backoff |
+| Global fetch timeout | None | Removed | Let Supabase handle internally |
 
 ## Files Modified
 
 1. **app/auth/sign-in-form.tsx**
-   - Optimized auth timeout (30s → 20s)
+   - Maintained auth timeout at 30s for reliability
    - Improved retry logic with network check inside loop
+   - Enhanced error messages
+   - Better logging
+   - True exponential backoff (1s, 2s, 4s, 8s)
+   - Fixed profile check to not bypass onboarding
+   - Security: Only log PII in development mode
    - Enhanced error messages
    - Better logging
    - Optimized profile check timeout (10s → 8s)
@@ -237,7 +246,9 @@ console.log('[sign-in] Profile complete, redirecting to app')
    - Added timeout to Apple sign-in
 
 2. **app/auth/sign-up-form.tsx**
-   - Added timeout wrapper (20s)
+   - Added timeout wrapper (30s)
+   - Improved error messages
+   - Enhanced logging
    - Improved error messages
    - Enhanced logging
 
@@ -269,11 +280,12 @@ console.log('[sign-in] Profile complete, redirecting to app')
 - ❌ Frustrating experience
 
 ### After Fix
-- ✅ Faster error feedback (max 41s vs 60s+)
+- ✅ Similar total timeout (~62s max) but with better experience
 - ✅ Clear, actionable error messages
 - ✅ Better distinction between network and server issues
-- ✅ Improved user experience
+- ✅ Improved user experience with better error detection
 - ✅ Graceful fallbacks prevent blocking users
+- ✅ True exponential backoff for better retry strategy
 
 ## Related Documentation
 

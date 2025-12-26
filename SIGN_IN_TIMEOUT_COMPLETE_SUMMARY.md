@@ -1,5 +1,9 @@
 # Sign-In Timeout Issue Resolution - Complete Summary
 
+> **⚠️ DOCUMENTATION NOTE:** Timeout values mentioned below reflect the initial plan.
+> **ACTUAL IMPLEMENTATION:** AUTH_TIMEOUT = 30s (maintained for reliability), focus on better error handling and structured error detection rather than speed.
+> See commit 54e1f95 for final implementation details.
+
 ## Overview
 This document provides a comprehensive summary of the sign-in timeout issue resolution, including problem analysis, solutions implemented, code review feedback addressed, and testing recommendations.
 

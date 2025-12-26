@@ -1,5 +1,9 @@
 # Sign-In Timeout Fix - Testing Guide
 
+> **⚠️ DOCUMENTATION NOTE:** Test expectations below reference initial timeout values (20s).
+> **ACTUAL IMPLEMENTATION:** AUTH_TIMEOUT = 30s, adjust test expectations accordingly.
+> **Updated expectations:** First timeout ~30s, Total max time ~62s with retries.
+
 ## Overview
 This guide provides test scenarios to verify the sign-in timeout fixes work correctly across different network conditions and edge cases.
 
