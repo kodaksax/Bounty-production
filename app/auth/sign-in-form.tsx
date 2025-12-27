@@ -109,8 +109,12 @@ export function SignInForm() {
             
             data = res.data
             error = res.error
-            // break out on success or server-side auth error
-            break
+            
+            // If we got a response (success or auth error), don't retry
+            // Auth errors like "Invalid credentials" should fail fast
+            if (res.data || res.error) {
+              break
+            }
           } catch (e: any) {
             lastErr = e
             console.error(`[sign-in] Attempt ${attempt} failed:`, e.message || e)
@@ -213,30 +217,30 @@ export function SignInForm() {
             // swallow analytics errors
           }
 
-          // Check if user has completed onboarding (has profile in Supabase)
-          // Use optimized timeout from config
-          console.log('[sign-in] Checking user profile for:', data.session.user.id)
+          // OPTIMIZED: Quick profile check with fast timeout and immediate navigation
+          // The AuthProvider will handle full profile sync in the background
+          console.log('[sign-in] Performing quick profile check for:', data.session.user.id)
           
           try {
+            // Use a very short timeout for the profile check - just to determine onboarding status
             const { data: profile, error: profileError } = await withTimeout(
               supabase
                 .from('profiles')
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
             )
 
             if (profileError) {
-              console.error('[sign-in] Profile check error:', profileError)
               // If profile doesn't exist (PGRST116), user needs onboarding
               if (profileError.code === 'PGRST116') {
                 console.log('[sign-in] No profile found, redirecting to onboarding')
                 router.replace('/onboarding/username')
                 return
               }
-              // For other errors, log but continue - let AuthProvider handle it
-              console.warn('[sign-in] Profile check failed, proceeding to app. AuthProvider will sync.')
+              // For other errors, proceed to app - AuthProvider will handle sync
+              console.log('[sign-in] Profile check error, proceeding to app:', profileError.message)
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
               return
             }
@@ -251,18 +255,10 @@ export function SignInForm() {
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
           } catch (profileCheckError: any) {
-            console.error('[sign-in] Profile check timeout or error:', profileCheckError)
-            
-            // Distinguish between different error types to route appropriately
-            if (isTimeoutError(profileCheckError) || isNetworkError(profileCheckError)) {
-              // Network/timeout issues - assume profile exists and let AuthProvider sync
-              console.log('[sign-in] Network/timeout error during profile check. Proceeding to app, AuthProvider will sync.')
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
-            } else {
-              // Other errors (like profile not found) - redirect to onboarding to be safe
-              console.log('[sign-in] Profile check failed, redirecting to onboarding')
-              router.replace('/onboarding/username')
-            }
+            // On timeout or error, proceed to app and let AuthProvider handle it
+            // This prevents blocking the user from signing in due to profile check issues
+            console.log('[sign-in] Profile check timeout/error, proceeding to app. AuthProvider will sync.')
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
           throw new Error('Authentication failed. Please try again.')
@@ -377,7 +373,7 @@ export function SignInForm() {
         if (data.session) {
           console.log('[google] Sign-in successful, checking profile')
           
-          // Check if user has completed onboarding with timeout
+          // Quick profile check with fast timeout
           try {
             const { data: profile } = await withTimeout(
               supabase
@@ -385,7 +381,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
             )
 
             if (!profile || !profile.username) {
@@ -396,21 +392,9 @@ export function SignInForm() {
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
           } catch (profileError: any) {
-            console.error('[google] Profile check failed during Google sign-in:', profileError)
-
-            // Do NOT proceed to the app on profile check failure if it's not a timeout/network issue
-            if (isTimeoutError(profileError) || isNetworkError(profileError)) {
-              // Network/timeout issues - proceed to app, AuthProvider will sync
-              console.log('[google] Network/timeout error during profile check. Proceeding to app.')
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
-            } else {
-              // Other errors - show error and keep user on auth screen
-              const friendlyMessage = getUserFriendlyError(profileError)
-              setSocialAuthError(
-                friendlyMessage ||
-                'We could not verify your profile. Please try again in a moment or contact support if this continues.'
-              )
-            }
+            console.log('[google] Profile check failed, proceeding to app. AuthProvider will sync.')
+            // On error/timeout, proceed to app - AuthProvider will handle profile sync
+            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
           setSocialAuthError('No session returned after Google sign-in.')
@@ -571,7 +555,7 @@ export function SignInForm() {
                         if (data.session) {
                           console.log('[apple] Sign-in successful, checking profile')
                           
-                          // Check if user has completed onboarding with timeout
+                          // Quick profile check with fast timeout
                           try {
                             const { data: profile } = await withTimeout(
                               supabase
@@ -579,7 +563,7 @@ export function SignInForm() {
                                 .select('username')
                                 .eq('id', data.session.user.id)
                                 .single(),
-                              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT
+                              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
                             )
 
                             if (!profile || !profile.username) {
@@ -588,18 +572,9 @@ export function SignInForm() {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                             }
                           } catch (profileError: any) {
-                            console.error('[apple] Profile check failed during Apple sign-in:', profileError)
-                            
-                            // Do NOT proceed to the app on profile check failure if it's not a timeout/network issue
-                            if (isTimeoutError(profileError) || isNetworkError(profileError)) {
-                              // Network/timeout issues - proceed to app, AuthProvider will sync
-                              console.log('[apple] Network/timeout error during profile check. Proceeding to app.')
-                              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
-                            } else {
-                              // Other errors - redirect to onboarding to be safe
-                              console.log('[apple] Profile check failed, redirecting to onboarding')
-                              router.replace('/onboarding/username')
-                            }
+                            console.log('[apple] Profile check failed, proceeding to app. AuthProvider will sync.')
+                            // On error/timeout, proceed to app - AuthProvider will handle profile sync
+                            router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                           }
                         }
                       } catch (e: any) {

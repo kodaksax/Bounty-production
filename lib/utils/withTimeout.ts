@@ -1,5 +1,6 @@
-// Small helper to race a promise against a timeout.
+// Helper to race a promise against a timeout.
 // Ensures the timer is cleaned up when the provided promise settles.
+// Note: This does not cancel the underlying operation; it only rejects the promise after the timeout.
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
