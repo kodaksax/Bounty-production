@@ -35,7 +35,7 @@ SIGNUP_TIMEOUT: 30000,      // 30 seconds
 
 // AFTER  
 AUTH_TIMEOUT: 15000,        // 15 seconds (50% faster)
-PROFILE_TIMEOUT: 5000,      // 5 seconds (50% faster)
+PROFILE_TIMEOUT: 3000,      // 3 seconds (70% faster)
 SOCIAL_AUTH_TIMEOUT: 15000, // 15 seconds (25% faster)
 SIGNUP_TIMEOUT: 20000,      // 20 seconds (33% faster)
 ```
@@ -111,32 +111,33 @@ try {
 }
 ```
 
-### 6. Enhanced AbortController in withTimeout
+### 6. Enhanced withTimeout utility
 
 **File: `lib/utils/withTimeout.ts`**
 
-- Added AbortController to cancel pending requests on timeout
-- Helps prevent resource leaks and stale requests
+- Simplified timeout implementation with proper cleanup
+- Note: Does not cancel underlying operations; only rejects the promise after timeout
+- Timer is properly cleaned up when promise settles
 
 ## Performance Improvements
 
 | Operation | Before | After | Improvement |
 |-----------|--------|-------|-------------|
 | **Auth timeout** | 30s | 15s | **50% faster** |
-| **Profile check** | 10s | 3-5s | **50-70% faster** |
+| **Profile check** | 10s | 3s | **70% faster** |
 | **Social auth** | 20s | 15s | **25% faster** |
 | **Sign-out** | No timeout | 10s | **Prevents hangs** |
-| **Total sign-in (typical)** | 40-50s | 18-20s max, 2-4s typical | **60-80% faster** |
+| **Total sign-in (typical)** | 40-50s | 18s max, 2-4s typical | **60-80% faster** |
 | **Invalid credentials** | 30s+ | 1-2s | **93% faster** |
 
 ## Files Modified
 
-1. **lib/utils/auth-errors.ts** - Reduced timeout constants
-2. **lib/utils/withTimeout.ts** - Added AbortController support
-3. **app/auth/sign-in-form.tsx** - Optimized sign-in flow and profile check
-4. **lib/services/auth-profile-service.ts** - Reduced profile fetch timeouts
-5. **components/social-auth-controls/sign-out-button.tsx** - Added sign-out timeout
-6. **components/settings-screen.tsx** - Added sign-out timeout with fallback
+1. **lib/utils/auth-errors.ts** - Reduced timeout constants (profile timeout 10s → 3s)
+2. **lib/utils/withTimeout.ts** - Simplified timeout implementation with proper cleanup
+3. **app/auth/sign-in-form.tsx** - Optimized sign-in flow with consistent timeout usage
+4. **lib/services/auth-profile-service.ts** - Reduced profile fetch timeouts (10s → 5s)
+5. **components/social-auth-controls/sign-out-button.tsx** - Added sign-out timeout with error handling
+6. **components/settings-screen.tsx** - Added sign-out timeout with fallback and static imports
 
 ## Testing Recommendations
 

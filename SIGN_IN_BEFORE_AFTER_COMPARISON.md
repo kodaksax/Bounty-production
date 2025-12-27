@@ -162,12 +162,12 @@ export const AUTH_RETRY_CONFIG = {
 ```typescript
 export const AUTH_RETRY_CONFIG = {
   AUTH_TIMEOUT: 15000,        // 15 seconds (50% faster)
-  PROFILE_TIMEOUT: 5000,      // 5 seconds (50% faster)
+  PROFILE_TIMEOUT: 3000,      // 3 seconds (70% faster)
   SOCIAL_AUTH_TIMEOUT: 15000, // 15 seconds (25% faster)
 }
 ```
 
-**Impact:** Faster error feedback, reduces wait time by 50%
+**Impact:** Faster error feedback, reduces wait time by 50-70%
 
 ### 2. Sign-In Flow
 
@@ -271,7 +271,7 @@ async function onSignOutButtonPress() {
 
 **Impact:** Users never get stuck on logout
 
-### 5. AbortController Enhancement
+### 5. Simplified withTimeout Implementation
 
 **Before:**
 ```typescript
@@ -286,18 +286,21 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number) {
 **After:**
 ```typescript
 export async function withTimeout<T>(promise: Promise<T>, ms: number) {
-  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      controller.abort() // Cancel the request
+    timer = setTimeout(() => {
       reject(new Error('timeout'))
     }, ms)
   })
-  return await Promise.race([promise, timeoutPromise])
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timer) clearTimeout(timer) // Proper cleanup
+  }
 }
 ```
 
-**Impact:** Prevents resource leaks, cancels stale requests
+**Impact:** Proper timer cleanup, consistent behavior
 
 ## Performance Metrics
 

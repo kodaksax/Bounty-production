@@ -132,7 +132,7 @@ export function getAuthErrorMessage(error: any): string {
 export const AUTH_RETRY_CONFIG = {
   MAX_ATTEMPTS: 2,
   AUTH_TIMEOUT: 15000, // 15 seconds - reduced from 30s for faster feedback
-  PROFILE_TIMEOUT: 5000, // 5 seconds - reduced from 10s, profile checks are typically fast
+  PROFILE_TIMEOUT: 3000, // 3 seconds - reduced from 10s, profile checks are typically fast
   SOCIAL_AUTH_TIMEOUT: 15000, // 15 seconds - reduced from 20s
   SIGNUP_TIMEOUT: 20000, // 20 seconds - reduced from 30s
 } as const

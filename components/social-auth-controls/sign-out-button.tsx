@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button } from 'react-native'
+import { Alert, Button } from 'react-native'
 import { supabase } from '../../lib/supabase'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
@@ -21,6 +21,12 @@ async function onSignOutButtonPress() {
       await supabase.auth.signOut({ scope: 'local' })
     } catch (e) {
       console.error('Failed to clear local session:', e)
+      // If both server and local sign-out fail, alert the user
+      Alert.alert(
+        'Sign Out Error',
+        'Unable to sign out. Please close and restart the app.',
+        [{ text: 'OK' }]
+      )
     }
   }
 }

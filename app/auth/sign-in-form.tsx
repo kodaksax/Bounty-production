@@ -229,7 +229,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              3000 // 3 second timeout - fast decision
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
             )
 
             if (profileError) {
@@ -381,7 +381,7 @@ export function SignInForm() {
                 .select('username')
                 .eq('id', data.session.user.id)
                 .single(),
-              3000 // 3 second timeout - fast decision
+              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
             )
 
             if (!profile || !profile.username) {
@@ -563,7 +563,7 @@ export function SignInForm() {
                                 .select('username')
                                 .eq('id', data.session.user.id)
                                 .single(),
-                              3000 // 3 second timeout - fast decision
+                              AUTH_RETRY_CONFIG.PROFILE_TIMEOUT // 3 second timeout - fast decision
                             )
 
                             if (!profile || !profile.username) {

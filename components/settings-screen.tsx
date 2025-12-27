@@ -10,6 +10,7 @@ import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
+import { withTimeout } from "../lib/utils/withTimeout"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -202,9 +203,6 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
               // Sign out from Supabase with timeout protection
               try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { withTimeout } = require('../lib/utils/withTimeout');
-                
                 const { error } = await withTimeout(
                   supabase.auth.signOut(),
                   10000 // 10 second timeout
@@ -341,8 +339,6 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
                               // Sign out (may already be done by deleteUserAccount)
                               try {
-                                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                                const { withTimeout } = require('../lib/utils/withTimeout');
                                 await withTimeout(
                                   supabase.auth.signOut(),
                                   5000 // 5 second timeout for delete account cleanup
