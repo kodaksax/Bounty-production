@@ -257,11 +257,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      // Skip processing during initialization to avoid race conditions
-      if (isInitializingRef.current) {
-        console.log('[AuthProvider] Skipping auth state change during initialization')
-        return
-      }
+      // Process auth state changes even during initialization to avoid missing SIGNED_IN
+      // events that occur while the initial session fetch is in progress.
+      // We rely on the subsequent logic (profile sync + timers) to be idempotent.
 
       console.log('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
       
