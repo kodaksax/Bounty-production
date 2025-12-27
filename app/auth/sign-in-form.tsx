@@ -83,6 +83,7 @@ export function SignInForm() {
 
         // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
         // The previous complex retry/timeout logic was causing valid requests to fail
+        // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for detailed rationale
         console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`)
         
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -294,6 +295,7 @@ export function SignInForm() {
         console.log('[google] Starting Google sign-in with id_token')
         
         // Simplified: Let Supabase handle its own timeout
+        // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,

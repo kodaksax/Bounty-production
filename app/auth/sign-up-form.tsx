@@ -78,6 +78,7 @@ export function SignUpForm() {
       console.log('[sign-up] Starting sign-up process')
       
       // SIMPLIFIED: Let Supabase handle its own timeout logic
+      // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
       // Pass age verification into user_metadata so backend can persist it
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(), // Normalize email
