@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * Manual Test Script for Remember Me Functionality
+ * Manual Test Guide for Remember Me Functionality
  * 
- * This script demonstrates the remember me behavior by simulating
- * the storage adapter operations.
+ * This script displays testing instructions for validating the remember me
+ * authentication behavior. Run with: node scripts/test-remember-me.js
  * 
- * Run: node scripts/test-remember-me.js
+ * This is an instructional script, not an automated test suite.
+ * Actual testing requires running the mobile app.
  */
 
 const { execSync } = require('child_process');

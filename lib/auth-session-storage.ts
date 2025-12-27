@@ -24,6 +24,11 @@ import { Platform } from 'react-native';
 // Storage key for remember me preference
 const REMEMBER_ME_KEY = 'auth_remember_me_preference';
 
+// Storage key used by Supabase for session data
+// This is the default key that Supabase uses internally
+// Reference: https://github.com/supabase/gotrue-js/blob/master/src/lib/constants.ts
+const SUPABASE_SESSION_KEY = 'supabase.auth.token';
+
 // SecureStore options for iOS
 const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
   Platform.OS === 'ios' ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined;
@@ -76,21 +81,17 @@ export async function clearRememberMePreference(): Promise<void> {
  */
 export async function clearAllSessionData(): Promise<void> {
   try {
-    // Clear the Supabase session key from secure storage
-    // The key used by Supabase is 'supabase.auth.token'
-    const sessionKey = 'supabase.auth.token';
-    
     // Check if it's chunked
-    const val = await SecureStore.getItemAsync(sessionKey);
+    const val = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY);
     if (val === '__chunked__') {
-      const countStr = await SecureStore.getItemAsync(sessionKey + CHUNK_META_SUFFIX);
+      const countStr = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY + CHUNK_META_SUFFIX);
       const count = parseInt(countStr || '0', 10);
       for (let i = 0; i < count; i++) {
-        await SecureStore.deleteItemAsync(`${sessionKey}__${i}`);
+        await SecureStore.deleteItemAsync(`${SUPABASE_SESSION_KEY}__${i}`);
       }
-      await SecureStore.deleteItemAsync(sessionKey + CHUNK_META_SUFFIX);
+      await SecureStore.deleteItemAsync(SUPABASE_SESSION_KEY + CHUNK_META_SUFFIX);
     }
-    await SecureStore.deleteItemAsync(sessionKey);
+    await SecureStore.deleteItemAsync(SUPABASE_SESSION_KEY);
     
     console.log('[AuthSessionStorage] All session data cleared from secure storage');
   } catch (e) {
@@ -153,6 +154,8 @@ export const createAuthSessionStorageAdapter = () => {
         if (!rememberMe) {
           // If remember me is not set, don't persist to secure storage
           // Session will only exist in Supabase's internal memory for this app session
+          // NOTE: We return early without persisting. Callers relying on this behavior
+          // should check the remember me preference separately if needed.
           console.log('[AuthSessionStorage] Remember me is false, not persisting session');
           return;
         }

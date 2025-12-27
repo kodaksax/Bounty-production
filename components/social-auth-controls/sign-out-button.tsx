@@ -6,9 +6,6 @@ import { clearRememberMePreference, clearAllSessionData } from '../../lib/auth-s
 
 async function onSignOutButtonPress() {
   try {
-    // Clear remember me preference first
-    await clearRememberMePreference()
-    
     // Add timeout to prevent hanging on sign out
     const { error } = await withTimeout(
       supabase.auth.signOut(),
@@ -19,14 +16,18 @@ async function onSignOutButtonPress() {
       console.error('Error signing out:', error)
     }
     
+    // Clear remember me preference after successful sign out
+    // This ensures preference is only cleared if sign out succeeds
+    await clearRememberMePreference()
+    
     // Ensure all session data is cleared
     await clearAllSessionData()
   } catch (timeoutError) {
     console.error('Sign out timed out:', timeoutError)
     // Force clear local session even if server signout fails
     try {
-      await clearRememberMePreference()
       await supabase.auth.signOut({ scope: 'local' })
+      await clearRememberMePreference()
       await clearAllSessionData()
     } catch (e) {
       console.error('Failed to clear local session:', e)

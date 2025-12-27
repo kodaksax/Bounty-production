@@ -84,8 +84,14 @@ export function SignInForm() {
 
         // IMPORTANT: Set remember me preference BEFORE authentication
         // This ensures the session storage adapter can immediately use it
-        console.log('[sign-in] Setting remember me preference:', rememberMe)
-        await setRememberMePreference(rememberMe)
+        try {
+          console.log('[sign-in] Setting remember me preference:', rememberMe)
+          await setRememberMePreference(rememberMe)
+        } catch (prefError) {
+          // Don't block sign-in if preference storage fails
+          // The user can still sign in, just won't have persistent session
+          console.warn('[sign-in] Failed to save remember me preference:', prefError)
+        }
 
         // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
         // The previous complex retry/timeout logic was causing valid requests to fail
