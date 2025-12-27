@@ -7,17 +7,17 @@
  * API request timeout configurations
  */
 export const API_TIMEOUTS = {
-  /** Standard timeout for API requests (15 seconds) */
-  DEFAULT: 15000,
-  
+  /** Standard timeout for API requests (15 seconds) - can be overridden with `API_TIMEOUT` env var (ms) */
+  DEFAULT: Number(process.env.API_TIMEOUT ?? process.env.EXPO_PUBLIC_API_TIMEOUT) || 15000,
+
   /** Shorter timeout for quick operations (5 seconds) */
-  QUICK: 5000,
-  
+  QUICK: Number(process.env.API_TIMEOUT_QUICK ?? process.env.EXPO_PUBLIC_API_TIMEOUT_QUICK) || 5000,
+
   /** Longer timeout for file uploads or heavy operations (30 seconds) */
-  LONG: 30000,
-  
+  LONG: Number(process.env.API_TIMEOUT_LONG ?? process.env.EXPO_PUBLIC_API_TIMEOUT_LONG) || 30000,
+
   /** Very long timeout for background sync operations (60 seconds) */
-  BACKGROUND: 60000,
+  BACKGROUND: Number(process.env.API_TIMEOUT_BACKGROUND ?? process.env.EXPO_PUBLIC_API_TIMEOUT_BACKGROUND) || 60000,
 } as const;
 
 /**
