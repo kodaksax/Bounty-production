@@ -18,7 +18,7 @@ import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { AUTH_RETRY_CONFIG, getAuthErrorMessage, getBackoffDelay, isNetworkError, isTimeoutError } from '../../lib/utils/auth-errors'
+import { AUTH_RETRY_CONFIG, getAuthErrorMessage } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
@@ -81,87 +81,20 @@ export function SignInForm() {
           console.log('[sign-in] Attempting to sign in (email redacted for production)')
         }
 
-        // Attempt sign-in with optimized timeout and retry strategy
-        // Using constants from AUTH_RETRY_CONFIG for consistency
-        const { AUTH_TIMEOUT, MAX_ATTEMPTS } = AUTH_RETRY_CONFIG
-        let lastErr: any = null
-        let data: any = null
-        let error: any = null
-
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          try {
-            console.log(`[sign-in] Auth attempt ${attempt}/${MAX_ATTEMPTS} with timeout ${AUTH_TIMEOUT}ms`)
-            console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`)
-            
-            const res = await withTimeout(
-              supabase.auth.signInWithPassword({
-                email: identifier.trim().toLowerCase(),
-                password,
-              }),
-              AUTH_TIMEOUT
-            )
-            
-            console.log(`[sign-in] Auth response received:`, {
-              hasData: Boolean(res.data),
-              hasError: Boolean(res.error),
-              errorMessage: res.error?.message,
-            })
-            
-            data = res.data
-            error = res.error
-            
-            // If we got a response (success or auth error), don't retry
-            // Auth errors like "Invalid credentials" should fail fast
-            if (res.data || res.error) {
-              break
-            }
-          } catch (e: any) {
-            lastErr = e
-            console.error(`[sign-in] Attempt ${attempt} failed:`, e.message || e)
-            
-            // Only include stack trace in development to avoid leaking internals in production logs
-            if (typeof __DEV__ !== 'undefined' && __DEV__) {
-              console.error(`[sign-in] Error details:`, {
-                name: e.name,
-                message: e.message,
-                stack: e.stack?.substring(0, 200),
-              })
-            }
-            
-            // If last attempt, rethrow below
-            if (attempt < MAX_ATTEMPTS) {
-              // Only check network if error suggests connectivity issue
-              // This avoids unnecessary NetInfo calls on every retry
-              if (isNetworkError(e)) {
-                console.log(`[sign-in] Network error detected, checking connectivity...`)
-                const net = await NetInfo.fetch()
-                console.log(`[sign-in] Network status:`, {
-                  isConnected: net.isConnected,
-                  isInternetReachable: net.isInternetReachable,
-                  type: net.type,
-                })
-                if (!net.isConnected) {
-                  throw new Error('No internet connection. Please check your network and try again.')
-                }
-              }
-              
-              // Use exponential backoff for better retry handling
-              const backoff = getBackoffDelay(attempt)
-              console.log(`[sign-in] Retrying in ${backoff}ms...`)
-              await new Promise((r) => setTimeout(r, backoff))
-              continue
-            }
-          }
-        }
-
-        // Handle errors after all retry attempts
-        if (error) {
-          console.error('[sign-in] Authentication error:', error)
-        } else if (lastErr) {
-          console.error('[sign-in] Authentication failed after retries:', lastErr)
-          // Provide more specific error message using shared utility
-          throw new Error(getAuthErrorMessage(lastErr))
-        }
+        // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
+        // The previous complex retry/timeout logic was causing valid requests to fail
+        console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`)
+        
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: identifier.trim().toLowerCase(),
+          password,
+        })
+        
+        console.log(`[sign-in] Auth response received:`, {
+          hasData: Boolean(data),
+          hasError: Boolean(error),
+          errorMessage: error?.message,
+        })
 
         if (error) {
           console.error('[sign-in] Authentication error:', error)
@@ -360,14 +293,11 @@ export function SignInForm() {
         setSocialAuthLoading(true)
         console.log('[google] Starting Google sign-in with id_token')
         
-        // Add timeout to Google sign-in using config constant
-        const { data, error } = await withTimeout(
-          supabase.auth.signInWithIdToken({
-            provider: 'google',
-            token: idToken,
-          }),
-          AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT
-        )
+        // Simplified: Let Supabase handle its own timeout
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        })
         
         if (error) throw error
         if (data.session) {
@@ -543,13 +473,10 @@ export function SignInForm() {
                         }
                         
                         console.log('[apple] Exchanging token with Supabase')
-                        const { data, error } = await withTimeout(
-                          supabase.auth.signInWithIdToken({
-                            provider: 'apple',
-                            token: credential.identityToken,
-                          }),
-                          AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT
-                        )
+                        const { data, error } = await supabase.auth.signInWithIdToken({
+                          provider: 'apple',
+                          token: credential.identityToken,
+                        })
                         
                         if (error) throw error
                         if (data.session) {

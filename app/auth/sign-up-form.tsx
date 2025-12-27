@@ -8,9 +8,8 @@ import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { AUTH_RETRY_CONFIG, getAuthErrorMessage } from '../../lib/utils/auth-errors'
+import { getAuthErrorMessage } from '../../lib/utils/auth-errors'
 import { validateEmail } from '../../lib/utils/auth-validation'
-import { withTimeout } from '../../lib/utils/withTimeout'
 
 export default function SignUpRoute() {
   return <SignUpForm />
@@ -78,18 +77,15 @@ export function SignUpForm() {
       setIsLoading(true)
       console.log('[sign-up] Starting sign-up process')
       
+      // SIMPLIFIED: Let Supabase handle its own timeout logic
       // Pass age verification into user_metadata so backend can persist it
-      // Add timeout to prevent hanging on slow networks
-      const { data, error } = await withTimeout(
-        supabase.auth.signUp({
-          email: email.trim().toLowerCase(), // Normalize email
-          password,
-          options: {
-            data: { age_verified: ageVerified }
-          }
-        }),
-        AUTH_RETRY_CONFIG.SIGNUP_TIMEOUT
-      )
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(), // Normalize email
+        password,
+        options: {
+          data: { age_verified: ageVerified }
+        }
+      })
       
       if (error) {
         console.error('[sign-up] Error:', error)
