@@ -3,6 +3,7 @@
 # dependencies
 node_modules/
 .env
+.env.test
 .env.production.template
 .env.example
 .env.local
