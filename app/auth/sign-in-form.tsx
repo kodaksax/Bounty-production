@@ -18,7 +18,7 @@ import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { AUTH_RETRY_CONFIG, getAuthErrorMessage } from '../../lib/utils/auth-errors'
+import { getAuthErrorMessage } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
 
