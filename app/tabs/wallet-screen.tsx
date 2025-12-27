@@ -43,7 +43,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     if (hasValidSession) {
       refreshFromApi(session.access_token);
     }
-  }, [session?.access_token, session?.user?.id, refreshFromApi]);
+  }, [session, refreshFromApi]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
