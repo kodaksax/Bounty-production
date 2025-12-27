@@ -539,7 +539,8 @@ class StripeService {
         return [];
       }
 
-      // Use fetch with Stripe SDK's built-in timeout handling
+      // Use fetch API's default timeout behavior (no custom timeout wrapper)
+      // This allows the network stack to handle timeouts naturally
       // Fetch payment methods from backend
       const response = await fetch(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',

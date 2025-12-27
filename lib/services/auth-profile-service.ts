@@ -77,6 +77,8 @@ export class AuthProfileService {
 
       try {
         // Use Supabase SDK's built-in network handling and timeouts
+        // Supabase client has default timeouts and retry logic built-in
+        // See: https://supabase.com/docs/reference/javascript/initializing
         const res = await supabase
           .from('profiles')
           .select('*')
@@ -94,6 +96,7 @@ export class AuthProfileService {
       if (!data) {
         try {
           // Use Supabase SDK's built-in network handling and timeouts
+          // Supabase client has default timeouts and retry logic built-in
           const pub = await supabase
             .from('public_profiles')
             // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
