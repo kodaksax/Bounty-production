@@ -331,7 +331,7 @@ function BountyAppInner() {
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications, loadTrendingBounties])
+  }, []) // Empty deps - functions are called directly and are stable
 
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {
