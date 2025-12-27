@@ -2,9 +2,13 @@ import React from 'react'
 import { Alert, Button } from 'react-native'
 import { supabase } from '../../lib/supabase'
 import { withTimeout } from '../../lib/utils/withTimeout'
+import { clearRememberMePreference, clearAllSessionData } from '../../lib/auth-session-storage'
 
 async function onSignOutButtonPress() {
   try {
+    // Clear remember me preference first
+    await clearRememberMePreference()
+    
     // Add timeout to prevent hanging on sign out
     const { error } = await withTimeout(
       supabase.auth.signOut(),
@@ -14,11 +18,16 @@ async function onSignOutButtonPress() {
     if (error) {
       console.error('Error signing out:', error)
     }
+    
+    // Ensure all session data is cleared
+    await clearAllSessionData()
   } catch (timeoutError) {
     console.error('Sign out timed out:', timeoutError)
     // Force clear local session even if server signout fails
     try {
+      await clearRememberMePreference()
       await supabase.auth.signOut({ scope: 'local' })
+      await clearAllSessionData()
     } catch (e) {
       console.error('Failed to clear local session:', e)
       // If both server and local sign-out fail, alert the user

@@ -259,8 +259,15 @@ export async function deleteUserAccount(): Promise<{
       // Clear all local user data before signing out
       await clearLocalUserData();
 
+      // Clear remember me preference (import at top if not already done)
+      const { clearRememberMePreference, clearAllSessionData } = require('../auth-session-storage');
+      await clearRememberMePreference();
+
       // Sign out the user after successful deletion
       await supabase.auth.signOut();
+      
+      // Clear all session data
+      await clearAllSessionData();
 
       return {
         success: true,
@@ -372,8 +379,15 @@ export async function deleteUserAccount(): Promise<{
         // Clear all local user data before signing out
         await clearLocalUserData();
 
+        // Clear remember me preference
+        const { clearRememberMePreference: clearRememberMe, clearAllSessionData: clearSession } = require('../auth-session-storage');
+        await clearRememberMe();
+
         // Sign out the user
         await supabase.auth.signOut();
+        
+        // Clear all session data
+        await clearSession();
 
         return {
           success: true,

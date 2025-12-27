@@ -21,6 +21,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { getAuthErrorMessage } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
+import { setRememberMePreference } from '../../lib/auth-session-storage'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -80,6 +81,11 @@ export function SignInForm() {
         } else {
           console.log('[sign-in] Attempting to sign in (email redacted for production)')
         }
+
+        // IMPORTANT: Set remember me preference BEFORE authentication
+        // This ensures the session storage adapter can immediately use it
+        console.log('[sign-in] Setting remember me preference:', rememberMe)
+        await setRememberMePreference(rememberMe)
 
         // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
         // The previous complex retry/timeout logic was causing valid requests to fail
@@ -294,6 +300,10 @@ export function SignInForm() {
         setSocialAuthLoading(true)
         console.log('[google] Starting Google sign-in with id_token')
         
+        // Social auth: default to remember me = true
+        console.log('[google] Setting remember me preference: true (social auth)')
+        await setRememberMePreference(true)
+        
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
         const { data, error } = await supabase.auth.signInWithIdToken({
@@ -473,6 +483,10 @@ export function SignInForm() {
                           setSocialAuthError('Authentication service is not configured.')
                           return
                         }
+                        
+                        // Social auth: default to remember me = true
+                        console.log('[apple] Setting remember me preference: true (social auth)')
+                        await setRememberMePreference(true)
                         
                         console.log('[apple] Exchanging token with Supabase')
                         const { data, error } = await supabase.auth.signInWithIdToken({
