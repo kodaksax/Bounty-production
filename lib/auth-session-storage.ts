@@ -6,6 +6,16 @@
  * the user's session persistence preference. When "remember me" is checked,
  * sessions are persisted to secure storage. When unchecked, sessions are
  * kept only in memory and cleared on app reload.
+ * 
+ * IMPORTANT: The storage adapter checks the preference on EVERY operation.
+ * This means:
+ * - On sign-in with remember me = false: session is stored in memory only
+ * - On app reload: preference is false (or missing), so getItem returns null
+ * - Result: User is redirected to login screen (expected behavior)
+ * 
+ * - On sign-in with remember me = true: session is stored in secure storage
+ * - On app reload: preference is true, so getItem reads from secure storage
+ * - Result: User stays logged in (expected behavior)
  */
 
 import * as SecureStore from 'expo-secure-store';
@@ -13,9 +23,6 @@ import { Platform } from 'react-native';
 
 // Storage key for remember me preference
 const REMEMBER_ME_KEY = 'auth_remember_me_preference';
-
-// In-memory storage for non-persistent sessions
-const sessionMemoryStorage: Map<string, string> = new Map();
 
 // SecureStore options for iOS
 const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
@@ -27,6 +34,7 @@ const CHUNK_META_SUFFIX = '__chunkCount';
 
 /**
  * Get the current remember me preference
+ * Returns false if preference is not set or any error occurs
  */
 export async function getRememberMePreference(): Promise<boolean> {
   try {
@@ -63,15 +71,13 @@ export async function clearRememberMePreference(): Promise<void> {
 }
 
 /**
- * Clear all session data (both memory and persistent)
+ * Clear all session data from secure storage
+ * This is called during sign out to ensure no session data remains
  */
 export async function clearAllSessionData(): Promise<void> {
   try {
-    // Clear in-memory storage
-    sessionMemoryStorage.clear();
-    
     // Clear the Supabase session key from secure storage
-    // The key used by Supabase is typically 'supabase.auth.token'
+    // The key used by Supabase is 'supabase.auth.token'
     const sessionKey = 'supabase.auth.token';
     
     // Check if it's chunked
@@ -86,7 +92,7 @@ export async function clearAllSessionData(): Promise<void> {
     }
     await SecureStore.deleteItemAsync(sessionKey);
     
-    console.log('[AuthSessionStorage] All session data cleared');
+    console.log('[AuthSessionStorage] All session data cleared from secure storage');
   } catch (e) {
     console.error('[AuthSessionStorage] Error clearing session data:', e);
   }
@@ -94,21 +100,27 @@ export async function clearAllSessionData(): Promise<void> {
 
 /**
  * Storage adapter for Supabase that respects remember me preference
+ * 
+ * KEY BEHAVIOR:
+ * - getItem: Returns null if remember me is false (forces re-login on reload)
+ * - setItem: Only persists to secure storage if remember me is true
+ * - removeItem: Always clears from secure storage
  */
 export const createAuthSessionStorageAdapter = () => {
   return {
     getItem: async (key: string): Promise<string | null> => {
       try {
-        // Always check the remember me preference first
+        // CRITICAL: Check remember me preference on every read
+        // If false or not set, return null to force re-authentication
         const rememberMe = await getRememberMePreference();
         
         if (!rememberMe) {
-          // If remember me is not set, only use memory storage
-          const memValue = sessionMemoryStorage.get(key);
-          return memValue || null;
+          // User didn't check remember me, so don't restore session
+          console.log('[AuthSessionStorage] Remember me is false, not restoring session');
+          return null;
         }
         
-        // If remember me is set, read from secure storage
+        // Remember me is true, read from secure storage
         const val = await SecureStore.getItemAsync(key);
         
         // Handle chunked storage
@@ -126,7 +138,8 @@ export const createAuthSessionStorageAdapter = () => {
         return val;
       } catch (e) {
         console.error('[AuthSessionStorage] Error getting item:', e);
-        throw e;
+        // On error, return null to force re-authentication
+        return null;
       }
     },
 
@@ -134,18 +147,18 @@ export const createAuthSessionStorageAdapter = () => {
       try {
         if (typeof value !== 'string') value = String(value);
         
-        // Always check the remember me preference
+        // Check the remember me preference
         const rememberMe = await getRememberMePreference();
         
         if (!rememberMe) {
-          // If remember me is not set, only store in memory
-          sessionMemoryStorage.set(key, value);
-          console.log('[AuthSessionStorage] Session stored in memory only');
+          // If remember me is not set, don't persist to secure storage
+          // Session will only exist in Supabase's internal memory for this app session
+          console.log('[AuthSessionStorage] Remember me is false, not persisting session');
           return;
         }
         
-        // If remember me is set, store in secure storage with chunking support
-        console.log('[AuthSessionStorage] Session stored in secure storage');
+        // Remember me is true, persist to secure storage with chunking support
+        console.log('[AuthSessionStorage] Remember me is true, persisting session to secure storage');
         
         // If value fits in one item, store directly
         if (value.length <= CHUNK_SIZE) {
@@ -182,10 +195,7 @@ export const createAuthSessionStorageAdapter = () => {
 
     removeItem: async (key: string): Promise<void> => {
       try {
-        // Remove from memory
-        sessionMemoryStorage.delete(key);
-        
-        // Remove from secure storage (check for chunked data)
+        // Always remove from secure storage (if it exists)
         const val = await SecureStore.getItemAsync(key);
         if (val === '__chunked__') {
           const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
@@ -195,15 +205,16 @@ export const createAuthSessionStorageAdapter = () => {
           }
           await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
           await SecureStore.deleteItemAsync(key);
-        } else {
+        } else if (val !== null) {
           await SecureStore.deleteItemAsync(key);
         }
         
-        console.log('[AuthSessionStorage] Session removed');
+        console.log('[AuthSessionStorage] Session removed from secure storage');
       } catch (e) {
         console.error('[AuthSessionStorage] Error removing item:', e);
-        throw e;
+        // Don't throw - best effort removal
       }
     },
   };
 };
+
