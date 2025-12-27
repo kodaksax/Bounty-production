@@ -351,8 +351,11 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   useEffect(() => {
     // Only load data if we have a valid authenticated user
     if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
-      // Set loading to false if no valid user
+      // Set loading to false if no valid user and clear any data
       setIsLoading({ myBounties: false, inProgress: false, requests: false })
+      setMyBounties([])
+      setInProgressBounties([])
+      setBountyRequests([])
       return
     }
     

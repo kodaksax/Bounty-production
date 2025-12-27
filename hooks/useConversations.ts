@@ -84,6 +84,7 @@ export function useConversations(): UseConversationsResult {
     const init = async () => {
       // Only initialize if we have a valid user
       if (!hasValidUser) {
+        setConversations([]); // Clear conversations when no user
         setLoading(false);
         return;
       }
@@ -109,7 +110,7 @@ export function useConversations(): UseConversationsResult {
         supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
       }
     };
-  }, [currentUserId, hasValidUser]);
+  }, [currentUserId]); // Only depend on currentUserId to avoid re-subscriptions
 
   return {
     conversations,

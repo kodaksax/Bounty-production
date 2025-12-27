@@ -274,12 +274,12 @@ function BountyAppInner() {
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
-  }, [loadUserApplications])
+  }, [currentUserId]) // Only reload when user changes
 
   useEffect(() => {
     loadBounties({ reset: true })
     loadTrendingBounties()
-  }, [loadBounties, loadTrendingBounties])
+  }, []) // Only load once on mount, not on every callback change
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
@@ -289,7 +289,7 @@ function BountyAppInner() {
       loadUserApplications()
       loadTrendingBounties()
     }
-  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
+  }, [activeScreen]) // Only depend on activeScreen to avoid infinite loops
 
   // Restore last-selected chip on mount
   useEffect(() => {

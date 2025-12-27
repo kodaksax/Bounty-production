@@ -63,7 +63,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
     const fetchStats = async () => {
-      if (!authUserId) return;
+      if (!authUserId) {
+        // Set loading to false when no user
+        setStats({
+          jobsAccepted: 0,
+          bountiesPosted: 0,
+          badgesEarned: 0,
+          isLoading: false,
+        });
+        return;
+      }
       try {
         const postedBounties = await bountyService.getByUserId(authUserId);
         const acceptedRequests = await bountyRequestService.getByUserId(authUserId);
