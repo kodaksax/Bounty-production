@@ -109,9 +109,9 @@ The existing unit tests should pass without modification since they mock the net
 
 ## Rollback Plan
 
-If issues arise, the commit can be reverted to restore the timeout wrappers:
+If issues arise, the changes can be reverted:
 ```bash
-git revert e61b4ed
+git revert <commit-hash>
 ```
 
 However, this would bring back the timeout issues. A better approach would be to:

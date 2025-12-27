@@ -76,9 +76,9 @@ export class AuthProfileService {
       let error: any = null;
 
       try {
-        // Use Supabase SDK's built-in network handling and timeouts
-        // Supabase client has default timeouts and retry logic built-in
-        // See: https://supabase.com/docs/reference/javascript/initializing
+        // Use Supabase SDK without custom timeout wrapper
+        // Allows SDK to use its internal network handling and retry logic
+        // Custom timeouts were causing premature request cancellation
         const res = await supabase
           .from('profiles')
           .select('*')
@@ -95,8 +95,8 @@ export class AuthProfileService {
       // If profiles returned an error or no data, attempt public_profiles fallback
       if (!data) {
         try {
-          // Use Supabase SDK's built-in network handling and timeouts
-          // Supabase client has default timeouts and retry logic built-in
+          // Use Supabase SDK without custom timeout wrapper
+          // Allows SDK to use its internal network handling and retry logic
           const pub = await supabase
             .from('public_profiles')
             // PostgREST aliasing uses `alias:column` — alias the snake_case DB column

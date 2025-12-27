@@ -539,8 +539,9 @@ class StripeService {
         return [];
       }
 
-      // Use fetch API's default timeout behavior (no custom timeout wrapper)
-      // This allows the network stack to handle timeouts naturally
+      // Use fetch API without custom timeout wrapper
+      // This relies on the network stack's TCP timeouts and browser defaults
+      // Allows requests to complete naturally without premature cancellation
       // Fetch payment methods from backend
       const response = await fetch(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
