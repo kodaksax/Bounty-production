@@ -11,6 +11,7 @@ import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { withTimeout } from "../lib/utils/withTimeout"
+import { clearRememberMePreference, clearAllSessionData } from "../lib/auth-session-storage"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -194,9 +195,6 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Auth profile service to clear drafts
               // eslint-disable-next-line @typescript-eslint/no-var-requires
               const { authProfileService } = require('../lib/services/auth-profile-service');
-              // Auth session storage to clear remember me preference
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { clearRememberMePreference, clearAllSessionData } = require('../lib/auth-session-storage');
 
               // Get current user ID before signing out
               const currentUserId = authProfile?.id;
@@ -204,7 +202,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
-              // Clear remember me preference first
+              // Clear remember me preference
               await clearRememberMePreference();
 
               // Sign out from Supabase with timeout protection

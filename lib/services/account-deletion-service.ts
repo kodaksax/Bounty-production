@@ -16,6 +16,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../config/api';
 import { supabase } from '../supabase';
+import { clearRememberMePreference, clearAllSessionData } from '../auth-session-storage';
 
 /**
  * Clear all local storage data for the user
@@ -259,8 +260,7 @@ export async function deleteUserAccount(): Promise<{
       // Clear all local user data before signing out
       await clearLocalUserData();
 
-      // Clear remember me preference (import at top if not already done)
-      const { clearRememberMePreference, clearAllSessionData } = require('../auth-session-storage');
+      // Clear remember me preference
       await clearRememberMePreference();
 
       // Sign out the user after successful deletion
@@ -380,14 +380,13 @@ export async function deleteUserAccount(): Promise<{
         await clearLocalUserData();
 
         // Clear remember me preference
-        const { clearRememberMePreference: clearRememberMe, clearAllSessionData: clearSession } = require('../auth-session-storage');
-        await clearRememberMe();
+        await clearRememberMePreference();
 
         // Sign out the user
         await supabase.auth.signOut();
         
         // Clear all session data
-        await clearSession();
+        await clearAllSessionData();
 
         return {
           success: true,
