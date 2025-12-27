@@ -205,7 +205,8 @@ function BountyAppInner() {
 
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
-    if (!currentUserId) {
+    // Guard: don't load if no valid user or using fallback ID
+    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
       setApplicationsLoaded(true)
       return
     }

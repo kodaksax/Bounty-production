@@ -271,6 +271,13 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [])
 
   const loadMyBounties = React.useCallback(async () => {
+    // Guard: don't load if no valid user
+    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+      setIsLoading((prev) => ({ ...prev, myBounties: false }))
+      setMyBounties([])
+      return
+    }
+    
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       const mine = await bountyService.getByUserId(currentUserId)
@@ -288,6 +295,13 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
+    // Guard: don't load if no valid user
+    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+      setIsLoading((prev) => ({ ...prev, inProgress: false }))
+      setInProgressBounties([])
+      return
+    }
+    
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
       // Show bounties that the current user has applied for (pending/accepted/etc.)
@@ -335,11 +349,18 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
+    // Only load data if we have a valid authenticated user
+    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+      // Set loading to false if no valid user
+      setIsLoading({ myBounties: false, inProgress: false, requests: false })
+      return
+    }
+    
     setError(null)
     // Load in parallel
     loadMyBounties()
     loadInProgress()
-  }, [postSuccess, loadMyBounties, loadInProgress]) // Re-fetch after a successful post
+  }, [postSuccess, loadMyBounties, loadInProgress, currentUserId]) // Re-fetch after a successful post
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
   // To re-implement real-time updates, you would need to use a technology
