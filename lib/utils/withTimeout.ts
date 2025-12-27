@@ -1,10 +1,12 @@
-// Small helper to race a promise against a timeout.
+// Helper to race a promise against a timeout with proper AbortController support.
 // Ensures the timer is cleaned up when the provided promise settles.
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
+      controller.abort(); // Abort the request if it's still pending
       reject(new Error(`Network request timed out after ${ms}ms`));
     }, ms);
   });

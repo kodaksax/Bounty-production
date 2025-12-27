@@ -83,7 +83,7 @@ export class AuthProfileService {
             .select('*')
             .eq('id', userId)
             .maybeSingle(),
-          10000 // 10 second timeout
+          5000 // 5 second timeout - optimized for speed
         );
         data = res.data ?? null;
         error = res.error ?? null;
@@ -227,7 +227,7 @@ export class AuthProfileService {
           .select('*')
           .eq('id', userId)
           .single(),
-        10000 // 10 second timeout
+        5000 // 5 second timeout - optimized for speed
       );
 
       if (error) {
