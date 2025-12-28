@@ -70,6 +70,8 @@ function BountyAppInner() {
   const scrollY = useRef(new Animated.Value(0)).current
   // Reference to the FlatList for scroll-to-top functionality
   const bountyListRef = useRef<FlatList>(null)
+  // Ref for pagination offset to avoid dependency in useCallback
+  const offsetRef = useRef(0)
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
@@ -237,14 +239,15 @@ function BountyAppInner() {
       setLoadingMore(true)
     }
     try {
-      const pageOffset = reset ? 0 : offset
+      const pageOffset = reset ? 0 : offsetRef.current
       const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
       if (reset) {
         setBounties(fetchedBounties)
       } else {
         setBounties(prev => [...prev, ...fetchedBounties])
       }
-      setOffset(pageOffset + fetchedBounties.length)
+      offsetRef.current = pageOffset + fetchedBounties.length
+      setOffset(offsetRef.current)
       setHasMore(fetchedBounties.length === PAGE_SIZE)
     } catch (error) {
       console.error('Error loading bounties:', error)
@@ -256,7 +259,7 @@ function BountyAppInner() {
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, [offset])
+  }, []) // Empty dependencies - uses ref for offset
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -274,12 +277,13 @@ function BountyAppInner() {
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
-  }, [currentUserId]) // Only reload when user changes
+  }, [currentUserId, loadUserApplications]) // Depend on stable function and userId primitive
 
+  // Load initial data on mount only
   useEffect(() => {
     loadBounties({ reset: true })
     loadTrendingBounties()
-  }, []) // Only load once on mount, not on every callback change
+  }, [loadBounties, loadTrendingBounties]) // Depend on stable functions
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
@@ -289,7 +293,7 @@ function BountyAppInner() {
       loadUserApplications()
       loadTrendingBounties()
     }
-  }, [activeScreen]) // Only depend on activeScreen to avoid infinite loops
+  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties]) // Depend on stable primitives and functions
 
   // Restore last-selected chip on mount
   useEffect(() => {

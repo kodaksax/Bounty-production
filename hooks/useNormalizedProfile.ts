@@ -18,9 +18,10 @@ export function useNormalizedProfile(userId?: string) {
   const loadSupabase = useCallback(async (id?: string) => {
     console.log('[useNormalizedProfile] loadSupabase called', { id, hasId: !!id });
     setSbError(null);
-    if (!id) {
-      console.log('[useNormalizedProfile] No id provided, setting profile to null');
+    if (!id || id === '00000000-0000-0000-0000-000000000001') {
+      console.log('[useNormalizedProfile] No valid id provided (or sentinel user), setting profile to null and clearing loading');
       setSupabaseProfile(null);
+      setSbLoading(false); // Ensure loading is cleared when no valid id
       return;
     }
 

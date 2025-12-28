@@ -271,10 +271,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [])
 
   const loadMyBounties = React.useCallback(async () => {
-    // Guard: don't load if no valid user
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
     if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
-      setIsLoading((prev) => ({ ...prev, myBounties: false }))
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
+      setIsLoading((prev) => ({ ...prev, myBounties: false, requests: false }))
       setMyBounties([])
+      setBountyRequests([])
       return
     }
     
@@ -295,8 +297,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
-    // Guard: don't load if no valid user
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
     if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
       setIsLoading((prev) => ({ ...prev, inProgress: false }))
       setInProgressBounties([])
       return
@@ -349,9 +352,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
-    // Only load data if we have a valid authenticated user
+    // Only load data if we have a valid authenticated user (including sentinel/fallback user IDs)
     if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
-      // Set loading to false if no valid user and clear any data
+      // Immediately clear loading flags and empty data arrays to avoid stuck skeletons
       setIsLoading({ myBounties: false, inProgress: false, requests: false })
       setMyBounties([])
       setInProgressBounties([])
