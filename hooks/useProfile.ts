@@ -17,7 +17,6 @@ export function useProfile(userId?: string): UseProfileResult {
 
   const fetchProfile = async () => {
     try {
-      console.log('[useProfile] Starting fetch, userId:', userId);
       setLoading(true);
       setError(null);
       
@@ -25,13 +24,10 @@ export function useProfile(userId?: string): UseProfileResult {
         ? await userProfileService.getProfile(userId)
         : await userProfileService.getCurrentProfile();
       
-      console.log('[useProfile] Fetch complete, data:', data ? 'found' : 'null');
       setProfile(data);
     } catch (err) {
-      console.error('[useProfile] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load profile');
     } finally {
-      console.log('[useProfile] Setting loading to false');
       setLoading(false);
     }
   };
