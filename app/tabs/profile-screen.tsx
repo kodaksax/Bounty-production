@@ -63,8 +63,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
     const fetchStats = async () => {
-      if (!authUserId) {
-        // Set loading to false when no user
+      if (!authUserId || authUserId === '00000000-0000-0000-0000-000000000001') {
+        // Set loading to false when no valid user (including sentinel)
         setStats({
           jobsAccepted: 0,
           bountiesPosted: 0,
@@ -103,7 +103,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // This effect is now redundant as authProfileService handles this, but kept for backward compatibility
   useEffect(() => {
     const ensureProfile = async () => {
-      if (!authUserId) return;
+      if (!authUserId || authUserId === '00000000-0000-0000-0000-000000000001') return;
       
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();
