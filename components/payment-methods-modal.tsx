@@ -38,11 +38,10 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshWithRetry = async (maxRetries = 3) => {
+  const refreshWithRetry = async (totalAttempts = 4) => {
     let lastErr: unknown
     setLoadFailed(false)
-    // maxRetries includes the initial attempt (e.g., maxRetries=3 means 1 initial + 3 retries = 4 total attempts)
-    for (let i = 0; i <= maxRetries; i++) {
+    for (let i = 0; i < totalAttempts; i++) {
       try {
         // Clear previous errors before attempt
         clearError()
@@ -52,23 +51,23 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
         return
       } catch (e: unknown) {
         lastErr = e
-        // Skip backoff after the last retry
-        if (i < maxRetries) {
+        // Skip backoff after the last attempt
+        if (i < totalAttempts - 1) {
           // Exponential backoff: 1s, 2s, 4s (between attempts)
           const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
-          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${maxRetries + 1} failed, waiting ${backoffMs}ms before retry`)
+          console.log(`[PaymentMethodsModal] Attempt ${i + 1}/${totalAttempts} failed, waiting ${backoffMs}ms before retry`)
           await new Promise(r => setTimeout(r, backoffMs))
         }
       }
     }
-    console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed after all attempts:', lastErr)
+    console.warn('[PaymentMethodsModal] loadPaymentMethods failed after all attempts:', lastErr)
     setLoadFailed(true)
   }
 
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      refreshWithRetry(3)
+      refreshWithRetry(4) // 4 total attempts: 1 initial + 3 retries
     }
   }, [isOpen])
 
