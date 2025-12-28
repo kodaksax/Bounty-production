@@ -16,8 +16,10 @@ export function useNormalizedProfile(userId?: string) {
   const [sbError, setSbError] = useState<string | null>(null);
 
   const loadSupabase = useCallback(async (id?: string) => {
+    console.log('[useNormalizedProfile] loadSupabase called', { id, hasId: !!id });
     setSbError(null);
     if (!id) {
+      console.log('[useNormalizedProfile] No id provided, setting profile to null');
       setSupabaseProfile(null);
       return;
     }
@@ -28,23 +30,29 @@ export function useNormalizedProfile(userId?: string) {
     // profiles for some poster ids. Remove that heuristic so `public_profiles`
     // fallback (implemented in auth-profile-service) can be used.
 
+    console.log('[useNormalizedProfile] Starting Supabase fetch...');
     setSbLoading(true);
     try {
       const authId = authProfileService.getAuthUserId();
       const isSelf = authId ? id === authId : false;
+      console.log('[useNormalizedProfile] Fetch params', { id, authId, isSelf });
       const profile = isSelf
         ? await authProfileService.fetchAndSyncProfile(id)
         : await authProfileService.getProfileById(id);
+      console.log('[useNormalizedProfile] Fetch completed', { hasProfile: !!profile, username: profile?.username });
       setSupabaseProfile(profile || null);
     } catch (err) {
+      console.error('[useNormalizedProfile] Fetch error:', err);
       setSbError(err instanceof Error ? err.message : String(err));
       setSupabaseProfile(null);
     } finally {
+      console.log('[useNormalizedProfile] Setting sbLoading to false');
       setSbLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    console.log('[useNormalizedProfile] useEffect triggered', { userId });
     loadSupabase(userId);
   }, [userId, loadSupabase]);
 
@@ -58,7 +66,19 @@ export function useNormalizedProfile(userId?: string) {
   const loading = localLoading || (isViewingSelf ? authHookLoading : false) || sbLoading;
   const error = localError || sbError || null;
 
+  console.log('[useNormalizedProfile] Current state', {
+    userId,
+    isViewingSelf,
+    localLoading,
+    authHookLoading: isViewingSelf ? authHookLoading : false,
+    sbLoading,
+    loading,
+    hasEffectiveProfile: !!effective,
+    effectiveUsername: effective?.username,
+  });
+
   const refresh = useCallback(async () => {
+    console.log('[useNormalizedProfile] refresh called');
     if (isViewingSelf) {
       const effectiveId = userId ?? authHookUserId ?? undefined;
       await Promise.all([refreshLocal(), refreshProfile(), loadSupabase(effectiveId)]);

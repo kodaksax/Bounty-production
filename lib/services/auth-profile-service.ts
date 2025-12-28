@@ -58,7 +58,10 @@ export class AuthProfileService {
    * refetching for the same card renders.
    */
   async getProfileById(userId: string, options: { bypassCache?: boolean } = {}): Promise<AuthProfile | null> {
+    console.log('[authProfileService] getProfileById called', { userId, isSupabaseConfigured });
+    
     if (!isSupabaseConfigured) {
+      console.error('[authProfileService] Supabase not configured - cannot fetch profile by ID');
       return null;
     }
 
@@ -66,11 +69,13 @@ export class AuthProfileService {
     if (!bypassCache) {
       const cached = this.externalProfileCache.get(userId);
       if (cached && Date.now() - cached.timestamp < PROFILE_CACHE_EXPIRY) {
+        console.log('[authProfileService] Returning cached profile for userId:', userId);
         return cached.profile;
       }
     }
 
     try {
+      console.log('[authProfileService] Fetching profile from Supabase for userId:', userId);
       // Try canonical profiles table first
       let data: any = null;
       let error: any = null;
@@ -86,7 +91,9 @@ export class AuthProfileService {
           .maybeSingle();
         data = res.data ?? null;
         error = res.error ?? null;
+        console.log('[authProfileService] Profiles table query result', { hasData: !!data, hasError: !!error });
       } catch (e: any) {
+        console.error('[authProfileService] Profiles table query exception:', e);
         logger.warning('Profile fetch error', { userId, error: e });
         data = null;
         error = e;
@@ -94,6 +101,7 @@ export class AuthProfileService {
 
       // If profiles returned an error or no data, attempt public_profiles fallback
       if (!data) {
+        console.log('[authProfileService] Trying public_profiles fallback...');
         try {
           // Use Supabase SDK without custom timeout wrapper
           // Allows SDK to use its internal network handling and retry logic
@@ -104,6 +112,7 @@ export class AuthProfileService {
             .select('id,username,displayName:display_name,avatar,location')
             .eq('id', userId)
             .maybeSingle();
+          console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
           if (pub.error) {
             // If both attempts fail, surface a warning and return null
             // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
@@ -119,17 +128,20 @@ export class AuthProfileService {
 
           if (!pub.data) {
             // No public profile either
+            console.log('[authProfileService] No data in public_profiles either');
             return null;
           }
 
           data = pub.data;
         } catch (e) {
+          console.error('[authProfileService] Public_profiles query exception:', e);
           logger.error('Error fetching public_profiles', { userId, error: e });
           return null;
         }
       }
 
       if (!data) {
+        console.warn('[authProfileService] No profile data found for userId:', userId);
         return null;
       }
 
@@ -149,6 +161,8 @@ export class AuthProfileService {
         onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
       };
 
+      console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
+
       if (!bypassCache) {
         this.externalProfileCache.set(userId, {
           profile,
@@ -158,6 +172,7 @@ export class AuthProfileService {
 
       return profile;
     } catch (error) {
+      console.error('[authProfileService] getProfileById exception:', error);
       logger.error('Error fetching profile by id', { userId, error });
       if (!bypassCache) {
         this.externalProfileCache.delete(userId);
@@ -173,7 +188,14 @@ export class AuthProfileService {
     const previousUserId = this.currentSession?.user?.id;
     this.currentSession = session;
     
+    console.log('[authProfileService] setSession called', { 
+      previousUserId, 
+      newUserId: session?.user?.id,
+      hasSession: !!session 
+    });
+    
     if (!session) {
+      console.log('[authProfileService] No session, clearing profile');
       this.currentProfile = null;
       // Clear cache for the previous user if switching users
       if (previousUserId) {
@@ -188,8 +210,10 @@ export class AuthProfileService {
       await this.clearCache(previousUserId);
     }
 
+    console.log('[authProfileService] Calling fetchAndSyncProfile for userId:', session.user.id);
     // Fetch and sync profile for authenticated user
     await this.fetchAndSyncProfile(session.user.id);
+    console.log('[authProfileService] fetchAndSyncProfile completed, profile exists:', !!this.currentProfile);
   }
 
   /**
@@ -210,12 +234,20 @@ export class AuthProfileService {
    * Fetch profile from Supabase and sync with local cache
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
+    console.log('[authProfileService] fetchAndSyncProfile START', { 
+      userId,
+      isSupabaseConfigured 
+    });
+    
     if (!isSupabaseConfigured) {
+      console.error('[authProfileService] Supabase not configured - cannot fetch profile');
       logger.error('Supabase not configured', { userId });
       return null;
     }
 
     try {
+      console.log('[authProfileService] Querying Supabase profiles table...');
+      
       // Use Supabase SDK's built-in network handling and timeouts
       const { data, error } = await supabase
         .from('profiles')
@@ -223,12 +255,21 @@ export class AuthProfileService {
         .eq('id', userId)
         .single();
 
+      console.log('[authProfileService] Supabase query completed', { 
+        hasData: !!data, 
+        hasError: !!error,
+        errorCode: error?.code,
+        errorMessage: error?.message 
+      });
+
       if (error) {
         // If profile doesn't exist, create a minimal one
         if (error.code === 'PGRST116') {
+          console.log('[authProfileService] Profile not found (PGRST116), creating minimal profile');
           logger.warning('Profile not found, creating minimal profile', { userId });
           return await this.createMinimalProfile(userId);
         }
+        console.error('[authProfileService] Supabase query error:', error);
         throw error;
       }
 
@@ -248,31 +289,40 @@ export class AuthProfileService {
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         };
 
+        console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
         this.currentProfile = profile;
         await this.cacheProfile(profile);
+        console.log('[authProfileService] Notifying listeners, count:', this.listeners.length);
         this.notifyListeners(profile);
+        console.log('[authProfileService] fetchAndSyncProfile SUCCESS');
         return profile;
       }
 
+      console.warn('[authProfileService] Supabase returned no data and no error');
       return null;
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
       const msg = (error && (error.message || String(error))) || '';
       if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
+        console.error('[authProfileService] Received HTML response - likely misconfigured Supabase URL');
         logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
       } else {
+        console.error('[authProfileService] fetchAndSyncProfile ERROR:', error);
         logger.error('Error fetching profile', { userId, error });
       }
       
       // Try to load from cache
+      console.log('[authProfileService] Attempting to load from cache...');
       const cached = await this.loadFromCache(userId);
       if (cached && cached.id === userId) {
+        console.log('[authProfileService] Loaded profile from cache');
         this.currentProfile = cached;
         this.notifyListeners(cached);
         return cached;
       }
       
+      console.error('[authProfileService] No cached profile available, returning null');
       return null;
     }
   }
