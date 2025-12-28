@@ -319,6 +319,7 @@ function BountyAppInner() {
     setRefreshing(true)
     try {
       // Reset pagination and reload first page, also refresh applications and trending
+      offsetRef.current = 0
       setOffset(0)
       setHasMore(true)
       await Promise.all([
@@ -335,7 +336,7 @@ function BountyAppInner() {
     } finally {
       setRefreshing(false)
     }
-  }, []) // Empty deps - functions are called directly and are stable
+  }, [loadBounties, loadUserApplications, loadTrendingBounties]) // Depend on stable functions
 
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {
