@@ -28,7 +28,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const isRefreshingRef = useRef<boolean>(false)
   const isMountedRef = useRef<boolean>(true)
   const isInitializingRef = useRef<boolean>(true)
-  const profileFetchCompletedRef = useRef<boolean>(false)
   const sessionIdRef = useRef<string | null>(null)
   const lastProfileLogRef = useRef<string | null>(null)
 
@@ -165,11 +164,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     }, refreshIn)
   }
 
+  /**
+   * Helper to sync session with profile service in fire-and-forget mode
+   * Logs errors but doesn't block auth flow
+   */
+  const syncProfileWithSession = (session: Session | null, context: string) => {
+    authProfileService.setSession(session).catch((e) => {
+      console.error(`[AuthProvider] Profile sync error (${context}):`, {
+        error: e,
+        userId: session?.user?.id,
+        hasSession: Boolean(session),
+      })
+    })
+  }
+
   // Fetch the session once, and subscribe to auth state changes
   useEffect(() => {
     isMountedRef.current = true
     isInitializingRef.current = true
-    profileFetchCompletedRef.current = false
 
     const fetchSession = async () => {
       setIsLoading(true)
@@ -198,16 +210,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           setSession(session)
           sessionIdRef.current = session.user.id
           
-          // Sync session with auth profile service
-          try {
-            await authProfileService.setSession(session)
-            // Mark that profile fetch has completed (successfully or not)
-            profileFetchCompletedRef.current = true
-          } catch (e) {
-            console.error('[AuthProvider] Error setting session in profile service:', e)
-            // Even on error, mark as completed to avoid blocking
-            profileFetchCompletedRef.current = true
-          }
+          // ROLLBACK: Fire-and-forget profile sync
+          // Profile fetch should not block the app from rendering main UI
+          // Failures will be logged but won't keep skeletons indefinitely
+          syncProfileWithSession(session, 'initial-fetch')
           
           // Email verification gate: Check if email is verified
           // Priority: session.user?.email_confirmed_at > profile.email_verified > false
@@ -242,11 +248,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } finally {
         if (isMountedRef.current) {
-          // Only set isLoading to false if there's no session
-          // If there is a session, wait for the profile to load via subscription
-          if (!sessionFound) {
-            setIsLoading(false)
-          }
+          // ROLLBACK: Always clear isLoading after session retrieval
+          // Profile fetch should not block the app from rendering main UI
+          // Failures will be logged but won't keep skeletons indefinitely
+          setIsLoading(false)
           isInitializingRef.current = false
         }
       }
@@ -268,19 +273,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       setSession(session)
       sessionIdRef.current = session?.user?.id || null
       
-      // Reset profile fetch flag for events that trigger profile fetch
-      profileFetchCompletedRef.current = false
-      
-      // Sync session with auth profile service
-      try {
-        await authProfileService.setSession(session)
-        // Mark profile fetch as completed after setSession finishes
-        profileFetchCompletedRef.current = true
-      } catch (e) {
-        console.error('[AuthProvider] Error syncing session in profile service:', e)
-        // Mark as completed even on error to avoid blocking
-        profileFetchCompletedRef.current = true
-      }
+      // ROLLBACK: Profile fetch happens async, doesn't block auth state
+      // Fire-and-forget profile sync - log errors but don't block
+      syncProfileWithSession(session, `auth-state-change:${_event}`)
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(
@@ -345,33 +340,22 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const unsubscribe = authProfileService.subscribe((authProfile) => {
       setProfile(authProfile)
 
-      // Only set isLoading to false if:
-      // 1. No session exists (immediate subscription callback with null), OR
-      // 2. Profile fetch has completed (after setSession finishes)
-      const currentSessionId = sessionIdRef.current
-      const shouldSetLoadingFalse = !currentSessionId || profileFetchCompletedRef.current
-
+      // ROLLBACK: Profile updates no longer control isLoading state
+      // isLoading is cleared immediately after session retrieval
+      // This prevents profile fetch failures from blocking the app
+      
       // Only log profile updates in development and only when the username changes
       try {
         const username = authProfile?.username ?? null
         if (__DEV__ && lastProfileLogRef.current !== username) {
           lastProfileLogRef.current = username
-          if (shouldSetLoadingFalse) {
-            console.log('[AuthProvider] Profile update received, setting isLoading to false:', {
-              hasSession: Boolean(currentSessionId),
-              hasProfile: Boolean(authProfile),
-              username,
-            })
-          } else {
-            console.log('[AuthProvider] Profile update received but waiting for fetch to complete')
-          }
+          console.log('[AuthProvider] Profile update received:', {
+            hasProfile: Boolean(authProfile),
+            username,
+          })
         }
       } catch (e) {
         // swallow logging errors
-      }
-
-      if (shouldSetLoadingFalse) {
-        setIsLoading(false)
       }
       
       // Email verification gate: Also check profile for email_verified flag (some profile shapes include this field)
