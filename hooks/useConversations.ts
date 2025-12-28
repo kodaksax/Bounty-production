@@ -80,10 +80,14 @@ export function useConversations(): UseConversationsResult {
 
   useEffect(() => {
     let subscription: RealtimeChannel | null = null;
+    
+    // Check if we have a valid authenticated user (not the fallback ID)
+    const isValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
 
     const init = async () => {
       // Only initialize if we have a valid user
-      if (!hasValidUser) {
+      if (!isValidUser) {
+        setConversations([]); // Clear conversations when no user
         setLoading(false);
         return;
       }
@@ -109,7 +113,7 @@ export function useConversations(): UseConversationsResult {
         supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
       }
     };
-  }, [currentUserId, hasValidUser]);
+  }, [currentUserId]); // Only depend on currentUserId to avoid re-subscriptions
 
   return {
     conversations,

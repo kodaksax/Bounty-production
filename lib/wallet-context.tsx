@@ -90,7 +90,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(false);
   }, [persist]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { 
+    refresh(); 
+  }, []); // Only run once on mount, not on every refresh change
 
   const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
     try { 
