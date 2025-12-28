@@ -51,9 +51,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshPaymentMethodsWithRetry = async (retries = 2): Promise<void> => {
+  const refreshPaymentMethodsWithRetry = async (maxRetries = 2): Promise<void> => {
     let lastErr: any
-    for (let attempt = 0; attempt <= retries; attempt++) {
+    // maxRetries includes the initial attempt (e.g., maxRetries=2 means 1 initial + 2 retries = 3 total attempts)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         await loadPaymentMethods()
         return

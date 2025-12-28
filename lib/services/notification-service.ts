@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { API_BASE_URL } from 'lib/config/api';
-import { API_TIMEOUTS, ERROR_LOG_THROTTLE } from 'lib/config/network';
+import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';

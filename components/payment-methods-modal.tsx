@@ -38,10 +38,11 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshWithRetry = async (retries = 3) => {
+  const refreshWithRetry = async (maxRetries = 3) => {
     let lastErr: unknown
     setLoadFailed(false)
-    for (let i = 0; i <= retries; i++) {
+    // maxRetries includes the initial attempt (e.g., maxRetries=3 means 1 initial + 3 retries = 4 total attempts)
+    for (let i = 0; i <= maxRetries; i++) {
       try {
         // Clear previous errors before attempt
         clearError()
@@ -52,10 +53,10 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
       } catch (e: unknown) {
         lastErr = e
         // Skip backoff after the last retry
-        if (i < retries) {
+        if (i < maxRetries) {
           // Exponential backoff: 1s, 2s, 4s (between attempts)
           const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
-          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${retries + 1} failed, waiting ${backoffMs}ms before retry`)
+          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${maxRetries + 1} failed, waiting ${backoffMs}ms before retry`)
           await new Promise(r => setTimeout(r, backoffMs))
         }
       }
