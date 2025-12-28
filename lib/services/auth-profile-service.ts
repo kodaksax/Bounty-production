@@ -59,7 +59,15 @@ export class AuthProfileService {
    */
   async getProfileById(userId: string, options: { bypassCache?: boolean } = {}): Promise<AuthProfile | null> {
     if (!isSupabaseConfigured) {
-      return null;
+      logger.warning('Supabase not configured, returning fallback profile', { userId });
+      console.warn('[authProfileService] getProfileById: Supabase not configured');
+      // Return a minimal fallback profile
+      return {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        balance: 0,
+        created_at: new Date().toISOString(),
+      };
     }
 
     const { bypassCache = false } = options;
@@ -217,9 +225,25 @@ export class AuthProfileService {
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
     console.log('[authProfileService] fetchAndSyncProfile called for userId:', userId);
     if (!isSupabaseConfigured) {
-      logger.error('Supabase not configured', { userId });
-      console.error('[authProfileService] Supabase not configured');
-      return null;
+      logger.warning('Supabase not configured, using fallback profile', { userId });
+      console.warn('[authProfileService] Supabase not configured - creating fallback profile');
+      
+      // Create a fallback profile for development when Supabase is not configured
+      const fallbackProfile: AuthProfile = {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        email: this.currentSession?.user?.email,
+        avatar: undefined,
+        about: 'Development user (Supabase not configured)',
+        balance: 0,
+        created_at: new Date().toISOString(),
+        onboarding_completed: true,
+      };
+      
+      this.currentProfile = fallbackProfile;
+      this.notifyListeners(fallbackProfile);
+      console.log('[authProfileService] Using fallback profile:', fallbackProfile.username);
+      return fallbackProfile;
     }
 
     try {
@@ -290,8 +314,22 @@ export class AuthProfileService {
         return cached;
       }
       
-      console.log('[authProfileService] No cached profile available');
-      return null;
+      // If all else fails, create a fallback profile so the app doesn't break
+      console.log('[authProfileService] Creating fallback profile due to error');
+      const fallbackProfile: AuthProfile = {
+        id: userId,
+        username: `user_${userId.slice(0, 8)}`,
+        email: this.currentSession?.user?.email,
+        avatar: undefined,
+        about: 'Error loading profile',
+        balance: 0,
+        created_at: new Date().toISOString(),
+        onboarding_completed: false,
+      };
+      
+      this.currentProfile = fallbackProfile;
+      this.notifyListeners(fallbackProfile);
+      return fallbackProfile;
     }
   }
 
