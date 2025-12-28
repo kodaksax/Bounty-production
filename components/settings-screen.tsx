@@ -10,7 +10,6 @@ import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
-import { withTimeout } from "../lib/utils/withTimeout"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -201,20 +200,18 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
-              // Sign out from Supabase with timeout protection
+              // Sign out from Supabase
+              // Let Supabase SDK handle network timeouts and retry logic
               try {
-                const { error } = await withTimeout(
-                  supabase.auth.signOut(),
-                  10000 // 10 second timeout
-                );
+                const { error } = await supabase.auth.signOut();
                 
                 if (error) {
                   console.error('[Logout] Supabase signout error:', error);
                   // Try local signout as fallback
                   await supabase.auth.signOut({ scope: 'local' });
                 }
-              } catch (timeoutError) {
-                console.error('[Logout] Supabase signout timeout, forcing local logout:', timeoutError);
+              } catch (signoutError) {
+                console.error('[Logout] Supabase signout failed, forcing local logout:', signoutError);
                 // Force local logout even if server signout fails
                 try {
                   await supabase.auth.signOut({ scope: 'local' });
@@ -338,11 +335,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                               }
 
                               // Sign out (may already be done by deleteUserAccount)
+                              // Let Supabase SDK handle network timeouts and retry logic
                               try {
-                                await withTimeout(
-                                  supabase.auth.signOut(),
-                                  5000 // 5 second timeout for delete account cleanup
-                                );
+                                await supabase.auth.signOut();
                               } catch (e) {
                                 console.error('[DeleteAccount] Sign out failed', e);
                               }

@@ -8,7 +8,6 @@ import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
-import { withTimeout } from "../lib/utils/withTimeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -50,13 +49,13 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session } = useAuthContext()
 
-  // Use shared timeout helper for retryable fetches
-
-  const refreshPaymentMethodsWithRetry = async (retries = 2, timeoutMs = 3000): Promise<void> => {
+  // Refresh payment methods with retry logic
+  // Let Stripe SDK and network stack handle timeouts naturally
+  const refreshPaymentMethodsWithRetry = async (retries = 2): Promise<void> => {
     let lastErr: any
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        await withTimeout(loadPaymentMethods(), timeoutMs)
+        await loadPaymentMethods()
         return
       } catch (e) {
         lastErr = e

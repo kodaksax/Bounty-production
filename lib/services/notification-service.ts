@@ -59,20 +59,6 @@ async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<R
   }
 }
 
-// Small helper to add an explicit timeout to fetches so we fail fast on unreachable
-// dev machines or when a physical device isn’t on the same LAN. React Native’s
-// default fetch can take a long time before surfacing a network timeout.
-function withTimeout(signal: AbortSignal | undefined, ms = 8000) {
-  if (signal) return signal
-  const controller = new AbortController()
-  const id = setTimeout(() => controller.abort(), ms)
-  // @ts-ignore attach for cleanup by callers if needed
-  controller.__timeoutId = id
-  const wrapped = controller.signal
-  // Ensure we clear the timer on end consumers that await fetch
-  wrapped.addEventListener('abort', () => clearTimeout(id), { once: true })
-  return wrapped
-}
 
 // Configure how notifications should be handled when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -193,7 +179,6 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications/register-token`
-      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
@@ -201,8 +186,7 @@ export class NotificationService {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ token, deviceId }),
-        // add an 8s timeout so we don't hang forever on mobile when the dev API isn't reachable
-        signal: withTimeout(controller.signal, 8000),
+        // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {
@@ -322,15 +306,14 @@ export class NotificationService {
         }
       }
 
-      // Fallback to API endpoint (with longer timeout for development)
+      // Fallback to API endpoint
       const url = `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`;
-      const controller = new AbortController();
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, API_TIMEOUTS.DEFAULT),
+        // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {
@@ -418,15 +401,14 @@ export class NotificationService {
         }
       }
 
-      // Fallback to API endpoint (with longer timeout for development)
+      // Fallback to API endpoint
       const url = `${API_BASE_URL}/notifications/unread-count`;
-      const controller = new AbortController();
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, API_TIMEOUTS.DEFAULT),
+        // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {
@@ -505,13 +487,12 @@ export class NotificationService {
       }
 
       const url = `${API_BASE_URL}/notifications/mark-all-read`
-      const controller = new AbortController()
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
-        signal: withTimeout(controller.signal, 8000),
+        // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {

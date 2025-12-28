@@ -5,7 +5,6 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
-import { withTimeout } from '../lib/utils/withTimeout'
 import { AddCardModal } from "./add-card-modal"
 import { AddBankAccountModal } from "./add-bank-account-modal"
 
@@ -37,17 +36,17 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
     }
   }, [isOpen, preferredType])
 
-  // Use shared timeout helper for retryable fetches with exponential backoff
-  const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
+  // Refresh payment methods with retry logic
+  // Let Stripe SDK and network stack handle timeouts naturally
+  const refreshWithRetry = async (retries = 3) => {
     let lastErr: unknown
     setLoadFailed(false)
     for (let i = 0; i <= retries; i++) {
       try {
         // Clear previous errors before attempt
         clearError()
-        // Use exponentially increasing timeout: 10s, 15s, 20s, 25s
-        const timeout = initialTimeoutMs + (i * 5000)
-        await withTimeout(loadPaymentMethods(), timeout)
+        // Let SDK handle network timeouts without artificial limits
+        await loadPaymentMethods()
         // If loadPaymentMethods resolved, success
         return
       } catch (e: unknown) {
@@ -68,7 +67,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      refreshWithRetry(3, 10000)
+      refreshWithRetry(3)
     }
   }, [isOpen])
 
