@@ -166,7 +166,7 @@ describe('Authentication State Persistence', () => {
   });
 
   describe('Profile Loading Race Condition', () => {
-    it('should wait for profile to load before setting isLoading to false', async () => {
+    it('should set isLoading to false after session load, independent of profile fetch', async () => {
       const mockSession = {
         access_token: 'valid_token',
         refresh_token: 'refresh_token',
@@ -223,21 +223,21 @@ describe('Authentication State Persistence', () => {
         expect(supabase.auth.getSession).toHaveBeenCalled();
       });
 
-      // Wait for setSession to be called
-      await waitFor(() => {
-        expect(authProfileService.setSession).toHaveBeenCalledWith(mockSession);
-      });
+      // ROLLBACK BEHAVIOR: isLoading is cleared immediately after session load
+      // Profile fetch happens async and doesn't block the loading state
+      // setSession is called fire-and-forget (no await)
+      expect(authProfileService.setSession).toHaveBeenCalledWith(mockSession);
 
       // Fast-forward to complete the async profile fetch
       jest.advanceTimersByTime(150);
 
-      // Verify that profile was loaded
+      // Verify that profile was eventually loaded
       await waitFor(() => {
         expect(profileSubscriptionCallback).toBeDefined();
       });
     });
 
-    it('should handle profile fetch failure gracefully', async () => {
+    it('should handle profile fetch failure gracefully and not block app', async () => {
       const mockSession = {
         access_token: 'valid_token',
         refresh_token: 'refresh_token',
@@ -280,10 +280,10 @@ describe('Authentication State Persistence', () => {
         expect(supabase.auth.getSession).toHaveBeenCalled();
       });
 
-      // Even with error, should not block indefinitely
-      await waitFor(() => {
-        expect(authProfileService.setSession).toHaveBeenCalled();
-      });
+      // ROLLBACK BEHAVIOR: Profile fetch error doesn't block app
+      // isLoading is cleared regardless of profile fetch result
+      // Error is logged but app continues to function
+      expect(authProfileService.setSession).toHaveBeenCalled();
     });
   });
 
