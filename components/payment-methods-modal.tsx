@@ -5,7 +5,6 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
-import { withTimeout } from '../lib/utils/withTimeout'
 import { AddCardModal } from "./add-card-modal"
 import { AddBankAccountModal } from "./add-bank-account-modal"
 
@@ -37,38 +36,38 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
     }
   }, [isOpen, preferredType])
 
-  // Use shared timeout helper for retryable fetches with exponential backoff
-  const refreshWithRetry = async (retries = 3, initialTimeoutMs = 10000) => {
+  // Refresh payment methods with retry logic
+  // Let Stripe SDK and network stack handle timeouts naturally
+  const refreshWithRetry = async (totalAttempts = 4) => {
     let lastErr: unknown
     setLoadFailed(false)
-    for (let i = 0; i <= retries; i++) {
+    for (let i = 0; i < totalAttempts; i++) {
       try {
         // Clear previous errors before attempt
         clearError()
-        // Use exponentially increasing timeout: 10s, 15s, 20s, 25s
-        const timeout = initialTimeoutMs + (i * 5000)
-        await withTimeout(loadPaymentMethods(), timeout)
+        // Let SDK handle network timeouts without artificial limits
+        await loadPaymentMethods()
         // If loadPaymentMethods resolved, success
         return
       } catch (e: unknown) {
         lastErr = e
-        // Skip backoff after the last retry
-        if (i < retries) {
+        // Skip backoff after the last attempt
+        if (i < totalAttempts - 1) {
           // Exponential backoff: 1s, 2s, 4s (between attempts)
           const backoffMs = Math.min(1000 * Math.pow(2, i), 4000)
-          console.log(`[PaymentMethodsModal] Retry attempt ${i + 1}/${retries + 1} failed, waiting ${backoffMs}ms before retry`)
+          console.log(`[PaymentMethodsModal] Attempt ${i + 1}/${totalAttempts} failed, waiting ${backoffMs}ms before retry`)
           await new Promise(r => setTimeout(r, backoffMs))
         }
       }
     }
-    console.warn('[PaymentMethodsModal] loadPaymentMethods retry failed after all attempts:', lastErr)
+    console.warn('[PaymentMethodsModal] loadPaymentMethods failed after all attempts:', lastErr)
     setLoadFailed(true)
   }
 
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      refreshWithRetry(3, 10000)
+      refreshWithRetry(4) // Try 4 times total
     }
   }, [isOpen])
 
