@@ -67,7 +67,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      refreshWithRetry(4) // 4 total attempts: 1 initial + 3 retries
+      refreshWithRetry(4) // Try 4 times total
     }
   }, [isOpen])
 
