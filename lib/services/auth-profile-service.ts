@@ -173,7 +173,10 @@ export class AuthProfileService {
     const previousUserId = this.currentSession?.user?.id;
     this.currentSession = session;
     
+    console.log('[authProfileService] setSession called, previousUserId:', previousUserId, 'newUserId:', session?.user?.id);
+    
     if (!session) {
+      console.log('[authProfileService] Clearing profile');
       this.currentProfile = null;
       // Clear cache for the previous user if switching users
       if (previousUserId) {
@@ -188,8 +191,10 @@ export class AuthProfileService {
       await this.clearCache(previousUserId);
     }
 
+    console.log('[authProfileService] Fetching and syncing profile for userId:', session.user.id);
     // Fetch and sync profile for authenticated user
     await this.fetchAndSyncProfile(session.user.id);
+    console.log('[authProfileService] Fetch and sync complete, profile:', this.currentProfile ? 'found' : 'null');
   }
 
   /**
@@ -210,12 +215,15 @@ export class AuthProfileService {
    * Fetch profile from Supabase and sync with local cache
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
+    console.log('[authProfileService] fetchAndSyncProfile called for userId:', userId);
     if (!isSupabaseConfigured) {
       logger.error('Supabase not configured', { userId });
+      console.error('[authProfileService] Supabase not configured');
       return null;
     }
 
     try {
+      console.log('[authProfileService] Fetching profile from Supabase...');
       // Use Supabase SDK's built-in network handling and timeouts
       const { data, error } = await supabase
         .from('profiles')
@@ -223,10 +231,13 @@ export class AuthProfileService {
         .eq('id', userId)
         .single();
 
+      console.log('[authProfileService] Supabase fetch result:', { hasData: !!data, error });
+
       if (error) {
         // If profile doesn't exist, create a minimal one
         if (error.code === 'PGRST116') {
           logger.warning('Profile not found, creating minimal profile', { userId });
+          console.log('[authProfileService] Profile not found, creating minimal profile');
           return await this.createMinimalProfile(userId);
         }
         throw error;
@@ -248,12 +259,15 @@ export class AuthProfileService {
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         };
 
+        console.log('[authProfileService] Profile loaded successfully:', profile.username);
         this.currentProfile = profile;
         await this.cacheProfile(profile);
         this.notifyListeners(profile);
+        console.log('[authProfileService] Notified', this.listeners.length, 'listeners');
         return profile;
       }
 
+      console.log('[authProfileService] No data returned from Supabase');
       return null;
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when
@@ -261,18 +275,22 @@ export class AuthProfileService {
       const msg = (error && (error.message || String(error))) || '';
       if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
         logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
+        console.error('[authProfileService] Received HTML response - Supabase URL likely misconfigured');
       } else {
         logger.error('Error fetching profile', { userId, error });
+        console.error('[authProfileService] Error fetching profile:', error);
       }
       
       // Try to load from cache
       const cached = await this.loadFromCache(userId);
       if (cached && cached.id === userId) {
+        console.log('[authProfileService] Loaded from cache');
         this.currentProfile = cached;
         this.notifyListeners(cached);
         return cached;
       }
       
+      console.log('[authProfileService] No cached profile available');
       return null;
     }
   }
