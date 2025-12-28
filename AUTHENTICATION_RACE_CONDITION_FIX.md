@@ -1,5 +1,7 @@
 # Authentication Race Condition Fix
 
+> **⚠️ SUPERSEDED**: This document describes a previous fix attempt. The final solution is documented in [AUTH_ROLLBACK_GUIDE.md](./AUTH_ROLLBACK_GUIDE.md), which makes the loading state completely independent of profile fetch operations.
+
 ## Issue Summary
 
 **Problem**: Users who completed account registration and onboarding were incorrectly redirected to the onboarding flow after app refresh, effectively "erasing" their account progress.
@@ -7,6 +9,8 @@
 **Impact**: Critical user experience issue causing frustration and preventing users from accessing the app after registration.
 
 **Root Cause**: Race condition between session loading and profile fetching in the authentication initialization flow.
+
+**Current Status**: RESOLVED - See AUTH_ROLLBACK_GUIDE.md for the implemented solution that makes profile loading non-blocking.
 
 ---
 

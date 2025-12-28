@@ -164,6 +164,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     }, refreshIn)
   }
 
+  /**
+   * Helper to sync session with profile service in fire-and-forget mode
+   * Logs errors but doesn't block auth flow
+   */
+  const syncProfileWithSession = (session: Session | null, context: string) => {
+    authProfileService.setSession(session).catch((e) => {
+      console.error(`[AuthProvider] Profile sync error (${context}):`, {
+        error: e,
+        userId: session?.user?.id,
+        hasSession: Boolean(session),
+      })
+    })
+  }
+
   // Fetch the session once, and subscribe to auth state changes
   useEffect(() => {
     isMountedRef.current = true
@@ -199,9 +213,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // ROLLBACK: Fire-and-forget profile sync
           // Profile fetch should not block the app from rendering main UI
           // Failures will be logged but won't keep skeletons indefinitely
-          authProfileService.setSession(session).catch((e) => {
-            console.error('[AuthProvider] Error setting session in profile service:', e)
-          })
+          syncProfileWithSession(session, 'initial-fetch')
           
           // Email verification gate: Check if email is verified
           // Priority: session.user?.email_confirmed_at > profile.email_verified > false
@@ -263,9 +275,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       
       // ROLLBACK: Profile fetch happens async, doesn't block auth state
       // Fire-and-forget profile sync - log errors but don't block
-      authProfileService.setSession(session).catch((e) => {
-        console.error('[AuthProvider] Error syncing session in profile service:', e)
-      })
+      syncProfileWithSession(session, `auth-state-change:${_event}`)
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(
