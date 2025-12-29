@@ -10,7 +10,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { getCurrentUserId } from "lib/utils/data-utils"
+import { getCurrentUserId, CURRENT_USER_ID } from "lib/utils/data-utils"
 import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
@@ -271,10 +271,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [])
 
   const loadMyBounties = React.useCallback(async () => {
-    // Guard: don't load if no valid user
-    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
-      setIsLoading((prev) => ({ ...prev, myBounties: false }))
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
+      setIsLoading((prev) => ({ ...prev, myBounties: false, requests: false }))
       setMyBounties([])
+      setBountyRequests([])
       return
     }
     
@@ -295,8 +297,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
-    // Guard: don't load if no valid user
-    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
       setIsLoading((prev) => ({ ...prev, inProgress: false }))
       setInProgressBounties([])
       return
@@ -349,9 +352,9 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
-    // Only load data if we have a valid authenticated user
-    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
-      // Set loading to false if no valid user and clear any data
+    // Only load data if we have a valid authenticated user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data arrays to avoid stuck skeletons
       setIsLoading({ myBounties: false, inProgress: false, requests: false })
       setMyBounties([])
       setInProgressBounties([])

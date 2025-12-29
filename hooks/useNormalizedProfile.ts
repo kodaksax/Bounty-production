@@ -1,5 +1,6 @@
 import { authProfileService, type AuthProfile } from 'lib/services/auth-profile-service';
 import { mergeNormalized, normalizeAuthProfile, normalizeUserProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
+import { CURRENT_USER_ID } from 'lib/utils/data-utils';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthProfile } from './useAuthProfile';
 import { useProfile } from './useProfile';
@@ -18,9 +19,10 @@ export function useNormalizedProfile(userId?: string) {
   const loadSupabase = useCallback(async (id?: string) => {
     console.log('[useNormalizedProfile] loadSupabase called', { id, hasId: !!id });
     setSbError(null);
-    if (!id) {
-      console.log('[useNormalizedProfile] No id provided, setting profile to null');
+    if (!id || id === CURRENT_USER_ID) {
+      console.log('[useNormalizedProfile] No valid id provided (or sentinel user), setting profile to null and clearing loading');
       setSupabaseProfile(null);
+      setSbLoading(false); // Ensure loading is cleared when no valid id
       return;
     }
 

@@ -29,6 +29,7 @@ import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
 import { searchService } from '../../lib/services/search-service'
 import type { TrendingBounty } from '../../lib/types'
+import { CURRENT_USER_ID } from '../../lib/utils/data-utils'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
@@ -54,7 +55,6 @@ function BountyAppInner() {
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
   // Track bounty IDs the user has applied to (pending, accepted, or rejected)
@@ -70,6 +70,8 @@ function BountyAppInner() {
   const scrollY = useRef(new Animated.Value(0)).current
   // Reference to the FlatList for scroll-to-top functionality
   const bountyListRef = useRef<FlatList>(null)
+  // Ref for pagination offset to avoid dependency in useCallback
+  const offsetRef = useRef(0)
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
@@ -206,7 +208,7 @@ function BountyAppInner() {
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
     // Guard: don't load if no valid user or using fallback ID
-    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
       setApplicationsLoaded(true)
       return
     }
@@ -237,14 +239,14 @@ function BountyAppInner() {
       setLoadingMore(true)
     }
     try {
-      const pageOffset = reset ? 0 : offset
+      const pageOffset = reset ? 0 : offsetRef.current
       const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
       if (reset) {
         setBounties(fetchedBounties)
       } else {
         setBounties(prev => [...prev, ...fetchedBounties])
       }
-      setOffset(pageOffset + fetchedBounties.length)
+      offsetRef.current = pageOffset + fetchedBounties.length
       setHasMore(fetchedBounties.length === PAGE_SIZE)
     } catch (error) {
       console.error('Error loading bounties:', error)
@@ -256,7 +258,7 @@ function BountyAppInner() {
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, [offset])
+  }, []) // Empty dependencies - uses ref for offset
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -274,12 +276,15 @@ function BountyAppInner() {
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
-  }, [currentUserId]) // Only reload when user changes
+  }, [loadUserApplications]) // Depend on stable function, which already tracks currentUserId
 
+  // Load initial data on mount only
   useEffect(() => {
     loadBounties({ reset: true })
     loadTrendingBounties()
-  }, []) // Only load once on mount, not on every callback change
+    // We intentionally run this only once on mount; callbacks are stable (empty dependency arrays).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
@@ -289,7 +294,7 @@ function BountyAppInner() {
       loadUserApplications()
       loadTrendingBounties()
     }
-  }, [activeScreen]) // Only depend on activeScreen to avoid infinite loops
+  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties]) // Depend on stable primitives and functions
 
   // Restore last-selected chip on mount
   useEffect(() => {
@@ -315,7 +320,7 @@ function BountyAppInner() {
     setRefreshing(true)
     try {
       // Reset pagination and reload first page, also refresh applications and trending
-      setOffset(0)
+      offsetRef.current = 0
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
@@ -331,7 +336,7 @@ function BountyAppInner() {
     } finally {
       setRefreshing(false)
     }
-  }, []) // Empty deps - functions are called directly and are stable
+  }, [loadBounties, loadUserApplications, loadTrendingBounties]) // Depend on stable functions
 
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {

@@ -240,9 +240,24 @@ export class AuthProfileService {
     });
     
     if (!isSupabaseConfigured) {
-      console.error('[authProfileService] Supabase not configured - cannot fetch profile');
-      logger.error('Supabase not configured', { userId });
-      return null;
+      console.log('[authProfileService] Supabase not configured - creating fallback profile');
+      // When Supabase is not configured, return a fallback profile so the app
+      // can function in development mode without full backend setup
+      const normalizedUserId = (userId ?? '').toString().trim();
+      const safeUserSuffix = (normalizedUserId || 'devuser').slice(0, 8);
+      const fallbackProfile: AuthProfile = {
+        id: userId,
+        username: `user_${safeUserSuffix}`,
+        email: undefined,
+        about: 'Development user (Supabase not configured)',
+        balance: 0,
+        onboarding_completed: false,
+      };
+      console.log('[authProfileService] Using fallback profile:', fallbackProfile.username);
+      this.currentProfile = fallbackProfile;
+      await this.cacheProfile(fallbackProfile);
+      this.notifyListeners(fallbackProfile);
+      return fallbackProfile;
     }
 
     try {
