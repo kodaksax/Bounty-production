@@ -243,9 +243,12 @@ export class AuthProfileService {
       console.log('[authProfileService] Supabase not configured - creating fallback profile');
       // When Supabase is not configured, return a fallback profile so the app
       // can function in development mode without full backend setup
+      const normalizedUserId = (userId ?? '').toString().trim();
+      const safeUserSuffix = (normalizedUserId || 'devuser').slice(0, 8);
       const fallbackProfile: AuthProfile = {
         id: userId,
-        username: `user_${userId.slice(0, 8)}`,
+        username: `user_${safeUserSuffix}`,
+        email: undefined,
         about: 'Development user (Supabase not configured)',
         balance: 0,
         onboarding_completed: false,

@@ -10,6 +10,7 @@ import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { TrustBadges } from "components/ui/trust-badges";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
+import { CURRENT_USER_ID } from "lib/utils/data-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
@@ -63,7 +64,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
     const fetchStats = async () => {
-      if (!authUserId || authUserId === '00000000-0000-0000-0000-000000000001') {
+      if (!authUserId || authUserId === CURRENT_USER_ID) {
         // Set loading to false when no valid user (including sentinel)
         setStats({
           jobsAccepted: 0,
@@ -103,7 +104,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // This effect is now redundant as authProfileService handles this, but kept for backward compatibility
   useEffect(() => {
     const ensureProfile = async () => {
-      if (!authUserId || authUserId === '00000000-0000-0000-0000-000000000001') return;
+      if (!authUserId || authUserId === CURRENT_USER_ID) return;
       
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();

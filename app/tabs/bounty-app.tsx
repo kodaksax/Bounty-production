@@ -29,6 +29,7 @@ import type { Bounty as BountyType } from '../../lib/services/database.types'
 import { locationService } from '../../lib/services/location-service'
 import { searchService } from '../../lib/services/search-service'
 import type { TrendingBounty } from '../../lib/types'
+import { CURRENT_USER_ID } from '../../lib/utils/data-utils'
 import { WalletProvider, useWallet } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
@@ -54,7 +55,6 @@ function BountyAppInner() {
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const { balance } = useWallet()
   // Track bounty IDs the user has applied to (pending, accepted, or rejected)
@@ -208,7 +208,7 @@ function BountyAppInner() {
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
     // Guard: don't load if no valid user or using fallback ID
-    if (!currentUserId || currentUserId === '00000000-0000-0000-0000-000000000001') {
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
       setApplicationsLoaded(true)
       return
     }
@@ -247,7 +247,6 @@ function BountyAppInner() {
         setBounties(prev => [...prev, ...fetchedBounties])
       }
       offsetRef.current = pageOffset + fetchedBounties.length
-      setOffset(offsetRef.current)
       setHasMore(fetchedBounties.length === PAGE_SIZE)
     } catch (error) {
       console.error('Error loading bounties:', error)
@@ -277,13 +276,15 @@ function BountyAppInner() {
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
-  }, [currentUserId, loadUserApplications]) // Depend on stable function and userId primitive
+  }, [loadUserApplications]) // Depend on stable function, which already tracks currentUserId
 
   // Load initial data on mount only
   useEffect(() => {
     loadBounties({ reset: true })
     loadTrendingBounties()
-  }, [loadBounties, loadTrendingBounties]) // Depend on stable functions
+    // We intentionally run this only once on mount; callbacks are stable (empty dependency arrays).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
@@ -320,7 +321,6 @@ function BountyAppInner() {
     try {
       // Reset pagination and reload first page, also refresh applications and trending
       offsetRef.current = 0
-      setOffset(0)
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
