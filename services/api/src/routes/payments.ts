@@ -4,28 +4,17 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { logger } from '../services/logger';
 import { walletService } from '../services/wallet-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
+import { 
+  checkIdempotencyKey, 
+  storeIdempotencyKey, 
+  removeIdempotencyKey,
+  getServiceStatus 
+} from '../services/idempotency-service';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 // Platform account ID for fee collection
 // In production, this should be stored in environment variables
 const PLATFORM_ACCOUNT_ID = process.env.PLATFORM_ACCOUNT_ID || '00000000-0000-0000-0000-000000000000';
-
-// Idempotency tracking for duplicate payment prevention
-// NOTE: In production, this should be stored in a persistent database (e.g., Redis or PostgreSQL)
-// The in-memory implementation below is suitable for development/single-instance deployments only.
-// For multi-instance production deployments, implement idempotency via:
-// 1. Store idempotency keys in Redis with TTL
-// 2. Or use PostgreSQL with a unique constraint on idempotency_key
-const pendingPayments = new Map<string, number>();
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function cleanupExpiredIdempotencyKeys() {
-  const now = Date.now();
-  for (const [key, timestamp] of pendingPayments.entries()) {
-    if (now - timestamp >= IDEMPOTENCY_TTL_MS) {
-      pendingPayments.delete(key);
-    }
-  }
-}
 
 export async function registerPaymentRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';
@@ -96,16 +85,17 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Check for duplicate submission
+      // Check for duplicate submission using idempotency service
       if (idempotencyKey) {
-        if (pendingPayments.has(idempotencyKey)) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          logger.warn(`[payments] Duplicate payment request detected for key: ${idempotencyKey}`);
           return reply.code(409).send({
             error: 'Duplicate payment request. Please wait for the current payment to complete.',
             code: 'duplicate_transaction',
           });
         }
-        pendingPayments.set(idempotencyKey, Date.now());
-        cleanupExpiredIdempotencyKeys();
+        await storeIdempotencyKey(idempotencyKey);
       }
 
       // Create PaymentIntent with proper configuration
@@ -136,11 +126,17 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         currency: paymentIntent.currency,
       };
     } catch (error: any) {
-      logger.error('[payments] Error creating payment intent:', error);
+      // Log error with full context
+      logErrorWithContext(request, error, {
+        operation: 'create_payment_intent',
+        amountCents: body.amountCents,
+        currency: body.currency,
+        idempotencyKey,
+      });
       
       // Clean up idempotency key on failure to allow retry
       if (idempotencyKey) {
-        pendingPayments.delete(idempotencyKey);
+        await removeIdempotencyKey(idempotencyKey);
       }
       
       // Handle specific Stripe errors
@@ -149,6 +145,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           error: error.message,
           code: error.code,
           decline_code: error.decline_code,
+          requestId: getRequestContext(request).requestId,
         });
       }
 
@@ -156,11 +153,13 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({
           error: 'Invalid payment request',
           code: error.code,
+          requestId: getRequestContext(request).requestId,
         });
       }
 
       return reply.code(500).send({
-        error: 'Failed to create payment intent'
+        error: 'Failed to create payment intent',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
