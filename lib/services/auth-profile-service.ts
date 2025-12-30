@@ -316,7 +316,13 @@ export class AuthProfileService {
       console.warn('[authProfileService] Supabase returned no data and no error - attempting to create minimal profile');
       // If no data and no error, try to create a minimal profile
       // This handles edge cases where the profile wasn't created by the trigger
-      logger.warning('Profile query returned no data, creating minimal profile', { userId });
+      logger.warning('Profile query returned no data, creating minimal profile. This should be rare if DB trigger is working.', { userId });
+      
+      // Track this fallback for monitoring
+      if (__DEV__) {
+        console.warn('[authProfileService] MONITORING: Fallback profile creation triggered - check if DB trigger is working');
+      }
+      
       return await this.createMinimalProfile(userId);
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when

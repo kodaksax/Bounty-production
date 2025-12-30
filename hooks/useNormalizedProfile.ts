@@ -59,15 +59,13 @@ export function useNormalizedProfile(userId?: string) {
     
     // Safety timeout: ensure loading is cleared after max 8 seconds
     const safetyTimeout = setTimeout(() => {
-      if (sbLoading) {
-        console.warn('[useNormalizedProfile] Safety timeout: forcing sbLoading = false after 8s');
-        setSbLoading(false);
-        setSupabaseProfile(null);
-      }
+      console.warn('[useNormalizedProfile] Safety timeout: forcing sbLoading = false after 8s');
+      setSbLoading(false);
+      setSupabaseProfile(null);
     }, 8000);
     
     return () => clearTimeout(safetyTimeout);
-  }, [userId, loadSupabase, sbLoading]);
+  }, [userId, loadSupabase]);
 
   const normalizedFromSupabase = normalizeAuthProfile(supabaseProfile || null);
   const normalizedFromAuthHook = isViewingSelf ? normalizeAuthProfile(authHookProfile || null) : null;

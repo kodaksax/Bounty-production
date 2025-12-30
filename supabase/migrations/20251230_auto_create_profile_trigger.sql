@@ -28,9 +28,21 @@ BEGIN
   END IF;
   
   -- Ensure username is unique by appending numbers if needed
-  WHILE EXISTS (SELECT 1 FROM public.profiles WHERE username = generated_username) LOOP
-    generated_username := generated_username || floor(random() * 100)::text;
-  END LOOP;
+  -- Add maximum retry limit to prevent infinite loops
+  DECLARE
+    retry_count INT := 0;
+    max_retries INT := 10;
+  BEGIN
+    WHILE EXISTS (SELECT 1 FROM public.profiles WHERE username = generated_username) AND retry_count < max_retries LOOP
+      generated_username := generated_username || floor(random() * 100)::text;
+      retry_count := retry_count + 1;
+    END LOOP;
+    
+    -- If we hit max retries, fallback to UUID-based username
+    IF retry_count >= max_retries THEN
+      generated_username := 'user_' || substring(NEW.id::text from 1 for 8);
+    END IF;
+  END;
 
   -- Insert new profile with data from auth.users
   INSERT INTO public.profiles (
