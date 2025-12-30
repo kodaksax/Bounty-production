@@ -26,6 +26,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
   const refreshTimerRef = useRef<number | null>(null)
   const isRefreshingRef = useRef<boolean>(false)
+  const refreshPromiseRef = useRef<Promise<void> | null>(null) // Store in-flight promise
   const isMountedRef = useRef<boolean>(true)
   const isInitializingRef = useRef<boolean>(true)
   const profileFetchCompletedRef = useRef<boolean>(false)
@@ -33,13 +34,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const lastProfileLogRef = useRef<string | null>(null)
 
   /**
-   * Manually refresh the session token
+   * Manually refresh the session token with promise-based queueing
+   * If a refresh is already in progress, subsequent calls wait for it to complete
    */
   const refreshTokenNow = async () => {
-    // Prevent concurrent refresh attempts
-    if (isRefreshingRef.current) {
-      console.log('[AuthProvider] Refresh already in progress, skipping')
-      return
+    // If refresh is in progress, wait for it instead of returning early
+    if (refreshPromiseRef.current) {
+      console.log('[AuthProvider] Refresh already in progress, waiting for completion')
+      return refreshPromiseRef.current
     }
 
     // Check if component is still mounted
@@ -48,54 +50,67 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       return
     }
 
-    isRefreshingRef.current = true
+    // Create and store the refresh promise
+    refreshPromiseRef.current = (async () => {
+      isRefreshingRef.current = true
 
-    try {
-      console.log('[AuthProvider] Attempting to refresh token...')
-      const { data, error } = await supabase.auth.refreshSession()
-      
-      if (error) {
-        console.error('[AuthProvider] Token refresh failed:', error)
+      try {
+        console.log('[AuthProvider] Attempting to refresh token...')
+        const { data, error } = await supabase.auth.refreshSession()
         
-        // Distinguish between network errors and auth errors
-        const isNetworkError = error.message?.includes('network') || 
-                               error.message?.includes('fetch') ||
-                               error.status === 503 ||
-                               error.status === 504
-        
-        if (isNetworkError) {
-          console.log('[AuthProvider] Network error during refresh, will retry')
-          // Don't clear session on network errors, let it be retried
-          return
-        }
-        
-        // On permanent auth failure, clear session and let user re-authenticate
-        if (isMountedRef.current) {
-          setSession(null)
-          try {
-            await authProfileService.setSession(null)
-          } catch (e) {
-            console.error('[AuthProvider] Error clearing session in profile service:', e)
-          }
-        }
-        return
-      }
-
-      if (data.session) {
-        console.log('[AuthProvider] Token refreshed successfully')
-        if (isMountedRef.current) {
-          setSession(data.session)
-          try {
-            await authProfileService.setSession(data.session)
-          } catch (e) {
-            console.error('[AuthProvider] Error setting session in profile service:', e)
+        if (error) {
+          console.error('[AuthProvider] Token refresh failed:', error)
+          
+          // Distinguish between network errors and auth errors
+          const isNetworkError = error.message?.includes('network') || 
+                                 error.message?.includes('fetch') ||
+                                 error.status === 503 ||
+                                 error.status === 504
+          
+          if (isNetworkError) {
+            console.log('[AuthProvider] Network error during refresh, will retry')
+            // Don't clear session on network errors, let it be retried
+            return
           }
           
-          // Schedule next refresh
-          scheduleTokenRefresh(data.session)
+          // On permanent auth failure, clear session and let user re-authenticate
+          if (isMountedRef.current) {
+            setSession(null)
+            try {
+              await authProfileService.setSession(null)
+            } catch (e) {
+              console.error('[AuthProvider] Error clearing session in profile service:', e)
+            }
+          }
+          return
         }
-      } else {
-        console.warn('[AuthProvider] Token refresh returned no session')
+
+        if (data.session) {
+          console.log('[AuthProvider] Token refreshed successfully')
+          if (isMountedRef.current) {
+            setSession(data.session)
+            try {
+              await authProfileService.setSession(data.session)
+            } catch (e) {
+              console.error('[AuthProvider] Error setting session in profile service:', e)
+            }
+            
+            // Schedule next refresh
+            scheduleTokenRefresh(data.session)
+          }
+        } else {
+          console.warn('[AuthProvider] Token refresh returned no session')
+          if (isMountedRef.current) {
+            setSession(null)
+            try {
+              await authProfileService.setSession(null)
+            } catch (e) {
+              console.error('[AuthProvider] Error clearing session in profile service:', e)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[AuthProvider] Unexpected error refreshing token:', error)
         if (isMountedRef.current) {
           setSession(null)
           try {
@@ -104,20 +119,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             console.error('[AuthProvider] Error clearing session in profile service:', e)
           }
         }
+      } finally {
+        isRefreshingRef.current = false
+        refreshPromiseRef.current = null // Clear promise after completion
       }
-    } catch (error) {
-      console.error('[AuthProvider] Unexpected error refreshing token:', error)
-      if (isMountedRef.current) {
-        setSession(null)
-        try {
-          await authProfileService.setSession(null)
-        } catch (e) {
-          console.error('[AuthProvider] Error clearing session in profile service:', e)
-        }
-      }
-    } finally {
-      isRefreshingRef.current = false
-    }
+    })()
+
+    return refreshPromiseRef.current
   }
 
   /**

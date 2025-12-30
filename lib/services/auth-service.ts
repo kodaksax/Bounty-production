@@ -5,6 +5,16 @@
 
 import { supabase } from '../supabase'
 import { validateNewPassword, isValidEmail } from '../utils/password-validation'
+import { generateCorrelationId } from '../utils/auth-errors'
+
+// Import analytics service (safely handle if not available)
+let analyticsService: any = null;
+try {
+  analyticsService = require('./analytics-service').analyticsService;
+} catch (e) {
+  // Analytics service not available, operations will continue without tracking
+  console.warn('[auth-service] Analytics service not available');
+}
 
 /**
  * Result type for authentication operations
@@ -13,6 +23,7 @@ export interface AuthResult {
   success: boolean;
   message: string;
   error?: string;
+  correlationId?: string;
 }
 
 /**
@@ -23,7 +34,11 @@ export interface AuthResult {
  * @returns Promise that resolves when the request completes
  */
 export async function resendVerification(email: string): Promise<AuthResult> {
+  const correlationId = generateCorrelationId('resend_verification');
+  
   try {
+    console.log('[auth-service] Resending verification email', { email: email.trim().toLowerCase(), correlationId });
+    
     // Supabase provides a built-in resend method
     const { error } = await supabase.auth.resend({
       type: 'signup',
@@ -31,24 +46,63 @@ export async function resendVerification(email: string): Promise<AuthResult> {
     })
 
     if (error) {
-      console.error('[auth-service] Failed to resend verification:', error)
+      console.error('[auth-service] Failed to resend verification:', error, { correlationId })
+      
+      // Track failed attempt
+      if (analyticsService) {
+        try {
+          await analyticsService.trackEvent('auth_resend_verification_failed', {
+            email: email.trim().toLowerCase(),
+            error: error.message,
+            correlation_id: correlationId,
+          });
+        } catch (e) { /* Swallow analytics errors */ }
+      }
+      
       return {
         success: false,
         message: error.message || 'Failed to resend verification email',
         error: error.message,
+        correlationId,
       }
+    }
+
+    console.log('[auth-service] Verification email sent successfully', { correlationId });
+    
+    // Track successful send
+    if (analyticsService) {
+      try {
+        await analyticsService.trackEvent('auth_resend_verification_success', {
+          email: email.trim().toLowerCase(),
+          correlation_id: correlationId,
+        });
+      } catch (e) { /* Swallow analytics errors */ }
     }
 
     return {
       success: true,
       message: 'Verification email sent! Please check your inbox.',
+      correlationId,
     }
   } catch (error: any) {
-    console.error('[auth-service] Unexpected error resending verification:', error)
+    console.error('[auth-service] Unexpected error resending verification:', error, { correlationId })
+    
+    // Track unexpected error
+    if (analyticsService) {
+      try {
+        await analyticsService.trackEvent('auth_resend_verification_error', {
+          email: email.trim().toLowerCase(),
+          error: error?.message,
+          correlation_id: correlationId,
+        });
+      } catch (e) { /* Swallow analytics errors */ }
+    }
+    
     return {
       success: false,
       message: 'An unexpected error occurred. Please try again later.',
       error: error?.message,
+      correlationId,
     }
   }
 }
@@ -89,7 +143,11 @@ export async function requestPasswordReset(
   email: string, 
   redirectTo?: string
 ): Promise<AuthResult> {
+  const correlationId = generateCorrelationId('password_reset');
+  
   try {
+    console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId });
+    
     // Validate email format using pre-compiled regex
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
@@ -97,6 +155,7 @@ export async function requestPasswordReset(
         success: false,
         message: 'Please enter a valid email address',
         error: 'Invalid email format',
+        correlationId,
       }
     }
 
@@ -110,7 +169,18 @@ export async function requestPasswordReset(
     })
 
     if (error) {
-      console.error('[auth-service] Password reset request error:', error)
+      console.error('[auth-service] Password reset request error:', error, { correlationId })
+      
+      // Track failed attempt
+      if (analyticsService) {
+        try {
+          await analyticsService.trackEvent('auth_password_reset_failed', {
+            email: normalizedEmail,
+            error: error.message,
+            correlation_id: correlationId,
+          });
+        } catch (e) { /* Swallow analytics errors */ }
+      }
       
       // Handle rate limiting specifically
       if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
@@ -118,25 +188,52 @@ export async function requestPasswordReset(
           success: false,
           message: 'Too many requests. Please wait a few minutes before trying again.',
           error: 'rate_limited',
+          correlationId,
         }
       }
 
       // For security, we don't reveal whether the email exists or not
       // Instead, we log the actual error and return a generic success message
-      console.error('[auth-service] Password reset error (returning success for security):', error.message)
+      console.error('[auth-service] Password reset error (returning success for security):', error.message, { correlationId })
+    }
+
+    console.log('[auth-service] Password reset request processed', { correlationId });
+    
+    // Track successful request (even if email doesn't exist, for security)
+    if (analyticsService) {
+      try {
+        await analyticsService.trackEvent('auth_password_reset_requested', {
+          email: normalizedEmail,
+          correlation_id: correlationId,
+        });
+      } catch (e) { /* Swallow analytics errors */ }
     }
 
     // Always return success to prevent email enumeration attacks
     return {
       success: true,
       message: 'If an account exists with this email, you will receive a password reset link shortly.',
+      correlationId,
     }
   } catch (error: any) {
-    console.error('[auth-service] Unexpected error in password reset request:', error)
+    console.error('[auth-service] Unexpected error in password reset request:', error, { correlationId })
+    
+    // Track unexpected error
+    if (analyticsService) {
+      try {
+        await analyticsService.trackEvent('auth_password_reset_error', {
+          email: email.trim().toLowerCase(),
+          error: error?.message,
+          correlation_id: correlationId,
+        });
+      } catch (e) { /* Swallow analytics errors */ }
+    }
+    
     return {
       success: false,
       message: 'An unexpected error occurred. Please try again later.',
       error: error?.message,
+      correlationId,
     }
   }
 }
