@@ -11,7 +11,7 @@ import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { withTimeout } from "../lib/utils/withTimeout"
-import { clearRememberMePreference, clearAllSessionData } from "../lib/auth-session-storage"
+import { clearRememberMePreference } from "../lib/auth-session-storage"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -202,9 +202,6 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
-              // Clear remember me preference
-              await clearRememberMePreference();
-
               // Sign out from Supabase with timeout protection
               try {
                 const { error } = await withTimeout(
@@ -227,8 +224,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 }
               }
 
-              // Clear all session data
-              await clearAllSessionData();
+              // Clear remember me preference after sign-out completes
+              // This ensures consistency: preference cleared only after session is gone
+              // Note: supabase.auth.signOut() calls the storage adapter's removeItem,
+              // which clears session data from secure storage automatically
+              await clearRememberMePreference();
 
               // Clear user-specific draft data to prevent data leaks
               if (currentUserId) {

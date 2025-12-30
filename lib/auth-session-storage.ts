@@ -106,6 +106,15 @@ export async function clearAllSessionData(): Promise<void> {
  * - getItem: Returns null if remember me is false (forces re-login on reload)
  * - setItem: Only persists to secure storage if remember me is true
  * - removeItem: Always clears from secure storage
+ * 
+ * RACE CONDITION NOTE:
+ * Each storage operation independently checks the remember me preference.
+ * While JavaScript is single-threaded, async operations can interleave:
+ * - If preference changes between operations, each operation uses the preference
+ *   value at the time it was called
+ * - This is intentional: session operations are meant to be independently evaluated
+ * - For transactional consistency across multiple operations, callers should
+ *   manage the preference state externally
  */
 export const createAuthSessionStorageAdapter = () => {
   return {
@@ -154,9 +163,11 @@ export const createAuthSessionStorageAdapter = () => {
         if (!rememberMe) {
           // If remember me is not set, don't persist to secure storage
           // Session will only exist in Supabase's internal memory for this app session
-          // NOTE: We return early without persisting. Callers relying on this behavior
-          // should check the remember me preference separately if needed.
-          console.log('[AuthSessionStorage] Remember me is false, not persisting session');
+          // NOTE: We return early without persisting. This is intentional behavior:
+          // - Supabase SDK will still function normally with in-memory session
+          // - On app reload, getItem will return null (forcing re-authentication)
+          // - This implements the "remember me = false" behavior
+          console.log('[AuthSessionStorage] Remember me is false, skipping session persistence (session exists in memory only)');
           return;
         }
         

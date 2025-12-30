@@ -10,8 +10,6 @@
  * Actual testing requires running the mobile app.
  */
 
-const { execSync } = require('child_process');
-
 console.log('\n=== Remember Me Authentication Test ===\n');
 
 // Test scenarios
