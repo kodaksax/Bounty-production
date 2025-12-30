@@ -313,12 +313,31 @@ export function getBackoffDelay(attempt: number, baseDelay: number = 1000): numb
 }
 
 /**
+ * Generate a cryptographically secure random string for IDs
+ * Uses crypto.getRandomValues when available, falls back to counter-based approach
+ */
+function generateSecureRandom(length: number = 6): string {
+  // Check if crypto is available (browser/Node.js)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    // Convert bytes to base-36 string
+    return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+  }
+  
+  // Fallback: Use timestamp + counter for uniqueness without Math.random()
+  const timestamp = Date.now().toString(36);
+  return timestamp.slice(-length);
+}
+
+/**
  * Generate a correlation ID for tracking auth operations
  * Format: auth_<timestamp>_<random>
+ * Uses cryptographically secure random when available
  */
 export function generateCorrelationId(prefix: string = 'auth'): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = generateSecureRandom(6);
   return `${prefix}_${timestamp}_${random}`;
 }
 

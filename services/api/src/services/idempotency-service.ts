@@ -43,7 +43,9 @@ export async function initializeIdempotencyService(): Promise<void> {
       retryStrategy: (times: number) => {
         // Retry with exponential backoff up to 3 times
         if (times > 3) {
-          logger.warn('[IdempotencyService] Redis connection failed after 3 retries, falling back to in-memory');
+          logger.error('[IdempotencyService] Redis connection failed after 3 retries, FALLING BACK TO IN-MEMORY - Multi-instance deployments may experience issues');
+          // Explicitly disable Redis to trigger fallback
+          redisEnabled = false;
           return null; // Stop retrying
         }
         const delay = Math.min(times * 1000, 3000); // Max 3s delay
@@ -88,7 +90,7 @@ export async function checkIdempotencyKey(key: string): Promise<boolean> {
       const exists = await redisClient.exists(key);
       return exists === 1;
     } catch (error) {
-      logger.error('[IdempotencyService] Redis check failed, falling back to in-memory:', error);
+      logger.error('[IdempotencyService] CRITICAL: Redis check failed, falling back to in-memory - Multi-instance safety compromised:', error);
       // Fallback to in-memory check
       return checkInMemory(key);
     }
@@ -109,7 +111,7 @@ export async function storeIdempotencyKey(key: string, ttlSeconds: number = 8640
       await redisClient.setex(key, ttlSeconds, Date.now().toString());
       return;
     } catch (error) {
-      logger.error('[IdempotencyService] Redis store failed, falling back to in-memory:', error);
+      logger.error('[IdempotencyService] CRITICAL: Redis store failed, falling back to in-memory - Multi-instance safety compromised:', error);
       // Fallback to in-memory
       storeInMemory(key);
     }
@@ -171,8 +173,8 @@ function checkInMemory(key: string): boolean {
 function storeInMemory(key: string): void {
   inMemoryStore.set(key, Date.now());
   
-  // Cleanup expired keys periodically (every 100 inserts)
-  if (inMemoryStore.size % 100 === 0) {
+  // Cleanup expired keys periodically (every 10 inserts to prevent memory accumulation)
+  if (inMemoryStore.size % 10 === 0) {
     cleanupExpiredKeys();
   }
 }

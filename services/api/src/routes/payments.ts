@@ -7,8 +7,7 @@ import { stripeConnectService } from '../services/stripe-connect-service';
 import { 
   checkIdempotencyKey, 
   storeIdempotencyKey, 
-  removeIdempotencyKey,
-  getServiceStatus 
+  removeIdempotencyKey
 } from '../services/idempotency-service';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 

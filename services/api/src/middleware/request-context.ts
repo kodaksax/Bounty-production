@@ -31,12 +31,29 @@ export interface RequestContext {
 }
 
 /**
+ * Generate cryptographically secure random string
+ * Uses crypto.randomBytes in Node.js environment
+ */
+function generateSecureRandom(length: number = 8): string {
+  try {
+    // Node.js environment
+    const crypto = require('crypto');
+    const bytes = crypto.randomBytes(Math.ceil(length / 2));
+    return bytes.toString('hex').slice(0, length);
+  } catch (error) {
+    // Fallback: timestamp-based (still unique but less secure)
+    return Date.now().toString(36).slice(-length);
+  }
+}
+
+/**
  * Generate a unique request ID
  * Format: req_<timestamp>_<random>
+ * Uses cryptographically secure random in Node.js
  */
 function generateRequestId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 10);
+  const random = generateSecureRandom(8);
   return `req_${timestamp}_${random}`;
 }
 
