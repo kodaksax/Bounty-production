@@ -28,6 +28,7 @@ export interface AuthProfile {
   created_at?: string;
   updated_at?: string;
   onboarding_completed?: boolean; // Track if user has completed onboarding flow
+  needs_onboarding?: boolean; // Flag to indicate user needs to complete onboarding (no profile exists)
 }
 
 interface CachedProfile {
@@ -278,11 +279,25 @@ export class AuthProfileService {
       });
 
       if (error) {
-        // If profile doesn't exist, create a minimal one
+        // If profile doesn't exist, return a special state indicating onboarding is needed
+        // Instead of creating a minimal profile, we'll redirect the user to onboarding
         if (error.code === 'PGRST116') {
-          console.log('[authProfileService] Profile not found (PGRST116), creating minimal profile');
-          logger.warning('Profile not found, creating minimal profile', { userId });
-          return await this.createMinimalProfile(userId);
+          console.log('[authProfileService] Profile not found (PGRST116), user needs to complete onboarding');
+          logger.warning('Profile not found, user needs onboarding', { userId });
+          
+          // Return a special profile state indicating onboarding is needed
+          const onboardingNeededProfile: AuthProfile = {
+            id: userId,
+            username: '', // Will be set during onboarding
+            email: this.currentSession?.user?.email,
+            balance: 0,
+            onboarding_completed: false,
+            needs_onboarding: true, // Special flag to indicate onboarding is required
+          };
+          
+          this.currentProfile = onboardingNeededProfile;
+          this.notifyListeners(onboardingNeededProfile);
+          return onboardingNeededProfile;
         }
         console.error('[authProfileService] Supabase query error:', error);
         throw error;
@@ -313,17 +328,29 @@ export class AuthProfileService {
         return profile;
       }
 
-      console.warn('[authProfileService] Supabase returned no data and no error - attempting to create minimal profile');
-      // If no data and no error, try to create a minimal profile
+      console.warn('[authProfileService] Supabase returned no data and no error - user needs onboarding');
+      // If no data and no error, return onboarding needed state
       // This handles edge cases where the profile wasn't created by the trigger
-      logger.warning('Profile query returned no data, creating minimal profile. This should be rare if DB trigger is working.', { userId });
+      logger.warning('Profile query returned no data, user needs onboarding. This should be rare if DB trigger is working.', { userId });
       
       // Track this fallback for monitoring
       if (__DEV__) {
-        console.warn('[authProfileService] MONITORING: Fallback profile creation triggered - check if DB trigger is working');
+        console.warn('[authProfileService] MONITORING: No profile found - check if DB trigger is working');
       }
       
-      return await this.createMinimalProfile(userId);
+      // Return a special profile state indicating onboarding is needed
+      const onboardingNeededProfile: AuthProfile = {
+        id: userId,
+        username: '', // Will be set during onboarding
+        email: this.currentSession?.user?.email,
+        balance: 0,
+        onboarding_completed: false,
+        needs_onboarding: true, // Special flag to indicate onboarding is required
+      };
+      
+      this.currentProfile = onboardingNeededProfile;
+      this.notifyListeners(onboardingNeededProfile);
+      return onboardingNeededProfile;
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
@@ -355,9 +382,18 @@ export class AuthProfileService {
   }
 
   /**
-   * Create a minimal profile for a new user
-   * This is called when a Supabase auth user exists but has no profile record
-   * Note: Minimal profiles are temporary - users should complete onboarding
+   * Create a minimal profile for a new user (DEPRECATED - kept for backward compatibility)
+   * 
+   * NOTE: This method is now only used as a fallback in race conditions where the
+   * database trigger creates the profile between our check and insert.
+   * 
+   * New users without profiles should be redirected to onboarding instead of
+   * creating a minimal profile. See fetchAndSyncProfile for the new behavior.
+   * 
+   * This is called when a Supabase auth user exists but has no profile record,
+   * but in practice this should be rare since:
+   * 1. Database trigger creates profiles automatically on signup
+   * 2. If trigger fails, we return needs_onboarding=true instead
    */
   private async createMinimalProfile(userId: string): Promise<AuthProfile | null> {
     if (!isSupabaseConfigured) {

@@ -114,6 +114,18 @@ export default function DoneScreen() {
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile
     await clearOnboardingData();
+    
+    // Refresh the auth profile service to pick up the completed profile
+    // This ensures the profile with onboarding_completed=true is loaded
+    try {
+      const { authProfileService } = await import('../../lib/services/auth-profile-service');
+      await authProfileService.refreshProfile();
+      console.log('[Onboarding] Profile refreshed after onboarding completion');
+    } catch (refreshError) {
+      console.error('[Onboarding] Error refreshing profile:', refreshError);
+      // Don't block navigation
+    }
+    
     // Navigate to the Bounty app dashboard
     router.replace('/tabs/bounty-app');
   };
