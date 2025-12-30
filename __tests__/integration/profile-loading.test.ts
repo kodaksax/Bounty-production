@@ -4,7 +4,6 @@
  */
 
 import { authProfileService, type AuthProfile } from '../../lib/services/auth-profile-service';
-import { supabase } from '../../lib/supabase';
 
 // Mock Supabase client
 const mockSupabase = {
@@ -107,7 +106,7 @@ describe('Profile Loading and Creation', () => {
               };
             },
             eq: mockEq,
-            single: isInsert ? mockInsertSingle : mockSingle,
+            single: (...args: any[]) => (isInsert ? mockInsertSingle : mockSingle)(...args),
           };
         }
         return { select: mockSelect };

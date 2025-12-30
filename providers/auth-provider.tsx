@@ -382,10 +382,16 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     // Safety timeout: ensure isLoading is cleared after max 10 seconds
     // This prevents perpetual skeleton screens if profile fetch hangs
+    // Use setState with callback to access current value, avoiding stale closure
     const safetyTimeout = setTimeout(() => {
-      if (isMountedRef.current && isLoading) {
-        console.warn('[AuthProvider] Safety timeout: forcing isLoading = false after 10s')
-        setIsLoading(false)
+      if (isMountedRef.current) {
+        setIsLoading((currentLoading) => {
+          if (currentLoading) {
+            console.warn('[AuthProvider] Safety timeout: forcing isLoading = false after 10s')
+            return false
+          }
+          return currentLoading
+        })
       }
     }, 10000)
 
