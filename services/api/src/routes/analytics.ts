@@ -1,7 +1,10 @@
 // services/api/src/routes/analytics.ts - Analytics routes for admin dashboard
 import { FastifyInstance } from 'fastify';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { logger, analyticsLogger } from '../services/logger';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 /**
  * Register analytics routes

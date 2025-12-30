@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { db } from '../db/connection';
 import { conversationParticipants, conversations, messages, users } from '../db/schema';
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { notificationService } from '../services/notification-service';
 import { wsMessagingService } from '../services/websocket-messaging-service';
 

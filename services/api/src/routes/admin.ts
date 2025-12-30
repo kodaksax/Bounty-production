@@ -1,9 +1,14 @@
 // services/api/src/routes/admin.ts - Admin-only routes with proper security
 import { desc, eq, sql } from 'drizzle-orm';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { FastifyInstance } from 'fastify';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { db } from '../db/connection';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { bounties, users } from '../db/schema';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { adminMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 /**
  * Register admin-only routes
