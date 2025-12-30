@@ -56,7 +56,18 @@ export function useNormalizedProfile(userId?: string) {
   useEffect(() => {
     console.log('[useNormalizedProfile] useEffect triggered', { userId });
     loadSupabase(userId);
-  }, [userId, loadSupabase]);
+    
+    // Safety timeout: ensure loading is cleared after max 8 seconds
+    const safetyTimeout = setTimeout(() => {
+      if (sbLoading) {
+        console.warn('[useNormalizedProfile] Safety timeout: forcing sbLoading = false after 8s');
+        setSbLoading(false);
+        setSupabaseProfile(null);
+      }
+    }, 8000);
+    
+    return () => clearTimeout(safetyTimeout);
+  }, [userId, loadSupabase, sbLoading]);
 
   const normalizedFromSupabase = normalizeAuthProfile(supabaseProfile || null);
   const normalizedFromAuthHook = isViewingSelf ? normalizeAuthProfile(authHookProfile || null) : null;

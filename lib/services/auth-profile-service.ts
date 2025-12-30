@@ -313,8 +313,11 @@ export class AuthProfileService {
         return profile;
       }
 
-      console.warn('[authProfileService] Supabase returned no data and no error');
-      return null;
+      console.warn('[authProfileService] Supabase returned no data and no error - attempting to create minimal profile');
+      // If no data and no error, try to create a minimal profile
+      // This handles edge cases where the profile wasn't created by the trigger
+      logger.warning('Profile query returned no data, creating minimal profile', { userId });
+      return await this.createMinimalProfile(userId);
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
@@ -338,6 +341,9 @@ export class AuthProfileService {
       }
       
       console.error('[authProfileService] No cached profile available, returning null');
+      // IMPORTANT: Always notify listeners even on failure to clear loading states
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     }
   }
@@ -415,6 +421,9 @@ export class AuthProfileService {
         } else {
           logger.error('Error creating minimal profile', { userId, error });
         }
+        // IMPORTANT: Notify listeners with null to clear loading states even on failure
+        this.currentProfile = null;
+        this.notifyListeners(null);
         return null;
       }
 
@@ -441,9 +450,16 @@ export class AuthProfileService {
         return profile;
       }
 
+      // No data returned from insert - notify listeners with null
+      console.warn('[authProfileService] Profile insert returned no data');
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     } catch (error) {
       logger.error('Error creating minimal profile', { userId, error });
+      // IMPORTANT: Always notify listeners even on error to clear loading states
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     }
   }
