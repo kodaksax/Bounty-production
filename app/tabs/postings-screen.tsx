@@ -10,7 +10,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { getCurrentUserId } from "lib/utils/data-utils"
+import { getCurrentUserId, CURRENT_USER_ID } from "lib/utils/data-utils"
 import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
@@ -271,6 +271,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [])
 
   const loadMyBounties = React.useCallback(async () => {
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
+      setIsLoading((prev) => ({ ...prev, myBounties: false, requests: false }))
+      setMyBounties([])
+      setBountyRequests([])
+      return
+    }
+    
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       const mine = await bountyService.getByUserId(currentUserId)
@@ -288,6 +297,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
+    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data to avoid stuck skeletons
+      setIsLoading((prev) => ({ ...prev, inProgress: false }))
+      setInProgressBounties([])
+      return
+    }
+    
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
       // Show bounties that the current user has applied for (pending/accepted/etc.)
@@ -335,11 +352,21 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
+    // Only load data if we have a valid authenticated user (including sentinel/fallback user IDs)
+    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+      // Immediately clear loading flags and empty data arrays to avoid stuck skeletons
+      setIsLoading({ myBounties: false, inProgress: false, requests: false })
+      setMyBounties([])
+      setInProgressBounties([])
+      setBountyRequests([])
+      return
+    }
+    
     setError(null)
     // Load in parallel
     loadMyBounties()
     loadInProgress()
-  }, [postSuccess, loadMyBounties, loadInProgress]) // Re-fetch after a successful post
+  }, [postSuccess, loadMyBounties, loadInProgress, currentUserId]) // Re-fetch after a successful post
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
   // To re-implement real-time updates, you would need to use a technology

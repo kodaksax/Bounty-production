@@ -35,16 +35,23 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
   // Refresh wallet data from API when user is authenticated
   useEffect(() => {
-    if (session?.access_token) {
+    // Only refresh if we have a valid session with an access token
+    // and the user ID is not the fallback ID
+    const hasValidSession = session?.access_token && session?.user?.id && 
+                           session.user.id !== '00000000-0000-0000-0000-000000000001';
+    
+    if (hasValidSession) {
       refreshFromApi(session.access_token);
     }
-  }, [session?.access_token, refreshFromApi]);
+  }, [session, refreshFromApi]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
     setShowAddMoney(false);
-    // Refresh wallet after adding money
-    if (session?.access_token) {
+    // Refresh wallet after adding money, only if we have a valid session
+    const hasValidSession = session?.access_token && session?.user?.id && 
+                           session.user.id !== '00000000-0000-0000-0000-000000000001';
+    if (hasValidSession) {
       refreshFromApi(session.access_token);
     }
   };

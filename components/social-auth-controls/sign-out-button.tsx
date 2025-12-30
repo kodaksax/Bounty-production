@@ -6,22 +6,14 @@ import { clearRememberMePreference } from '../../lib/auth-session-storage'
 
 async function onSignOutButtonPress() {
   try {
-    // Add timeout to prevent hanging on sign out
-    const { error } = await withTimeout(
-      supabase.auth.signOut(),
-      10000 // 10 second timeout for sign out
-    )
+    // Let Supabase SDK handle network timeouts and retry logic
+    const { error } = await supabase.auth.signOut()
 
     if (error) {
       console.error('Error signing out:', error)
     }
-    
-    // Clear remember me preference regardless of sign-out result
-    // This ensures local state is always cleared even if server sign-out fails
-    // The storage adapter's removeItem will handle clearing session data
-    await clearRememberMePreference()
-  } catch (timeoutError) {
-    console.error('Sign out timed out:', timeoutError)
+  } catch (signoutError) {
+    console.error('Sign out failed:', signoutError)
     // Force clear local session even if server signout fails
     try {
       await supabase.auth.signOut({ scope: 'local' })

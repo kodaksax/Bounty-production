@@ -19,8 +19,18 @@ export function useConversations(): UseConversationsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const currentUserId = getCurrentUserId();
+  
+  // Check if we have a valid authenticated user (not the fallback ID)
+  const hasValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
 
   const fetchConversations = async () => {
+    // Guard: don't fetch if no valid user
+    if (!hasValidUser) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -70,8 +80,18 @@ export function useConversations(): UseConversationsResult {
 
   useEffect(() => {
     let subscription: RealtimeChannel | null = null;
+    
+    // Check if we have a valid authenticated user (not the fallback ID)
+    const isValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
 
     const init = async () => {
+      // Only initialize if we have a valid user
+      if (!isValidUser) {
+        setConversations([]); // Clear conversations when no user
+        setLoading(false);
+        return;
+      }
+      
       // Initial fetch
       await fetchConversations();
 
@@ -93,7 +113,7 @@ export function useConversations(): UseConversationsResult {
         supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
       }
     };
-  }, [currentUserId]);
+  }, [currentUserId]); // Only depend on currentUserId to avoid re-subscriptions
 
   return {
     conversations,
