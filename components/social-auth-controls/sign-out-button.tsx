@@ -1,6 +1,8 @@
 import React from 'react'
 import { Alert, Button } from 'react-native'
 import { supabase } from '../../lib/supabase'
+import { withTimeout } from '../../lib/utils/withTimeout'
+import { clearRememberMePreference } from '../../lib/auth-session-storage'
 
 async function onSignOutButtonPress() {
   try {
@@ -15,6 +17,7 @@ async function onSignOutButtonPress() {
     // Force clear local session even if server signout fails
     try {
       await supabase.auth.signOut({ scope: 'local' })
+      await clearRememberMePreference()
     } catch (e) {
       console.error('Failed to clear local session:', e)
       // If both server and local sign-out fail, alert the user

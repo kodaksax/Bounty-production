@@ -10,6 +10,8 @@ import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
+import { withTimeout } from "../lib/utils/withTimeout"
+import { clearRememberMePreference } from "../lib/auth-session-storage"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
@@ -219,6 +221,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                   console.error('[Logout] Local signout failed:', e);
                 }
               }
+
+              // Clear remember me preference after sign-out completes
+              // This ensures consistency: preference cleared only after session is gone
+              // Note: supabase.auth.signOut() calls the storage adapter's removeItem,
+              // which clears session data from secure storage automatically
+              await clearRememberMePreference();
 
               // Clear user-specific draft data to prevent data leaks
               if (currentUserId) {
