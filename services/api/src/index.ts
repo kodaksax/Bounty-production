@@ -65,6 +65,7 @@ const STARTUP_USE_SUPABASE = !!(STARTUP_SUPABASE_URL && STARTUP_SUPABASE_SERVICE
 const { users } = require('./db/schema');
 const { authMiddleware } = require('./middleware/auth');
 const { rateLimitMiddleware } = require('./middleware/rate-limit');
+const { requestContextMiddleware } = require('./middleware/request-context');
 const { registerAdminRoutes } = require('./routes/admin');
 const { registerNotificationRoutes } = require('./routes/notifications');
 const { registerSearchRoutes } = require('./routes/search');
@@ -86,9 +87,15 @@ const riskManagementRoutes = require('./routes/risk-management');
 // Import logger and analytics
 const { logger } = require('./services/logger');
 const { backendAnalytics } = require('./services/analytics');
+const { initializeIdempotencyService } = require('./services/idempotency-service');
 
 // Initialize analytics on startup
 backendAnalytics.initialize();
+
+// Initialize idempotency service (Redis or in-memory fallback)
+initializeIdempotencyService().catch((error) => {
+  logger.error('[startup] Failed to initialize idempotency service:', error);
+});
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
@@ -100,6 +107,12 @@ const fastify = Fastify({
 // Register WebSocket plugin and all routes
 const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
+
+  // Register request context middleware globally (first middleware)
+  // This adds request ID and context to all requests
+  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    await requestContextMiddleware(request, reply);
+  });
 
   // Register global rate limiting middleware for all routes except health
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -390,16 +403,25 @@ fastify.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     // Test database connection with simple query
     const { Pool } = require('pg');
+    const { getServiceStatus } = require('./services/idempotency-service');
+    
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query('SELECT 1');
     await pool.end();
+    
+    // Get idempotency service status
+    const idempotencyStatus = getServiceStatus();
     
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       service: 'bountyexpo-api',
-      database: 'connected'
+      database: 'connected',
+      idempotency: {
+        backend: idempotencyStatus.backend,
+        connected: idempotencyStatus.connected,
+      }
     };
   } catch (error) {
     return reply.code(503).send({

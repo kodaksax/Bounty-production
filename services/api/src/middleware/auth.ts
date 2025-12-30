@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastify';
+import { addUserContext } from './request-context';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
 let supabase: any = null;
@@ -106,6 +107,9 @@ export async function authMiddleware(
     request.userId = data.user.id;
     request.user = data.user;
     
+    // Add user context to request context for logging
+    addUserContext(request, data.user.id);
+    
     // Check for admin role
     request.isAdmin = data.user.user_metadata?.role === 'admin' || 
                       data.user.app_metadata?.role === 'admin';
@@ -141,6 +145,9 @@ export async function optionalAuthMiddleware(
         request.user = data.user;
         request.isAdmin = data.user.user_metadata?.role === 'admin' || 
                           data.user.app_metadata?.role === 'admin';
+        
+        // Add user context for optional auth too
+        addUserContext(request, data.user.id);
       }
     }
   } catch (error) {
