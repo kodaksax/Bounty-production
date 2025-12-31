@@ -3,6 +3,9 @@
  * Verifies that logout operations complete quickly and cleanup happens in background
  */
 
+// Test timeouts
+const SLOW_TEST_TIMEOUT_MS = 5000; // Timeout for tests with async operations
+
 describe('Logout Speed Optimization', () => {
   // Mock timers to control async operations
   beforeEach(() => {
@@ -279,6 +282,6 @@ describe('Logout Speed Optimization', () => {
       if (cleanupEvent) {
         expect(cleanupEvent.timestamp).toBeGreaterThanOrEqual(criticalPathComplete);
       }
-    }, 5000); // Set 5 second timeout for this test
+    }, SLOW_TEST_TIMEOUT_MS); // Use named constant for timeout
   });
 });
