@@ -22,6 +22,16 @@ export default function Index() {
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
   const hasNavigatedRef = useRef(false)
+  
+  // Debug logging for initial render
+  useEffect(() => {
+    console.log('[index] Component mounted, auth state:', {
+      isLoading,
+      hasSession: Boolean(session),
+      hasProfile: Boolean(profile),
+      sessionId: session?.user?.id
+    })
+  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -79,6 +89,7 @@ export default function Index() {
   // Show loading spinner while checking authentication state
   // CRITICAL: This prevents any content flash before auth is determined
   if (isLoading) {
+    console.log('[index] Rendering loading state')
     return (
       <View className="flex-1 items-center justify-center bg-emerald-800">
         <ActivityIndicator size="large" color="#10b981" />
@@ -89,10 +100,12 @@ export default function Index() {
 
   // If not authenticated, show sign-in form
   if (!session) {
+    console.log('[index] Rendering sign-in form')
     return <SignInForm />
   }
 
   // While redirecting, show loading spinner
+  console.log('[index] Rendering redirecting state')
   return (
     <View className="flex-1 items-center justify-center bg-emerald-800">
       <ActivityIndicator size="large" color="#10b981" />
