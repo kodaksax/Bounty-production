@@ -49,7 +49,9 @@ function BountyAppInner() {
   // This prevents accessing the bounty app without authentication
   useEffect(() => {
     if (!isLoading && !session) {
-      console.log('[bounty-app] Not authenticated, redirecting to index')
+      if (__DEV__) {
+        console.log('[bounty-app] Not authenticated, redirecting to index')
+      }
       router.replace('/')
     }
   }, [isLoading, session, router])
