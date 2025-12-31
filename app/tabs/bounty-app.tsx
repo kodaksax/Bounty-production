@@ -13,9 +13,9 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter, Redirect } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, Animated, ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
@@ -42,8 +42,29 @@ function BountyAppInner() {
   const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
-  const { session } = useAuthContext()
+  const { session, isLoading } = useAuthContext()
   const currentUserId = session?.user?.id
+  
+  // Auth Guard: Show loading or redirect BEFORE rendering any content
+  // This prevents the bounty app from rendering at all if not authenticated
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-emerald-600">
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text className="text-white mt-4 text-base">Loading...</Text>
+      </View>
+    )
+  }
+  
+  // If not authenticated, redirect immediately and show nothing
+  if (!session) {
+    if (__DEV__) {
+      console.log('[bounty-app] Not authenticated, redirecting to index')
+    }
+    // Use declarative Redirect component for reliable redirection
+    return <Redirect href="/" />
+  }
+  
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")

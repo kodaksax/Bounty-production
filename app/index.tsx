@@ -13,11 +13,34 @@ import { SignInForm } from "./auth/sign-in-form"
  * - If logged in with complete profile: redirect to main app
  * - If logged in but needs onboarding: redirect to onboarding
  * - If not logged in: show sign-in form
+ * 
+ * IMPORTANT: This acts as the authentication gate for the entire app.
+ * On cold start, we ensure proper initialization before allowing navigation.
  */
 export default function Index() {
   const { session, isLoading, profile } = useAuthContext()
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
+  const hasNavigatedRef = useRef(false)
+  
+  // Debug logging for initial render (captures state at mount time only)
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[index] Component mounted, auth state:', {
+        isLoading,
+        hasSession: Boolean(session),
+        hasProfile: Boolean(profile),
+        sessionId: session?.user?.id
+      })
+    }
+  }, [])
+
+  // Reset navigation ref on unmount to ensure clean state if component remounts
+  useEffect(() => {
+    return () => {
+      hasNavigatedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -27,7 +50,11 @@ export default function Index() {
     const startingSessionId = latestSessionIdRef.current
 
     // Wait for auth state to be determined
+    // IMPORTANT: Don't navigate until isLoading is false to prevent race conditions
     if (isLoading) {
+      if (__DEV__) {
+        console.log('[index] Auth still loading, waiting...')
+      }
       return () => {
         isActive = false
       }
@@ -38,17 +65,38 @@ export default function Index() {
       try {
         if (!isActive || latestSessionIdRef.current !== startingSessionId) return
         
+        // Prevent multiple navigations
+        if (hasNavigatedRef.current) {
+          if (__DEV__) {
+            console.log('[index] Already navigated, skipping')
+          }
+          return
+        }
+        
         // Check if user needs to complete onboarding
         // This happens when auth user exists but no profile is found
         if (profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
-          console.log('[index] User needs onboarding, redirecting to onboarding flow')
+          if (__DEV__) {
+            console.log('[index] User needs onboarding, redirecting to onboarding flow')
+          }
+          hasNavigatedRef.current = true
           router.replace('/onboarding')
         } else {
-          console.log('[index] Authenticated with complete profile, redirecting to main app')
+          if (__DEV__) {
+            console.log('[index] Authenticated with complete profile, redirecting to main app')
+          }
+          hasNavigatedRef.current = true
           router.replace(ROUTES.TABS.BOUNTY_APP)
         }
       } catch (navError) {
         console.error('[index] Navigation error:', navError)
+      }
+    } else {
+      // No session: user should see sign-in form
+      // Reset navigation flag to allow navigation after sign-in
+      hasNavigatedRef.current = false
+      if (__DEV__) {
+        console.log('[index] No session found, showing sign-in form')
       }
     }
 
@@ -58,7 +106,11 @@ export default function Index() {
   }, [session, isLoading, profile, router])
 
   // Show loading spinner while checking authentication state
+  // CRITICAL: This prevents any content flash before auth is determined
   if (isLoading) {
+    if (__DEV__) {
+      console.log('[index] Rendering loading state')
+    }
     return (
       <View className="flex-1 items-center justify-center bg-emerald-800">
         <ActivityIndicator size="large" color="#10b981" />
@@ -69,10 +121,16 @@ export default function Index() {
 
   // If not authenticated, show sign-in form
   if (!session) {
+    if (__DEV__) {
+      console.log('[index] Rendering sign-in form')
+    }
     return <SignInForm />
   }
 
   // While redirecting, show loading spinner
+  if (__DEV__) {
+    console.log('[index] Rendering redirecting state')
+  }
   return (
     <View className="flex-1 items-center justify-center bg-emerald-800">
       <ActivityIndicator size="large" color="#10b981" />
