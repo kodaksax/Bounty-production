@@ -230,9 +230,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 ) : Promise.resolve(),
                 // Clear stored tokens (best-effort)
                 Promise.all([
-                  SecureStore.deleteItemAsync('sb-access-token').catch(() => {}),
-                  SecureStore.deleteItemAsync('sb-refresh-token').catch(() => {})
-                ]).catch(e => console.error('[Logout] SecureStore cleanup failed', e)),
+                  SecureStore.deleteItemAsync('sb-access-token').catch(e => 
+                    console.error('[Logout] Failed to delete sb-access-token', e)
+                  ),
+                  SecureStore.deleteItemAsync('sb-refresh-token').catch(e =>
+                    console.error('[Logout] Failed to delete sb-refresh-token', e)
+                  )
+                ]),
                 // Attempt server sign-out in background (best-effort)
                 supabase.auth.signOut().catch(e => 
                   console.error('[Logout] Background server signout failed (non-critical)', e)
@@ -243,9 +247,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               });
 
               // Show success message after navigation
+              // Delay ensures navigation completes before showing alert
+              const ALERT_DELAY_MS = 100;
               setTimeout(() => {
                 Alert.alert('Logged Out', 'You have been signed out successfully.');
-              }, 100);
+              }, ALERT_DELAY_MS);
             } catch (e) {
               console.error('[Logout] Error:', e);
               Alert.alert('Error', 'Failed to log out properly.');
