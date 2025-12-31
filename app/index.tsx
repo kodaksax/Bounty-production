@@ -35,6 +35,13 @@ export default function Index() {
     }
   }, [])
 
+  // Reset navigation ref on unmount to ensure clean state if component remounts
+  useEffect(() => {
+    return () => {
+      hasNavigatedRef.current = false
+    }
+  }, [])
+
   useEffect(() => {
     let isActive = true
 
