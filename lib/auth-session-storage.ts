@@ -145,7 +145,15 @@ export const createAuthSessionStorageAdapter = () => {
           return null;
         }
         
-        // Remember me is true, read from secure storage
+        // Remember me is true, check in-memory cache first for better performance
+        const cached = inMemorySessionCache.get(key);
+        if (cached) {
+          console.log('[AuthSessionStorage] Remember me is true, returning cached session for performance');
+          return cached;
+        }
+        
+        // Cache miss, read from secure storage
+        console.log('[AuthSessionStorage] Remember me is true, reading from secure storage');
         const val = await SecureStore.getItemAsync(key);
         
         // Handle chunked storage
@@ -157,7 +165,18 @@ export const createAuthSessionStorageAdapter = () => {
             const part = await SecureStore.getItemAsync(`${key}__${i}`);
             out += part ?? '';
           }
+          
+          // Cache the result for future reads
+          if (out) {
+            inMemorySessionCache.set(key, out);
+          }
+          
           return out;
+        }
+        
+        // Cache the result for future reads
+        if (val) {
+          inMemorySessionCache.set(key, val);
         }
         
         return val;
@@ -187,36 +206,44 @@ export const createAuthSessionStorageAdapter = () => {
         // Remember me is true, persist to secure storage with chunking support
         console.log('[AuthSessionStorage] Remember me is true, persisting session to secure storage');
         
-        // Also cache in memory for faster access
-        inMemorySessionCache.set(key, value);
-        
-        // If value fits in one item, store directly
-        if (value.length <= CHUNK_SIZE) {
-          await SecureStore.setItemAsync(key, value, SECURE_OPTS);
-          
-          // Clean up any old chunks
-          const prevCountStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
-          if (prevCountStr) {
-            const prevCount = parseInt(prevCountStr, 10) || 0;
-            for (let i = 0; i < prevCount; i++) {
-              await SecureStore.deleteItemAsync(`${key}__${i}`);
+        try {
+          // If value fits in one item, store directly
+          if (value.length <= CHUNK_SIZE) {
+            await SecureStore.setItemAsync(key, value, SECURE_OPTS);
+            
+            // Clean up any old chunks
+            const prevCountStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
+            if (prevCountStr) {
+              const prevCount = parseInt(prevCountStr, 10) || 0;
+              for (let i = 0; i < prevCount; i++) {
+                await SecureStore.deleteItemAsync(`${key}__${i}`);
+              }
+              await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
             }
-            await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
+          } else {
+            // Chunk the value
+            const chunks = Math.ceil(value.length / CHUNK_SIZE);
+            for (let i = 0; i < chunks; i++) {
+              const part = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+              await SecureStore.setItemAsync(`${key}__${i}`, part, SECURE_OPTS);
+            }
+            
+            // Write marker and metadata
+            await SecureStore.setItemAsync(key, '__chunked__', SECURE_OPTS);
+            await SecureStore.setItemAsync(key + CHUNK_META_SUFFIX, String(chunks), SECURE_OPTS);
           }
           
-          return;
+          // Only cache in memory after successful secure storage write
+          // This ensures consistency between cache and storage
+          inMemorySessionCache.set(key, value);
+          console.log('[AuthSessionStorage] Session persisted to secure storage and cached');
+        } catch (storageError) {
+          // If secure storage fails, clear the cache to maintain consistency
+          // User will need to re-authenticate, but we won't have stale cached data
+          inMemorySessionCache.delete(key);
+          console.error('[AuthSessionStorage] Secure storage failed, cache cleared to maintain consistency:', storageError);
+          throw storageError;
         }
-        
-        // Chunk the value
-        const chunks = Math.ceil(value.length / CHUNK_SIZE);
-        for (let i = 0; i < chunks; i++) {
-          const part = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-          await SecureStore.setItemAsync(`${key}__${i}`, part, SECURE_OPTS);
-        }
-        
-        // Write marker and metadata
-        await SecureStore.setItemAsync(key, '__chunked__', SECURE_OPTS);
-        await SecureStore.setItemAsync(key + CHUNK_META_SUFFIX, String(chunks), SECURE_OPTS);
       } catch (e) {
         console.error('[AuthSessionStorage] Error setting item:', e);
         throw e;

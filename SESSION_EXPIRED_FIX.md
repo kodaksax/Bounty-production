@@ -47,9 +47,10 @@ const inMemorySessionCache: Map<string, string> = new Map();
 3. After app restart: Memory cache is empty, so `getItem()` returns null → user must re-login
 
 **When `rememberMe` is true:**
-1. `setItem()`: Store session in both memory cache and secure storage
-2. `getItem()`: Return session from secure storage
-3. After app restart: Session is restored from secure storage → user stays logged in
+1. `setItem()`: Store session in secure storage, then cache in memory (for performance)
+2. `getItem()`: Check memory cache first (fast), fallback to secure storage if cache miss
+3. After app restart: Session is restored from secure storage and cached → user stays logged in
+4. Cache consistency: If secure storage write fails, cache is cleared to prevent stale data
 
 ## Changes Made
 
@@ -74,8 +75,18 @@ getItem: async (key: string): Promise<string | null> => {
     return null; // No session after app restart
   }
   
-  // Read from secure storage when rememberMe is true
-  return await SecureStore.getItemAsync(key);
+  // Remember me is true: check cache first for performance
+  const cached = inMemorySessionCache.get(key);
+  if (cached) {
+    return cached; // Fast path: return from cache
+  }
+  
+  // Cache miss: read from secure storage and populate cache
+  const val = await SecureStore.getItemAsync(key);
+  if (val) {
+    inMemorySessionCache.set(key, val);
+  }
+  return val;
 }
 ```
 
@@ -90,9 +101,17 @@ setItem: async (key: string, value: string): Promise<void> => {
     return;
   }
   
-  // Store in both cache and secure storage when rememberMe is true
-  inMemorySessionCache.set(key, value);
-  await SecureStore.setItemAsync(key, value);
+  try {
+    // Write to secure storage first
+    await SecureStore.setItemAsync(key, value);
+    
+    // Only cache after successful write (maintains consistency)
+    inMemorySessionCache.set(key, value);
+  } catch (error) {
+    // If storage fails, clear cache to prevent stale data
+    inMemorySessionCache.delete(key);
+    throw error;
+  }
 }
 ```
 
