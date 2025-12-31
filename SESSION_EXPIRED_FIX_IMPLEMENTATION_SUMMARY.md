@@ -43,14 +43,14 @@ let inMemoryRememberMeCache: boolean | null = null;
 
 // Write: Update cache IMMEDIATELY (synchronous)
 export async function setRememberMePreference(remember: boolean): Promise<void> {
-  inMemoryRememberMeCache = remember; // ⚡ INSTANT (~1μs)
+  inMemoryRememberMeCache = remember; // ⚡ INSTANT (synchronous)
   await SecureStore.setItemAsync(...); // Background persistence (10-50ms)
 }
 
 // Read: Check cache FIRST (synchronous)
 export async function getRememberMePreference(): Promise<boolean> {
   if (inMemoryRememberMeCache !== null) {
-    return inMemoryRememberMeCache; // ⚡ INSTANT (~1μs)
+    return inMemoryRememberMeCache; // ⚡ INSTANT (synchronous)
   }
   // Cache miss: read from SecureStore and populate cache
   const value = await SecureStore.getItemAsync(...);
@@ -65,7 +65,7 @@ export async function getRememberMePreference(): Promise<boolean> {
 2. **No race conditions**: Within JavaScript (single-threaded), synchronous operations don't race
 3. **Always correct**: Cache is updated immediately, subsequent reads get correct value
 4. **Persistent storage**: SecureStore still updated for persistence across app restarts
-5. **Performance**: ~10,000x faster (microseconds vs milliseconds)
+5. **Performance**: Eliminates race window by making operations synchronous
 
 ---
 
@@ -113,13 +113,13 @@ export async function getRememberMePreference(): Promise<boolean> {
 - ✅ Smooth, expected user experience
 - ✅ Users can immediately use the app
 - ✅ Remember me preference works correctly
-- ✅ 10,000x performance improvement for preference reads
+- ✅ Synchronous in-memory access eliminates race conditions
 
 ### Performance Metrics
 
 | Metric | Before | After | Improvement |
 |--------|--------|-------|-------------|
-| Preference read time | 10-50ms | ~1μs | ~10,000x faster |
+| Preference access | 10-50ms (async) | Instant (sync) | Synchronous vs async |
 | Race condition window | 20-100ms | 0ms | ✅ Eliminated |
 | Cache hit rate | N/A | ~99.9% | ✅ Excellent |
 | Memory footprint | N/A | 1 boolean | ✅ Negligible |

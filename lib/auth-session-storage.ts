@@ -77,6 +77,13 @@ export async function getRememberMePreference(): Promise<boolean> {
  * 
  * IMPORTANT: Updates in-memory cache IMMEDIATELY before writing to secure storage.
  * This ensures subsequent reads get the correct value without waiting for async storage.
+ * 
+ * DESIGN DECISION: If SecureStore write fails, the cache remains updated.
+ * This means:
+ * - Current app session will use the new preference from cache (correct behavior)
+ * - After app restart, cache is cleared and SecureStore will be read (might contain old value)
+ * - This trade-off prioritizes current session correctness over cross-restart consistency
+ * - The alternative (rolling back cache on failure) would break the current session
  */
 export async function setRememberMePreference(remember: boolean): Promise<void> {
   try {
@@ -88,6 +95,7 @@ export async function setRememberMePreference(remember: boolean): Promise<void> 
     console.log('[AuthSessionStorage] Remember me preference set to:', remember, '(cached in memory and persisted to secure storage)');
   } catch (e) {
     console.error('[AuthSessionStorage] Error setting remember me preference:', e);
+    // Note: Cache remains updated even if SecureStore fails (see function doc for rationale)
   }
 }
 

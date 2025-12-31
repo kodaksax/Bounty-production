@@ -23,7 +23,7 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 describe('Auth Session Storage - Remember Me Preference', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Clear all mocks before each test
     jest.clearAllMocks();
     
@@ -31,6 +31,10 @@ describe('Auth Session Storage - Remember Me Preference', () => {
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
     (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
     (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+    
+    // Reset the in-memory cache to ensure test isolation
+    // Since the cache is module-level, we reset it by calling clearRememberMePreference
+    await clearRememberMePreference();
   });
 
   describe('setRememberMePreference', () => {
@@ -78,6 +82,16 @@ describe('Auth Session Storage - Remember Me Preference', () => {
       // Cache should still be updated even if SecureStore fails
       const preference = await getRememberMePreference();
       expect(preference).toBe(true);
+      
+      // Verify that multiple subsequent reads still return the cached value
+      // This ensures the cache persisted despite the SecureStore write failure
+      const preference2 = await getRememberMePreference();
+      const preference3 = await getRememberMePreference();
+      expect(preference2).toBe(true);
+      expect(preference3).toBe(true);
+      
+      // Verify SecureStore.getItemAsync was not called (cache is being used)
+      expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
     });
   });
 
@@ -231,7 +245,11 @@ describe('Auth Session Storage - Remember Me Preference', () => {
       // Wait for both to complete
       await Promise.all([setPromise, getPromise]);
       
-      // Get should have returned the correct value from cache
+      // Verify the concurrent get operation itself received the correct cached value
+      const getResult = await getPromise;
+      expect(getResult).toBe(true);
+      
+      // Also verify subsequent calls still return the correct value
       const preference = await getRememberMePreference();
       expect(preference).toBe(true);
     });

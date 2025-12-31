@@ -105,7 +105,7 @@
    ┌──────────────────────────────────────────────────────────┐
    │ await setRememberMePreference(false)                     │
    │   ├─> ✅ inMemoryRememberMeCache = false                 │  ← INSTANT
-   │   │   ⚡ Synchronous: ~1μs (memory write)                │     FAST!
+   │   │   ⚡ Synchronous: instant (memory write)             │     FAST!
    │   │                                                       │
    │   └─> SecureStore.setItemAsync('remember_me', 'false')  │  ← Async (slower)
    │       ⏱️  Estimated: 10-50ms (runs in background)        │
@@ -122,7 +122,7 @@
    │           ✅ Check inMemoryRememberMeCache first          │
    │             ↓                                             │
    │           ✅ Cache HIT! Returns: false                    │  ← INSTANT
-   │           ⚡ Synchronous: ~1μs (memory read)              │     FAST!
+   │           ⚡ Synchronous: instant (memory read)           │     FAST!
    │             ↓                                             │
    │           ✅ Session stored correctly in memory cache     │
    │           (Not in SecureStore, as expected)               │
@@ -197,12 +197,12 @@
 
 | Operation | Time | Type | Notes |
 |-----------|------|------|-------|
-| `setRememberMePreference(false)` - memory cache | ~1μs | **Sync** | ✅ Instant memory write |
+| `setRememberMePreference(false)` - memory cache | ~instant (≪1ms) | **Sync** | ✅ In-memory write |
 | `setRememberMePreference(false)` - SecureStore | 10-50ms | Async | Background persistence |
-| `getRememberMePreference()` - from cache | ~1μs | **Sync** | ✅ Instant memory read |
+| `getRememberMePreference()` - from cache | ~instant (≪1ms) | **Sync** | ✅ In-memory read |
 | **Race window** | **NONE** | ✅ | Cache is always consistent! |
 
-**Speed improvement: ~10,000x faster** (microseconds vs milliseconds)
+**Effective impact:** Eliminates the race window and makes preference access synchronous (in-memory) instead of asynchronous SecureStore I/O.
 
 ---
 
@@ -325,7 +325,7 @@ const value = await SecureStore.getItemAsync('key'); // Might read old value!
 **Solution with Sync Cache:**
 ```typescript
 // Memory write (synchronous)
-inMemoryCache = 'value'; // Instant (~1μs)
+inMemoryCache = 'value'; // Instant (in-memory, synchronous)
                          ↓
                          (Cache updated immediately)
                          ↓
@@ -362,7 +362,7 @@ const value = inMemoryCache; // Instant, always correct!
 - ✅ App restart behavior is correct
 
 ### Performance Impact
-- ✅ **Faster**: Memory reads are 10,000x faster than SecureStore
+- ✅ **Faster**: Synchronous in-memory access vs asynchronous SecureStore I/O
 - ✅ **No degradation**: SecureStore still used for persistence
 - ✅ **Cache hit rate**: ~99.9% after initial population
 - ✅ **Memory footprint**: Negligible (1 boolean value)
