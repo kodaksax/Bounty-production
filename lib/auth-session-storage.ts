@@ -82,11 +82,10 @@ export async function setRememberMePreference(remember: boolean): Promise<void> 
   try {
     // Update in-memory cache immediately (synchronous, no race condition)
     inMemoryRememberMeCache = remember;
-    console.log('[AuthSessionStorage] Remember me preference cached in memory:', remember);
     
     // Then persist to secure storage (asynchronous, but cache already updated)
     await SecureStore.setItemAsync(REMEMBER_ME_KEY, remember ? 'true' : 'false', SECURE_OPTS);
-    console.log('[AuthSessionStorage] Remember me preference persisted to secure storage:', remember);
+    console.log('[AuthSessionStorage] Remember me preference set to:', remember, '(cached in memory and persisted to secure storage)');
   } catch (e) {
     console.error('[AuthSessionStorage] Error setting remember me preference:', e);
   }

@@ -262,10 +262,12 @@ describe('Auth Session Storage - Remember Me Preference', () => {
     });
 
     it('should persist cache across multiple get calls', async () => {
+      const CACHE_PERSISTENCE_TEST_ITERATIONS = 10;
+      
       await setRememberMePreference(true);
       
-      // Call get multiple times
-      for (let i = 0; i < 10; i++) {
+      // Call get multiple times to verify cache persistence
+      for (let i = 0; i < CACHE_PERSISTENCE_TEST_ITERATIONS; i++) {
         const preference = await getRememberMePreference();
         expect(preference).toBe(true);
       }
