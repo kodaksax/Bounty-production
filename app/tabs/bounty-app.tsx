@@ -13,7 +13,7 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter, Redirect } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, Animated, ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -45,19 +45,8 @@ function BountyAppInner() {
   const { session, isLoading } = useAuthContext()
   const currentUserId = session?.user?.id
   
-  // Auth Guard: Redirect to index if not authenticated
-  // This prevents accessing the bounty app without authentication
-  useEffect(() => {
-    if (!isLoading && !session) {
-      if (__DEV__) {
-        console.log('[bounty-app] Not authenticated, redirecting to index')
-      }
-      router.replace('/')
-    }
-  }, [isLoading, session, router])
-  
-  // Show loading while checking authentication
-  // This prevents flash of unauthed content
+  // Auth Guard: Show loading or redirect BEFORE rendering any content
+  // This prevents the bounty app from rendering at all if not authenticated
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-emerald-600">
@@ -67,9 +56,13 @@ function BountyAppInner() {
     )
   }
   
-  // If not authenticated, show nothing (redirect will happen via useEffect)
+  // If not authenticated, redirect immediately and show nothing
   if (!session) {
-    return null
+    if (__DEV__) {
+      console.log('[bounty-app] Not authenticated, redirecting to index')
+    }
+    // Use declarative Redirect component for reliable redirection
+    return <Redirect href="/" />
   }
   
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
