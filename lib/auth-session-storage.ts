@@ -42,14 +42,30 @@ const CHUNK_META_SUFFIX = '__chunkCount';
 // but not persist across app restarts
 const inMemorySessionCache: Map<string, string> = new Map();
 
+// In-memory cache for remember me preference
+// This avoids race conditions when reading from SecureStore immediately after writing
+// The preference is cached in memory and immediately available
+let inMemoryRememberMeCache: boolean | null = null;
+
 /**
  * Get the current remember me preference
  * Returns false if preference is not set or any error occurs
+ * 
+ * IMPORTANT: Checks in-memory cache first to avoid race conditions.
+ * The cache is populated immediately when setRememberMePreference() is called.
  */
 export async function getRememberMePreference(): Promise<boolean> {
   try {
+    // Check in-memory cache first (fast path, avoids race conditions)
+    if (inMemoryRememberMeCache !== null) {
+      return inMemoryRememberMeCache;
+    }
+    
+    // Cache miss: read from secure storage and populate cache
     const value = await SecureStore.getItemAsync(REMEMBER_ME_KEY);
-    return value === 'true';
+    const preference = value === 'true';
+    inMemoryRememberMeCache = preference;
+    return preference;
   } catch (e) {
     console.error('[AuthSessionStorage] Error reading remember me preference:', e);
     return false;
@@ -58,13 +74,28 @@ export async function getRememberMePreference(): Promise<boolean> {
 
 /**
  * Set the remember me preference
+ * 
+ * IMPORTANT: Updates in-memory cache IMMEDIATELY before writing to secure storage.
+ * This ensures subsequent reads get the correct value without waiting for async storage.
+ * 
+ * DESIGN DECISION: If SecureStore write fails, the cache remains updated.
+ * This means:
+ * - Current app session will use the new preference from cache (correct behavior)
+ * - After app restart, cache is cleared and SecureStore will be read (might contain old value)
+ * - This trade-off prioritizes current session correctness over cross-restart consistency
+ * - The alternative (rolling back cache on failure) would break the current session
  */
 export async function setRememberMePreference(remember: boolean): Promise<void> {
   try {
+    // Update in-memory cache immediately (synchronous, no race condition)
+    inMemoryRememberMeCache = remember;
+    
+    // Then persist to secure storage (asynchronous, but cache already updated)
     await SecureStore.setItemAsync(REMEMBER_ME_KEY, remember ? 'true' : 'false', SECURE_OPTS);
-    console.log('[AuthSessionStorage] Remember me preference set to:', remember);
+    console.log('[AuthSessionStorage] Remember me preference set to:', remember, '(cached in memory and persisted to secure storage)');
   } catch (e) {
     console.error('[AuthSessionStorage] Error setting remember me preference:', e);
+    // Note: Cache remains updated even if SecureStore fails (see function doc for rationale)
   }
 }
 
@@ -73,8 +104,12 @@ export async function setRememberMePreference(remember: boolean): Promise<void> 
  */
 export async function clearRememberMePreference(): Promise<void> {
   try {
+    // Clear in-memory cache immediately
+    inMemoryRememberMeCache = null;
+    
+    // Then clear from secure storage
     await SecureStore.deleteItemAsync(REMEMBER_ME_KEY);
-    console.log('[AuthSessionStorage] Remember me preference cleared');
+    console.log('[AuthSessionStorage] Remember me preference cleared from memory and secure storage');
   } catch (e) {
     console.error('[AuthSessionStorage] Error clearing remember me preference:', e);
   }
@@ -86,8 +121,9 @@ export async function clearRememberMePreference(): Promise<void> {
  */
 export async function clearAllSessionData(): Promise<void> {
   try {
-    // Clear in-memory cache
+    // Clear in-memory caches
     inMemorySessionCache.clear();
+    inMemoryRememberMeCache = null;
     
     // Check if it's chunked
     const val = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY);
@@ -101,7 +137,7 @@ export async function clearAllSessionData(): Promise<void> {
     }
     await SecureStore.deleteItemAsync(SUPABASE_SESSION_KEY);
     
-    console.log('[AuthSessionStorage] All session data cleared from secure storage and in-memory cache');
+    console.log('[AuthSessionStorage] All session data and preferences cleared from secure storage and memory');
   } catch (e) {
     console.error('[AuthSessionStorage] Error clearing session data:', e);
   }
