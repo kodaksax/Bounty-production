@@ -202,14 +202,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
-              // Show success message before navigation to ensure user sees it
-              Alert.alert('Logged Out', 'You have been signed out successfully.');
-
               // OPTIMIZATION: Sign out locally first for immediate response
               // Server sign-out will be attempted in background
               await supabase.auth.signOut({ scope: 'local' });
 
               // OPTIMIZATION: Navigate immediately after local sign-out for perceived speed
+              // Navigation itself provides sufficient feedback to the user
               try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { router } = require('expo-router');
