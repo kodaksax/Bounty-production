@@ -173,7 +173,7 @@ export function SignInForm() {
             // Let Supabase SDK handle network timeouts and retry logic
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
-              .select('username')
+              .select('username, onboarding_completed')
               .eq('id', data.session.user.id)
               .single()
 
@@ -181,7 +181,7 @@ export function SignInForm() {
               // If profile doesn't exist (PGRST116), user needs onboarding
               if (profileError.code === 'PGRST116') {
                 console.log('[sign-in] No profile found, redirecting to onboarding', { correlationId })
-                router.replace('/onboarding/username')
+                router.replace('/onboarding')
                 return
               }
               // For other errors, proceed to app - AuthProvider will handle sync
@@ -190,10 +190,19 @@ export function SignInForm() {
               return
             }
 
-            if (!profile || !profile.username) {
+            // Check if user needs to complete onboarding
+            // User needs onboarding if:
+            // 1. No profile exists
+            // 2. Profile exists but has no username (incomplete)
+            // 3. Profile exists but onboarding_completed is false
+            if (!profile || !profile.username || profile.onboarding_completed === false) {
               // User needs to complete onboarding
-              console.log('[sign-in] Profile incomplete, redirecting to onboarding', { correlationId })
-              router.replace('/onboarding/username')
+              console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
+                correlationId,
+                hasUsername: !!profile?.username,
+                onboardingCompleted: profile?.onboarding_completed
+              })
+              router.replace('/onboarding')
             } else {
               // User has completed onboarding, go to app
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
@@ -328,13 +337,22 @@ export function SignInForm() {
           try {
             const { data: profile } = await supabase
               .from('profiles')
-              .select('username')
+              .select('username, onboarding_completed')
               .eq('id', data.session.user.id)
               .single()
 
-            if (!profile || !profile.username) {
+            // Check if user needs to complete onboarding
+            // User needs onboarding if:
+            // 1. No profile exists
+            // 2. Profile exists but has no username (incomplete)
+            // 3. Profile exists but onboarding_completed is false
+            if (!profile || !profile.username || profile.onboarding_completed === false) {
               // User needs to complete onboarding
-              router.replace('/onboarding/username')
+              console.log('[google] Profile incomplete or onboarding not completed, redirecting to onboarding', {
+                hasUsername: !!profile?.username,
+                onboardingCompleted: profile?.onboarding_completed
+              })
+              router.replace('/onboarding')
             } else {
               // User has completed onboarding, go to app
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
@@ -509,12 +527,21 @@ export function SignInForm() {
                           try {
                             const { data: profile } = await supabase
                               .from('profiles')
-                              .select('username')
+                              .select('username, onboarding_completed')
                               .eq('id', data.session.user.id)
                               .single()
 
-                            if (!profile || !profile.username) {
-                              router.replace('/onboarding/username')
+                            // Check if user needs to complete onboarding
+                            // User needs onboarding if:
+                            // 1. No profile exists
+                            // 2. Profile exists but has no username (incomplete)
+                            // 3. Profile exists but onboarding_completed is false
+                            if (!profile || !profile.username || profile.onboarding_completed === false) {
+                              console.log('[apple] Profile incomplete or onboarding not completed, redirecting to onboarding', {
+                                hasUsername: !!profile?.username,
+                                onboardingCompleted: profile?.onboarding_completed
+                              })
+                              router.replace('/onboarding')
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                             }
