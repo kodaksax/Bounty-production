@@ -10,12 +10,12 @@ import { SignInForm } from "./auth/sign-in-form"
  * Root Index - Auth Gate
  * 
  * This component checks authentication state and routes accordingly:
- * - If logged in with profile: redirect to main app
- * - If logged in without profile: redirect to onboarding
+ * - If logged in with complete profile: redirect to main app
+ * - If logged in but needs onboarding: redirect to onboarding
  * - If not logged in: show sign-in form
  */
 export default function Index() {
-  const { session, isLoading } = useAuthContext()
+  const { session, isLoading, profile } = useAuthContext()
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
 
@@ -33,22 +33,29 @@ export default function Index() {
       }
     }
 
-    // If user is authenticated, always route to dashboard on app start.
-    // Onboarding is triggered explicitly after fresh sign-in/sign-up, not here.
+    // If user is authenticated, check their profile status
     if (session?.user) {
       try {
         if (!isActive || latestSessionIdRef.current !== startingSessionId) return
-        console.log('[index] Authenticated on boot, redirecting to main app')
-        router.replace(ROUTES.TABS.BOUNTY_APP)
+        
+        // Check if user needs to complete onboarding
+        // This happens when auth user exists but no profile is found
+        if (profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
+          console.log('[index] User needs onboarding, redirecting to onboarding flow')
+          router.replace('/onboarding')
+        } else {
+          console.log('[index] Authenticated with complete profile, redirecting to main app')
+          router.replace(ROUTES.TABS.BOUNTY_APP)
+        }
       } catch (navError) {
-        console.error('[index] Navigation error to main app:', navError)
+        console.error('[index] Navigation error:', navError)
       }
     }
 
     return () => {
       isActive = false
     }
-  }, [session, isLoading, router])
+  }, [session, isLoading, profile, router])
 
   // Show loading spinner while checking authentication state
   if (isLoading) {

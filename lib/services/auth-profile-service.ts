@@ -28,6 +28,7 @@ export interface AuthProfile {
   created_at?: string;
   updated_at?: string;
   onboarding_completed?: boolean; // Track if user has completed onboarding flow
+  needs_onboarding?: boolean; // Flag to indicate user needs to complete onboarding (no profile exists)
 }
 
 interface CachedProfile {
@@ -278,11 +279,25 @@ export class AuthProfileService {
       });
 
       if (error) {
-        // If profile doesn't exist, create a minimal one
+        // If profile doesn't exist, return a special state indicating onboarding is needed
+        // Instead of creating a minimal profile, we'll redirect the user to onboarding
         if (error.code === 'PGRST116') {
-          console.log('[authProfileService] Profile not found (PGRST116), creating minimal profile');
-          logger.warning('Profile not found, creating minimal profile', { userId });
-          return await this.createMinimalProfile(userId);
+          console.log('[authProfileService] Profile not found (PGRST116), user needs to complete onboarding');
+          logger.warning('Profile not found, user needs onboarding', { userId });
+          
+          // Return a special profile state indicating onboarding is needed
+          const onboardingNeededProfile: AuthProfile = {
+            id: userId,
+            username: '', // Will be set during onboarding
+            email: this.currentSession?.user?.email,
+            balance: 0,
+            onboarding_completed: false,
+            needs_onboarding: true, // Special flag to indicate onboarding is required
+          };
+          
+          this.currentProfile = onboardingNeededProfile;
+          this.notifyListeners(onboardingNeededProfile);
+          return onboardingNeededProfile;
         }
         console.error('[authProfileService] Supabase query error:', error);
         throw error;
@@ -313,8 +328,29 @@ export class AuthProfileService {
         return profile;
       }
 
-      console.warn('[authProfileService] Supabase returned no data and no error');
-      return null;
+      console.warn('[authProfileService] Supabase returned no data and no error - user needs onboarding');
+      // If no data and no error, return onboarding needed state
+      // This handles edge cases where the profile wasn't created by the trigger
+      logger.warning('Profile query returned no data, user needs onboarding. This should be rare if DB trigger is working.', { userId });
+      
+      // Track this fallback for monitoring
+      if (__DEV__) {
+        console.warn('[authProfileService] MONITORING: No profile found - check if DB trigger is working');
+      }
+      
+      // Return a special profile state indicating onboarding is needed
+      const onboardingNeededProfile: AuthProfile = {
+        id: userId,
+        username: '', // Will be set during onboarding
+        email: this.currentSession?.user?.email,
+        balance: 0,
+        onboarding_completed: false,
+        needs_onboarding: true, // Special flag to indicate onboarding is required
+      };
+      
+      this.currentProfile = onboardingNeededProfile;
+      this.notifyListeners(onboardingNeededProfile);
+      return onboardingNeededProfile;
     } catch (error: any) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
@@ -338,6 +374,9 @@ export class AuthProfileService {
       }
       
       console.error('[authProfileService] No cached profile available, returning null');
+      // IMPORTANT: Always notify listeners even on failure to clear loading states
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     }
   }
@@ -435,6 +474,9 @@ export class AuthProfileService {
             return this.createMinimalProfile(userId, retryCount + 1);
           }
         }
+        // IMPORTANT: Notify listeners with null to clear loading states even on failure
+        this.currentProfile = null;
+        this.notifyListeners(null);
         return null;
       }
 
@@ -461,18 +503,16 @@ export class AuthProfileService {
         return profile;
       }
 
+      // No data returned from insert - notify listeners with null
+      console.warn('[authProfileService] Profile insert returned no data');
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     } catch (error) {
-      logger.error('Error creating minimal profile', { userId, error, retryCount });
-      
-      // Retry on unexpected errors (up to MAX_RETRIES)
-      if (retryCount < MAX_RETRIES) {
-        const delayMs = BASE_DELAY_MS * Math.pow(2, retryCount); // Exponential backoff
-        logger.info('Retrying profile creation after unexpected error', { userId, retryCount, delayMs });
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        return this.createMinimalProfile(userId, retryCount + 1);
-      }
-      
+      logger.error('Error creating minimal profile', { userId, error });
+      // IMPORTANT: Always notify listeners even on error to clear loading states
+      this.currentProfile = null;
+      this.notifyListeners(null);
       return null;
     }
   }
