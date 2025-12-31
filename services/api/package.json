@@ -12,6 +12,7 @@
     "test:payment-flow": "tsx src/test-end-to-end-payment-flow.ts",
     "test:escrow": "tsx src/test-escrow.ts",
     "test:complete-flow": "tsx src/test-complete-payment-flow.ts",
+    "test:auth": "tsx src/test-consolidated-auth.ts",
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
