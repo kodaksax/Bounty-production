@@ -382,23 +382,17 @@ export class AuthProfileService {
   }
 
   /**
-   * Create a minimal profile for a new user (DEPRECATED - kept for backward compatibility)
-   * 
-   * NOTE: This method is now only used as a fallback in race conditions where the
-   * database trigger creates the profile between our check and insert.
-   * 
-   * New users without profiles should be redirected to onboarding instead of
-   * creating a minimal profile. See fetchAndSyncProfile for the new behavior.
-   * 
-   * This is called when a Supabase auth user exists but has no profile record,
-   * but in practice this should be rare since:
-   * 1. Database trigger creates profiles automatically on signup
-   * 2. If trigger fails, we return needs_onboarding=true instead
+   * Create a minimal profile for a new user with retry logic
+   * This is called when a Supabase auth user exists but has no profile record
+   * Note: Minimal profiles are temporary - users should complete onboarding
    */
-  private async createMinimalProfile(userId: string): Promise<AuthProfile | null> {
+  private async createMinimalProfile(userId: string, retryCount: number = 0): Promise<AuthProfile | null> {
     if (!isSupabaseConfigured) {
       return null;
     }
+
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 1000;
 
     try {
       // Generate a temporary username from email or user ID
@@ -416,6 +410,7 @@ export class AuthProfileService {
 
       if (existing) {
         // Profile was created by another process, use it
+        logger.info('Profile already exists, using existing profile', { userId, retryCount });
         this.currentProfile = existing;
         await this.cacheProfile(existing);
         this.notifyListeners(existing);
@@ -446,7 +441,7 @@ export class AuthProfileService {
       if (error) {
         // If error is due to duplicate key, profile was created concurrently
         if (error.code === '23505') {
-          logger.warning('Profile already exists (concurrent creation)', { userId });
+          logger.warning('Profile already exists (concurrent creation)', { userId, retryCount });
           // Fetch the existing profile
           const existingProfile = await this.getProfileById(userId, { bypassCache: true });
 
@@ -461,7 +456,23 @@ export class AuthProfileService {
         if (error.code === '42501') {
           logger.error('Supabase RLS blocked profile insert. Grant authenticated users insert access on public.profiles (id = auth.uid()).', { userId, error });
         } else {
-          logger.error('Error creating minimal profile', { userId, error });
+          logger.error('Error creating minimal profile', { userId, error, retryCount });
+          
+          // Retry on transient errors (network, timeout, etc.)
+          const isRetryableError = 
+            error.message?.includes('network') ||
+            error.message?.includes('timeout') ||
+            error.code === 'PGRST301' || // Connection error
+            error.code === '08000' || // Connection exception
+            error.code === '08003' || // Connection does not exist
+            error.code === '08006'; // Connection failure
+          
+          if (isRetryableError && retryCount < MAX_RETRIES) {
+            const delayMs = BASE_DELAY_MS * Math.pow(2, retryCount); // Exponential backoff
+            logger.info('Retrying profile creation after transient error', { userId, retryCount, delayMs });
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            return this.createMinimalProfile(userId, retryCount + 1);
+          }
         }
         // IMPORTANT: Notify listeners with null to clear loading states even on failure
         this.currentProfile = null;
@@ -488,7 +499,7 @@ export class AuthProfileService {
         this.currentProfile = profile;
         await this.cacheProfile(profile);
         this.notifyListeners(profile);
-        logger.info('Created minimal profile for new user', { userId, username });
+        logger.info('Created minimal profile for new user', { userId, username, retryCount });
         return profile;
       }
 

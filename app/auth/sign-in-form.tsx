@@ -18,7 +18,7 @@ import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { getAuthErrorMessage } from '../../lib/utils/auth-errors'
+import { parseAuthError, generateCorrelationId } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { withTimeout } from '../../lib/utils/withTimeout'
 import { setRememberMePreference } from '../../lib/auth-session-storage'
@@ -46,17 +46,20 @@ export function SignInForm() {
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
     async () => {
-      console.log('[sign-in] Starting sign-in process')
+      // Generate correlation ID for tracking this auth attempt
+      const correlationId = generateCorrelationId('signin');
+      console.log('[sign-in] Starting sign-in process', { correlationId })
       
       // Check Supabase configuration first
       if (!isSupabaseConfigured) {
-        console.error('[sign-in] Supabase is not configured!')
+        console.error('[sign-in] Supabase is not configured!', { correlationId })
         throw new Error('Authentication service is not configured. Please contact support.')
       }
       
       // Log Supabase configuration status for debugging (development only to avoid leaking env details)
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log('[sign-in] Supabase configured:', {
+          correlationId,
           hasUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
           hasKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
           urlPrefix: process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 15) + '...',
@@ -77,26 +80,26 @@ export function SignInForm() {
         // If identifier may be username, your backend should resolve username -> email.
         // Here we assume email sign-in
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase())
+          console.log('[sign-in] Attempting to sign in with email:', identifier.trim().toLowerCase(), { correlationId })
         } else {
-          console.log('[sign-in] Attempting to sign in (email redacted for production)')
+          console.log('[sign-in] Attempting to sign in (email redacted for production)', { correlationId })
         }
 
         // IMPORTANT: Set remember me preference BEFORE authentication
         // This ensures the session storage adapter can immediately use it
         try {
-          console.log('[sign-in] Setting remember me preference:', rememberMe)
+          console.log('[sign-in] Setting remember me preference:', rememberMe, { correlationId })
           await setRememberMePreference(rememberMe)
         } catch (prefError) {
           // Don't block sign-in if preference storage fails
           // The user can still sign in, just won't have persistent session
-          console.warn('[sign-in] Failed to save remember me preference:', prefError)
+          console.warn('[sign-in] Failed to save remember me preference:', prefError, { correlationId })
         }
 
         // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
         // The previous complex retry/timeout logic was causing valid requests to fail
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for detailed rationale
-        console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`)
+        console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`, { correlationId })
         
         const { data, error } = await supabase.auth.signInWithPassword({
           email: identifier.trim().toLowerCase(),
@@ -104,13 +107,17 @@ export function SignInForm() {
         })
         
         console.log(`[sign-in] Auth response received:`, {
+          correlationId,
           hasData: Boolean(data),
           hasError: Boolean(error),
           errorMessage: error?.message,
         })
 
         if (error) {
-          console.error('[sign-in] Authentication error:', error)
+          console.error('[sign-in] Authentication error:', error, { correlationId })
+          
+          // Parse error using centralized handler
+          const authError = parseAuthError(error, correlationId);
           
           // Track failed login attempts
           const newAttempts = loginAttempts + 1
@@ -123,21 +130,15 @@ export function SignInForm() {
             throw new Error('Too many failed attempts. Please try again in 5 minutes.')
           }
 
-          // Handle specific error cases with user-friendly messages
-          if (error.message.includes('Invalid login credentials')) {
-            throw new Error('Invalid email or password. Please try again.')
-          } else if (error.message.includes('Email not confirmed')) {
-            throw new Error('Please confirm your email address before signing in.')
-          } else {
-            throw error
-          }
+          // Use centralized error message
+          throw new Error(authError.userMessage)
         }
 
         // Reset login attempts on success
         setLoginAttempts(0)
         setLockoutUntil(null)
 
-        console.log('[sign-in] Authentication successful')
+        console.log('[sign-in] Authentication successful', { correlationId })
 
         // Handle remember me preference
         try {
@@ -147,7 +148,7 @@ export function SignInForm() {
             await storage.removeItem('rememberMeEmail')
           }
         } catch (error) {
-          console.error('[sign-in] Failed to save remember me preference:', error)
+          console.error('[sign-in] Failed to save remember me preference:', error, { correlationId })
         }
 
         if (data.session) {
@@ -158,14 +159,14 @@ export function SignInForm() {
               $email: data.session.user.email,
               $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
             })
-            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email }); } catch (e) { }
+            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email, correlation_id: correlationId }); } catch (e) { }
           } catch (e) {
             // swallow analytics errors
           }
 
           // OPTIMIZED: Quick profile check with fast timeout and immediate navigation
           // The AuthProvider will handle full profile sync in the background
-          console.log('[sign-in] Performing quick profile check for:', data.session.user.id)
+          console.log('[sign-in] Performing quick profile check for:', data.session.user.id, { correlationId })
           
           try {
             // Profile check to determine onboarding status
@@ -179,39 +180,42 @@ export function SignInForm() {
             if (profileError) {
               // If profile doesn't exist (PGRST116), user needs onboarding
               if (profileError.code === 'PGRST116') {
-                console.log('[sign-in] No profile found, redirecting to onboarding')
+                console.log('[sign-in] No profile found, redirecting to onboarding', { correlationId })
                 router.replace('/onboarding/username')
                 return
               }
               // For other errors, proceed to app - AuthProvider will handle sync
-              console.log('[sign-in] Profile check error, proceeding to app:', profileError.message)
+              console.log('[sign-in] Profile check error, proceeding to app:', profileError.message, { correlationId })
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
               return
             }
 
             if (!profile || !profile.username) {
               // User needs to complete onboarding
-              console.log('[sign-in] Profile incomplete, redirecting to onboarding')
+              console.log('[sign-in] Profile incomplete, redirecting to onboarding', { correlationId })
               router.replace('/onboarding/username')
             } else {
               // User has completed onboarding, go to app
-              console.log('[sign-in] Profile complete, redirecting to app')
+              console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
           } catch (profileCheckError: any) {
             // On error, proceed to app and let AuthProvider handle it
             // This prevents blocking the user from signing in due to profile check issues
-            console.log('[sign-in] Profile check error, proceeding to app. AuthProvider will sync.')
+            console.log('[sign-in] Profile check error, proceeding to app. AuthProvider will sync.', { correlationId })
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
           }
         } else {
           throw new Error('Authentication failed. Please try again.')
         }
       } catch (err: any) {
-        console.error('[sign-in] Sign-in error:', err)
+        console.error('[sign-in] Sign-in error:', err, { correlationId })
         
-        // Use shared error message utility for consistent messaging
-        throw new Error(getAuthErrorMessage(err))
+        // Parse error using centralized handler
+        const authError = parseAuthError(err, correlationId);
+        
+        // Throw with user-friendly message
+        throw new Error(authError.userMessage)
       }
     },
     {

@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { db } from '../db/connection';
 import { bounties, walletTransactions } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
 
@@ -135,9 +136,13 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         hasMore,
       };
     } catch (error) {
-      console.error('Error fetching wallet balance:', error);
+      logErrorWithContext(request, error, {
+        operation: 'fetch_wallet_transactions',
+        userId: request.userId,
+      });
       return reply.code(500).send({
-        error: 'Failed to fetch wallet balance'
+        error: 'Failed to fetch wallet balance',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
@@ -195,9 +200,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         newBalance: newBalanceCents / 100,
       };
     } catch (error) {
-      console.error('Error creating deposit:', error);
+      logErrorWithContext(request, error, {
+        operation: 'create_deposit',
+        userId: request.userId,
+        amount: body.amountDollars,
+      });
       return reply.code(500).send({
-        error: 'Failed to create deposit'
+        error: 'Failed to create deposit',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
@@ -424,9 +434,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         message: `Transfer of $${amount.toFixed(2)} has been initiated.`,
       };
     } catch (error) {
-      console.error('Error processing transfer:', error);
+      logErrorWithContext(request, error, {
+        operation: 'process_transfer',
+        userId: request.userId,
+        amount: body.amount,
+      });
       return reply.code(500).send({
-        error: 'Failed to process transfer'
+        error: 'Failed to process transfer',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });

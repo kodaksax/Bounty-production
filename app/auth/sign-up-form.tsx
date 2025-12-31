@@ -8,7 +8,7 @@ import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { getAuthErrorMessage } from '../../lib/utils/auth-errors'
+import { parseAuthError, generateCorrelationId } from '../../lib/utils/auth-errors'
 import { validateEmail } from '../../lib/utils/auth-validation'
 
 export default function SignUpRoute() {
@@ -73,9 +73,12 @@ export function SignUpForm() {
       return
     }
 
+    // Generate correlation ID for tracking this auth attempt
+    const correlationId = generateCorrelationId('signup');
+
     try {
       setIsLoading(true)
-      console.log('[sign-up] Starting sign-up process')
+      console.log('[sign-up] Starting sign-up process', { correlationId })
       
       // SIMPLIFIED: Let Supabase handle its own timeout logic
       // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
@@ -89,15 +92,11 @@ export function SignUpForm() {
       })
       
       if (error) {
-        console.error('[sign-up] Error:', error)
-        // Handle specific error cases
-        if (error.message.includes('already registered')) {
-          setAuthError('This email is already registered. Please sign in instead.')
-        } else if (error.message.includes('rate limit')) {
-          setAuthError('Too many attempts. Please try again later.')
-        } else {
-          setAuthError(error.message)
-        }
+        console.error('[sign-up] Error:', error, { correlationId })
+        
+        // Parse error using centralized handler
+        const authError = parseAuthError(error, correlationId);
+        setAuthError(authError.userMessage)
         return
       }
 
@@ -106,7 +105,7 @@ export function SignUpForm() {
         try {
           await supabase.auth.signOut()
         } catch (signOutError) {
-          console.error('[sign-up] Unable to sign out newly created session', signOutError)
+          console.error('[sign-up] Unable to sign out newly created session', signOutError, { correlationId })
         }
       }
 
@@ -116,14 +115,15 @@ export function SignUpForm() {
       setAgeVerified(false)
       setTermsAccepted(false)
 
-      console.log('[sign-up] Sign-up successful, navigating to email confirmation')
+      console.log('[sign-up] Sign-up successful, navigating to email confirmation', { correlationId })
       // Navigate to the email confirmation screen with clear instructions
       router.replace('/auth/email-confirmation' as Href)
     } catch (e: any) {
-      console.error('[sign-up] Unexpected error:', e)
+      console.error('[sign-up] Unexpected error:', e, { correlationId })
       
-      // Use shared error message utility for consistent messaging
-      setAuthError(getAuthErrorMessage(e))
+      // Parse error using centralized handler
+      const authError = parseAuthError(e, correlationId);
+      setAuthError(authError.userMessage)
     } finally {
       setIsLoading(false)
     }

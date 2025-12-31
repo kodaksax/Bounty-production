@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import type { AuthenticatedRequest } from '../middleware/auth';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { staleBountyService } from '../services/stale-bounty-service';
+import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 type StaleBountyRouteParams = { bountyId: string };
 
