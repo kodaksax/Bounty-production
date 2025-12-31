@@ -323,9 +323,16 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           email: session.user.email,
         })
       } else if (_event === 'SIGNED_OUT') {
-        await analyticsService.trackEvent('user_logged_out')
-        await analyticsService.reset()
-        Sentry.setUser(null)
+        // OPTIMIZATION: Run analytics cleanup in background (non-blocking)
+        // User is already signed out, analytics tracking shouldn't delay the experience
+        Promise.all([
+          analyticsService.trackEvent('user_logged_out'),
+          analyticsService.reset(),
+        ]).catch(e => {
+          console.error('[AuthProvider] Analytics cleanup failed (non-critical)', e);
+        });
+        // Sentry user clear is synchronous and fast
+        Sentry.setUser(null);
       } else if (_event === 'USER_UPDATED' && verified && session?.user) {
         await analyticsService.trackEvent('email_verified', {
           userId: session.user.id,

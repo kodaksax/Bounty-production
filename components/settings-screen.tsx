@@ -202,51 +202,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
-              // Sign out from Supabase
-              // Let Supabase SDK handle network timeouts and retry logic
-              try {
-                const { error } = await supabase.auth.signOut();
-                
-                if (error) {
-                  console.error('[Logout] Supabase signout error:', error);
-                  // Try local signout as fallback
-                  await supabase.auth.signOut({ scope: 'local' });
-                }
-              } catch (signoutError) {
-                console.error('[Logout] Supabase signout failed, forcing local logout:', signoutError);
-                // Force local logout even if server signout fails
-                try {
-                  await supabase.auth.signOut({ scope: 'local' });
-                } catch (e) {
-                  console.error('[Logout] Local signout failed:', e);
-                }
-              }
+              // OPTIMIZATION: Sign out locally first for immediate response
+              // Server sign-out will be attempted in background
+              await supabase.auth.signOut({ scope: 'local' });
 
-              // Clear remember me preference after sign-out completes
-              // This ensures consistency: preference cleared only after session is gone
-              // Note: supabase.auth.signOut() calls the storage adapter's removeItem,
-              // which clears session data from secure storage automatically
-              await clearRememberMePreference();
-
-              // Clear user-specific draft data to prevent data leaks
-              if (currentUserId) {
-                try {
-                  await authProfileService.clearUserDraftData(currentUserId);
-                } catch (e) {
-                  console.error('[Logout] Draft cleanup failed', e);
-                }
-              }
-
-              // Clear any stored tokens (best-effort)
-              try {
-                await SecureStore.deleteItemAsync('sb-access-token');
-                await SecureStore.deleteItemAsync('sb-refresh-token');
-              } catch (e) {
-                // Not critical; log and continue
-                console.error('[Logout] SecureStore cleanup failed', e);
-              }
-
-              // Route to sign-in screen using expo-router
+              // OPTIMIZATION: Navigate immediately after local sign-out for perceived speed
               try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { router } = require('expo-router');
@@ -257,7 +217,35 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 console.error('[Logout] Router navigation failed', e);
               }
 
-              Alert.alert('Logged Out', 'You have been signed out successfully.');
+              // OPTIMIZATION: Run cleanup operations in background (non-blocking)
+              // These operations don't need to block the user experience
+              Promise.all([
+                // Clear remember me preference
+                clearRememberMePreference().catch(e => 
+                  console.error('[Logout] Failed to clear remember me preference', e)
+                ),
+                // Clear user-specific draft data
+                currentUserId ? authProfileService.clearUserDraftData(currentUserId).catch(e =>
+                  console.error('[Logout] Draft cleanup failed', e)
+                ) : Promise.resolve(),
+                // Clear stored tokens (best-effort)
+                Promise.all([
+                  SecureStore.deleteItemAsync('sb-access-token').catch(() => {}),
+                  SecureStore.deleteItemAsync('sb-refresh-token').catch(() => {})
+                ]).catch(e => console.error('[Logout] SecureStore cleanup failed', e)),
+                // Attempt server sign-out in background (best-effort)
+                supabase.auth.signOut().catch(e => 
+                  console.error('[Logout] Background server signout failed (non-critical)', e)
+                )
+              ]).catch(e => {
+                // Log but don't show error - user is already logged out
+                console.error('[Logout] Background cleanup errors (non-critical)', e);
+              });
+
+              // Show success message after navigation
+              setTimeout(() => {
+                Alert.alert('Logged Out', 'You have been signed out successfully.');
+              }, 100);
             } catch (e) {
               console.error('[Logout] Error:', e);
               Alert.alert('Error', 'Failed to log out properly.');
