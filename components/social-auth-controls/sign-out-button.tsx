@@ -12,12 +12,15 @@ async function onSignOutButtonPress() {
     
     // OPTIMIZATION: Run cleanup operations in background (non-blocking)
     // Each operation has its own error handling so failures don't cascade
-    Promise.all([
+    // Using void to explicitly indicate fire-and-forget behavior
+    void Promise.all([
       // Clear remember me preference
       clearRememberMePreference().catch(e => 
         console.error('[SignOut] Failed to clear remember me preference', e)
       ),
-      // Attempt server sign-out (best-effort)
+      // Attempt server sign-out in background (best-effort)
+      // Note: This calls signOut() without scope, which will attempt both local and server.
+      // Since local is already cleared, this effectively only does server-side cleanup.
       supabase.auth.signOut().catch(e => 
         console.error('[SignOut] Background server signout failed (non-critical)', e)
       )

@@ -202,6 +202,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Mark this as an intentional sign-out to prevent "Session Expired" alert
               markIntentionalSignOut();
 
+              // Show success message before navigation to ensure user sees it
+              Alert.alert('Logged Out', 'You have been signed out successfully.');
+
               // OPTIMIZATION: Sign out locally first for immediate response
               // Server sign-out will be attempted in background
               await supabase.auth.signOut({ scope: 'local' });
@@ -219,7 +222,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
               // OPTIMIZATION: Run cleanup operations in background (non-blocking)
               // These operations don't need to block the user experience
-              Promise.all([
+              // Using void to explicitly indicate fire-and-forget behavior
+              void Promise.all([
                 // Clear remember me preference
                 clearRememberMePreference().catch(e => 
                   console.error('[Logout] Failed to clear remember me preference', e)
@@ -238,6 +242,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                   )
                 ]),
                 // Attempt server sign-out in background (best-effort)
+                // Note: This calls signOut() without scope, which will attempt both local and server.
+                // Since local is already cleared, this effectively only does server-side cleanup.
                 supabase.auth.signOut().catch(e => 
                   console.error('[Logout] Background server signout failed (non-critical)', e)
                 )
@@ -245,13 +251,6 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 // Log but don't show error - user is already logged out
                 console.error('[Logout] Background cleanup errors (non-critical)', e);
               });
-
-              // Show success message after navigation
-              // Delay ensures navigation completes before showing alert
-              const ALERT_DELAY_MS = 100;
-              setTimeout(() => {
-                Alert.alert('Logged Out', 'You have been signed out successfully.');
-              }, ALERT_DELAY_MS);
             } catch (e) {
               console.error('[Logout] Error:', e);
               Alert.alert('Error', 'Failed to log out properly.');

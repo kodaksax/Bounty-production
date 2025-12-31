@@ -325,7 +325,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       } else if (_event === 'SIGNED_OUT') {
         // OPTIMIZATION: Run analytics cleanup in background (non-blocking)
         // User is already signed out, analytics tracking shouldn't delay the experience
-        Promise.all([
+        // Using void to explicitly indicate fire-and-forget behavior
+        void Promise.all([
           analyticsService.trackEvent('user_logged_out'),
           analyticsService.reset(),
         ]).catch(e => {
