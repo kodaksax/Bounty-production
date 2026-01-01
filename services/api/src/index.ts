@@ -84,6 +84,7 @@ const { registerApplePayRoutes } = require('./routes/apple-pay');
 const { registerWalletRoutes } = require('./routes/wallet');
 const riskManagementRoutes = require('./routes/risk-management');
 const { registerConsolidatedAuthRoutes } = require('./routes/consolidated-auth');
+const { registerConsolidatedProfileRoutes } = require('./routes/consolidated-profiles');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -144,6 +145,9 @@ const startServer = async () => {
 
   // Register consolidated authentication routes
   await registerConsolidatedAuthRoutes(fastify);
+
+  // Register consolidated profile routes
+  await registerConsolidatedProfileRoutes(fastify);
 
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
