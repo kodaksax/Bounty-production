@@ -296,13 +296,7 @@ export async function createWithdrawal(
   
   const admin = getSupabaseAdmin();
   
-  // Validate user has sufficient balance
-  const { balance } = await getBalance(userId);
-  if (balance < amount) {
-    throw new ValidationError('Insufficient balance');
-  }
-  
-  // Create pending transaction
+  // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
     .insert({
@@ -322,10 +316,10 @@ export async function createWithdrawal(
     });
   }
   
-  // Deduct from balance atomically
-  await updateBalance(userId, -amount);
-  
   try {
+    // Deduct from balance atomically (this validates sufficient balance)
+    await updateBalance(userId, -amount);
+    
     // Initiate Stripe transfer
     const transfer = await stripe.transfers.create({
       amount: Math.round(amount * 100), // Convert to cents
@@ -373,16 +367,38 @@ export async function createWithdrawal(
       updated_at: transaction.updated_at,
     };
   } catch (error) {
-    // Mark transaction as failed
-    await admin
-      .from('wallet_transactions')
-      .update({ status: 'failed' })
-      .eq('id', transaction.id);
+    const handledError = handleStripeError(error);
     
-    // Refund the balance (rollback)
-    await updateBalance(userId, amount);
+    // Best-effort: mark transaction as failed
+    try {
+      await admin
+        .from('wallet_transactions')
+        .update({ status: 'failed' })
+        .eq('id', transaction.id);
+    } catch (txUpdateError) {
+      logger.error({
+        userId,
+        transactionId: transaction.id,
+        error: (txUpdateError as Error).message ?? txUpdateError,
+      }, '[WalletService] Failed to mark withdrawal transaction as failed');
+    }
     
-    throw handleStripeError(error);
+    // Best-effort: refund the balance (rollback)
+    // Only attempt if balance was actually deducted (error occurred after updateBalance)
+    if (!(error instanceof ValidationError && (error as any).message?.includes('Insufficient balance'))) {
+      try {
+        await updateBalance(userId, amount);
+      } catch (rollbackError) {
+        logger.error({
+          userId,
+          transactionId: transaction.id,
+          amount,
+          error: (rollbackError as Error).message ?? rollbackError,
+        }, '[WalletService] CRITICAL: Failed to rollback user balance after withdrawal failure');
+      }
+    }
+    
+    throw handledError;
   }
 }
 
@@ -405,10 +421,17 @@ export async function createEscrow(
   
   const admin = getSupabaseAdmin();
   
-  // Validate poster has sufficient balance
-  const { balance } = await getBalance(posterId);
-  if (balance < amount) {
-    throw new ValidationError('Insufficient balance');
+  // Check for existing escrow transaction to prevent duplicates
+  const { data: existingEscrow } = await admin
+    .from('wallet_transactions')
+    .select('id')
+    .eq('bounty_id', bountyId)
+    .eq('type', 'escrow')
+    .eq('status', 'completed')
+    .maybeSingle();
+  
+  if (existingEscrow) {
+    throw new ConflictError('Escrow already exists for this bounty');
   }
   
   // Create escrow transaction
@@ -435,7 +458,7 @@ export async function createEscrow(
     });
   }
   
-  // Deduct from poster's balance atomically
+  // Deduct from poster's balance atomically (validates sufficient balance)
   await updateBalance(posterId, -amount);
   
   return {
@@ -464,6 +487,19 @@ export async function releaseEscrow(
   hunterId: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
+  
+  // Check for existing release or refund to prevent double-release
+  const { data: existingRelease } = await admin
+    .from('wallet_transactions')
+    .select('id, type')
+    .eq('bounty_id', bountyId)
+    .in('type', ['release', 'refund'])
+    .eq('status', 'completed')
+    .maybeSingle();
+  
+  if (existingRelease) {
+    throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
+  }
   
   // Find the escrow transaction
   const { data: escrowTx, error: escrowError } = await admin
@@ -536,6 +572,19 @@ export async function refundEscrow(
   reason: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
+  
+  // Check for existing release or refund to prevent double-refund
+  const { data: existingRelease } = await admin
+    .from('wallet_transactions')
+    .select('id, type')
+    .eq('bounty_id', bountyId)
+    .in('type', ['release', 'refund'])
+    .eq('status', 'completed')
+    .maybeSingle();
+  
+  if (existingRelease) {
+    throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
+  }
   
   // Find the escrow transaction
   const { data: escrowTx, error: escrowError } = await admin
@@ -614,13 +663,9 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
   // Check for specific Postgres error indicating function doesn't exist
   if (rpcError) {
     const errorCode = (rpcError as any).code;
-    const errorMessage = rpcError.message?.toLowerCase() || '';
     
     // PGRST202: Function not found in Supabase PostgREST
-    // Also check message for "function" and "does not exist" as fallback
-    const isFunctionNotFound = 
-      errorCode === 'PGRST202' || 
-      (errorMessage.includes('function') && errorMessage.includes('does not exist'));
+    const isFunctionNotFound = errorCode === 'PGRST202';
     
     if (isFunctionNotFound) {
       // Optimistic locking approach
@@ -669,31 +714,42 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
           
           // If no rows updated, balance changed (optimistic lock failed)
           if (!updated || updated.length === 0) {
-            retries++;
-            if (retries >= MAX_RETRIES) {
-              throw new ConflictError('Balance changed during update, please retry');
-            }
-            // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
-            const delayMs = Math.min(1000, 100 * Math.pow(2, retries - 1));
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            continue;
+            throw new ConflictError('Balance changed during update, please retry');
           }
           
           // Success
           return;
         } catch (error) {
-          // Re-throw non-conflict errors
-          if (!(error instanceof ConflictError) || retries >= MAX_RETRIES - 1) {
+          // Re-throw non-conflict errors immediately
+          if (!(error instanceof ConflictError)) {
             throw error;
           }
+          
+          // ConflictError: apply retry policy with backoff
           retries++;
+          if (retries >= MAX_RETRIES) {
+            throw new ConflictError('Balance changed during update after multiple retries, please try again');
+          }
+          
+          // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
+          const delayMs = Math.min(1000, 100 * Math.pow(2, retries));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
     } else {
-      // RPC function exists but failed
-      throw new ExternalServiceError('Supabase', 'Failed to update balance via RPC', {
-        error: rpcError.message,
-      });
+      // RPC function exists but failed - interpret the error appropriately
+      const errorMessage = rpcError.message?.toLowerCase() || '';
+      
+      // Check for specific error patterns and throw appropriate error types
+      if (errorMessage.includes('insufficient') || errorMessage.includes('negative')) {
+        throw new ValidationError('Insufficient balance');
+      } else if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
+        throw new NotFoundError('User', userId);
+      } else {
+        throw new ExternalServiceError('Supabase', 'Failed to update balance via RPC', {
+          error: rpcError.message,
+        });
+      }
     }
   }
   

@@ -70,7 +70,7 @@ Phase 3.1 of the backend consolidation project - consolidating wallet operations
   - Calculates new balance
   - Validates non-negative balance
   - Updates only if balance hasn't changed (WHERE balance = old_balance)
-  - Retries up to 3 times with exponential backoff on conflict
+  - Retries up to 3 times with exponential backoff on conflict (100ms, 200ms, 400ms)
 - **Prevents race conditions** during concurrent updates
 
 ### Data Model Alignment
@@ -193,7 +193,7 @@ Tests include:
 2. **Validation**: Amount and balance validations before processing
 3. **Authorization**: Service assumes caller has already validated user authorization
 4. **Stripe Security**: Transfer operations use authenticated Stripe API
-5. **Rollback**: Failed operations automatically rollback balance changes
+5. **Rollback (Best Effort)**: Failed operations attempt to rollback balance changes. Note that rollback operations themselves may fail in edge cases; such failures are logged as critical errors and may require manual investigation/remediation.
 
 ### Future Enhancements
 

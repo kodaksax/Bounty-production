@@ -9,7 +9,6 @@
  */
 
 import {
-  consolidatedWalletService,
   getBalance,
   getTransactions,
   createDeposit,
