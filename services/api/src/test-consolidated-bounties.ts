@@ -113,7 +113,8 @@ async function setupTestUsers() {
     // Create first test user
     const timestamp = Date.now();
     const user1Email = `bounty_test_user_${timestamp}@example.com`;
-    const user1Password = 'TestPassword123!';
+    // Generate a random password for security (even in tests)
+    const user1Password = `TestPass_${Math.random().toString(36).substring(2, 15)}${timestamp}!`;
 
     const registerResponse1 = await makeRequest('POST', '/auth/register', {
       email: user1Email,
@@ -139,7 +140,8 @@ async function setupTestUsers() {
 
     // Create second test user
     const user2Email = `bounty_test_user2_${timestamp}@example.com`;
-    const user2Password = 'TestPassword123!';
+    // Generate a random password for security (even in tests)
+    const user2Password = `TestPass_${Math.random().toString(36).substring(2, 15)}${timestamp}!`;
 
     const registerResponse2 = await makeRequest('POST', '/auth/register', {
       email: user2Email,

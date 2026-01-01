@@ -48,9 +48,12 @@ const createBountySchema = z.object({
     .datetime()
     .optional(),
 }).refine(data => {
+  // Honor bounties must have amount = 0
   if (data.isForHonor && data.amount > 0) {
     return false;
   }
+  // Non-honor bounties can have amount = 0 or > 0
+  // (amount = 0 non-honor bounties are allowed for future flexibility)
   return true;
 }, { 
   message: 'Honor bounties must have amount set to 0',
@@ -227,6 +230,8 @@ export async function registerConsolidatedBountyRoutes(
           dbQuery = dbQuery.eq('status', query.status);
         } else {
           // Default to showing only open bounties if no status specified
+          // This differs from typical REST conventions but provides better UX
+          // by showing actionable bounties by default
           dbQuery = dbQuery.eq('status', 'open');
         }
 
@@ -403,19 +408,22 @@ export async function registerConsolidatedBountyRoutes(
         'Creating bounty'
       );
 
-      // Additional business logic validation
-      if (!body.isForHonor && body.amount === 0) {
-        throw new ValidationError(
-          'Non-honor bounties must have an amount greater than 0',
-          { field: 'amount' }
-        );
-      }
+      // Note: Non-honor bounties with amount=0 are allowed for flexibility
+      // Future phases may add alternative compensation models
 
       try {
         const supabase = getSupabaseAdmin();
 
         // Prepare bounty data
-        const bountyData: any = {
+        const bountyData: Partial<Bounty> & { 
+          user_id: string; 
+          title: string; 
+          description: string;
+          amount: number;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        } = {
           user_id: userId,
           title: body.title,
           description: body.description,
@@ -544,7 +552,7 @@ export async function registerConsolidatedBountyRoutes(
         }
 
         // Prepare update data
-        const updateData: any = {
+        const updateData: Partial<Bounty> & { updated_at: string } = {
           updated_at: new Date().toISOString(),
         };
 
