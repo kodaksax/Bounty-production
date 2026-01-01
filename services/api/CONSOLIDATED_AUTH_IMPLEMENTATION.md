@@ -141,7 +141,11 @@ Authorization: Bearer <access_token>
 
 **Features**:
 - Requires authentication (Bearer token)
-- Cleans up dependent data (conversations, etc.)
+- Comprehensive cleanup of dependent data:
+  - Deletes completion submissions
+  - Deletes bounty requests
+  - Deletes bounties created by user
+  - Deletes conversations, messages, and participants
 - Attempts admin deletion first, falls back to manual profile deletion
 - Comprehensive error handling with fallback strategies
 - Full audit logging
@@ -228,7 +232,7 @@ npm run dev
 Then run the test script:
 
 ```bash
-npm run test-auth  # Or: tsx src/test-consolidated-auth.ts
+npm run test:auth  # Or: tsx src/test-consolidated-auth.ts
 ```
 
 The test script will:

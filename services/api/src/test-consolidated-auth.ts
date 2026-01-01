@@ -3,7 +3,6 @@
  * Tests all endpoints with various scenarios
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { config } from './config';
 
 const API_BASE_URL = `http://localhost:${config.service.port}`;

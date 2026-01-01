@@ -63,16 +63,8 @@ async function authRateLimitMiddleware(
     authRateLimitStore.set(ip, record);
   }
 
-  // Increment request count
-  record.count++;
-
-  // Add rate limit headers
-  reply.header('X-RateLimit-Limit', maxRequests.toString());
-  reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - record.count).toString());
-  reply.header('X-RateLimit-Reset', new Date(record.resetTime).toISOString());
-
-  // Check if rate limit exceeded
-  if (record.count > maxRequests) {
+  // Check if rate limit exceeded BEFORE incrementing
+  if (record.count >= maxRequests) {
     const retryAfterSeconds = Math.ceil((record.resetTime - now) / 1000);
     reply.header('Retry-After', retryAfterSeconds.toString());
     
@@ -89,34 +81,145 @@ async function authRateLimitMiddleware(
       timestamp: new Date().toISOString(),
     });
   }
+
+  // Increment request count after check
+  record.count++;
+
+  // Add rate limit headers
+  reply.header('X-RateLimit-Limit', maxRequests.toString());
+  reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - record.count).toString());
+  reply.header('X-RateLimit-Reset', new Date(record.resetTime).toISOString());
 }
 
 /**
  * Clean up expired rate limit entries every 5 minutes
  */
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, record] of authRateLimitStore.entries()) {
-    if (now > record.resetTime + 60000) { // Keep for 1 extra minute after reset
-      authRateLimitStore.delete(ip);
+let cleanupIntervalId: NodeJS.Timeout | null = null;
+
+function startRateLimitCleanup() {
+  if (cleanupIntervalId) return; // Already started
+  
+  cleanupIntervalId = setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of authRateLimitStore.entries()) {
+      if (now > record.resetTime + 60000) { // Keep for 1 extra minute after reset
+        authRateLimitStore.delete(ip);
+      }
     }
+  }, 5 * 60 * 1000);
+}
+
+/**
+ * Stop rate limit cleanup (for graceful shutdown)
+ */
+export function stopRateLimitCleanup() {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
   }
-}, 5 * 60 * 1000);
+}
+
+/**
+ * Supabase admin client singleton for user management operations
+ * Reused across all requests to avoid repeated connection setup
+ */
+const supabaseAdminClient = createClient(
+  config.supabase.url,
+  config.supabase.serviceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 /**
  * Get Supabase admin client for user management operations
  */
 function getSupabaseAdmin() {
-  return createClient(
-    config.supabase.url,
-    config.supabase.serviceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
+  return supabaseAdminClient;
+}
+
+/**
+ * Shared user registration handler
+ * Used by both /auth/register and /auth/sign-up endpoints
+ */
+async function handleUserRegistration(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  body: { email: string; password: string; username?: string },
+  logPrefix: string
+) {
+  request.log.info(
+    { email: body.email, hasUsername: !!body.username },
+    `${logPrefix} attempt`
   );
+
+  try {
+    const supabaseAdmin = getSupabaseAdmin();
+    
+    // Generate username from email if not provided
+    // Add timestamp suffix to ensure uniqueness
+    let username = body.username;
+    if (!username) {
+      const emailLocal = body.email.split('@')[0];
+      const timestamp = Date.now().toString(36).slice(-4);
+      username = `${emailLocal}_${timestamp}`;
+    }
+
+    // Create user in Supabase Auth
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: body.email.trim(),
+      password: body.password,
+      email_confirm: true, // Auto-confirm email for immediate login
+      user_metadata: { username },
+    });
+
+    if (error) {
+      request.log.error(
+        { error: error.message, email: body.email },
+        'Supabase user creation failed'
+      );
+
+      // Check for duplicate email error
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        throw new ValidationError('Email already registered', { email: body.email });
+      }
+
+      throw new ExternalServiceError('Supabase', error.message, { code: error.code });
+    }
+
+    if (!data?.user?.id) {
+      throw new ExternalServiceError('Supabase', 'User creation returned no user ID');
+    }
+
+    const userId = data.user.id;
+
+    request.log.info(
+      { userId, email: body.email, username },
+      `${logPrefix} successful`
+    );
+
+    reply.code(201).send({
+      success: true,
+      userId,
+      email: body.email,
+      username,
+      message: 'Account created successfully',
+    });
+  } catch (error) {
+    // Re-throw AppErrors as-is, they'll be handled by error handler
+    if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+      throw error;
+    }
+    
+    // Wrap unexpected errors
+    request.log.error({ error }, `Unexpected ${logPrefix} error`);
+    throw new ExternalServiceError(logPrefix, 'Failed to create account', { 
+      originalError: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
 }
 
 /**
@@ -125,6 +228,9 @@ function getSupabaseAdmin() {
 export async function registerConsolidatedAuthRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
+  
+  // Start rate limit cleanup on route registration
+  startRateLimitCleanup();
   
   /**
    * POST /auth/register
@@ -164,70 +270,7 @@ export async function registerConsolidatedAuthRoutes(
     },
     asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
       const body = registerSchema.parse(request.body);
-      
-      request.log.info(
-        { email: body.email, hasUsername: !!body.username },
-        'User registration attempt'
-      );
-
-      try {
-        const supabaseAdmin = getSupabaseAdmin();
-        
-        // Generate username from email if not provided
-        const username = body.username || body.email.split('@')[0];
-
-        // Create user in Supabase Auth
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email: body.email.trim(),
-          password: body.password,
-          email_confirm: true, // Auto-confirm email for immediate login
-          user_metadata: { username },
-        });
-
-        if (error) {
-          request.log.error(
-            { error: error.message, email: body.email },
-            'Supabase user creation failed'
-          );
-
-          // Check for duplicate email error
-          if (error.message.includes('already registered') || error.message.includes('already exists')) {
-            throw new ValidationError('Email already registered', { email: body.email });
-          }
-
-          throw new ExternalServiceError('Supabase', error.message, { code: error.code });
-        }
-
-        if (!data?.user?.id) {
-          throw new ExternalServiceError('Supabase', 'User creation returned no user ID');
-        }
-
-        const userId = data.user.id;
-
-        request.log.info(
-          { userId, email: body.email, username },
-          'User registered successfully'
-        );
-
-        reply.code(201).send({
-          success: true,
-          userId,
-          email: body.email,
-          username,
-          message: 'Account created successfully',
-        });
-      } catch (error) {
-        // Re-throw AppErrors as-is, they'll be handled by error handler
-        if (error instanceof ValidationError || error instanceof ExternalServiceError) {
-          throw error;
-        }
-        
-        // Wrap unexpected errors
-        request.log.error({ error }, 'Unexpected registration error');
-        throw new ExternalServiceError('Registration', 'Failed to create account', { 
-          originalError: error instanceof Error ? error.message : 'Unknown error' 
-        });
-      }
+      await handleUserRegistration(request, reply, body, 'User registration');
     })
   );
 
@@ -286,9 +329,7 @@ export async function registerConsolidatedAuthRoutes(
       );
 
       try {
-        const supabaseAdmin = getSupabaseAdmin();
-
-        // Sign in with Supabase (we use the regular client for sign-in, not admin)
+        // Sign in with Supabase (use regular client for sign-in, not admin)
         const supabaseClient = createClient(
           config.supabase.url,
           config.supabase.anonKey
@@ -380,69 +421,8 @@ export async function registerConsolidatedAuthRoutes(
       },
     },
     asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
-      // Reuse the same logic as /auth/register
       const body = signUpSchema.parse(request.body);
-      
-      request.log.info(
-        { email: body.email, hasUsername: !!body.username },
-        'User sign-up attempt'
-      );
-
-      try {
-        const supabaseAdmin = getSupabaseAdmin();
-        
-        // Generate username from email if not provided
-        const username = body.username || body.email.split('@')[0];
-
-        // Create user in Supabase Auth
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email: body.email.trim(),
-          password: body.password,
-          email_confirm: true,
-          user_metadata: { username },
-        });
-
-        if (error) {
-          request.log.error(
-            { error: error.message, email: body.email },
-            'Supabase user creation failed'
-          );
-
-          if (error.message.includes('already registered') || error.message.includes('already exists')) {
-            throw new ValidationError('Email already registered', { email: body.email });
-          }
-
-          throw new ExternalServiceError('Supabase', error.message, { code: error.code });
-        }
-
-        if (!data?.user?.id) {
-          throw new ExternalServiceError('Supabase', 'User creation returned no user ID');
-        }
-
-        const userId = data.user.id;
-
-        request.log.info(
-          { userId, email: body.email, username },
-          'User signed up successfully'
-        );
-
-        reply.code(201).send({
-          success: true,
-          userId,
-          email: body.email,
-          username,
-          message: 'Account created successfully',
-        });
-      } catch (error) {
-        if (error instanceof ValidationError || error instanceof ExternalServiceError) {
-          throw error;
-        }
-        
-        request.log.error({ error }, 'Unexpected sign-up error');
-        throw new ExternalServiceError('Sign-up', 'Failed to create account', { 
-          originalError: error instanceof Error ? error.message : 'Unknown error' 
-        });
-      }
+      await handleUserRegistration(request, reply, body, 'User sign-up');
     })
   );
 
@@ -530,7 +510,7 @@ export async function registerConsolidatedAuthRoutes(
         const supabaseAdmin = getSupabaseAdmin();
 
         // Try to list users (limit to 1 to minimize load)
-        const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+        const { error } = await supabaseAdmin.auth.admin.listUsers({
           page: 1,
           perPage: 1,
         });
@@ -568,10 +548,13 @@ export async function registerConsolidatedAuthRoutes(
    * Delete the authenticated user's account
    * Requires valid authentication token
    * 
-   * This endpoint:
-   * 1. Nullifies references in conversations table to avoid FK constraints
-   * 2. Deletes the user from Supabase Auth (which cascades to profiles if configured)
-   * 3. Falls back to manual profile deletion if admin deletion fails
+   * This endpoint performs comprehensive cleanup:
+   * 1. Deletes completion submissions tied to the user
+   * 2. Deletes bounty requests by the user
+   * 3. Deletes bounties created by the user
+   * 4. Deletes conversations and related data (messages, participants)
+   * 5. Deletes the user from Supabase Auth (cascades to profiles if configured)
+   * 6. Falls back to manual profile deletion if admin deletion fails
    * 
    * @header {string} Authorization - Bearer token (required)
    * 
@@ -585,7 +568,7 @@ export async function registerConsolidatedAuthRoutes(
       preHandler: authMiddleware,
       schema: {
         tags: ['auth'],
-        description: 'Delete the authenticated user account',
+        description: 'Delete the authenticated user account with comprehensive cleanup',
         response: {
           200: {
             type: 'object',
@@ -608,28 +591,135 @@ export async function registerConsolidatedAuthRoutes(
       try {
         const supabaseAdmin = getSupabaseAdmin();
 
-        // Step 1: Try to clean up conversations references
-        // This prevents FK constraint violations
+        // Step 1: Delete completion submissions tied to this user as hunter
         try {
-          const { error: convError } = await supabaseAdmin
-            .from('conversations')
-            .update({ created_by: null })
-            .eq('created_by', userId);
-
-          if (convError) {
+          const { error: compErr } = await supabaseAdmin
+            .from('completion_submissions')
+            .delete()
+            .eq('hunter_id', userId);
+          if (compErr) {
             request.log.warn(
-              { userId, error: convError.message },
-              'Conversations cleanup warning (continuing)'
+              { userId, error: compErr.message },
+              'completion_submissions cleanup failed (continuing)'
             );
           }
         } catch (error) {
           request.log.warn(
             { userId, error: error instanceof Error ? error.message : 'Unknown' },
-            'Conversations cleanup failed (continuing)'
+            'completion_submissions cleanup threw (continuing)'
           );
         }
 
-        // Step 2: Delete auth user via admin API
+        // Step 2: Delete bounty requests by this user (hunter applications)
+        try {
+          const { error: reqErr } = await supabaseAdmin
+            .from('bounty_requests')
+            .delete()
+            .eq('user_id', userId);
+          if (reqErr) {
+            request.log.warn(
+              { userId, error: reqErr.message },
+              'bounty_requests cleanup failed (continuing)'
+            );
+          }
+        } catch (error) {
+          request.log.warn(
+            { userId, error: error instanceof Error ? error.message : 'Unknown' },
+            'bounty_requests cleanup threw (continuing)'
+          );
+        }
+
+        // Step 3: Delete bounties created by this user
+        try {
+          const { error: bntyErr } = await supabaseAdmin
+            .from('bounties')
+            .delete()
+            .eq('poster_id', userId);
+          if (bntyErr) {
+            request.log.warn(
+              { userId, error: bntyErr.message },
+              'bounties cleanup failed (continuing)'
+            );
+          }
+        } catch (error) {
+          request.log.warn(
+            { userId, error: error instanceof Error ? error.message : 'Unknown' },
+            'bounties cleanup threw (continuing)'
+          );
+        }
+
+        // Step 4: Delete conversations created by this user, with explicit child cleanup
+        try {
+          // Fetch conversation ids first
+          const { data: convs, error: convListErr } = await supabaseAdmin
+            .from('conversations')
+            .select('id')
+            .eq('created_by', userId);
+          
+          if (convListErr) {
+            request.log.warn(
+              { userId, error: convListErr.message },
+              'conversations list failed (continuing)'
+            );
+          } else if (convs && convs.length > 0) {
+            const ids = convs.map((c: any) => c.id);
+            
+            // Delete messages in those conversations
+            const { error: msgErr } = await supabaseAdmin
+              .from('messages')
+              .delete()
+              .in('conversation_id', ids);
+            if (msgErr) {
+              request.log.warn(
+                { userId, error: msgErr.message },
+                'messages deletion failed (continuing)'
+              );
+            }
+            
+            // Delete participants in those conversations
+            const { error: partErr } = await supabaseAdmin
+              .from('conversation_participants')
+              .delete()
+              .in('conversation_id', ids);
+            if (partErr) {
+              request.log.warn(
+                { userId, error: partErr.message },
+                'participants deletion failed (continuing)'
+              );
+            }
+            
+            // Finally delete the conversations
+            const { error: convDelErr } = await supabaseAdmin
+              .from('conversations')
+              .delete()
+              .in('id', ids);
+            if (convDelErr) {
+              request.log.warn(
+                { userId, error: convDelErr.message },
+                'conversations deletion failed (continuing)'
+              );
+            }
+          }
+          
+          // Also remove any participant rows for this user in other conversations
+          const { error: partUserErr } = await supabaseAdmin
+            .from('conversation_participants')
+            .delete()
+            .eq('user_id', userId);
+          if (partUserErr) {
+            request.log.warn(
+              { userId, error: partUserErr.message },
+              'participant rows for user deletion failed (continuing)'
+            );
+          }
+        } catch (error) {
+          request.log.warn(
+            { userId, error: error instanceof Error ? error.message : 'Unknown' },
+            'conversations cascade deletion threw (continuing)'
+          );
+        }
+
+        // Step 5: Delete auth user via admin API
         // This should cascade to profiles if FK is configured with ON DELETE CASCADE
         let adminDeleted = false;
         try {
@@ -651,7 +741,7 @@ export async function registerConsolidatedAuthRoutes(
           );
         }
 
-        // Step 3: Fallback to manual profile deletion if admin deletion failed
+        // Step 6: Fallback to manual profile deletion if admin deletion failed
         if (!adminDeleted) {
           request.log.info({ userId }, 'Attempting fallback profile deletion');
 
