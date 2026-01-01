@@ -1,3 +1,57 @@
+# Copilot Instructions — BOUNTYExpo
+
+This file provides concise, repo-specific guidance for AI coding agents working on BOUNTYExpo.
+
+Key pointers
+- Language & runtime: TypeScript + React (Expo/React Native). See `App.tsx` and `app/` routes.
+- Backend: server and `services/api` (see `../server/README.md` and `../services/api/README.md`).
+- Auth & DB: Supabase migrations live under `supabase/`; data models in `lib/types.ts`.
+
+Architecture & data flow (high-level)
+- Mobile app (app/) ↔ services/api (server) ↔ Supabase/Stripe. Core domain shapes: `Bounty` → `Posting` → `Request` → `Conversation` → `WalletTransaction` (see `lib/types.ts`).
+- UI routing uses Expo Router (file-based routes under `app/`). Bottom nav is global — do NOT render BottomNav inside screens.
+
+Patterns and conventions to follow
+- File placement: screens in `app/`, shared UI in `lib/components` or `components/ui/`, hooks in `hooks/`, services in `lib/services/`.
+- Naming: `PascalCase` for React components/types, `camelCase` for functions/vars, `kebab-case` for filenames and folders.
+- Keep code small and focused: prefer utility hooks in `hooks/` and thin presentational components under `components/`.
+- Use `lib/types.ts` as the canonical shapes for domain objects.
+
+Critical developer workflows (commands)
+- Install deps: `npm install`
+- Start app (Expo): `npx expo start` (use `--clear` to reset Metro cache)
+- Typecheck: `npx tsc --noEmit`
+- Server docs & startup: see [server/README.md](../server/README.md)
+- Run migrations: follow `supabase/migrations/README.md` (or scripts in `scripts/`).
+
+Project-specific rules for AI edits
+- Preserve navigation patterns: update only `app/` routes when adding screens and ensure `BottomNav` remains root-level.
+- Update `lib/types.ts` only when adding fields globally; adjust both app and server docs when changing domain shapes.
+- Follow existing style — minimal diffs, no sweeping reformatting.
+- When adding dependencies, update `package.json` and include exact install commands in PR notes.
+
+Integration points to check in PRs
+- Supabase usage (migrations and client setup)
+- Payments (Stripe) — server-side code under `server/` and docs in `server/README.md`
+- Push notifications / analytics — search for `PUSH` or `analytics` in repo for integration touchpoints
+
+Examples (where to look)
+- Bottom navigation guidance: see `BOTTOM_NAV_AUDIT_REPORT.md` and `BOUNTY_DASHBOARD_IMPLEMENTATION.md` for examples of correct placement.
+- Domain shapes & types: `lib/types.ts` and `BOUNTY_*` docs.
+- Messaging & convo patterns: `MESSAGING_IMPLEMENTATION.md` and `MESSENGER_QOL_README.md`.
+
+Testing & validation
+- Run `npx tsc --noEmit` on all changes.
+- If UI-affecting, preview in Expo (`npx expo start`) and include screenshots / device tested notes in PR.
+
+When to ask for clarification
+- Any change touching escrow/payments, auth flows, or database migrations — ask a human reviewer.
+
+Reporting back
+- Use the todo list when multi-step changes are required.
+- In PR descriptions, list touched domains (navigation, payments, migrations, messaging).
+
+If anything here is unclear or missing, tell me which area you want expanded (navigation, server, payments, or CI/workflows).
 # Copilot Instructions for BOUNTYExpo
 
 ## Mission & Elevator Pitch
