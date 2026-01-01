@@ -8,7 +8,7 @@
  * - api/server.js (lines 348-418)
  */
 
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
 import { 
   asyncHandler, 
@@ -48,8 +48,8 @@ const updateProfileSchema = z.object({
     .nullable(),
 });
 
-// Schema for PATCH operations (partial updates)
-const patchProfileSchema = updateProfileSchema.partial();
+// Schema for PATCH operations (partial updates) - same as update since all fields are already optional
+const patchProfileSchema = updateProfileSchema;
 
 // Schema for POST operations (create/update full profile)
 const createProfileSchema = z.object({
@@ -399,19 +399,17 @@ export async function registerConsolidatedProfileRoutes(
         const supabase = getSupabaseAdmin();
 
         // Check if username is already taken by another user
-        if (body.username) {
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id, username')
-            .eq('username', body.username)
-            .maybeSingle();
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id, username')
+          .eq('username', body.username)
+          .maybeSingle();
 
-          if (existingProfile && existingProfile.id !== userId) {
-            throw new ValidationError('Username already taken', {
-              field: 'username',
-              value: body.username,
-            });
-          }
+        if (existingProfile && existingProfile.id !== userId) {
+          throw new ValidationError('Username already taken', {
+            field: 'username',
+            value: body.username,
+          });
         }
 
         // Prepare update data
@@ -419,7 +417,7 @@ export async function registerConsolidatedProfileRoutes(
           updated_at: new Date().toISOString(),
         };
 
-        if (body.username) updateData.username = body.username;
+        updateData.username = body.username;
         if (body.avatar_url !== undefined) updateData.avatar = body.avatar_url;
         if (body.bio !== undefined) updateData.bio = body.bio;
         if (body.about !== undefined) updateData.about = body.about;

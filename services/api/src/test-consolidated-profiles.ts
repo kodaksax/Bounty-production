@@ -97,7 +97,6 @@ async function makeRequest(
 // Test data
 let testAccessToken = '';
 let testUserId = '';
-let testUsername = '';
 
 async function testGetPublicProfile() {
   logSection('Testing GET /api/profiles/:id (Public)');
