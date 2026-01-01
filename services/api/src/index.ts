@@ -83,6 +83,7 @@ const { staleBountyService } = require('./services/stale-bounty-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
 const { registerWalletRoutes } = require('./routes/wallet');
 const riskManagementRoutes = require('./routes/risk-management');
+const { registerConsolidatedAuthRoutes } = require('./routes/consolidated-auth');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -141,9 +142,15 @@ const startServer = async () => {
   // Register payment routes (SetupIntent, PaymentIntent, etc.)
   await registerPaymentRoutes(fastify);
 
+  // Register consolidated authentication routes
+  await registerConsolidatedAuthRoutes(fastify);
+
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
 
+  // Legacy delete account endpoint (kept for backwards compatibility)
+  // NOTE: This endpoint duplicates functionality in consolidated-auth routes
+  // Consider removing after migration is complete
   // Delete account endpoint
   fastify.delete('/auth/delete-account', {
     preHandler: authMiddleware
