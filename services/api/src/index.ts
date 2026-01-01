@@ -85,6 +85,7 @@ const { registerWalletRoutes } = require('./routes/wallet');
 const riskManagementRoutes = require('./routes/risk-management');
 const { registerConsolidatedAuthRoutes } = require('./routes/consolidated-auth');
 const { registerConsolidatedProfileRoutes } = require('./routes/consolidated-profiles');
+const { registerConsolidatedBountyRoutes } = require('./routes/consolidated-bounties');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -148,6 +149,9 @@ const startServer = async () => {
 
   // Register consolidated profile routes
   await registerConsolidatedProfileRoutes(fastify);
+
+  // Register consolidated bounty routes
+  await registerConsolidatedBountyRoutes(fastify);
 
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
