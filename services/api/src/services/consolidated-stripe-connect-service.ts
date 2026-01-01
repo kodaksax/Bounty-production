@@ -17,13 +17,11 @@ import { config } from '../config';
 import {
   ValidationError,
   NotFoundError,
-  ConflictError,
   ExternalServiceError,
   handleStripeError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import {
-  getBalance,
   createWithdrawal,
   updateBalance,
   type WalletTransaction,
@@ -131,17 +129,22 @@ export async function createConnectAccount(
   }
   
   try {
-    // Create new Stripe Express account
-    const account = await stripe.accounts.create({
-      type: 'express',
-      email,
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
+    // Create new Stripe Express account with idempotency key to prevent duplicates
+    const account = await stripe.accounts.create(
+      {
+        type: 'express',
+        email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        business_type: 'individual',
+        metadata: { user_id: userId },
       },
-      business_type: 'individual',
-      metadata: { user_id: userId },
-    });
+      {
+        idempotencyKey: `connect_acct_${userId}`,
+      }
+    );
     
     // Save account ID to profiles table
     const { error: updateError } = await admin
@@ -354,7 +357,7 @@ export async function createTransfer(
   
   // Verify user has Connect account
   if (!accountId) {
-    throw new ValidationError('Complete Stripe Connect onboarding first');
+    throw new ValidationError('Stripe Connect account not found. Please create an account first.');
   }
   
   // Verify user has completed onboarding
@@ -362,15 +365,9 @@ export async function createTransfer(
     throw new ValidationError('Complete Stripe Connect onboarding first');
   }
   
-  // Check sufficient balance
-  const balance = profile.balance || 0;
-  if (balance < amount) {
-    throw new ValidationError('Insufficient wallet balance');
-  }
-  
   try {
     // Create withdrawal transaction via wallet service
-    // This will deduct balance and create the transaction
+    // This will deduct balance atomically and create the transaction
     const transaction = await createWithdrawal(userId, amount, accountId);
     
     logger.info({
@@ -381,7 +378,7 @@ export async function createTransfer(
       transferId: transaction.stripe_transfer_id,
     }, '[StripeConnect] Transfer created successfully');
     
-    // Calculate estimated arrival (2 business days)
+    // Calculate estimated arrival (2 calendar days - actual arrival depends on bank processing)
     const estimatedArrival = new Date();
     estimatedArrival.setDate(estimatedArrival.getDate() + 2);
     
@@ -421,11 +418,6 @@ export async function retryTransfer(
   
   if (txError || !transaction) {
     throw new NotFoundError('Transaction', transactionId);
-  }
-  
-  // Verify transaction belongs to user
-  if (transaction.user_id !== userId) {
-    throw new ValidationError('Not authorized to retry this transaction');
   }
   
   // Verify transaction is failed
@@ -491,9 +483,9 @@ export async function retryTransfer(
       .from('wallet_transactions')
       .update({
         stripe_transfer_id: transfer.id,
-        status: 'completed',
+        status: 'pending',
         metadata: {
-          ...transaction.metadata,
+          ...(transaction.metadata || {}),
           retry_count: retryCount + 1,
           previous_transfer_id: transaction.stripe_transfer_id,
           retried_at: new Date().toISOString(),
@@ -517,13 +509,13 @@ export async function retryTransfer(
       retryAttempt: retryCount + 1,
     }, '[StripeConnect] Transfer retried successfully');
     
-    // Calculate estimated arrival
+    // Calculate estimated arrival (2 calendar days - actual arrival depends on bank processing)
     const estimatedArrival = new Date();
     estimatedArrival.setDate(estimatedArrival.getDate() + 2);
     
     return {
       transferId: transfer.id,
-      status: 'completed',
+      status: 'pending',
       amount,
       estimatedArrival: estimatedArrival.toISOString(),
     };

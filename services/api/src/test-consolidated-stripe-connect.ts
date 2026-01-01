@@ -17,7 +17,7 @@ import {
   retryTransfer,
   getAccountStatus,
 } from './services/consolidated-stripe-connect-service';
-import { getBalance, createDeposit } from './services/consolidated-wallet-service';
+import { getBalance } from './services/consolidated-wallet-service';
 
 // ANSI color codes for console output
 const colors = {
@@ -176,7 +176,7 @@ async function runTests() {
         logInfo(`Current balance: $${balanceResult.balance}`);
         
         // Try to transfer more than balance
-        const transferAmount = balanceResult.balance + 100;
+        const transferAmount = Math.floor(balanceResult.balance * 2);
         await createTransfer(TEST_USER_ID, transferAmount);
         logError('Transfer should have failed with insufficient balance');
         testsFailed++;

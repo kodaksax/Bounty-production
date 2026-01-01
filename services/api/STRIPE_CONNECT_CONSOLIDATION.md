@@ -150,11 +150,14 @@ Creates a transfer from user's wallet to their Stripe Connect account.
 **Transfer Workflow**:
 1. User requests withdrawal from wallet
 2. Verify Connect account onboarded
-3. Verify sufficient balance
-4. Create wallet withdrawal transaction (deduct balance)
+3. Verify sufficient balance (via wallet service atomic check)
+4. Create wallet withdrawal transaction (deduct balance atomically)
 5. Create Stripe transfer
-6. On success → mark transaction 'completed'
+6. On success → mark transaction 'pending' (transfer initiated; actual settlement pending)
 7. On failure → refund wallet balance, mark transaction 'failed', allow retry
+8. Webhooks (Phase 3.3) will update status to 'completed' when transfer settles
+
+**Note**: The 'pending' status indicates the transfer request was successfully submitted to Stripe, not that funds have arrived. Actual transfer completion is tracked via Stripe webhooks.
 
 ### 5. retryTransfer(transactionId, userId)
 
@@ -229,7 +232,7 @@ All functions use the unified error handling system from `error-handler.ts`:
 ### With Wallet Service
 
 The Stripe Connect service integrates with the wallet service for:
-- **Balance checks**: Via `getBalance(userId)`
+- **Balance checks**: Via atomic balance validation during withdrawal
 - **Transaction creation**: Via `createWithdrawal(userId, amount, destination)`
 - **Balance updates**: Via `updateBalance(userId, amount)` for retry rollbacks
 
