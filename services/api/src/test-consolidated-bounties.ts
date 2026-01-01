@@ -102,6 +102,17 @@ let testUserId = '';
 let testBountyId = '';
 let secondUserToken = '';
 let secondUserId = '';
+const createdBountyIds: string[] = [];  // Track created bounties for cleanup
+
+/**
+ * Generate a secure test password that meets common requirements
+ */
+function generateTestPassword(): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 10);
+  // Ensure we have uppercase, lowercase, number, and special char
+  return `Test${random}${timestamp}!`;
+}
 
 /**
  * Setup: Create test users
@@ -113,8 +124,7 @@ async function setupTestUsers() {
     // Create first test user
     const timestamp = Date.now();
     const user1Email = `bounty_test_user_${timestamp}@example.com`;
-    // Generate a random password for security (even in tests)
-    const user1Password = `TestPass_${Math.random().toString(36).substring(2, 15)}${timestamp}!`;
+    const user1Password = generateTestPassword();
 
     const registerResponse1 = await makeRequest('POST', '/auth/register', {
       email: user1Email,
@@ -140,8 +150,7 @@ async function setupTestUsers() {
 
     // Create second test user
     const user2Email = `bounty_test_user2_${timestamp}@example.com`;
-    // Generate a random password for security (even in tests)
-    const user2Password = `TestPass_${Math.random().toString(36).substring(2, 15)}${timestamp}!`;
+    const user2Password = generateTestPassword();
 
     const registerResponse2 = await makeRequest('POST', '/auth/register', {
       email: user2Email,
@@ -195,6 +204,7 @@ async function testCreateBounty() {
 
     if (response.status === 201 && response.data.id) {
       testBountyId = response.data.id;
+      createdBountyIds.push(response.data.id);  // Track for cleanup
       recordTest('Create valid bounty', true);
     } else {
       recordTest('Create valid bounty', false, `Status: ${response.status}`);
@@ -219,6 +229,9 @@ async function testCreateBounty() {
     );
 
     recordTest('Create honor bounty', response.status === 201);
+    if (response.status === 201 && response.data.id) {
+      createdBountyIds.push(response.data.id);  // Track for cleanup
+    }
   } catch (error) {
     recordTest('Create honor bounty', false, error instanceof Error ? error.message : 'Unknown error');
   }
@@ -413,9 +426,10 @@ async function testGetBounty() {
   try {
     const response = await makeRequest('GET', '/api/bounties/invalid-uuid');
 
-    recordTest('Get bounty with invalid UUID returns 400', response.status >= 400);
+    // Accept either 400 (validation error) or 404 (route not matched)
+    recordTest('Get bounty with invalid UUID returns error', response.status === 400 || response.status === 404);
   } catch (error) {
-    recordTest('Get bounty with invalid UUID returns 400', false, error instanceof Error ? error.message : 'Unknown error');
+    recordTest('Get bounty with invalid UUID returns error', false, error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -620,6 +634,7 @@ async function testArchiveBounty() {
 
     if (response.status === 201) {
       archiveBountyId = response.data.id;
+      createdBountyIds.push(response.data.id);  // Track for cleanup
       logInfo('Created bounty for archive tests');
     }
   } catch (error) {
@@ -671,6 +686,7 @@ async function testArchiveBounty() {
 
     if (response.status === 201) {
       otherBountyId = response.data.id;
+      createdBountyIds.push(response.data.id);  // Track for cleanup
     }
   } catch (error) {
     logError('Failed to create second bounty for archive test');
@@ -729,6 +745,7 @@ async function testDeleteBounty() {
 
     if (response.status === 201) {
       deleteBountyId = response.data.id;
+      createdBountyIds.push(response.data.id);  // Track for cleanup
       logInfo('Created bounty for deletion tests');
     }
   } catch (error) {
@@ -815,6 +832,43 @@ async function testUpdateCompletedBounty() {
 }
 
 /**
+ * Cleanup test data
+ */
+async function cleanupTestData() {
+  logSection('Cleanup: Removing Test Data');
+  
+  let cleanedCount = 0;
+  let failedCount = 0;
+  
+  // Clean up bounties
+  for (const bountyId of createdBountyIds) {
+    try {
+      // Try to delete the bounty (may already be deleted in tests)
+      const response = await makeRequest(
+        'DELETE',
+        `/api/bounties/${bountyId}`,
+        undefined,
+        { Authorization: `Bearer ${testAccessToken}` }
+      );
+      
+      if (response.status === 200 || response.status === 404) {
+        cleanedCount++;
+      } else {
+        failedCount++;
+      }
+    } catch (error) {
+      // Ignore errors during cleanup - bounty may already be deleted
+      failedCount++;
+    }
+  }
+  
+  logInfo(`Cleaned up ${cleanedCount} bounties, ${failedCount} already removed or failed`);
+  
+  // Note: User cleanup is typically handled by the auth system or database cascades
+  // Test users can be left for manual cleanup or database reset
+}
+
+/**
  * Print test summary
  */
 function printSummary() {
@@ -857,6 +911,9 @@ async function runTests() {
     await testDeleteBounty();
     
     printSummary();
+    
+    // Cleanup test data before exit
+    await cleanupTestData();
     
     // Exit with appropriate code
     process.exit(testResults.failed > 0 ? 1 : 0);

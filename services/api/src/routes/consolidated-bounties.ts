@@ -65,7 +65,7 @@ const updateBountySchema = createBountySchema.partial();
 
 // Schema for listing bounties with filters
 const listBountiesSchema = z.object({
-  status: z.enum(['open', 'in_progress', 'completed', 'archived'])
+  status: z.enum(['open', 'in_progress', 'completed', 'archived', 'all'])
     .optional(),
   category: z.string()
     .optional(),
@@ -226,12 +226,17 @@ export async function registerConsolidatedBountyRoutes(
           .select('*', { count: 'exact' });
 
         // Apply filters
-        if (query.status) {
+        if (query.status === 'all') {
+          // Explicit override: return bounties regardless of status
+          // This aligns with typical REST expectations when clients
+          // want to see all records and avoids the default "open only" filter.
+        } else if (query.status) {
           dbQuery = dbQuery.eq('status', query.status);
         } else {
-          // Default to showing only open bounties if no status specified
+          // Default to showing only open bounties if no status specified.
           // This differs from typical REST conventions but provides better UX
-          // by showing actionable bounties by default
+          // by showing actionable bounties by default. Clients that need all
+          // bounties can explicitly request `status=all` to disable this filter.
           dbQuery = dbQuery.eq('status', 'open');
         }
 
@@ -415,14 +420,13 @@ export async function registerConsolidatedBountyRoutes(
         const supabase = getSupabaseAdmin();
 
         // Prepare bounty data
+        // Note: created_at and updated_at are omitted to use database defaults
         const bountyData: Partial<Bounty> & { 
           user_id: string; 
           title: string; 
           description: string;
           amount: number;
           status: string;
-          created_at: string;
-          updated_at: string;
         } = {
           user_id: userId,
           title: body.title,
@@ -430,8 +434,6 @@ export async function registerConsolidatedBountyRoutes(
           amount: body.amount,
           isForHonor: body.isForHonor,
           status: 'open',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         };
 
         // Add optional fields
@@ -573,8 +575,8 @@ export async function registerConsolidatedBountyRoutes(
           
           if (finalIsForHonor && finalAmount > 0) {
             throw new ValidationError(
-              'Honor bounties must have amount set to 0',
-              { field: 'amount' }
+              'Honor bounties must have amount set to 0. Both isForHonor and amount fields must be consistent.',
+              { field: 'amount', relatedField: 'isForHonor' }
             );
           }
         }
@@ -805,7 +807,8 @@ export async function registerConsolidatedBountyRoutes(
           throw new ConflictError('This bounty has already been accepted');
         }
 
-        // Update bounty
+        // Update bounty with optimistic locking to prevent race conditions
+        // The WHERE clause ensures we only update if status is still 'open'
         const { data: updatedBounty, error: updateError } = await supabase
           .from('bounties')
           .update({
@@ -814,15 +817,26 @@ export async function registerConsolidatedBountyRoutes(
             updated_at: new Date().toISOString(),
           })
           .eq('id', bountyId)
+          .eq('status', 'open')  // Optimistic lock: only update if still open
+          .is('accepted_by', null)  // Additional check: ensure not accepted
           .select()
           .single();
 
         if (updateError) {
+          // Check if it's a not found error (likely due to race condition)
+          if (updateError.code === 'PGRST116') {
+            throw new ConflictError('This bounty has already been accepted by another user');
+          }
           request.log.error(
             { error: updateError.message, bountyId },
             'Bounty acceptance failed'
           );
           throw new Error(updateError.message);
+        }
+
+        if (!updatedBounty) {
+          // No rows updated - bounty was already accepted
+          throw new ConflictError('This bounty has already been accepted by another user');
         }
 
         request.log.info(

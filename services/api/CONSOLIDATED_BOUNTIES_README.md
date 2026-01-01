@@ -18,7 +18,7 @@ List bounties with optional filters and pagination.
 **Authentication:** Optional (public endpoint, enhanced with auth)
 
 **Query Parameters:**
-- `status` - Filter by status: `open`, `in_progress`, `completed`, `archived` (default: `open`)
+- `status` - Filter by status: `open`, `in_progress`, `completed`, `archived`, `all` (default: `open`)
 - `category` - Filter by category string
 - `user_id` - Filter by poster UUID
 - `accepted_by` - Filter by hunter UUID
@@ -71,7 +71,7 @@ Create a new bounty.
 
 **Business Rules:**
 - If `isForHonor=true`, `amount` must be 0
-- If `isForHonor=false`, `amount` must be > 0
+- If `isForHonor=false`, `amount` can be >= 0 (zero is allowed for future flexibility, e.g., when budget is not yet specified)
 - Initial status is always `open`
 - `user_id` is set to authenticated user
 
@@ -288,8 +288,8 @@ Uses unified error classes from `middleware/error-handler.ts`:
 5. **Better logging:** Structured logging with context
 
 ### Changes
-1. **Field naming:** Uses camelCase (`isForHonor`) instead of snake_case (`is_for_honor`) in API
-2. **Default status filter:** Lists only `open` bounties by default (was all bounties)
+1. **Field naming:** Public API uses camelCase (`isForHonor`) while the underlying Supabase schema may use snake_case conventions (e.g., `is_for_honor`). The Supabase client handles the mapping automatically, so API consumers should always use camelCase and do not need to be aware of the database column naming conventions.
+2. **Default status filter:** Lists only `open` bounties by default (was all bounties). Use `status=all` to fetch bounties regardless of status.
 3. **Stricter validation:** More comprehensive input validation
 4. **No MySQL:** Uses Supabase/PostgreSQL only (MySQL logic removed)
 
