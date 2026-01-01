@@ -185,24 +185,27 @@
                     ────────────                            ────────────
                                                                    
          ┌────────────────────────┐              ┌────────────────────────┐
-         │ Stripe Transfer        │              │ Transfer Failed        │
-         │ - ID: tr_123           │              │ - Card declined        │
-         │ - Status: pending      │              └────────────┬───────────┘
-         └────────────┬───────────┘                           │
-                      │                                       ▼
-                      ▼                          ┌────────────────────────┐
-         ┌────────────────────────┐              │ Rollback               │
-         │ Update Transaction     │              │ ├─ Refund $100        │
-         │ - transfer_id: tr_123  │              │ └─ Mark tx 'failed'   │
-         │ - status: completed    │              └────────────┬───────────┘
-         └────────────┬───────────┘                           │
-                      │                                       ▼
-                      ▼                          ┌────────────────────────┐
-         ┌────────────────────────┐              │ Allow Retry            │
-         │ Return to User         │              │ - retryTransfer()      │
-         │ - transferId: tr_123   │              │ - Max 3 attempts       │
-         │ - arrival: 2 days      │              └────────────────────────┘
-         └────────────────────────┘              
+         │ Stripe Transfer        │              │ Wallet Service         │
+         │ - ID: tr_123           │              │ Transfer Failed        │
+         │ - Status: pending      │              │ - Rollback balance     │
+         └────────────┬───────────┘              │ - Mark tx 'failed'     │
+                      │                          └────────────┬───────────┘
+                      ▼                                       │
+         ┌────────────────────────┐                          ▼
+         │ Update Transaction     │              ┌────────────────────────┐
+         │ - transfer_id: tr_123  │              │ Stripe Connect         │
+         │ - status: pending      │              │ - Receive failed       │
+         └────────────┬───────────┘              │   withdrawal result    │
+                      │                          │ - Return failure to    │
+                      ▼                          │   caller               │
+         ┌────────────────────────┐              └────────────┬───────────┘
+         │ Return to User         │                           │
+         │ - transferId: tr_123   │                          ▼
+         │ - status: pending      │              ┌────────────────────────┐
+         │ - arrival: 2 days      │              │ Allow Retry            │
+         └────────────────────────┘              │ - retryTransfer()      │
+                                                │ - Max 3 attempts       │
+                                                └────────────────────────┘              
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           ERROR HANDLING FLOW                                │
