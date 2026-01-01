@@ -22,6 +22,7 @@ import {
   handleStripeError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
+import { logger } from './logger';
 
 // Initialize Supabase admin client
 let supabaseAdmin: SupabaseClient | null = null;
@@ -308,7 +309,7 @@ export async function createWithdrawal(
       user_id: userId,
       type: 'withdrawal',
       amount: -amount, // Negative for debit
-      description: `Withdrawal to ${destination.substring(0, 12)}...`,
+      description: `Withdrawal to account ending in ${destination.slice(-4)}`,
       status: 'pending',
       stripe_connect_account_id: destination,
     })
@@ -351,7 +352,11 @@ export async function createWithdrawal(
       .eq('id', transaction.id);
     
     if (updateError) {
-      console.error('[WalletService] Failed to update transaction with transfer ID:', updateError);
+      logger.error({ 
+        transactionId: transaction.id, 
+        transferId: transfer.id, 
+        error: updateError 
+      }, '[WalletService] Failed to update transaction with transfer ID');
     }
     
     return {
@@ -606,77 +611,90 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
   });
   
   // If RPC function doesn't exist, fall back to optimistic locking
-  if (rpcError && rpcError.message?.includes('function') && rpcError.message?.includes('does not exist')) {
-    // Optimistic locking approach
-    const MAX_RETRIES = 3;
-    let retries = 0;
+  // Check for specific Postgres error indicating function doesn't exist
+  if (rpcError) {
+    const errorCode = (rpcError as any).code;
+    const errorMessage = rpcError.message?.toLowerCase() || '';
     
-    while (retries < MAX_RETRIES) {
-      try {
-        // Read current balance
-        const { data: profile, error: readError } = await admin
-          .from('profiles')
-          .select('balance')
-          .eq('id', userId)
-          .single();
-        
-        if (readError) {
-          if (readError.code === 'PGRST116') {
-            throw new NotFoundError('User', userId);
+    // PGRST202: Function not found in Supabase PostgREST
+    // Also check message for "function" and "does not exist" as fallback
+    const isFunctionNotFound = 
+      errorCode === 'PGRST202' || 
+      (errorMessage.includes('function') && errorMessage.includes('does not exist'));
+    
+    if (isFunctionNotFound) {
+      // Optimistic locking approach
+      const MAX_RETRIES = 3;
+      let retries = 0;
+      
+      while (retries < MAX_RETRIES) {
+        try {
+          // Read current balance
+          const { data: profile, error: readError } = await admin
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .single();
+          
+          if (readError) {
+            if (readError.code === 'PGRST116') {
+              throw new NotFoundError('User', userId);
+            }
+            throw new ExternalServiceError('Supabase', 'Failed to fetch user balance', {
+              error: readError.message,
+            });
           }
-          throw new ExternalServiceError('Supabase', 'Failed to fetch user balance', {
-            error: readError.message,
-          });
-        }
-        
-        const oldBalance = profile.balance || 0;
-        const newBalance = oldBalance + amount;
-        
-        // Check for negative balance
-        if (newBalance < 0) {
-          throw new ValidationError('Insufficient balance');
-        }
-        
-        // Update with optimistic lock (WHERE balance = old_balance)
-        const { data: updated, error: updateError } = await admin
-          .from('profiles')
-          .update({ balance: newBalance })
-          .eq('id', userId)
-          .eq('balance', oldBalance)
-          .select();
-        
-        if (updateError) {
-          throw new ExternalServiceError('Supabase', 'Failed to update balance', {
-            error: updateError.message,
-          });
-        }
-        
-        // If no rows updated, balance changed (optimistic lock failed)
-        if (!updated || updated.length === 0) {
+          
+          const oldBalance = profile.balance || 0;
+          const newBalance = oldBalance + amount;
+          
+          // Check for negative balance
+          if (newBalance < 0) {
+            throw new ValidationError('Insufficient balance');
+          }
+          
+          // Update with optimistic lock (WHERE balance = old_balance)
+          const { data: updated, error: updateError } = await admin
+            .from('profiles')
+            .update({ balance: newBalance })
+            .eq('id', userId)
+            .eq('balance', oldBalance)
+            .select();
+          
+          if (updateError) {
+            throw new ExternalServiceError('Supabase', 'Failed to update balance', {
+              error: updateError.message,
+            });
+          }
+          
+          // If no rows updated, balance changed (optimistic lock failed)
+          if (!updated || updated.length === 0) {
+            retries++;
+            if (retries >= MAX_RETRIES) {
+              throw new ConflictError('Balance changed during update, please retry');
+            }
+            // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
+            const delayMs = Math.min(1000, 100 * Math.pow(2, retries - 1));
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+          
+          // Success
+          return;
+        } catch (error) {
+          // Re-throw non-conflict errors
+          if (!(error instanceof ConflictError) || retries >= MAX_RETRIES - 1) {
+            throw error;
+          }
           retries++;
-          if (retries >= MAX_RETRIES) {
-            throw new ConflictError('Balance changed during update, please retry');
-          }
-          // Wait a bit before retry (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, 100 * Math.pow(2, retries)));
-          continue;
         }
-        
-        // Success
-        return;
-      } catch (error) {
-        // Re-throw non-conflict errors
-        if (!(error instanceof ConflictError) || retries >= MAX_RETRIES - 1) {
-          throw error;
-        }
-        retries++;
       }
+    } else {
+      // RPC function exists but failed
+      throw new ExternalServiceError('Supabase', 'Failed to update balance via RPC', {
+        error: rpcError.message,
+      });
     }
-  } else if (rpcError) {
-    // RPC function exists but failed
-    throw new ExternalServiceError('Supabase', 'Failed to update balance via RPC', {
-      error: rpcError.message,
-    });
   }
   
   // RPC succeeded
