@@ -265,16 +265,19 @@ export async function registerConsolidatedBountyRequestRoutes(
             'Bounty requests listed successfully'
           );
 
-          // Note: Since authorization filtering happens in-memory, we use the filtered count
-          // for pagination. This means the total count reflects only accessible items.
+          // Note: Pagination metadata should reflect the original database count
+          // when filtering happens in-memory. This provides accurate total counts
+          // even though authorization filtering may reduce the returned items.
           // For large datasets, consider implementing database-level filtering with RLS.
+          const total = typeof count === 'number' && Number.isFinite(count) ? count : authorizedRequests.length;
+          
           return {
             requests: authorizedRequests,
             pagination: {
               page: query.page,
               limit: query.limit,
-              total: authorizedRequests.length,
-              totalPages: Math.ceil(authorizedRequests.length / query.limit),
+              total,
+              totalPages: total > 0 ? Math.ceil(total / query.limit) : 0,
             },
           };
         }
@@ -490,7 +493,7 @@ export async function registerConsolidatedBountyRequestRoutes(
    * 
    * @header {string} Authorization - Bearer token (required)
    * @body {string} bounty_id - Bounty UUID (required)
-   * @body {string} message - Application message (50-1000 chars, optional)
+   * @body {string} message - Application message (required, 50-1000 chars)
    * @body {string} proposed_completion_date - Proposed completion date (ISO 8601, optional)
    * 
    * @returns {201} Bounty request created successfully
@@ -777,11 +780,35 @@ export async function registerConsolidatedBountyRequestRoutes(
             .select()
             .single();
 
-          if (requestUpdateError) {
+          if (requestUpdateError || !updatedRequest) {
             request.log.error(
-              { error: requestUpdateError.message, requestId },
-              'Failed to update request status to accepted'
+              { error: requestUpdateError?.message, requestId },
+              'Failed to update request status to accepted, attempting to roll back bounty'
             );
+
+            // Compensating action: roll back the bounty to open if possible
+            const { error: bountyRollbackError } = await supabase
+              .from('bounties')
+              .update({
+                status: 'open',
+                accepted_by: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', bountyRequest.bounty_id)
+              .eq('status', 'in_progress')
+              .eq('accepted_by', bountyRequest.hunter_id);
+
+            if (bountyRollbackError) {
+              request.log.error(
+                {
+                  error: bountyRollbackError.message,
+                  bountyId: bountyRequest.bounty_id,
+                  hunterId: bountyRequest.hunter_id,
+                },
+                'Failed to roll back bounty after request accept failure - manual intervention required'
+              );
+            }
+
             throw new Error('Failed to accept request');
           }
 
@@ -932,7 +959,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Check status: cannot delete accepted requests
         if (bountyRequest.status === 'accepted') {
-          throw new ConflictError('Cannot delete accepted request. Use the withdraw status instead or contact support if needed.');
+          throw new ConflictError('Cannot delete accepted request; use the withdraw status instead or contact support if needed.');
         }
 
         // Only allow deleting pending requests

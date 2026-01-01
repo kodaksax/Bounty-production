@@ -92,7 +92,8 @@ async function makeRequest(
       headers: response.headers,
     };
   } catch (error) {
-    throw error;  // Preserve original error with stack trace
+    // Re-throw so callers can handle the error; in JS/TS this preserves the original stack trace
+    throw error;
   }
 }
 
@@ -103,7 +104,6 @@ let hunterToken = '';
 let hunterUserId = '';
 let testBountyId = '';
 let testRequestId = '';
-let secondRequestId = '';
 
 /**
  * Generate a secure test password
