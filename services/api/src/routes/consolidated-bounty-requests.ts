@@ -269,7 +269,7 @@ export async function registerConsolidatedBountyRequestRoutes(
           // when filtering happens in-memory. This provides accurate total counts
           // even though authorization filtering may reduce the returned items.
           // For large datasets, consider implementing database-level filtering with RLS.
-          const total = typeof count === 'number' && Number.isFinite(count) ? count : authorizedRequests.length;
+          const total = typeof count === 'number' && Number.isFinite(count) ? count : 0;
           
           return {
             requests: authorizedRequests,
@@ -787,7 +787,7 @@ export async function registerConsolidatedBountyRequestRoutes(
             );
 
             // Compensating action: roll back the bounty to open if possible
-            const { error: bountyRollbackError } = await supabase
+            const { data: rollbackData, error: bountyRollbackError } = await supabase
               .from('bounties')
               .update({
                 status: 'open',
@@ -796,7 +796,8 @@ export async function registerConsolidatedBountyRequestRoutes(
               })
               .eq('id', bountyRequest.bounty_id)
               .eq('status', 'in_progress')
-              .eq('accepted_by', bountyRequest.hunter_id);
+              .eq('accepted_by', bountyRequest.hunter_id)
+              .select();
 
             if (bountyRollbackError) {
               request.log.error(
@@ -806,6 +807,19 @@ export async function registerConsolidatedBountyRequestRoutes(
                   hunterId: bountyRequest.hunter_id,
                 },
                 'Failed to roll back bounty after request accept failure - manual intervention required'
+              );
+            } else if (!rollbackData || rollbackData.length === 0) {
+              request.log.warn(
+                {
+                  bountyId: bountyRequest.bounty_id,
+                  hunterId: bountyRequest.hunter_id,
+                },
+                'Rollback conditions not met - bounty may have been modified by another process'
+              );
+            } else {
+              request.log.info(
+                { bountyId: bountyRequest.bounty_id },
+                'Successfully rolled back bounty to open status'
               );
             }
 
