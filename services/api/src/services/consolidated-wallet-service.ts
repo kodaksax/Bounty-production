@@ -379,13 +379,13 @@ export async function createWithdrawal(
       logger.error({
         userId,
         transactionId: transaction.id,
-        error: (txUpdateError as Error).message ?? txUpdateError,
+        error: txUpdateError instanceof Error ? txUpdateError.message : String(txUpdateError),
       }, '[WalletService] Failed to mark withdrawal transaction as failed');
     }
     
     // Best-effort: refund the balance (rollback)
     // Only attempt if balance was actually deducted (error occurred after updateBalance)
-    if (!(error instanceof ValidationError && (error as any).message?.includes('Insufficient balance'))) {
+    if (!(error instanceof ValidationError && error.message?.includes('Insufficient balance'))) {
       try {
         await updateBalance(userId, amount);
       } catch (rollbackError) {
@@ -393,7 +393,7 @@ export async function createWithdrawal(
           userId,
           transactionId: transaction.id,
           amount,
-          error: (rollbackError as Error).message ?? rollbackError,
+          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
         }, '[WalletService] CRITICAL: Failed to rollback user balance after withdrawal failure');
       }
     }
@@ -732,7 +732,7 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
           }
           
           // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
-          const delayMs = Math.min(1000, 100 * Math.pow(2, retries));
+          const delayMs = Math.min(1000, 100 * Math.pow(2, retries - 1));
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
