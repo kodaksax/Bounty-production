@@ -32,8 +32,7 @@ const createRequestSchema = z.object({
   bounty_id: z.string().uuid('Invalid bounty ID format'),
   message: z.string()
     .min(50, 'Application message must be at least 50 characters')
-    .max(1000, 'Application message must be at most 1000 characters')
-    .optional(),
+    .max(1000, 'Application message must be at most 1000 characters'),
   proposed_completion_date: z.string()
     .datetime('Invalid date format')
     .optional(),
@@ -262,10 +261,13 @@ export async function registerConsolidatedBountyRequestRoutes(
           });
 
           request.log.info(
-            { count: authorizedRequests.length, total: count },
+            { count: authorizedRequests.length, totalFromDb: count },
             'Bounty requests listed successfully'
           );
 
+          // Note: Since authorization filtering happens in-memory, we use the filtered count
+          // for pagination. This means the total count reflects only accessible items.
+          // For large datasets, consider implementing database-level filtering with RLS.
           return {
             requests: authorizedRequests,
             pagination: {
@@ -558,7 +560,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Check if user is trying to apply to their own bounty
         if (posterId === userId) {
-          throw new ValidationError('You cannot apply to your own bounty');
+          throw new ValidationError('You cannot apply to your own bounty. Only other users can submit applications.');
         }
 
         // Validate bounty is open
@@ -584,11 +586,8 @@ export async function registerConsolidatedBountyRequestRoutes(
           hunter_id: userId,
           poster_id: posterId,
           status: 'pending',
+          message: body.message,  // Now required by schema
         };
-
-        if (body.message) {
-          requestData.message = body.message;
-        }
 
         if (body.proposed_completion_date) {
           requestData.proposed_completion_date = body.proposed_completion_date;
@@ -745,9 +744,9 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Special logic for accepting a request
         if (body.status === 'accepted') {
-          // This is a critical operation - use transaction-like approach
+          // This is a critical operation - use optimistic locking to prevent race conditions
           // 1. Update the bounty status and accepted_by
-          const { error: bountyUpdateError } = await supabase
+          const { data: updatedBounty, error: bountyUpdateError } = await supabase
             .from('bounties')
             .update({
               status: 'in_progress',
@@ -755,14 +754,16 @@ export async function registerConsolidatedBountyRequestRoutes(
               updated_at: new Date().toISOString(),
             })
             .eq('id', bountyRequest.bounty_id)
-            .eq('status', 'open');  // Optimistic lock
+            .eq('status', 'open')  // Optimistic lock: only update if still open
+            .select()
+            .single();
 
-          if (bountyUpdateError) {
+          if (bountyUpdateError || !updatedBounty) {
             request.log.error(
-              { error: bountyUpdateError.message, bountyId: bountyRequest.bounty_id },
-              'Failed to update bounty when accepting request'
+              { error: bountyUpdateError?.message, bountyId: bountyRequest.bounty_id },
+              'Failed to update bounty when accepting request (possibly already accepted)'
             );
-            throw new Error('Failed to accept request: bounty update failed');
+            throw new ConflictError('This bounty has already been accepted by another user');
           }
 
           // 2. Update this request to accepted
@@ -931,7 +932,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Check status: cannot delete accepted requests
         if (bountyRequest.status === 'accepted') {
-          throw new ConflictError('Cannot delete accepted request. Please contact support if you need to cancel an accepted bounty.');
+          throw new ConflictError('Cannot delete accepted request. Use the withdraw status instead or contact support if needed.');
         }
 
         // Only allow deleting pending requests

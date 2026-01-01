@@ -92,7 +92,7 @@ async function makeRequest(
       headers: response.headers,
     };
   } catch (error) {
-    throw new Error(`Request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw error;  // Preserve original error with stack trace
   }
 }
 
