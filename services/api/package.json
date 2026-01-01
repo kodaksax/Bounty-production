@@ -15,6 +15,7 @@
     "test:auth": "tsx src/test-consolidated-auth.ts",
     "test:profiles": "tsx src/test-consolidated-profiles.ts",
     "test:bounties": "tsx src/test-consolidated-bounties.ts",
+    "test:bounty-requests": "tsx src/test-consolidated-bounty-requests.ts",
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
