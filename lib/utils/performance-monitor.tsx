@@ -69,7 +69,7 @@ class PerformanceMonitor {
 
     // Log slow operations (>1000ms)
     if (duration > SLOW_OPERATION_THRESHOLD) {
-      console.error(`[Performance] Slow operation detected: ${name} took ${duration.toFixed(2)}ms`, metric.metadata);
+      console.warn(`[Performance] Slow operation detected: ${name} took ${duration.toFixed(2)}ms`, metric.metadata);
     }
 
     return duration;

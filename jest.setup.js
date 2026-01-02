@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
 process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
+process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'test-api-key-12345';
 process.env.NODE_ENV = 'test';
 
 // Define __DEV__ global for React Native code
@@ -20,7 +21,9 @@ jest.setTimeout(30000);
 jest.mock('expo-constants', () => ({
   default: {
     expoConfig: {
-      extra: {},
+      extra: {
+        googlePlacesApiKey: 'test-api-key-12345',
+      },
     },
     manifest: {},
   },
@@ -176,6 +179,104 @@ jest.mock('@stripe/stripe-react-native', () => ({
   initPaymentSheet: jest.fn(),
   presentPaymentSheet: jest.fn(),
   handleNextAction: jest.fn(),
+}));
+
+// Mock @sentry/react-native
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+  addBreadcrumb: jest.fn(),
+  setUser: jest.fn(),
+  setContext: jest.fn(),
+  setTag: jest.fn(),
+  setExtra: jest.fn(),
+  withScope: jest.fn((callback) => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
+  configureScope: jest.fn((callback) => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
+}));
+
+// Mock mixpanel-react-native
+jest.mock('mixpanel-react-native', () => ({
+  Mixpanel: {
+    init: jest.fn().mockResolvedValue(undefined),
+    track: jest.fn(),
+    identify: jest.fn(),
+    setProfile: jest.fn(),
+    timeEvent: jest.fn(),
+    flush: jest.fn(),
+    reset: jest.fn(),
+  },
+}));
+
+// Mock expo-modules-core
+jest.mock('expo-modules-core', () => ({
+  EventEmitter: class MockEventEmitter {
+    constructor() {
+      this.listeners = {};
+    }
+    
+    addListener(event, callback) {
+      if (!this.listeners[event]) {
+        this.listeners[event] = [];
+      }
+      this.listeners[event].push(callback);
+      return { remove: () => this.removeListener(event, callback) };
+    }
+    
+    removeListener(event, callback) {
+      if (this.listeners[event]) {
+        this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+      }
+    }
+    
+    emit(event, ...args) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach(callback => callback(...args));
+      }
+    }
+    
+    removeAllListeners(event) {
+      if (event) {
+        delete this.listeners[event];
+      } else {
+        this.listeners = {};
+      }
+    }
+  },
+  requireNativeModule: jest.fn(() => ({})),
+  NativeModulesProxy: {},
+}));
+
+// Mock expo-file-system (including legacy export)
+jest.mock('expo-file-system', () => ({
+  documentDirectory: '/mock/documents/',
+  cacheDirectory: '/mock/cache/',
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue(''),
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
+  EncodingType: {
+    UTF8: 'utf8',
+    Base64: 'base64',
+  },
+}));
+
+// Mock expo-file-system/legacy
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: '/mock/documents/',
+  cacheDirectory: '/mock/cache/',
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue(''),
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
+  EncodingType: {
+    UTF8: 'utf8',
+    Base64: 'base64',
+  },
+}));
+
+// Mock expo-sharing
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  shareAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock console methods to reduce noise in tests, but preserve critical errors

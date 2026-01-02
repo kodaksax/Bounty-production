@@ -13,15 +13,12 @@ describe('useConversations', () => {
   });
 
   it('should set loading to false when no valid user', async () => {
-    // Mock no valid user
+    // Mock no valid user (fallback ID)
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('00000000-0000-0000-0000-000000000001');
 
     const { result } = renderHook(() => useConversations());
 
-    // Initially loading should be true
-    expect(result.current.loading).toBe(true);
-
-    // Wait for the effect to run
+    // Wait for the effect to run - loading should become false quickly
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });

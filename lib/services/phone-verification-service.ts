@@ -69,8 +69,10 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
     if (error) {
       console.error('[phone-verification] Failed to send OTP:', error);
 
+      const errorMsg = error.message.toLowerCase();
+
       // Handle rate limiting
-      if (error.message.includes('rate limit') || error.message.includes('too many')) {
+      if (errorMsg.includes('rate limit') || errorMsg.includes('too many')) {
         // Extract retry-after information from error if available
         let waitTime = 'a few minutes'; // Default message
         
@@ -150,7 +152,9 @@ export async function verifyPhoneOTP(
     if (error) {
       console.error('[phone-verification] Failed to verify OTP:', error);
 
-      if (error.message.includes('expired')) {
+      const errorMsg = error.message.toLowerCase();
+
+      if (errorMsg.includes('expired')) {
         return {
           success: false,
           message: 'Verification code has expired. Please request a new one.',
@@ -158,7 +162,7 @@ export async function verifyPhoneOTP(
         };
       }
 
-      if (error.message.includes('invalid') || error.message.includes('incorrect')) {
+      if (errorMsg.includes('invalid') || errorMsg.includes('incorrect')) {
         return {
           success: false,
           message: 'Invalid verification code. Please try again.',
