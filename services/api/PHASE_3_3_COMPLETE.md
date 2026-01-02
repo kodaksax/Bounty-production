@@ -144,9 +144,9 @@ amount: DEBIT_AMOUNT * (charge.amount_refunded / 100) // Clear debit
 
 ✅ **Atomic Operations**
 - All balance updates use wallet service
-- Database transactions ensure consistency
-- Prevents race conditions
-- Handles concurrent webhook deliveries
+- Most operations use optimistic locking to prevent race conditions
+- Critical updates like payment deposits are atomic via wallet service methods
+- Some multi-step operations (refunds, failed transfers) use idempotency and error recovery
 
 ✅ **Error Isolation**
 - Each event handler wrapped in try/catch

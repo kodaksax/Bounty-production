@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Load environment variables
-const local = dotenv.config();
+dotenv.config();
 if (!process.env.STRIPE_SECRET_KEY) {
   const rootEnv = path.resolve(__dirname, '../../../.env');
   if (fs.existsSync(rootEnv)) {
@@ -186,7 +186,6 @@ async function testSignatureVerification() {
   });
   
   // Generate signature
-  const timestamp = Math.floor(Date.now() / 1000);
   const signature = stripe.webhooks.generateTestHeaderString({
     payload,
     secret: config.stripe.webhookSecret,

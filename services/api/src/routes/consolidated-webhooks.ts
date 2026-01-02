@@ -13,7 +13,6 @@ import { config } from '../config';
 import {
   ValidationError,
   ExternalServiceError,
-  asyncHandler,
 } from '../middleware/error-handler';
 import { logger } from '../services/logger';
 import { createClient } from '@supabase/supabase-js';
@@ -206,17 +205,25 @@ async function handlePaymentIntentRequiresAction(event: Stripe.Event): Promise<v
 /**
  * Handle charge.refunded event
  * Creates refund transaction and deducts from user balance
+ * Handles partial refunds by tracking individual refund IDs
  */
 async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
   const charge = event.data.object as Stripe.Charge;
   const paymentIntentId = charge.payment_intent as string;
   
-  logger.info({
-    chargeId: charge.id,
-    paymentIntentId,
-    amount: charge.amount_refunded / 100,
-  }, 'Processing charge refund');
+  // Get the specific refund that triggered this event
+  // Stripe includes the refund object in charge.refunds.data
+  const refunds = charge.refunds?.data || [];
+  if (refunds.length === 0) {
+    logger.warn({
+      chargeId: charge.id,
+      paymentIntentId,
+    }, 'charge.refunded event received but no refunds found in charge object');
+    return;
+  }
   
+  // Process each refund that hasn't been processed yet
+  // We'll use the refund ID to track which ones we've already handled
   const admin = getSupabaseAdmin();
   
   // Find original transaction
@@ -236,44 +243,77 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
   
-  try {
-    // Create refund transaction
-    const { error: refundError } = await admin
-      .from('wallet_transactions')
-      .insert({
-        user_id: originalTx.user_id,
-        type: 'refund',
-        amount: DEBIT_AMOUNT * (charge.amount_refunded / 100), // Negative for refund (debit from balance)
-        description: 'Payment refunded',
-        status: 'completed',
-        stripe_charge_id: charge.id,
-        metadata: {
-          refund_reason: charge.refunds?.data[0]?.reason,
-          original_payment_intent_id: paymentIntentId,
-        },
-      });
-    
-    if (refundError) {
-      throw new ExternalServiceError('Supabase', 'Failed to create refund transaction', {
-        error: refundError.message,
-      });
-    }
-    
-    // Deduct from balance atomically
-    await WalletService.updateBalance(originalTx.user_id, DEBIT_AMOUNT * (charge.amount_refunded / 100));
+  // Process each refund
+  for (const refund of refunds) {
+    const refundId = refund.id;
+    const refundAmount = refund.amount / 100; // Convert cents to dollars
     
     logger.info({
       chargeId: charge.id,
-      userId: originalTx.user_id,
-      amount: charge.amount_refunded / 100,
-    }, 'Refund processed successfully');
-  } catch (error: any) {
-    logger.error({
-      error: error.message,
-      chargeId: charge.id,
-      userId: originalTx.user_id,
-    }, 'Failed to process refund');
-    throw error;
+      refundId,
+      paymentIntentId,
+      amount: refundAmount,
+    }, 'Processing individual refund');
+    
+    try {
+      // Check if this specific refund has already been processed
+      const { data: existingRefund } = await admin
+        .from('wallet_transactions')
+        .select('id')
+        .eq('stripe_charge_id', charge.id)
+        .eq('type', 'refund')
+        .contains('metadata', { refund_id: refundId })
+        .maybeSingle();
+      
+      if (existingRefund) {
+        logger.info({
+          refundId,
+          transactionId: existingRefund.id,
+        }, 'Refund already processed, skipping');
+        continue;
+      }
+      
+      // Create refund transaction with refund ID in metadata
+      const { error: refundError } = await admin
+        .from('wallet_transactions')
+        .insert({
+          user_id: originalTx.user_id,
+          type: 'refund',
+          amount: DEBIT_AMOUNT * refundAmount, // Negative for refund (debit from balance)
+          description: 'Payment refunded',
+          status: 'completed',
+          stripe_charge_id: charge.id,
+          metadata: {
+            refund_id: refundId,
+            refund_reason: refund.reason,
+            original_payment_intent_id: paymentIntentId,
+          },
+        });
+      
+      if (refundError) {
+        throw new ExternalServiceError('Supabase', 'Failed to create refund transaction', {
+          error: refundError.message,
+        });
+      }
+      
+      // Deduct from balance atomically
+      await WalletService.updateBalance(originalTx.user_id, DEBIT_AMOUNT * refundAmount);
+      
+      logger.info({
+        chargeId: charge.id,
+        refundId,
+        userId: originalTx.user_id,
+        amount: refundAmount,
+      }, 'Refund processed successfully');
+    } catch (error: any) {
+      logger.error({
+        error: error.message,
+        chargeId: charge.id,
+        refundId,
+        userId: originalTx.user_id,
+      }, 'Failed to process refund');
+      throw error;
+    }
   }
 }
 
@@ -301,25 +341,65 @@ async function handleTransferCreated(event: Stripe.Event): Promise<void> {
   
   // Update related wallet transaction with transfer ID
   const transferAmountDollars = transfer.amount / 100;
-  const { error } = await admin
+  
+  // First, find the most recent matching withdrawal transaction
+  const {
+    data: existingTx,
+    error: fetchError,
+  } = await admin
     .from('wallet_transactions')
-    .update({
-      stripe_transfer_id: transfer.id,
-      metadata: { transfer_status: 'created' },
-    })
+    .select('id, metadata')
     .eq('user_id', userId)
     .eq('type', 'withdrawal')
     .eq('amount', DEBIT_AMOUNT * transferAmountDollars) // Withdrawals are negative (debits)
     .is('stripe_transfer_id', null)
     .order('created_at', { ascending: false })
-    .limit(1);
-  
-  if (error) {
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError) {
     logger.error({
-      error: error.message,
+      error: fetchError.message,
+      transferId: transfer.id,
+      userId,
+    }, 'Failed to fetch matching withdrawal transaction for transfer');
+    throw new ExternalServiceError('Supabase', 'Failed to fetch matching withdrawal transaction', {
+      error: fetchError.message,
+    });
+  }
+
+  if (!existingTx) {
+    logger.warn({
+      transferId: transfer.id,
+      userId,
+    }, 'No matching withdrawal transaction found for transfer');
+    return;
+  }
+
+  // Merge with existing metadata to preserve previous values
+  const mergedMetadata = {
+    ...(existingTx.metadata as Record<string, any> || {}),
+    transfer_status: 'created',
+  };
+
+  const { error: updateError } = await admin
+    .from('wallet_transactions')
+    .update({
+      stripe_transfer_id: transfer.id,
+      metadata: mergedMetadata,
+    })
+    .eq('id', existingTx.id);
+  
+  if (updateError) {
+    logger.error({
+      error: updateError.message,
       transferId: transfer.id,
       userId,
     }, 'Failed to update transaction with transfer ID');
+    throw new ExternalServiceError('Supabase', 'Failed to link Stripe transfer to wallet transaction', {
+      error: updateError.message,
+      transferId: transfer.id,
+    });
   }
 }
 
@@ -338,22 +418,54 @@ async function handleTransferPaid(event: Stripe.Event): Promise<void> {
   
   const admin = getSupabaseAdmin();
   
-  const { error } = await admin
+  // First, fetch the existing transaction to preserve metadata
+  const { data: existingTx, error: fetchError } = await admin
+    .from('wallet_transactions')
+    .select('id, metadata')
+    .eq('stripe_transfer_id', transfer.id)
+    .maybeSingle();
+  
+  if (fetchError) {
+    logger.error({
+      error: fetchError.message,
+      transferId: transfer.id,
+    }, 'Failed to fetch transaction for transfer.paid');
+    throw new ExternalServiceError('Supabase', 'Failed to fetch transaction', {
+      error: fetchError.message,
+    });
+  }
+  
+  if (!existingTx) {
+    logger.warn({
+      transferId: transfer.id,
+    }, 'No transaction found for transfer.paid event');
+    return;
+  }
+  
+  // Merge with existing metadata
+  const mergedMetadata = {
+    ...(existingTx.metadata as Record<string, any> || {}),
+    transfer_status: 'paid',
+    paid_at: new Date().toISOString(),
+  };
+
+  const { error: updateError } = await admin
     .from('wallet_transactions')
     .update({
       status: 'completed',
-      metadata: {
-        transfer_status: 'paid',
-        paid_at: new Date().toISOString(),
-      },
+      metadata: mergedMetadata,
     })
-    .eq('stripe_transfer_id', transfer.id);
+    .eq('id', existingTx.id);
   
-  if (error) {
+  if (updateError) {
     logger.error({
-      error: error.message,
+      error: updateError.message,
       transferId: transfer.id,
     }, 'Failed to mark transfer as paid');
+    throw new ExternalServiceError('Supabase', 'Failed to mark transfer as paid', {
+      error: updateError.message,
+      transferId: transfer.id,
+    });
   }
   
   // TODO: Send notification to user that funds have been transferred
@@ -374,19 +486,40 @@ async function handleTransferFailed(event: Stripe.Event): Promise<void> {
   
   const admin = getSupabaseAdmin();
   
-  // Mark transaction as failed
+  // First, load existing transaction to preserve and merge metadata
+  const { data: existingTx, error: existingTxError } = await admin
+    .from('wallet_transactions')
+    .select('id, amount, user_id, metadata')
+    .eq('stripe_transfer_id', transfer.id)
+    .single();
+  
+  if (existingTxError || !existingTx) {
+    logger.error({
+      error: existingTxError?.message,
+      transferId: transfer.id,
+    }, 'Failed to load transfer transaction before marking as failed');
+    throw new ExternalServiceError('Supabase', 'Failed to load transfer transaction', {
+      error: existingTxError?.message,
+    });
+  }
+
+  // Merge with existing metadata to preserve previous values
+  const mergedMetadata = {
+    ...(existingTx.metadata as Record<string, any> || {}),
+    transfer_status: 'failed',
+    failure_code: transfer.failure_code,
+    failure_message: transfer.failure_message,
+    retry_count: 0,
+  };
+
+  // Mark transaction as failed, preserving existing metadata keys
   const { data: tx, error: txError } = await admin
     .from('wallet_transactions')
     .update({
       status: 'failed',
-      metadata: {
-        transfer_status: 'failed',
-        failure_code: transfer.failure_code,
-        failure_message: transfer.failure_message,
-        retry_count: 0,
-      },
+      metadata: mergedMetadata,
     })
-    .eq('stripe_transfer_id', transfer.id)
+    .eq('id', existingTx.id)
     .select()
     .single();
   
@@ -395,7 +528,9 @@ async function handleTransferFailed(event: Stripe.Event): Promise<void> {
       error: txError?.message,
       transferId: transfer.id,
     }, 'Failed to mark transfer as failed');
-    return;
+    throw new ExternalServiceError('Supabase', 'Failed to mark transfer as failed', {
+      error: txError?.message,
+    });
   }
   
   try {
@@ -457,6 +592,10 @@ async function handleAccountUpdated(event: Stripe.Event): Promise<void> {
       accountId: account.id,
       userId,
     }, 'Failed to update user Connect status');
+    throw new ExternalServiceError('Supabase', 'Failed to update user Connect status', {
+      error: error.message,
+      accountId: account.id,
+    });
   }
 }
 
@@ -543,7 +682,7 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
         logger.info({ eventType: event.type }, 'Unhandled webhook event type');
     }
   } catch (error: any) {
-    // Log error but don't throw - we've isolated the error to this event type
+    // Log error and re-throw so Stripe can retry this isolated event type
     logger.error({
       error: error.message,
       stack: error.stack,

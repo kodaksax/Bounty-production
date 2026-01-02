@@ -60,9 +60,11 @@ The consolidated webhook handler (`services/api/src/routes/consolidated-webhooks
 #### `charge.refunded`
 - **Purpose**: Payment refunded
 - **Actions**:
-  - Creates refund transaction
-  - Deducts from user balance (atomic)
+  - Creates refund transaction (tracked by refund ID)
+  - Deducts from user balance
   - Logs refund reason
+  - Handles partial refunds correctly
+- **Note**: Transaction creation and balance update are separate operations
 - **Service Used**: `WalletService.updateBalance()`
 
 ### Transfer Events
