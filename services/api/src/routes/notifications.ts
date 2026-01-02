@@ -1,9 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { notificationService } from '../services/notification-service';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 // Regex pattern for validating Expo push tokens
 const EXPO_PUSH_TOKEN_PATTERN = /^Expo(nent)?PushToken\[.+\]$/;
