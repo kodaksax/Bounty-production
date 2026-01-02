@@ -181,13 +181,19 @@ class WebSocketClient {
   private maxReconnectAttempts = 5;
   
   connect(token: string) {
-    const wsURL = `${API_CONFIG.wsURL}/messages/subscribe?token=${token}`;
+    // Don't pass token in URL - use proper authentication after connection
+    const wsURL = `${API_CONFIG.wsURL}/messages/subscribe`;
     
     this.ws = new WebSocket(wsURL);
     
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
+      
+      // Authenticate after connection is established (secure)
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'authenticate', token }));
+      }
     };
     
     this.ws.onmessage = (event) => {

@@ -1,8 +1,6 @@
 // services/api/src/test-phase4-verification.ts
 // Comprehensive verification tests for Phase 4: Advanced Features
 
-import { logger } from './services/logger';
-
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
 interface TestResult {
@@ -273,7 +271,7 @@ class Phase4Verifier {
       });
 
       // Accept 200-299 (success) or 401/403 (endpoint exists but auth required)
-      const passed = response.status < 300 || [401, 403, 404].includes(response.status);
+      const passed = response.status < 300 || [401, 403].includes(response.status);
 
       this.results.push({
         name,

@@ -4,7 +4,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { metrics } from '../monitoring/metrics';
 import { alerting } from '../monitoring/alerts';
-import { tracing } from '../monitoring/tracing';
 import { logger } from '../services/logger';
 
 /**

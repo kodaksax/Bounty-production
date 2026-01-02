@@ -152,17 +152,22 @@ class MetricsCollector {
     // Histograms
     for (const [name, histogram] of Array.from(this.histograms.entries())) {
       const { metricName, labels } = this.parseKey(name);
-      const labelPrefix = labels ? `{${labels},` : '{';
       
       lines.push(`# TYPE ${metricName} histogram`);
       
       // Buckets
       for (const bucket of histogram.buckets) {
-        lines.push(`${metricName}_bucket${labelPrefix}le="${bucket.le}"} ${bucket.count}`);
+        const bucketLabelStr = labels
+          ? `{${labels},le="${bucket.le}"}`
+          : `{le="${bucket.le}"}`;
+        lines.push(`${metricName}_bucket${bucketLabelStr} ${bucket.count}`);
       }
       
       // +Inf bucket
-      lines.push(`${metricName}_bucket${labelPrefix}le="+Inf"} ${histogram.count}`);
+      const infLabelStr = labels
+        ? `{${labels},le="+Inf"}`
+        : `{le="+Inf"}`;
+      lines.push(`${metricName}_bucket${infLabelStr} ${histogram.count}`);
       
       // Sum and count
       const labelStr = labels ? `{${labels}}` : '';

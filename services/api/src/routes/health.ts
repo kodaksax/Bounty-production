@@ -5,7 +5,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logger } from '../services/logger';
 import { metrics, METRICS } from '../monitoring/metrics';
 import { alerting } from '../monitoring/alerts';
-import { Pool } from 'pg';
 import { createClient } from '@supabase/supabase-js';
 
 interface HealthCheckResult {

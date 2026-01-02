@@ -98,7 +98,7 @@ const { initializeIdempotencyService } = require('./services/idempotency-service
 
 // Import monitoring
 const { recordHttpRequest } = require('./monitoring/metrics');
-const { tracingMiddleware } = require('./monitoring/tracing');
+const { tracingMiddleware, tracing } = require('./monitoring/tracing');
 
 // Initialize analytics on startup
 backendAnalytics.initialize();
