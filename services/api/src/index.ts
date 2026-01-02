@@ -143,11 +143,26 @@ const startServer = async () => {
     const startTime = (request as any)._startTime || Date.now();
     const duration = Date.now() - startTime;
     recordHttpRequest(request.method, request.url, reply.statusCode, duration);
+    
+    // End tracing span if exists
+    const span = (reply as any)._span;
+    if (span) {
+      tracing.addTags(span.spanId, {
+        'http.status_code': reply.statusCode
+      });
+      
+      const status = reply.statusCode >= 400 ? 'error' : 'success';
+      tracing.endSpan(span.spanId, status);
+    }
   });
 
   // Register global rate limiting middleware for all routes except health/metrics
+  const rateLimitExcludePaths = ['/health', '/metrics'];
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (request.url.startsWith('/health') || request.url.startsWith('/metrics')) return;
+    // Skip rate limiting for excluded paths
+    if (rateLimitExcludePaths.some(path => request.url.startsWith(path))) {
+      return;
+    }
     await rateLimitMiddleware(request, reply);
   });
 

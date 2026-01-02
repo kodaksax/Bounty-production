@@ -141,10 +141,9 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/health/ready', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      // Quick database check
-      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      // Quick database check using existing pool
+      const { pool } = require('../db/connection');
       await pool.query('SELECT 1');
-      await pool.end();
       
       return reply.code(200).send({ ready: true });
     } catch (error) {
@@ -171,9 +170,10 @@ async function checkDatabase(): Promise<HealthCheck> {
   const startTime = Date.now();
   
   try {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // Import the existing pool from db/connection instead of creating a new one
+    const { pool } = require('../db/connection');
+    
     await pool.query('SELECT 1');
-    await pool.end();
     
     const latencyMs = Date.now() - startTime;
     

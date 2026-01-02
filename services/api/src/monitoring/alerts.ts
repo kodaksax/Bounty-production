@@ -148,7 +148,7 @@ class AlertingService {
    * Check all rules and trigger alerts
    */
   checkAlerts(): void {
-    for (const [name, rule] of this.rules.entries()) {
+    for (const [name, rule] of Array.from(this.rules.entries())) {
       try {
         // Check cooldown period
         const lastAlert = this.lastAlertTime.get(name);

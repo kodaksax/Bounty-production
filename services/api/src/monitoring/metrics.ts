@@ -134,7 +134,7 @@ class MetricsCollector {
     const lines: string[] = [];
 
     // Counters
-    for (const [name, value] of this.counters.entries()) {
+    for (const [name, value] of Array.from(this.counters.entries())) {
       const { metricName, labels } = this.parseKey(name);
       const labelStr = labels ? `{${labels}}` : '';
       lines.push(`# TYPE ${metricName} counter`);
@@ -142,7 +142,7 @@ class MetricsCollector {
     }
 
     // Gauges
-    for (const [name, value] of this.gauges.entries()) {
+    for (const [name, value] of Array.from(this.gauges.entries())) {
       const { metricName, labels } = this.parseKey(name);
       const labelStr = labels ? `{${labels}}` : '';
       lines.push(`# TYPE ${metricName} gauge`);
@@ -150,7 +150,7 @@ class MetricsCollector {
     }
 
     // Histograms
-    for (const [name, histogram] of this.histograms.entries()) {
+    for (const [name, histogram] of Array.from(this.histograms.entries())) {
       const { metricName, labels } = this.parseKey(name);
       const labelPrefix = labels ? `{${labels},` : '{';
       
@@ -280,6 +280,17 @@ export function recordHttpRequest(
   statusCode: number,
   durationMs: number
 ): void {
+  // Validate inputs
+  if (durationMs < 0) {
+    logger.warn({ durationMs }, '[metrics] Negative duration recorded, setting to 0');
+    durationMs = 0;
+  }
+  
+  if (statusCode < 100 || statusCode > 599) {
+    logger.warn({ statusCode }, '[metrics] Invalid status code recorded');
+    return;
+  }
+
   metrics.incrementCounter(METRICS.HTTP_REQUESTS_TOTAL, 1, {
     method,
     path,

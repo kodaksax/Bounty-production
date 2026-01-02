@@ -137,7 +137,7 @@ class TracingService {
    */
   cleanup(olderThanMs: number = 3600000): void {
     const cutoffTime = Date.now() - olderThanMs;
-    for (const [spanId, span] of this.spans.entries()) {
+    for (const [spanId, span] of Array.from(this.spans.entries())) {
       if (span.startTime < cutoffTime) {
         this.spans.delete(spanId);
       }
@@ -179,18 +179,8 @@ export async function tracingMiddleware(request: FastifyRequest, reply: FastifyR
   reply.header('X-Trace-Id', traceId);
   reply.header('X-Span-Id', span.spanId);
 
-  // End span when response finishes (use done callback)
-  const originalSend = reply.send;
-  (reply.send as any) = function(this: any, payload: any) {
-    tracing.addTags(span.spanId, {
-      'http.status_code': reply.statusCode
-    });
-    
-    const status = reply.statusCode >= 400 ? 'error' : 'success';
-    tracing.endSpan(span.spanId, status);
-    
-    return originalSend.call(this, payload);
-  };
+  // Store span for cleanup on response
+  (reply as any)._span = span;
 }
 
 /**
