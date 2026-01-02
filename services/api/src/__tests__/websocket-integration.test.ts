@@ -7,14 +7,11 @@
  * Run with: tsx src/__tests__/websocket-integration.test.ts
  */
 
-import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 
 // Configuration
 const API_URL = process.env.API_URL || 'http://localhost:3001';
 const WS_URL = API_URL.replace('http://', 'ws://').replace('https://', 'wss://');
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 interface TestResult {
   name: string;
@@ -329,9 +326,11 @@ async function testMultipleConnections() {
         return new Promise<void>((resolve) => {
           const ws = new WebSocket(`${WS_URL}/events/subscribe`);
           
+          // Always add to connections array for cleanup
+          connections.push(ws);
+          
           ws.on('open', () => {
             openCount++;
-            connections.push(ws);
           });
           
           ws.on('message', () => {
@@ -347,8 +346,14 @@ async function testMultipleConnections() {
       })
     );
 
-    // Close all connections
-    connections.forEach(ws => ws.close());
+    // Close all connections (even failed ones)
+    connections.forEach(ws => {
+      try {
+        ws.close();
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    });
 
     if (openCount === connectionCount) {
       logResult({
@@ -818,12 +823,21 @@ async function runAllTests() {
   return failed === 0;
 }
 
-// Run tests
-runAllTests()
-  .then((success) => {
-    process.exit(success ? 0 : 1);
-  })
-  .catch((error) => {
+// Run tests and handle results
+if (require.main === module) {
+  // Only use process.exit when run directly (not imported as a module)
+  runAllTests()
+    .then((success) => {
+      process.exit(success ? 0 : 1);
+    })
+    .catch((error) => {
+      console.error('Fatal error running tests:', error);
+      process.exit(1);
+    });
+} else {
+  // Export for testing frameworks
+  runAllTests().catch((error) => {
     console.error('Fatal error running tests:', error);
-    process.exit(1);
+    throw error;
   });
+}
