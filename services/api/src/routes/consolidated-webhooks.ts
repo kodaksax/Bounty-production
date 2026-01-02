@@ -19,6 +19,19 @@ import { logger } from '../services/logger';
 import { createClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 
+// Extend FastifyRequest to include rawBody for webhook signature verification
+declare module 'fastify' {
+  interface FastifyRequest {
+    rawBody?: string;
+  }
+}
+
+// Amount sign conventions
+// Positive: credits (deposits, refunds to user)
+// Negative: debits (withdrawals, refunds from user)
+const CREDIT_AMOUNT = 1;
+const DEBIT_AMOUNT = -1;
+
 // Initialize Supabase admin client
 let supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
@@ -230,7 +243,7 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
       .insert({
         user_id: originalTx.user_id,
         type: 'refund',
-        amount: -(charge.amount_refunded / 100), // Negative for refund
+        amount: DEBIT_AMOUNT * (charge.amount_refunded / 100), // Negative for refund (debit from balance)
         description: 'Payment refunded',
         status: 'completed',
         stripe_charge_id: charge.id,
@@ -247,7 +260,7 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     }
     
     // Deduct from balance atomically
-    await WalletService.updateBalance(originalTx.user_id, -(charge.amount_refunded / 100));
+    await WalletService.updateBalance(originalTx.user_id, DEBIT_AMOUNT * (charge.amount_refunded / 100));
     
     logger.info({
       chargeId: charge.id,
@@ -296,7 +309,7 @@ async function handleTransferCreated(event: Stripe.Event): Promise<void> {
     })
     .eq('user_id', userId)
     .eq('type', 'withdrawal')
-    .eq('amount', -transferAmountDollars) // Withdrawals are negative
+    .eq('amount', DEBIT_AMOUNT * transferAmountDollars) // Withdrawals are negative (debits)
     .is('stripe_transfer_id', null)
     .order('created_at', { ascending: false })
     .limit(1);
@@ -387,8 +400,8 @@ async function handleTransferFailed(event: Stripe.Event): Promise<void> {
   
   try {
     // Refund the amount back to user's wallet
-    const refundAmount = Math.abs(tx.amount);
-    await WalletService.updateBalance(tx.user_id, refundAmount);
+    const refundAmount = Math.abs(tx.amount); // Ensure positive amount for credit
+    await WalletService.updateBalance(tx.user_id, CREDIT_AMOUNT * refundAmount);
     
     logger.info({
       transferId: transfer.id,
@@ -551,34 +564,33 @@ export async function registerConsolidatedWebhookRoutes(
 ): Promise<void> {
   
   /**
-   * Add a custom content type parser for the webhook route
-   * This preserves the raw body needed for Stripe signature verification
-   * while still parsing JSON for normal use
-   */
-  fastify.removeContentTypeParser('application/json');
-  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    try {
-      // Store raw body for webhook signature verification
-      (req as any).rawBody = body;
-      // Parse JSON for normal request handling
-      const parsed = JSON.parse(body as string);
-      done(null, parsed);
-    } catch (error: any) {
-      done(error, undefined);
-    }
-  });
-  
-  /**
    * POST /webhooks/stripe
    * Handle Stripe webhook events
    * 
    * Note: Stripe requires the raw request body for signature verification.
-   * The custom content type parser above preserves it in request.rawBody.
+   * We use preParsing hook to capture the raw body before Fastify parses it.
    */
   fastify.post(
     '/webhooks/stripe',
     {
       bodyLimit: 1048576, // 1MB limit for webhook payloads
+      preParsing: async (request, reply, payload) => {
+        // Capture raw body for signature verification
+        const chunks: Buffer[] = [];
+        
+        for await (const chunk of payload) {
+          chunks.push(chunk);
+        }
+        
+        const rawBody = Buffer.concat(chunks);
+        
+        // Store raw body for signature verification (using extended type)
+        request.rawBody = rawBody.toString('utf8');
+        
+        // Return a stream for Fastify's body parser
+        const { Readable } = require('stream');
+        return Readable.from(rawBody);
+      },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -594,7 +606,7 @@ export async function registerConsolidatedWebhookRoutes(
         }
         
         // Get raw body for signature verification
-        const rawBody = (request as any).rawBody as string;
+        const rawBody = request.rawBody;
         
         if (!rawBody) {
           logger.error('Raw body not available for signature verification');
