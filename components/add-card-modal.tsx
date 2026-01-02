@@ -140,10 +140,19 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         throw lastErr || new Error('Failed to initialize payment setup')
       }
       const { clientSecret } = await response.json()
+      
+      // Validate key mode consistency
+      const publishableKeyMode = stripeService.getPublishableKeyMode()
+      console.log('[AddCardModal] Publishable key mode:', publishableKeyMode)
+      
       setSetupIntentSecret(clientSecret)
     } catch (error) {
       console.error('[AddCardModal] SetupIntent creation error:', error)
-      Alert.alert('Error', 'Failed to initialize payment setup. Please try again.')
+      
+      // Parse error for better user messaging
+      const errorMessage = stripeService.parseStripeError(error)
+      Alert.alert('Payment Configuration Error', errorMessage)
+      
       // Fallback to manual form if setup creation fails
       setPaymentElementFailed(true)
     } finally {

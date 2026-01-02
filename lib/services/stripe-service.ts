@@ -1443,6 +1443,70 @@ class StripeService {
   isSDKAvailable(): boolean {
     return !!this.stripeSDK;
   }
+
+  /**
+   * Detect the mode of a Stripe key (test or live)
+   * @param key Stripe publishable key (pk_test_... or pk_live_...) or secret key (sk_test_... or sk_live_...)
+   * @returns 'test' | 'live' | 'unknown'
+   */
+  getKeyMode(key: string): 'test' | 'live' | 'unknown' {
+    if (!key) return 'unknown';
+    if (key.startsWith('pk_test_') || key.startsWith('sk_test_')) return 'test';
+    if (key.startsWith('pk_live_') || key.startsWith('sk_live_')) return 'live';
+    return 'unknown';
+  }
+
+  /**
+   * Get the mode of the configured publishable key
+   */
+  getPublishableKeyMode(): 'test' | 'live' | 'unknown' {
+    return this.getKeyMode(this.publishableKey);
+  }
+
+  /**
+   * Extract the mode from a SetupIntent or PaymentIntent client secret
+   * @param clientSecret The client secret from a SetupIntent or PaymentIntent
+   * @returns 'test' | 'live' | 'unknown'
+   */
+  getClientSecretMode(clientSecret: string): 'test' | 'live' | 'unknown' {
+    if (!clientSecret) return 'unknown';
+    // Client secrets contain '_test_' or '_live_' in their format
+    // Format: seti_XXX_secret_YYY or pi_XXX_secret_YYY
+    // The _test_ or _live_ indicator is NOT in the client secret itself
+    // Instead, we check the prefix of the ID part
+    const parts = clientSecret.split('_secret_');
+    if (parts.length < 1) return 'unknown';
+    
+    // For SetupIntents: seti_1XXX... (test) vs seti_3XXX... (live) - NOT RELIABLE
+    // For PaymentIntents: pi_1XXX... (test) vs pi_3XXX... (live) - NOT RELIABLE
+    // The mode is not encoded in the client secret in a reliable way
+    // We need to check this at the backend level
+    return 'unknown';
+  }
+
+  /**
+   * Parse a Stripe error to detect mode mismatch issues
+   * @param error Error from Stripe API
+   * @returns User-friendly error message if mode mismatch is detected, otherwise original message
+   */
+  parseStripeError(error: any): string {
+    if (!error) return 'An unknown error occurred';
+    
+    const errorMessage = error.message || error.toString();
+    
+    // Detect test/live mode mismatch
+    if (errorMessage.includes('No such setupintent') || errorMessage.includes('No such paymentintent')) {
+      if (errorMessage.includes('live mode') && errorMessage.includes('test mode key')) {
+        return 'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.';
+      }
+      if (errorMessage.includes('test mode') && errorMessage.includes('live mode key')) {
+        return 'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.';
+      }
+    }
+    
+    // Return original message if no special case detected
+    return errorMessage;
+  }
 }
 
 // Export singleton instance

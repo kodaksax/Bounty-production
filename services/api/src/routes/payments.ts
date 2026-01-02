@@ -51,6 +51,18 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     throw new Error('PLATFORM_ACCOUNT_ID environment variable must be set in production');
   }
 
+  // Detect key mode and log warning if there might be a mismatch
+  const secretKeyMode = stripeKey.startsWith('sk_test_') ? 'test' : stripeKey.startsWith('sk_live_') ? 'live' : 'unknown';
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+  const publishableKeyMode = publishableKey.startsWith('pk_test_') ? 'test' : publishableKey.startsWith('pk_live_') ? 'live' : 'unknown';
+  
+  if (secretKeyMode !== 'unknown' && publishableKeyMode !== 'unknown' && secretKeyMode !== publishableKeyMode) {
+    logger.error(`[payments] KEY MODE MISMATCH: Secret key is in ${secretKeyMode} mode but publishable key is in ${publishableKeyMode} mode. This will cause payment failures!`);
+    logger.error('[payments] Please ensure STRIPE_SECRET_KEY and EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY are both test keys or both live keys.');
+  } else {
+    logger.info(`[payments] Stripe configured in ${secretKeyMode} mode`);
+  }
+
   const stripe = new Stripe(stripeKey, {
     apiVersion: '2025-08-27.basil',
   });

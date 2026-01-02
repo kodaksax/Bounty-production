@@ -156,7 +156,17 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to add bank account')
+        
+        // Check for common error scenarios
+        if (response.status === 404) {
+          throw new Error('Payment service unavailable. Please ensure the API server is running and configured correctly.')
+        }
+        
+        if (response.status === 501) {
+          throw new Error('Payment service not configured. Please contact support.')
+        }
+        
+        throw new Error(errorData.error || `Failed to add bank account (${response.status})`)
       }
 
       // Parse response to get tokenized data
@@ -179,6 +189,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       ])
       
     } catch (error) {
+      console.error('[AddBankAccountModal] Error adding bank account:', error)
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add bank account')
     } finally {
       setIsLoading(false)
