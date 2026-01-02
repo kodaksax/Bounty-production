@@ -140,10 +140,36 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         throw lastErr || new Error('Failed to initialize payment setup')
       }
       const { clientSecret } = await response.json()
+      
+      // Log detected key mode for debugging
+      // This helps diagnose configuration issues during development
+      // Note: __DEV__ is a React Native global constant that is true in development mode
+      if (__DEV__) {
+        const publishableKeyMode = stripeService.getPublishableKeyMode()
+        console.log('[AddCardModal] Publishable key mode:', publishableKeyMode)
+        if (publishableKeyMode === 'unknown') {
+          console.warn('[AddCardModal] Could not detect publishable key mode. Please verify EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY is set correctly.')
+        }
+      }
+      
       setSetupIntentSecret(clientSecret)
     } catch (error) {
       console.error('[AddCardModal] SetupIntent creation error:', error)
-      Alert.alert('Error', 'Failed to initialize payment setup. Please try again.')
+      
+      // Parse error for better user messaging
+      const errorMessage = stripeService.parseStripeError(error)
+      
+      // Use specific alert title only for configuration-related errors
+      const isConfigError = errorMessage.toLowerCase().includes('configuration') ||
+                           errorMessage.toLowerCase().includes('publishable key') ||
+                           errorMessage.toLowerCase().includes('secret key') ||
+                           errorMessage.toLowerCase().includes('different modes')
+      
+      Alert.alert(
+        isConfigError ? 'Payment Configuration Error' : 'Error',
+        errorMessage
+      )
+      
       // Fallback to manual form if setup creation fails
       setPaymentElementFailed(true)
     } finally {

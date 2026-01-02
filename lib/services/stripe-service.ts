@@ -1443,6 +1443,49 @@ class StripeService {
   isSDKAvailable(): boolean {
     return !!this.stripeSDK;
   }
+
+  /**
+   * Detect the mode of a Stripe key (test or live)
+   * @param key Stripe publishable key (pk_test_... or pk_live_...) or secret key (sk_test_... or sk_live_...)
+   * @returns 'test' | 'live' | 'unknown'
+   */
+  getKeyMode(key: string): 'test' | 'live' | 'unknown' {
+    if (!key) return 'unknown';
+    if (key.startsWith('pk_test_') || key.startsWith('sk_test_')) return 'test';
+    if (key.startsWith('pk_live_') || key.startsWith('sk_live_')) return 'live';
+    return 'unknown';
+  }
+
+  /**
+   * Get the mode of the configured publishable key
+   */
+  getPublishableKeyMode(): 'test' | 'live' | 'unknown' {
+    return this.getKeyMode(this.publishableKey);
+  }
+
+  /**
+   * Parse a Stripe error to detect mode mismatch issues
+   * @param error Error from Stripe API
+   * @returns User-friendly error message if mode mismatch is detected, otherwise original message
+   */
+  parseStripeError(error: any): string {
+    if (!error) return 'An unknown error occurred';
+    
+    const errorMessage = error.message || error.toString();
+    
+    // Detect test/live mode mismatch
+    if (errorMessage.includes('No such setupintent') || errorMessage.includes('No such paymentintent')) {
+      if (errorMessage.includes('live mode') && errorMessage.includes('test mode key')) {
+        return 'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.';
+      }
+      if (errorMessage.includes('test mode') && errorMessage.includes('live mode key')) {
+        return 'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.';
+      }
+    }
+    
+    // Return original message if no special case detected
+    return errorMessage;
+  }
 }
 
 // Export singleton instance

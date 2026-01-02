@@ -179,7 +179,11 @@ export function PaymentElementWrapper({
 
         if (initError) {
           console.error('[PaymentElementWrapper] Init error:', initError);
-          setError(initError.message || 'Failed to initialize payment');
+          
+          // Use centralized error parsing from stripe-service
+          const errorMessage = stripeService.parseStripeError(initError);
+          
+          setError(errorMessage);
           setIsPaymentSheetReady(false);
         } else {
           setIsPaymentSheetReady(true);

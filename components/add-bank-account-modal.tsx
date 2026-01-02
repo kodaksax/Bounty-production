@@ -16,6 +16,7 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
+import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
 
 interface AddBankAccountModalProps {
   onBack: () => void
@@ -156,7 +157,17 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to add bank account')
+        
+        // Check for common error scenarios using constants
+        if (response.status === HTTP_NOT_FOUND) {
+          throw new Error('Payment service unavailable. Please ensure the API server is running and configured correctly.')
+        }
+        
+        if (response.status === HTTP_NOT_IMPLEMENTED) {
+          throw new Error('Payment service not configured. Please contact support.')
+        }
+        
+        throw new Error(errorData.error || `Failed to add bank account (${response.status})`)
       }
 
       // Parse response to get tokenized data
@@ -179,6 +190,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       ])
       
     } catch (error) {
+      console.error('[AddBankAccountModal] Error adding bank account:', error)
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add bank account')
     } finally {
       setIsLoading(false)
