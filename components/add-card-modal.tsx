@@ -141,9 +141,15 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       }
       const { clientSecret } = await response.json()
       
-      // Validate key mode consistency
-      const publishableKeyMode = stripeService.getPublishableKeyMode()
-      console.log('[AddCardModal] Publishable key mode:', publishableKeyMode)
+      // Log detected key mode for debugging
+      // This helps diagnose configuration issues during development
+      if (__DEV__) {
+        const publishableKeyMode = stripeService.getPublishableKeyMode()
+        console.log('[AddCardModal] Publishable key mode:', publishableKeyMode)
+        if (publishableKeyMode === 'unknown') {
+          console.warn('[AddCardModal] Could not detect publishable key mode. Please verify EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY is set correctly.')
+        }
+      }
       
       setSetupIntentSecret(clientSecret)
     } catch (error) {

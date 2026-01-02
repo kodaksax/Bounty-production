@@ -17,6 +17,10 @@ import {
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
 
+// HTTP status codes for payment errors
+const HTTP_NOT_FOUND = 404;
+const HTTP_NOT_IMPLEMENTED = 501;
+
 interface AddBankAccountModalProps {
   onBack: () => void
   onSave?: (bankData: BankAccountData) => void
@@ -157,12 +161,12 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         
-        // Check for common error scenarios
-        if (response.status === 404) {
+        // Check for common error scenarios using constants
+        if (response.status === HTTP_NOT_FOUND) {
           throw new Error('Payment service unavailable. Please ensure the API server is running and configured correctly.')
         }
         
-        if (response.status === 501) {
+        if (response.status === HTTP_NOT_IMPLEMENTED) {
           throw new Error('Payment service not configured. Please contact support.')
         }
         
