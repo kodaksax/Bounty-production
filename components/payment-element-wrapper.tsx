@@ -180,15 +180,8 @@ export function PaymentElementWrapper({
         if (initError) {
           console.error('[PaymentElementWrapper] Init error:', initError);
           
-          // Check for mode mismatch errors
-          let errorMessage = initError.message || 'Failed to initialize payment';
-          if (initError.message && 
-              (initError.message.includes('No such setupintent') || initError.message.includes('No such paymentintent'))) {
-            if ((initError.message.includes('live mode') && initError.message.includes('test mode key')) ||
-                (initError.message.includes('test mode') && initError.message.includes('live mode key'))) {
-              errorMessage = 'Payment configuration error: Your payment keys are in different modes. Please ensure your publishable key and secret key are both test keys or both live keys.';
-            }
-          }
+          // Use centralized error parsing from stripe-service
+          const errorMessage = stripeService.parseStripeError(initError);
           
           setError(errorMessage);
           setIsPaymentSheetReady(false);

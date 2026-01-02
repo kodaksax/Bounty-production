@@ -143,6 +143,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       
       // Log detected key mode for debugging
       // This helps diagnose configuration issues during development
+      // Note: __DEV__ is a React Native global constant that is true in development mode
       if (__DEV__) {
         const publishableKeyMode = stripeService.getPublishableKeyMode()
         console.log('[AddCardModal] Publishable key mode:', publishableKeyMode)
@@ -157,7 +158,17 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       
       // Parse error for better user messaging
       const errorMessage = stripeService.parseStripeError(error)
-      Alert.alert('Payment Configuration Error', errorMessage)
+      
+      // Use specific alert title only for configuration-related errors
+      const isConfigError = errorMessage.toLowerCase().includes('configuration') ||
+                           errorMessage.toLowerCase().includes('publishable key') ||
+                           errorMessage.toLowerCase().includes('secret key') ||
+                           errorMessage.toLowerCase().includes('different modes')
+      
+      Alert.alert(
+        isConfigError ? 'Payment Configuration Error' : 'Error',
+        errorMessage
+      )
       
       // Fallback to manual form if setup creation fails
       setPaymentElementFailed(true)

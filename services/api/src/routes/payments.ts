@@ -64,9 +64,13 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     logger.error(`[payments] KEY MODE MISMATCH: Secret key is in ${secretKeyMode} mode but backend publishable key (STRIPE_PUBLISHABLE_KEY) is in ${publishableKeyMode} mode.`);
     logger.error('[payments] Please ensure STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY are both test keys or both live keys.');
     logger.error('[payments] Also verify that EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in the mobile app matches the secret key mode.');
+  } else if (secretKeyMode === 'unknown' || (backendPublishableKey && publishableKeyMode === 'unknown')) {
+    logger.warn('[payments] Unable to determine Stripe key mode from STRIPE_SECRET_KEY and/or STRIPE_PUBLISHABLE_KEY. Keys may have an unexpected format.');
+    logger.warn('[payments] STRIPE_SECRET_KEY should start with "sk_test_" or "sk_live_".');
+    logger.warn('[payments] STRIPE_PUBLISHABLE_KEY (and EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in the mobile app) should start with "pk_test_" or "pk_live_".');
   } else if (secretKeyMode !== 'unknown') {
     logger.info(`[payments] Stripe configured in ${secretKeyMode} mode`);
-    if (publishableKeyMode === 'unknown') {
+    if (!backendPublishableKey) {
       logger.info('[payments] Backend STRIPE_PUBLISHABLE_KEY not set (optional). Make sure EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in mobile app is in the same mode.');
     }
   }

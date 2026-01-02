@@ -16,10 +16,7 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
-
-// HTTP status codes for payment errors
-const HTTP_NOT_FOUND = 404;
-const HTTP_NOT_IMPLEMENTED = 501;
+import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
 
 interface AddBankAccountModalProps {
   onBack: () => void

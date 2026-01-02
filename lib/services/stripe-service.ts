@@ -1464,25 +1464,6 @@ class StripeService {
   }
 
   /**
-   * Extract the mode from a SetupIntent or PaymentIntent client secret
-   * 
-   * Note: Stripe client secrets do NOT reliably encode mode information.
-   * Mode validation must be done at the backend level by comparing the
-   * secret key mode with the publishable key mode.
-   * 
-   * This method is kept for potential future use if Stripe changes their
-   * client secret format, but currently always returns 'unknown'.
-   * 
-   * @param clientSecret The client secret from a SetupIntent or PaymentIntent
-   * @returns 'unknown' (client secrets don't encode mode reliably)
-   */
-  getClientSecretMode(clientSecret: string): 'unknown' {
-    // Client secrets don't reliably encode mode information
-    // Mode must be validated at backend by comparing key prefixes
-    return 'unknown';
-  }
-
-  /**
    * Parse a Stripe error to detect mode mismatch issues
    * @param error Error from Stripe API
    * @returns User-friendly error message if mode mismatch is detected, otherwise original message
