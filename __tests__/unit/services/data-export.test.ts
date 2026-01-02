@@ -42,7 +42,7 @@ describe('Data Export Service', () => {
     jest.clearAllMocks();
     
     // Import after mocks are set up
-    FileSystem = require('expo-file-system');
+    FileSystem = require('expo-file-system/legacy');
     Sharing = require('expo-sharing');
     const service = require('../../../lib/services/data-export-service');
     exportUserData = service.exportUserData;
@@ -291,7 +291,7 @@ describe('Data Export Service', () => {
       const result = await exportAndShareUserData(mockUserId);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Failed to share');
+      expect(result.message).toContain('Share failed');
     });
   });
 

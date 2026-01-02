@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
 process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
 process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
+process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'test-api-key-12345';
 process.env.NODE_ENV = 'test';
 
 // Define __DEV__ global for React Native code
