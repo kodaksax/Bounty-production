@@ -42,7 +42,7 @@ module.exports = {
     }],
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(expo-secure-store|expo-.*|@expo/.*|@react-native|react-native|react-native-url-polyfill|@supabase)/)',
+    'node_modules/(?!(expo-secure-store|expo-.*|@expo/.*|@react-native|react-native|react-native-url-polyfill|@supabase|mixpanel-react-native|@sentry)/)',
   ],
   testTimeout: 30000,
 };

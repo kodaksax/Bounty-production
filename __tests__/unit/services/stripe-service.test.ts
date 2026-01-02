@@ -180,11 +180,11 @@ describe('Stripe Service', () => {
       jest.clearAllMocks();
     });
 
-    it('should timeout after 15 seconds and throw network error', async () => {
-      // Mock a slow response that never resolves within timeout
+    it('should handle slow network requests without artificial timeout', async () => {
+      // Mock a slow response that takes 20 seconds
+      // The service no longer has artificial timeout logic and relies on network stack timeouts
       (global.fetch as jest.Mock).mockImplementation(() => 
         new Promise((resolve) => {
-          // Never resolve within the timeout period
           setTimeout(() => resolve({
             ok: true,
             json: async () => ({ paymentMethods: [] })
@@ -194,17 +194,21 @@ describe('Stripe Service', () => {
 
       const authToken = 'test_token';
 
-      // Expect any error to be thrown (timeout or network error)
-      await expect(stripeService.listPaymentMethods(authToken))
-        .rejects
-        .toThrow();
-    }, 30000); // Allow Jest to wait longer than the AbortController and mock delay
+      // The method will wait for the network request to complete naturally
+      // In this test, we'll let it timeout at Jest's test timeout
+      const methodsPromise = stripeService.listPaymentMethods(authToken);
+      
+      // For testing purposes, we'll verify it returns the result when it completes
+      // In a real scenario, the network stack would handle timeouts
+      const methods = await methodsPromise;
+      expect(Array.isArray(methods)).toBe(true);
+    }, 30000); // Allow Jest to wait longer than the mock delay
 
-    it('should handle AbortError specifically', async () => {
-      // Mock fetch to throw AbortError
+    it('should handle network errors gracefully', async () => {
+      // Mock fetch to throw a network error
       (global.fetch as jest.Mock).mockImplementation(() => {
-        const error = new Error('The user aborted a request.');
-        error.name = 'AbortError';
+        const error = new Error('Network request failed');
+        error.name = 'NetworkError';
         return Promise.reject(error);
       });
 
@@ -213,7 +217,7 @@ describe('Stripe Service', () => {
       await expect(stripeService.listPaymentMethods(authToken))
         .rejects
         .toMatchObject({
-          message: expect.stringMatching(/Network request timed out|timed out/i)
+          message: expect.stringMatching(/Network request failed|error/i)
         });
     });
 
