@@ -551,20 +551,36 @@ export async function registerConsolidatedWebhookRoutes(
 ): Promise<void> {
   
   /**
+   * Add a custom content type parser for the webhook route
+   * This preserves the raw body needed for Stripe signature verification
+   * while still parsing JSON for normal use
+   */
+  fastify.removeContentTypeParser('application/json');
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    try {
+      // Store raw body for webhook signature verification
+      (req as any).rawBody = body;
+      // Parse JSON for normal request handling
+      const parsed = JSON.parse(body as string);
+      done(null, parsed);
+    } catch (error: any) {
+      done(error, undefined);
+    }
+  });
+  
+  /**
    * POST /webhooks/stripe
    * Handle Stripe webhook events
    * 
    * Note: Stripe requires the raw request body for signature verification.
-   * We handle this by receiving the body as a buffer and manually parsing.
+   * The custom content type parser above preserves it in request.rawBody.
    */
-  fastify.post<{
-    Body: Buffer;
-  }>(
+  fastify.post(
     '/webhooks/stripe',
     {
       bodyLimit: 1048576, // 1MB limit for webhook payloads
     },
-    async (request: FastifyRequest<{ Body: Buffer }>, reply: FastifyReply) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const sig = request.headers['stripe-signature'];
         
@@ -577,19 +593,12 @@ export async function registerConsolidatedWebhookRoutes(
           throw new ExternalServiceError('Configuration', 'Webhook secret not configured');
         }
         
-        // Get raw body as string or buffer
-        let rawBody: string | Buffer;
+        // Get raw body for signature verification
+        const rawBody = (request as any).rawBody as string;
         
-        // The body might come as parsed JSON or as a raw string/buffer
-        if (Buffer.isBuffer(request.body)) {
-          rawBody = request.body;
-        } else if (typeof request.body === 'string') {
-          rawBody = request.body;
-        } else if (typeof request.body === 'object') {
-          // Already parsed - reconstruct as string for signature verification
-          rawBody = JSON.stringify(request.body);
-        } else {
-          throw new ValidationError('Invalid request body format');
+        if (!rawBody) {
+          logger.error('Raw body not available for signature verification');
+          throw new ValidationError('Raw body required for signature verification');
         }
         
         // Verify webhook signature

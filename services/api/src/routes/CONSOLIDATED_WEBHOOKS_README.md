@@ -14,16 +14,18 @@ The consolidated webhook handler (`services/api/src/routes/consolidated-webhooks
 
 ```
 1. Stripe sends POST to /webhooks/stripe
-2. Verify webhook signature (security)
-3. Check for duplicate events (idempotency)
-4. Log event to database
-5. Process event based on type
-6. Mark event as processed
-7. Return 200 OK to Stripe
+2. Custom content type parser preserves raw body
+3. Verify webhook signature (security)
+4. Check for duplicate events (idempotency)
+5. Log event to database
+6. Process event based on type
+7. Mark event as processed
+8. Return 200 OK to Stripe
 ```
 
 ### Key Components
 
+- **Content Type Parser**: Custom parser preserves raw body while still parsing JSON
 - **Signature Verification**: Uses `stripe.webhooks.constructEvent()` with webhook secret
 - **Idempotency**: Uses `stripe_events` table to prevent duplicate processing
 - **Atomic Operations**: Uses consolidated wallet service for balance updates
