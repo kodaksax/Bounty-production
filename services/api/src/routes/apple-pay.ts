@@ -1,9 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import Stripe from 'stripe';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 export async function registerApplePayRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';

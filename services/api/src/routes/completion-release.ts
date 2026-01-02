@@ -1,9 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { completionReleaseService } from '../services/completion-release-service';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { CompletionReleaseRequest } from '../services/completion-release-service';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 export const completionReleaseRouter = Router();
 

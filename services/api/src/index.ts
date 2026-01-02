@@ -88,17 +88,23 @@ const { registerConsolidatedProfileRoutes } = require('./routes/consolidated-pro
 const { registerConsolidatedBountyRoutes } = require('./routes/consolidated-bounties');
 const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidated-bounty-requests');
 const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
+const { registerHealthRoutes } = require('./routes/health');
+const { registerMetricsRoutes } = require('./routes/metrics');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
 const { backendAnalytics } = require('./services/analytics');
 const { initializeIdempotencyService } = require('./services/idempotency-service');
 
+// Import monitoring
+const { recordHttpRequest } = require('./monitoring/metrics');
+const { tracingMiddleware } = require('./monitoring/tracing');
+
 // Initialize analytics on startup
 backendAnalytics.initialize();
 
 // Initialize idempotency service (Redis or in-memory fallback)
-initializeIdempotencyService().catch((error) => {
+initializeIdempotencyService().catch((error: Error) => {
   logger.error('[startup] Failed to initialize idempotency service:', error);
 });
 
@@ -119,9 +125,29 @@ const startServer = async () => {
     await requestContextMiddleware(request, reply);
   });
 
-  // Register global rate limiting middleware for all routes except health
+  // Register tracing middleware (second middleware)
+  // This adds distributed tracing to all requests
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (request.url === '/health') return;
+    await tracingMiddleware(request, reply);
+  });
+
+  // Register metrics middleware (response-time tracking)
+  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    const startTime = Date.now();
+    
+    // Store start time on request
+    (request as any)._startTime = startTime;
+  });
+
+  fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
+    const startTime = (request as any)._startTime || Date.now();
+    const duration = Date.now() - startTime;
+    recordHttpRequest(request.method, request.url, reply.statusCode, duration);
+  });
+
+  // Register global rate limiting middleware for all routes except health/metrics
+  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (request.url.startsWith('/health') || request.url.startsWith('/metrics')) return;
     await rateLimitMiddleware(request, reply);
   });
 
@@ -163,6 +189,12 @@ const startServer = async () => {
 
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
+
+  // Register health check routes (monitoring)
+  await registerHealthRoutes(fastify);
+
+  // Register metrics routes (monitoring)
+  await registerMetricsRoutes(fastify);
 
   // Legacy delete account endpoint (kept for backwards compatibility)
   // NOTE: This endpoint duplicates functionality in consolidated-auth routes
@@ -421,42 +453,7 @@ const startServer = async () => {
   });
 };
 
-// Health check endpoint (no auth required)
-fastify.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    // Test database connection with simple query
-    const { Pool } = require('pg');
-    const { getServiceStatus } = require('./services/idempotency-service');
-    
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    await pool.query('SELECT 1');
-    await pool.end();
-    
-    // Get idempotency service status
-    const idempotencyStatus = getServiceStatus();
-    
-    return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-      service: 'bountyexpo-api',
-      database: 'connected',
-      idempotency: {
-        backend: idempotencyStatus.backend,
-        connected: idempotencyStatus.connected,
-      }
-    };
-  } catch (error) {
-    return reply.code(503).send({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-      service: 'bountyexpo-api',
-      database: 'disconnected',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+// Note: Health check endpoint moved to routes/health.ts for enhanced monitoring
 
 // Get user profile endpoint - creates user if not exists on first request
 fastify.get('/me', {
