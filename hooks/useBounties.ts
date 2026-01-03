@@ -4,6 +4,15 @@ import type { Bounty } from '../lib/services/database.types';
 import { logger } from '../lib/utils/error-logger';
 import { useWebSocketEvent } from './useWebSocket';
 
+/**
+ * WebSocket bounty status update event
+ */
+interface BountyStatusEvent {
+  id: string | number;
+  status: Bounty['status'];
+  timestamp?: string;
+}
+
 export interface BountiesState {
   bounties: Bounty[];
   loading: boolean;
@@ -169,7 +178,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
    * Handle real-time bounty status updates from WebSocket
    */
   const handleBountyStatusUpdate = useCallback(
-    (data: any) => {
+    (data: BountyStatusEvent) => {
       if (!data || !data.id || !data.status) {
         logger.warning('Received invalid bounty status update', { data });
         return;

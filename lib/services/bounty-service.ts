@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import type { Bounty } from "lib/services/database.types";
+import type { Bounty, BountyStatus } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
@@ -964,7 +964,7 @@ export const bountyService = {
   /**
    * Update a bounty's status with WebSocket notification
    */
-  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
+  async updateStatus(id: number, status: BountyStatus): Promise<Bounty | null> {
     const result = await this.update(id, { status })
     
     // Notify via WebSocket for real-time updates
