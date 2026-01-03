@@ -980,8 +980,6 @@ export const bountyService = {
             status: result.status,
             timestamp: new Date().toISOString(),
           });
-          
-          logOnce('bounties:ws-status', 'warn', 'Bounty status update sent via WebSocket', { id, status });
         }
       } catch (err) {
         // Don't fail the status update if WebSocket notification fails

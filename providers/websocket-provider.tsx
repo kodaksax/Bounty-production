@@ -94,7 +94,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       setLastConnectedAt(null);
       setReconnectAttempts(0);
     }
-  }, [isLoggedIn, webSocketState.isConnected]);
+  }, [isLoggedIn, webSocketState]);
 
   const contextValue: WebSocketContextValue = {
     ...webSocketState,
