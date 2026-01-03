@@ -96,6 +96,54 @@ function useRealtimeEvents() {
 }
 ```
 
+**useBounties Hook (Recommended):**
+```typescript
+import { useBounties } from '../hooks/useBounties';
+
+function MyComponent() {
+  const { 
+    bounties, 
+    loading, 
+    error, 
+    updateBountyStatus,
+    refreshBounties 
+  } = useBounties({
+    status: 'open',
+    optimisticUpdates: true, // Enable optimistic UI updates
+    autoRefresh: true // Auto-refresh on reconnection
+  });
+
+  const handleAcceptBounty = async (bountyId: number) => {
+    try {
+      // Optimistically updates UI, then syncs with API
+      await updateBountyStatus(bountyId, 'in_progress');
+      // All connected clients will receive the update via WebSocket
+    } catch (error) {
+      // Automatically rolls back on failure
+      console.error('Failed to update bounty:', error);
+    }
+  };
+
+  return (
+    <div>
+      {loading && <p>Loading...</p>}
+      {error && <p>Error: {error}</p>}
+      {bounties.map(bounty => (
+        <div key={bounty.id}>
+          <h3>{bounty.title}</h3>
+          <p>Status: {bounty.status}</p>
+          {bounty.status === 'open' && (
+            <button onClick={() => handleAcceptBounty(bounty.id)}>
+              Accept Bounty
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
 ### Event Types
 
 #### Connection Confirmation
