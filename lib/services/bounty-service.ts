@@ -6,8 +6,14 @@ import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
 
 // Lazy-load wsAdapter to avoid circular dependencies
-let wsAdapterInstance: any = null;
-async function getWsAdapter() {
+// Type for wsAdapter interface
+interface WsAdapter {
+  isConnected(): boolean;
+  send(type: string, data: any): void;
+}
+
+let wsAdapterInstance: WsAdapter | null = null;
+async function getWsAdapter(): Promise<WsAdapter> {
   if (!wsAdapterInstance) {
     const { wsAdapter } = await import('./websocket-adapter');
     wsAdapterInstance = wsAdapter;

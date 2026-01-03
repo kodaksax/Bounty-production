@@ -202,17 +202,17 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
           return prev;
         }
 
-        // If filtering by userId, we can't add without knowing the bounty details
-        // In this case, trigger a refresh to be safe
-        if (userId && autoRefresh) {
-          fetchBounties().catch((err) => {
-            logger.error('Error refreshing bounties after WebSocket update', { error: err });
-          });
-          return prev;
-        }
-
+        // If filtering by userId, trigger a refresh to get the full bounty details
+        // Don't try to add it without complete data
         return prev;
       });
+
+      // If we need to refresh for userId filter, do it outside of setState
+      if (userId && autoRefresh) {
+        fetchBounties().catch((err) => {
+          logger.error('Error refreshing bounties after WebSocket update', { error: err });
+        });
+      }
 
       logger.info('Bounty status updated via WebSocket', { id, status: newStatus });
     },
@@ -220,7 +220,11 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
   );
 
   // Subscribe to WebSocket events for real-time updates
-  useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
+  // Memoize the handler to prevent unnecessary subscription cycles
+  useEffect(() => {
+    const unsubscribe = useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
+    return unsubscribe;
+  }, [handleBountyStatusUpdate]);
 
   // Initial fetch on mount or when dependencies change
   useEffect(() => {
