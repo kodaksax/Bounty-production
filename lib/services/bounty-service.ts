@@ -962,10 +962,34 @@ export const bountyService = {
   },
 
   /**
-   * Update a bounty's status
+   * Update a bounty's status with WebSocket notification
    */
   async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
-    return this.update(id, { status })
+    const result = await this.update(id, { status })
+    
+    // Notify via WebSocket for real-time updates
+    if (result) {
+      try {
+        // Import wsAdapter dynamically to avoid circular dependencies
+        const { wsAdapter } = await import('./websocket-adapter');
+        
+        // Send status update event to all connected clients
+        if (wsAdapter.isConnected()) {
+          wsAdapter.send('bounty.status', {
+            id: result.id,
+            status: result.status,
+            timestamp: new Date().toISOString(),
+          });
+          
+          logOnce('bounties:ws-status', 'warn', 'Bounty status update sent via WebSocket', { id, status });
+        }
+      } catch (err) {
+        // Don't fail the status update if WebSocket notification fails
+        logOnce('bounties:ws-error', 'warn', 'Failed to send WebSocket notification', { error: (err as any)?.message });
+      }
+    }
+    
+    return result
   },
 
   /**
