@@ -5,6 +5,16 @@ import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
 
+// Lazy-load wsAdapter to avoid circular dependencies
+let wsAdapterInstance: any = null;
+async function getWsAdapter() {
+  if (!wsAdapterInstance) {
+    const { wsAdapter } = await import('./websocket-adapter');
+    wsAdapterInstance = wsAdapter;
+  }
+  return wsAdapterInstance;
+}
+
 // Helper: if the profiles relationship no longer exists in the DB schema, fallback
 // to fetching bounties without the join and then separately fetch profiles by poster_id
 // and attach username/avatar to the bounty objects.
@@ -970,8 +980,8 @@ export const bountyService = {
     // Notify via WebSocket for real-time updates
     if (result) {
       try {
-        // Import wsAdapter dynamically to avoid circular dependencies
-        const { wsAdapter } = await import('./websocket-adapter');
+        // Use lazy-loaded wsAdapter singleton
+        const wsAdapter = await getWsAdapter();
         
         // Send status update event to all connected clients
         if (wsAdapter.isConnected()) {
