@@ -16,6 +16,7 @@ import { AdminHeader } from '../../../components/admin/AdminHeader';
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
 import { ROUTES } from '../../../lib/routes';
@@ -36,7 +37,7 @@ export default function AdminDisputesScreen() {
   const loadDisputes = useCallback(async () => {
     try {
       setError(null);
-      const allDisputes = await disputeService.getOpenDisputes();
+      const allDisputes = await disputeService.getAllActiveDisputes();
       
       // Fetch bounty details for each dispute
       const disputesWithBounties = await Promise.all(
@@ -93,36 +94,6 @@ export default function AdminDisputesScreen() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open':
-        return '#f59e0b'; // amber
-      case 'under_review':
-        return '#3b82f6'; // blue
-      case 'resolved':
-        return '#10b981'; // emerald
-      case 'closed':
-        return '#6b7280'; // gray
-      default:
-        return '#6b7280';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'open':
-        return 'error-outline';
-      case 'under_review':
-        return 'visibility';
-      case 'resolved':
-        return 'check-circle';
-      case 'closed':
-        return 'cancel';
-      default:
-        return 'help-outline';
-    }
-  };
-
   const filteredDisputes = disputes.filter((dispute) => {
     if (filter === 'all') return true;
     return dispute.status === filter;
@@ -140,7 +111,7 @@ export default function AdminDisputesScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Resolution" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00dc50" />
+          <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Loading disputes...</Text>
         </View>
       </View>
@@ -258,9 +229,9 @@ export default function AdminDisputesScreen() {
                   <View style={styles.disputeHeader}>
                     <View style={styles.disputeHeaderLeft}>
                       <MaterialIcons
-                        name={getStatusIcon(dispute.status) as any}
+                        name={getDisputeStatusIcon(dispute.status) as any}
                         size={24}
-                        color={getStatusColor(dispute.status)}
+                        color={getDisputeStatusColor(dispute.status)}
                       />
                       <View style={styles.disputeHeaderText}>
                         <Text style={styles.disputeTitle} numberOfLines={1}>
@@ -276,7 +247,7 @@ export default function AdminDisputesScreen() {
                     <View
                       style={[
                         styles.statusBadge,
-                        { backgroundColor: getStatusColor(dispute.status) },
+                        { backgroundColor: getDisputeStatusColor(dispute.status) },
                       ]}
                     >
                       <Text style={styles.statusBadgeText}>

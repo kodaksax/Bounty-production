@@ -7,12 +7,12 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type { DisputeEvidence } from '../lib/types';
+import { generateEvidenceId } from '../lib/utils/dispute-helpers';
 
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
@@ -44,7 +44,7 @@ export function DisputeSubmissionForm({
     }
 
     const newEvidence: DisputeEvidence = {
-      id: Date.now().toString(),
+      id: generateEvidenceId(),
       type: 'text',
       content: textEvidence.trim(),
       uploadedAt: new Date().toISOString(),
@@ -70,7 +70,7 @@ export function DisputeSubmissionForm({
 
       if (!result.canceled && result.assets[0]) {
         const newEvidence: DisputeEvidence = {
-          id: Date.now().toString(),
+          id: generateEvidenceId(),
           type: 'image',
           content: result.assets[0].uri,
           description: 'Image evidence',
@@ -94,7 +94,7 @@ export function DisputeSubmissionForm({
       if (result.canceled === false && result.assets && result.assets[0]) {
         const asset = result.assets[0];
         const newEvidence: DisputeEvidence = {
-          id: Date.now().toString(),
+          id: generateEvidenceId(),
           type: 'document',
           content: asset.uri,
           description: asset.name || 'Document evidence',

@@ -25,7 +25,6 @@ export default function AdminDashboard() {
     { id: 'blocked', title: 'Blocked Users', icon: 'block', route: ROUTES.ADMIN.BLOCKED_USERS },
     { id: 'settings', title: 'Settings', icon: 'settings', route: ROUTES.ADMIN.SETTINGS.INDEX },
     { id: 'support', title: 'Support', icon: 'help', route: ROUTES.ADMIN.SUPPORT.INDEX },
-    { id: 'moderation', title: 'Moderation', icon: 'shield', route: ROUTES.ADMIN.REPORTS },
     { id: 'audit', title: 'Audit Logs', icon: 'history', route: ROUTES.ADMIN.AUDIT_LOGS },
   ];
 

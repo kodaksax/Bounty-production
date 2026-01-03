@@ -18,6 +18,7 @@ import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute, BountyCancellation } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
 
@@ -175,9 +176,9 @@ export default function AdminDisputeDetailScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <AdminHeader title="Dispute Details" showBack />
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00dc50" />
+          <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Loading dispute...</Text>
         </View>
       </View>
@@ -187,7 +188,7 @@ export default function AdminDisputeDetailScreen() {
   if (!data) {
     return (
       <View style={styles.container}>
-        <AdminHeader title="Dispute Details" showBack />
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="rgba(255,254,245,0.6)" />
           <Text style={styles.errorText}>Dispute not found</Text>
@@ -200,18 +201,18 @@ export default function AdminDisputeDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <AdminHeader title="Dispute Details" showBack />
+      <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
       
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Status Banner */}
         <View
           style={[
             styles.statusBanner,
-            { backgroundColor: getStatusColor(dispute.status) },
+            { backgroundColor: getDisputeStatusColor(dispute.status) },
           ]}
         >
           <MaterialIcons
-            name={getStatusIcon(dispute.status) as any}
+            name={getDisputeStatusIcon(dispute.status) as any}
             size={24}
             color="#fff"
           />
@@ -223,7 +224,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Bounty Information */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="work" size={20} color="#00dc50" />
+            <MaterialIcons name="work" size={20} color="#059669" />
             <Text style={styles.sectionTitle}>Bounty Information</Text>
           </View>
           <View style={styles.infoRow}>
@@ -245,7 +246,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Dispute Details */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="report-problem" size={20} color="#00dc50" />
+            <MaterialIcons name="report-problem" size={20} color="#059669" />
             <Text style={styles.sectionTitle}>Dispute Details</Text>
           </View>
           <View style={styles.infoRow}>
@@ -264,7 +265,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.evidence && dispute.evidence.length > 0 && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="attach-file" size={20} color="#00dc50" />
+              <MaterialIcons name="attach-file" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>
                 Evidence ({dispute.evidence.length})
               </Text>
@@ -283,7 +284,7 @@ export default function AdminDisputeDetailScreen() {
                         : 'text-fields'
                     }
                     size={16}
-                    color="#00dc50"
+                    color="#059669"
                   />
                   <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
                   <Text style={styles.evidenceDate}>
@@ -305,7 +306,7 @@ export default function AdminDisputeDetailScreen() {
         {cancellation && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="info-outline" size={20} color="#00dc50" />
+              <MaterialIcons name="info-outline" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>Cancellation Context</Text>
             </View>
             <View style={styles.infoRow}>
@@ -355,7 +356,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.status !== 'resolved' && dispute.status !== 'closed' && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="admin-panel-settings" size={20} color="#00dc50" />
+              <MaterialIcons name="admin-panel-settings" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>Admin Actions</Text>
             </View>
 
@@ -554,7 +555,7 @@ const styles = StyleSheet.create({
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#00dc50',
+    color: '#059669',
   },
   evidenceDate: {
     fontSize: 11,

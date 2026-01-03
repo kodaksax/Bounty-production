@@ -1,12 +1,11 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
-import { API_BASE_URL } from 'lib/config/api';
 import type { BountyDispute, DisputeEvidence } from '../types';
 import { cancellationService } from './cancellation-service';
 import { bountyService } from './bounty-service';
 
 /**
- * Helper to send notification via backend API
+ * Helper to send notification via Supabase direct insert
  */
 async function sendNotification(
   userId: string,
@@ -16,26 +15,23 @@ async function sendNotification(
   data?: Record<string, any>
 ): Promise<void> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      logger.error('No session available for sending notification');
+    if (!isSupabaseConfigured) {
+      logger.error('Supabase not configured for sending notification');
       return;
     }
 
-    await fetch(`${API_BASE_URL}/notifications/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        userId,
-        type,
-        title,
-        body,
-        data,
-      }),
+    const { error } = await supabase.from('notifications').insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      data: data || null,
+      read: false,
     });
+
+    if (error) {
+      logger.error('Error sending notification', { error, userId, type });
+    }
   } catch (error) {
     logger.error('Error sending notification', { error });
   }
@@ -133,7 +129,9 @@ export const disputeService = {
           }
           
           // If there's a hunter involved (from cancellation), notify them too
-          if (cancellation.requesterId !== initiatorId && cancellation.requesterId !== bounty.user_id) {
+          if (cancellation.requesterId && 
+              cancellation.requesterId !== initiatorId && 
+              cancellation.requesterId !== bounty.user_id) {
             await sendNotification(
               cancellation.requesterId,
               'dispute_created',
@@ -398,7 +396,10 @@ export const disputeService = {
 
           // Get cancellation to notify other party if exists
           const cancellation = await cancellationService.getCancellationById(dispute.cancellationId);
-          if (cancellation && cancellation.requesterId !== dispute.initiatorId && cancellation.requesterId !== bounty.user_id) {
+          if (cancellation && 
+              cancellation.requesterId && 
+              cancellation.requesterId !== dispute.initiatorId && 
+              cancellation.requesterId !== bounty.user_id) {
             await sendNotification(
               cancellation.requesterId,
               'dispute_resolved',
@@ -470,9 +471,9 @@ export const disputeService = {
   },
 
   /**
-   * Get all open disputes (for admin review)
+   * Get all active disputes (open and under review) for admin review
    */
-  async getOpenDisputes(): Promise<BountyDispute[]> {
+  async getAllActiveDisputes(): Promise<BountyDispute[]> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
@@ -485,7 +486,7 @@ export const disputeService = {
         .order('created_at', { ascending: true });
 
       if (error) {
-        logger.error('Error fetching open disputes', { error });
+        logger.error('Error fetching active disputes', { error });
         return [];
       }
 
@@ -505,7 +506,7 @@ export const disputeService = {
       }));
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in getOpenDisputes', { error: { message: error.message } });
+      logger.error('Error in getAllActiveDisputes', { error: { message: error.message } });
       return [];
     }
   },

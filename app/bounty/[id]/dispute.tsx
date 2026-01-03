@@ -8,6 +8,8 @@ import {
   Alert,
   Linking,
   StyleSheet,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, AlertCircle, Phone, Mail, HelpCircle } from 'lucide-react-native';
@@ -31,6 +33,8 @@ export default function DisputeScreen() {
   const [dispute, setDispute] = useState<BountyDispute | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [evidenceInput, setEvidenceInput] = useState('');
   
   useEffect(() => {
     loadData();
@@ -107,7 +111,7 @@ export default function DisputeScreen() {
     setSubmitting(true);
     try {
       const newEvidence: DisputeEvidence = {
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
         type: 'text',
         content: evidenceText,
         uploadedAt: new Date().toISOString(),
@@ -118,11 +122,19 @@ export default function DisputeScreen() {
       if (success) {
         Alert.alert('Success', 'Evidence added successfully');
         await loadData(); // Reload to show new evidence
+        setShowEvidenceModal(false);
+        setEvidenceInput('');
       } else {
         throw new Error('Failed to add evidence');
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmitEvidence = () => {
+    if (evidenceInput.trim()) {
+      handleAddEvidence(evidenceInput.trim());
     }
   };
 
@@ -265,18 +277,7 @@ export default function DisputeScreen() {
                     Provide additional text evidence to support your dispute. For images or documents, please contact support.
                   </Text>
                   <TouchableOpacity
-                    onPress={() => {
-                      Alert.prompt(
-                        'Add Evidence',
-                        'Describe the additional evidence',
-                        async (text) => {
-                          if (text && text.trim()) {
-                            await handleAddEvidence(text.trim());
-                          }
-                        },
-                        'plain-text'
-                      );
-                    }}
+                    onPress={() => setShowEvidenceModal(true)}
                     className="flex-row items-center justify-center rounded-lg py-3 bg-emerald-600"
                   >
                     <Text className="text-white font-medium">
@@ -340,6 +341,128 @@ export default function DisputeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Evidence Modal */}
+      <Modal
+        visible={showEvidenceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEvidenceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Evidence</Text>
+            <Text style={styles.modalSubtitle}>
+              Describe the additional evidence
+            </Text>
+            <TextInput
+              value={evidenceInput}
+              onChangeText={setEvidenceInput}
+              placeholder="Enter evidence details..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              style={styles.modalInput}
+              editable={!submitting}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={handleSubmitEvidence}
+                disabled={submitting || !evidenceInput.trim()}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonPrimary,
+                  (submitting || !evidenceInput.trim()) && styles.modalButtonDisabled,
+                ]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowEvidenceModal(false);
+                  setEvidenceInput('');
+                }}
+                disabled={submitting}
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+              >
+                <Text style={styles.modalButtonTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    minHeight: 100,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#059669',
+  },
+  modalButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  modalButtonDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextSecondary: {
+    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
