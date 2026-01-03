@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
-import { addressAutocompleteService } from '../../../lib/services/address-autocomplete-service';
+import { addressAutocompleteService, isPlaceDetailsError } from '../../../lib/services/address-autocomplete-service';
 import { sanitizeAddressText } from '../../../lib/utils/address-sanitization';
 import { useLocation } from 'app/hooks/useLocation';
 
@@ -70,23 +70,24 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   const handleSelectAddress = async (suggestion: any) => {
     // Fetch detailed place information to get coordinates
     try {
-      const details = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
-      if (details) {
-        // Sanitize the formatted address before storing
-        const sanitizedAddress = sanitizeAddressText(details.formattedAddress);
-        onUpdate({ 
-          location: sanitizedAddress,
-        });
-        setTouched({ ...touched, location: true });
-      } else {
-        // If place details fetch returns null, inform user and use fallback
+      const response = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
+      
+      if (isPlaceDetailsError(response)) {
+        // Handle error response with specific error message
         Alert.alert(
           'Address Details Unavailable',
-          'Could not fetch detailed information for this address. Using basic address information.',
+          response.error || 'Could not fetch detailed information for this address. Using basic address information.',
           [{ text: 'OK' }]
         );
         const sanitizedDescription = sanitizeAddressText(suggestion.description);
         onUpdate({ location: sanitizedDescription });
+        setTouched({ ...touched, location: true });
+      } else {
+        // Successfully got place details
+        const sanitizedAddress = sanitizeAddressText(response.formattedAddress);
+        onUpdate({ 
+          location: sanitizedAddress,
+        });
         setTouched({ ...touched, location: true });
       }
     } catch (err) {

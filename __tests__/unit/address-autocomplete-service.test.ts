@@ -24,7 +24,7 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-import { addressAutocompleteService } from '../../lib/services/address-autocomplete-service';
+import { addressAutocompleteService, isPlaceDetailsError } from '../../lib/services/address-autocomplete-service';
 
 describe('AddressAutocompleteService', () => {
   beforeEach(() => {
@@ -236,13 +236,13 @@ describe('AddressAutocompleteService', () => {
       });
     });
 
-    it('should return null for invalid place IDs', async () => {
+    it('should return error response for invalid place IDs', async () => {
       const details = await addressAutocompleteService.getPlaceDetails('invalid<script>');
-      expect(details).toBeNull();
+      expect(details).toEqual({ error: 'Invalid place ID provided', details: null });
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('should return null on API error', async () => {
+    it('should return error response on API NOT_FOUND', async () => {
       const mockResponse = {
         status: 'NOT_FOUND',
         error_message: 'Place not found',
@@ -253,7 +253,40 @@ describe('AddressAutocompleteService', () => {
       });
 
       const details = await addressAutocompleteService.getPlaceDetails('place1');
-      expect(details).toBeNull();
+      expect(details).toEqual({ error: 'Place not found', details: null });
+    });
+
+    it('should return error response on other API errors', async () => {
+      const mockResponse = {
+        status: 'INVALID_REQUEST',
+        error_message: 'Invalid request',
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        json: async () => mockResponse,
+      });
+
+      const details = await addressAutocompleteService.getPlaceDetails('place1');
+      expect(details).toEqual({ error: 'Unable to fetch place details', details: null });
+    });
+
+    it('should return error response on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+
+      const details = await addressAutocompleteService.getPlaceDetails('place1');
+      expect(details).toEqual({ error: 'Network error occurred', details: null });
+    });
+
+    it('should return error response when service is not configured', async () => {
+      // Temporarily mock the isConfigured method to return false
+      const originalIsConfigured = addressAutocompleteService.isConfigured;
+      addressAutocompleteService.isConfigured = jest.fn().mockReturnValue(false);
+
+      const details = await addressAutocompleteService.getPlaceDetails('place1');
+      expect(details).toEqual({ error: 'Service not configured', details: null });
+      
+      // Restore original method
+      addressAutocompleteService.isConfigured = originalIsConfigured;
     });
   });
 
@@ -345,6 +378,24 @@ describe('AddressAutocompleteService', () => {
       expect(typeof addressAutocompleteService.validateAddress).toBe('function');
       expect(typeof addressAutocompleteService.isConfigured).toBe('function');
       expect(typeof addressAutocompleteService.clearCache).toBe('function');
+    });
+  });
+
+  describe('Type Guards', () => {
+    it('should correctly identify error responses', () => {
+      const errorResponse = { error: 'Place not found', details: null };
+      expect(isPlaceDetailsError(errorResponse)).toBe(true);
+    });
+
+    it('should correctly identify successful responses', () => {
+      const successResponse = {
+        placeId: 'place1',
+        formattedAddress: '123 Main St',
+        latitude: 37.7749,
+        longitude: -122.4194,
+        components: {},
+      };
+      expect(isPlaceDetailsError(successResponse)).toBe(false);
     });
   });
 });
