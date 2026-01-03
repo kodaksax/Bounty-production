@@ -44,16 +44,22 @@ jobs:
         run: npm run test:unit
         env:
           NODE_ENV: test
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           NODE_ENV: test
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       
       - name: Generate coverage report
         run: npm run test:coverage
