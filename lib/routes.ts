@@ -51,6 +51,10 @@ export const ROUTES = {
     ANALYTICS: '/(admin)/analytics',
     REPORTS: '/(admin)/reports',
     
+    // Dispute Management
+    DISPUTES: '/(admin)/disputes',
+    DISPUTE_DETAIL: (id: string | number) => `/(admin)/disputes/${id}` as const,
+    
     // Settings section
     SETTINGS: {
       INDEX: '/(admin)/settings',
