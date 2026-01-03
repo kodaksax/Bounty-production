@@ -964,7 +964,7 @@ export const bountyService = {
   /**
    * Update a bounty's status with WebSocket notification
    */
-  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
+  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
     const result = await this.update(id, { status })
     
     // Notify via WebSocket for real-time updates
