@@ -9,8 +9,7 @@ import {
 } from '../../../lib/utils/performance-monitor';
 
 // Mock performance.now() for consistent testing
-const mockPerformanceNow = jest.fn();
-global.performance.now = mockPerformanceNow;
+const mockPerformanceNow = jest.spyOn(performance, 'now');
 
 // Mock console methods to verify logging behavior
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
