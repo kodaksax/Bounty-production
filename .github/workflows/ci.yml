@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - develop
+  workflow_dispatch:
 
 jobs:
   test:
@@ -69,6 +70,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage/coverage-final.json
           flags: unittests
           name: codecov-umbrella
@@ -93,6 +95,46 @@ jobs:
           title: Coverage Report
           update-comment: true
         continue-on-error: true
+
+  build:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      
+      - name: Validate Expo export build
+        run: npx expo export --output-dir dist --platform web
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      
+      - name: Check build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed: dist directory not created"
+            exit 1
+          fi
+          echo "✅ Build validation successful"
+          ls -la dist/
+      
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-build-artifacts
+          path: dist/
+          retention-days: 7
 
   lint:
     name: Lint Code
@@ -139,7 +181,7 @@ jobs:
   report:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [test, lint, security]
+    needs: [test, build, lint, security]
     if: always()
     
     steps:
