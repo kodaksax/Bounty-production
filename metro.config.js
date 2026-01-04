@@ -1,15 +1,9 @@
-const { withNativeWind } = require('nativewind/metro');
-const {
-  getSentryExpoConfig
-} = require("@sentry/react-native/metro");
+const { getDefaultConfig } = require('@react-native/metro-config');
 
-const config = getSentryExpoConfig(__dirname);
+const defaultConfig = getDefaultConfig(__dirname);
 
-// Performance optimizations for Metro bundler
-config.transformer = {
-  ...config.transformer,
-  // Configure minification with preserved names for Sentry error tracking
-  // Keeps function and class names intact for better error reporting in production
+defaultConfig.transformer = {
+  ...defaultConfig.transformer,
   minifierConfig: {
     keep_classnames: true,
     keep_fnames: true,
@@ -20,4 +14,9 @@ config.transformer = {
   },
 };
 
-module.exports = withNativeWind(config, { input: './global.css' });
+defaultConfig.resolver = {
+  ...defaultConfig.resolver,
+  sourceExts: Array.from(new Set([...(defaultConfig.resolver?.sourceExts || []), 'cjs'])),
+};
+
+module.exports = defaultConfig;
