@@ -23,7 +23,7 @@ Codecov is already integrated into the CI pipeline via `.github/workflows/ci.yml
 
 2. **Add Your Repository**
    - Once logged in, click "Add new repository"
-   - Find `kodaksax/Bounty-production` in the list
+   - Find `<your-username>/<your-repo-name>` (e.g., `kodaksax/Bounty-production`) in the list
    - Click "Setup repo"
 
 3. **Get Your Upload Token**
@@ -51,7 +51,7 @@ Codecov is already integrated into the CI pipeline via `.github/workflows/ci.yml
    - Wait for CI to complete
 
 2. **Check Codecov Dashboard**
-   - Visit https://app.codecov.io/gh/kodaksax/Bounty-production
+   - Visit https://app.codecov.io/gh/<your-username>/<your-repo-name>
    - You should see coverage reports appearing
    - Initial upload may take a few minutes
 
@@ -152,7 +152,7 @@ Codecov automatically comments on pull requests with:
 Add a coverage badge to your README.md:
 
 ```markdown
-[![codecov](https://codecov.io/gh/kodaksax/Bounty-production/branch/main/graph/badge.svg)](https://codecov.io/gh/kodaksax/Bounty-production)
+[![codecov](https://codecov.io/gh/<your-username>/<your-repo-name>/branch/main/graph/badge.svg)](https://codecov.io/gh/<your-username>/<your-repo-name>)
 ```
 
 ### 3. Sunburst Diagram

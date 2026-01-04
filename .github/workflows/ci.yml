@@ -114,11 +114,11 @@ jobs:
         run: npm ci --legacy-peer-deps
       
       - name: Validate Expo export build
-        run: npx expo export --output-dir dist --platform web
+        run: npx expo export --output-dir dist --platform web --max-workers 2
         env:
           NODE_ENV: production
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       
       - name: Check build artifacts
         run: |
