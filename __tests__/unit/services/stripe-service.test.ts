@@ -252,6 +252,8 @@ describe('Stripe Service', () => {
     it('should return empty array when no auth token provided', async () => {
       const methods = await stripeService.listPaymentMethods();
       expect(methods).toEqual([]);
+      // Verify no API call was made when auth token is not provided
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it('should handle API errors correctly', async () => {
