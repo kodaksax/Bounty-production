@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 
 type WebsocketConnection = {
   socket: {
@@ -30,7 +31,7 @@ export interface ConversationClient {
 }
 
 export class WebSocketMessagingService {
-  private supabaseClient: any = null;
+  private supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
   // Map of userId -> ConversationClient
   private clients: Map<string, ConversationClient> = new Map();
   // Map of conversationId -> Set of userIds
@@ -45,7 +46,7 @@ export class WebSocketMessagingService {
 
     // Initialize Supabase client if credentials are available
     if (supabaseUrl && supabaseAnon) {
-      this.supabaseClient = createClient(supabaseUrl, supabaseAnon);
+      this.supabaseClient = createClient<Database>(supabaseUrl, supabaseAnon);
       console.log('📡 WebSocket Messaging Service - Supabase client initialized');
     } else {
       console.log('⚠️  WebSocket Messaging Service - Supabase credentials not found');

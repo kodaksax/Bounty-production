@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastify';
 import { addUserContext } from './request-context';
 
@@ -10,7 +11,7 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE
 const supabaseAnon = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 
 if (supabaseUrl && supabaseAnon) {
-  supabase = createClient(supabaseUrl, supabaseAnon)
+  supabase = createClient<Database>(supabaseUrl, supabaseAnon)
   console.log('✅ Supabase auth client initialized')
 } else {
   console.log('⚠️  Supabase credentials not found - auth middleware will be disabled')

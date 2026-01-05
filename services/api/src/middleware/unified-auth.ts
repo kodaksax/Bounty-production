@@ -6,6 +6,7 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 import { config } from '../config';
 
 // Extend FastifyRequest to include authenticated user
@@ -18,11 +19,11 @@ export interface AuthenticatedRequest extends FastifyRequest {
  * Supabase admin client for JWT verification
  * Uses service role key to bypass RLS and verify tokens
  */
-let supabaseAdmin: SupabaseClient | null = null;
+let supabaseAdmin: SupabaseClient<Database> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient {
+function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    supabaseAdmin = createClient<Database>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -292,7 +293,7 @@ export function createUserSupabaseClient(request: AuthenticatedRequest): Supabas
   const token = extractBearerToken(authHeader);
   if (!token) return null;
   
-  return createClient(
+  return createClient<Database>(
     config.supabase.url,
     config.supabase.anonKey,
     {

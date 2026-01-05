@@ -12,6 +12,7 @@ import { asyncHandler, ValidationError, AuthenticationError, ExternalServiceErro
 import { config } from '../config';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 
 /**
  * Validation schemas using Zod
@@ -123,7 +124,7 @@ export function stopRateLimitCleanup() {
  * Supabase admin client singleton for user management operations
  * Reused across all requests to avoid repeated connection setup
  */
-const supabaseAdminClient = createClient(
+const supabaseAdminClient = createClient<Database>(
   config.supabase.url,
   config.supabase.serviceRoleKey,
   {
@@ -330,7 +331,7 @@ export async function registerConsolidatedAuthRoutes(
 
       try {
         // Sign in with Supabase (use regular client for sign-in, not admin)
-        const supabaseClient = createClient(
+        const supabaseClient = createClient<Database>(
           config.supabase.url,
           config.supabase.anonKey
         );

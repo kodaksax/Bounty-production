@@ -19,6 +19,7 @@ import {
 import { config } from '../config';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 
 /**
  * Validation schemas using Zod
@@ -105,11 +106,11 @@ interface Profile {
 /**
  * Supabase admin client singleton
  */
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
 
 function getSupabaseAdmin() {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    supabaseAdmin = createClient<Database>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {

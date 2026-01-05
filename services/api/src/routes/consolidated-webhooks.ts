@@ -17,6 +17,7 @@ import {
 import { logger } from '../services/logger';
 import { createClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
+import { Database } from '../types/database.types';
 
 // Extend FastifyRequest to include rawBody for webhook signature verification
 declare module 'fastify' {
@@ -32,11 +33,11 @@ const CREDIT_AMOUNT = 1;
 const DEBIT_AMOUNT = -1;
 
 // Initialize Supabase admin client
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
 
 function getSupabaseAdmin() {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    supabaseAdmin = createClient<Database>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
