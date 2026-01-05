@@ -43,7 +43,12 @@ export interface PlaceDetailsError {
 export function isPlaceDetailsError(
   response: PlaceDetails | PlaceDetailsError
 ): response is PlaceDetailsError {
-  return 'error' in response && response.error !== undefined;
+  return (
+    typeof (response as any).error === 'string' &&
+    (response as any).details === null &&
+    !('placeId' in response) &&
+    !('formattedAddress' in response)
+  );
 }
 
 /**
@@ -269,10 +274,6 @@ class AddressAutocompleteService {
       }
     } catch (error: any) {
       console.error('Error fetching place details:', error);
-      // Check for specific error messages
-      if (error.message === 'NOT_FOUND' || error.message === 'Invalid place ID provided') {
-        return { error: 'Place not found', details: null };
-      }
       return { error: 'Network error occurred', details: null };
     }
   }

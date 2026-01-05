@@ -76,7 +76,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         // Handle error response with specific error message
         Alert.alert(
           'Address Details Unavailable',
-          response.error || 'Could not fetch detailed information for this address. Using basic address information.',
+          response.error,
           [{ text: 'OK' }]
         );
         const sanitizedDescription = sanitizeAddressText(suggestion.description);
