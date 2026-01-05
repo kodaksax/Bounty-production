@@ -286,7 +286,7 @@ export function validateResourceOwnership(
  * Create service client for authenticated user
  * Returns a Supabase client with the user's JWT for RLS
  */
-export function createUserSupabaseClient(request: AuthenticatedRequest): SupabaseClient | null {
+export function createUserSupabaseClient(request: AuthenticatedRequest): SupabaseClient<Database> | null {
   const authHeader = request.headers.authorization;
   if (!authHeader) return null;
   

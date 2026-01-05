@@ -4,7 +4,7 @@ import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastif
 import { addUserContext } from './request-context';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
-let supabase: any = null;
+let supabase: ReturnType<typeof createClient<Database>> | null = null;
 
 // Support both server-style env names and Expo public env names (fallback)
 const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL
