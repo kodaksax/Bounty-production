@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    name: Run Tests
+    name: Run Tests (${{ matrix.node-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,7 +71,7 @@ jobs:
           NODE_ENV: test
       
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # v4.6.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage/coverage-final.json

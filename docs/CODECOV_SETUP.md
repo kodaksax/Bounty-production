@@ -72,7 +72,7 @@ The CI workflow (`.github/workflows/ci.yml`) includes:
     NODE_ENV: test
 
 - name: Upload coverage to Codecov
-  uses: codecov/codecov-action@v4
+  uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # v4.6.0
   with:
     token: ${{ secrets.CODECOV_TOKEN }}
     file: ./coverage/coverage-final.json
@@ -80,6 +80,8 @@ The CI workflow (`.github/workflows/ci.yml`) includes:
     name: codecov-umbrella
     fail_ci_if_error: false
 ```
+
+**Security Note:** The codecov action is pinned to a specific commit SHA (`5c47607acb93fed5485fdbf7232e8a31425f672a`) rather than a mutable tag (`v4`). This reduces supply-chain risk by ensuring only audited, immutable action code runs in the CI pipeline. When updating, always verify the new commit SHA corresponds to a trusted release.
 
 ### Coverage Thresholds
 
