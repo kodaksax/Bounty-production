@@ -1,7 +1,7 @@
 export type BountyStatus = "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested";
 
 export type Bounty = {
-  id: number
+  id: string  // uuid in database
   title: string
   description: string
   amount: number
@@ -70,7 +70,7 @@ export type Profile = {
 }
 
 export type Skill = {
-  id: number
+  id: string  // uuid in database
   user_id: string
   icon: string
   text: string
@@ -78,8 +78,8 @@ export type Skill = {
 }
 
 export type BountyRequest = {
-  id: number
-  bounty_id: number
+  id: string  // uuid in database
+  bounty_id: string  // uuid reference
   hunter_id: string
   status: "pending" | "accepted" | "rejected"
   created_at: string
@@ -87,7 +87,7 @@ export type BountyRequest = {
 
 export type BountyCancellation = {
   id: string
-  bounty_id: number
+  bounty_id: string  // uuid reference
   requester_id: string
   requester_type: 'poster' | 'hunter'
   reason: string

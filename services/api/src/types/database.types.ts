@@ -1,39 +1,34 @@
 export type BountyStatus = "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested";
 
 export type Bounty = {
-  id: number
+  id: string  // uuid in database
   title: string
   description: string
   amount: number
   is_for_honor: boolean
-  location: string
-  timeline: string
-  skills_required: string
-  poster_id: string
-  // Backwards-compatible alias for older code expecting user_id
-  user_id?: string
-  created_at: string
+  location: string | null
+  timeline: string | null
+  skills_required: string | null
+  poster_id: string | null
+  user_id: string  // NOT NULL in DB (legacy column)
   status: BountyStatus
-  distance?: number
-  // New optional fields for enhanced posting metadata
   work_type?: 'online' | 'in_person'
   is_time_sensitive?: boolean
-  deadline?: string // ISO date string when is_time_sensitive === true
-  attachments_json?: string // JSON serialized AttachmentMeta[] (storage format)
-  // Rating aggregates for the bounty poster
+  deadline?: string | null
+  attachments_json?: string | null
+  created_at: string
+  updated_at?: string
+  // Extended fields (not in DB, added by queries/joins)
+  distance?: number
   averageRating?: number
   ratingCount?: number
-  // If a bounty has been accepted, store the accepting hunter's id (optional)
   accepted_by?: string
-  // Profile data from joined query (populated when fetched with profile join)
   username?: string
   poster_avatar?: string
-  // Stale bounty fields
   is_stale?: boolean
   stale_reason?: string
   stale_detected_at?: string
-  // Stripe payment fields for escrow
-  payment_intent_id?: string // Stripe PaymentIntent ID for escrow
+  payment_intent_id?: string
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)
@@ -70,24 +65,26 @@ export type Profile = {
 }
 
 export type Skill = {
-  id: number
+  id: string  // uuid in database
   user_id: string
-  icon: string
+  icon: string | null
   text: string
   created_at: string
 }
 
 export type BountyRequest = {
-  id: number
-  bounty_id: number
-  hunter_id: string
+  id: string  // uuid in database
+  bounty_id: string  // uuid reference
+  hunter_id: string | null
+  user_id: string  // NOT NULL (legacy column)
   status: "pending" | "accepted" | "rejected"
   created_at: string
+  updated_at?: string
 }
 
 export type BountyCancellation = {
   id: string
-  bounty_id: number
+  bounty_id: string  // uuid reference
   requester_id: string
   requester_type: 'poster' | 'hunter'
   reason: string
@@ -111,8 +108,8 @@ export type Database = {
       }
       bounties: {
         Row: Bounty
-        Insert: Omit<Bounty, "id" | "created_at">
-        Update: Partial<Omit<Bounty, "id" | "created_at">>
+        Insert: Omit<Bounty, "id" | "created_at" | "updated_at" | "distance" | "averageRating" | "ratingCount" | "accepted_by" | "username" | "poster_avatar" | "is_stale" | "stale_reason" | "stale_detected_at" | "payment_intent_id">
+        Update: Partial<Omit<Bounty, "id" | "created_at" | "distance" | "averageRating" | "ratingCount" | "username" | "poster_avatar">>
       }
       skills: {
         Row: Skill
@@ -121,7 +118,7 @@ export type Database = {
       }
       bounty_requests: {
         Row: BountyRequest
-        Insert: Omit<BountyRequest, "id" | "created_at">
+        Insert: Omit<BountyRequest, "id" | "created_at" | "updated_at">
         Update: Partial<Omit<BountyRequest, "id" | "created_at">>
       }
     }
