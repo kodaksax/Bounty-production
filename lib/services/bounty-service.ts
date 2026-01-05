@@ -1,9 +1,25 @@
 import NetInfo from '@react-native-community/netinfo';
-import type { Bounty } from "lib/services/database.types";
+import type { Bounty, BountyStatus } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
+
+// Lazy-load wsAdapter to avoid circular dependencies
+// Type for wsAdapter interface
+interface WsAdapter {
+  isConnected(): boolean;
+  send(type: string, data: any): void;
+}
+
+let wsAdapterInstance: WsAdapter | null = null;
+async function getWsAdapter(): Promise<WsAdapter> {
+  if (!wsAdapterInstance) {
+    const { wsAdapter } = await import('./websocket-adapter');
+    wsAdapterInstance = wsAdapter;
+  }
+  return wsAdapterInstance;
+}
 
 // Helper: if the profiles relationship no longer exists in the DB schema, fallback
 // to fetching bounties without the join and then separately fetch profiles by poster_id
@@ -962,10 +978,32 @@ export const bountyService = {
   },
 
   /**
-   * Update a bounty's status
+   * Update a bounty's status with WebSocket notification
    */
-  async updateStatus(id: number, status: "open" | "in_progress" | "completed" | "archived" | "cancelled" | "cancellation_requested"): Promise<Bounty | null> {
-    return this.update(id, { status })
+  async updateStatus(id: number, status: BountyStatus): Promise<Bounty | null> {
+    const result = await this.update(id, { status })
+    
+    // Notify via WebSocket for real-time updates
+    if (result) {
+      try {
+        // Use lazy-loaded wsAdapter singleton
+        const wsAdapter = await getWsAdapter();
+        
+        // Send status update event to all connected clients
+        if (wsAdapter.isConnected()) {
+          wsAdapter.send('bounty.status', {
+            id: result.id,
+            status: result.status,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        // Don't fail the status update if WebSocket notification fails
+        logOnce('bounties:ws-error', 'warn', 'Failed to send WebSocket notification', { error: (err as any)?.message });
+      }
+    }
+    
+    return result
   },
 
   /**
