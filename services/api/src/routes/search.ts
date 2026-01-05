@@ -1,15 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import type { AuthenticatedRequest } from '../middleware/auth';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { authMiddleware } from '../middleware/auth';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { db } from '../db/connection';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { bounties, users } from '../db/schema';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { eq, and, or, gte, lte, ilike, sql, desc, asc } from 'drizzle-orm';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 
 interface BountySearchQuery {
   keywords?: string;
