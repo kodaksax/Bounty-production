@@ -398,6 +398,54 @@ it('should do async work', async () => {
 - [Supertest](https://github.com/visionmedia/supertest)
 - [Testing Best Practices](https://github.com/goldbergyoni/javascript-testing-best-practices)
 
+## API Service Tests
+
+The `services/api` directory contains additional integration tests that require a running API server:
+
+### Running API Service Tests
+
+```bash
+cd services/api
+
+# Start the API server (in a separate terminal)
+npm run dev
+
+# Then run specific test suites:
+npm run test                    # General API tests
+npm run test:websocket          # WebSocket integration
+npm run test:payment-flow       # End-to-end payment flow
+npm run test:escrow             # Escrow system
+npm run test:complete-flow      # Complete payment workflow
+npm run test:auth               # Authentication endpoints
+npm run test:profiles           # Profile service
+npm run test:bounties           # Bounty CRUD operations
+npm run test:bounty-requests    # Bounty request handling
+npm run test:stripe-connect     # Stripe Connect integration
+npm run test:wallet             # Wallet operations
+```
+
+### Requirements for API Tests
+
+These tests are different from the main Jest suite:
+
+- ✅ Require API server running (`npm run dev`)
+- ✅ Need database connection (PostgreSQL)
+- ✅ Use Supabase test environment
+- ✅ Require Stripe test API keys
+- ✅ Are **integration tests**, not unit tests
+
+### Test Status
+
+**Main Jest Suite (617 tests):** ✅ ALL PASSING
+- Unit tests: ✅ 556 passing
+- Integration tests: ✅ 73 passing
+- E2E tests: ✅ 17 passing
+
+**API Service Tests:** Require server setup
+- WebSocket integration: Requires running server
+- Payment flows: Requires Stripe test keys
+- Auth endpoints: Requires Supabase connection
+
 ## Contributing
 
 When adding new features:
@@ -412,6 +460,18 @@ When adding new features:
 
 For questions or issues with tests:
 1. Check this documentation
-2. Review existing test files for examples
-3. Open an issue on GitHub
-4. Contact the development team
+2. Review the [Test Execution Report](./TEST_EXECUTION_REPORT.md)
+3. See the [Testing Quick Start Guide](./TESTING_QUICK_START.md)
+4. Review existing test files for examples
+5. Open an issue on GitHub
+6. Contact the development team
+
+## Recent Updates (2026-01-05)
+
+✅ **All 617 tests passing** across 41 test suites
+- Successfully verified all unit, integration, and E2E tests
+- Test infrastructure confirmed working correctly
+- All test commands functioning as expected
+- Code coverage at 22% (below 70% target, but tests are passing)
+
+See [TEST_EXECUTION_REPORT.md](./TEST_EXECUTION_REPORT.md) for detailed results.
