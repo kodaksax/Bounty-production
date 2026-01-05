@@ -138,7 +138,7 @@ const supabaseAdminClient = createClient<Database>(
 /**
  * Get Supabase admin client for user management operations
  */
-function getSupabaseAdmin() {
+function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
   return supabaseAdminClient;
 }
 

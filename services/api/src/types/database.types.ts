@@ -102,38 +102,73 @@ export type Database = {
   public: {
     Tables: {
       profiles: {
-        Row: Profile
-        Insert: Omit<Profile, "id" | "created_at" | "updated_at">
-        Update: Partial<Omit<Profile, "id" | "created_at">>
-      }
+        Row: Profile;
+        Insert: Omit<Profile, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<Profile, "id" | "created_at">>;
+      };
       bounties: {
-        Row: Bounty
-        Insert: Omit<Bounty, "id" | "created_at" | "updated_at" | "distance" | "averageRating" | "ratingCount" | "accepted_by" | "username" | "poster_avatar" | "is_stale" | "stale_reason" | "stale_detected_at" | "payment_intent_id">
-        Update: Partial<Omit<Bounty, "id" | "created_at" | "distance" | "averageRating" | "ratingCount" | "username" | "poster_avatar">>
-      }
+        Row: Bounty;
+        Insert: Omit<Bounty, "id" | "created_at" | "updated_at" | "distance" | "averageRating" | "ratingCount" | "accepted_by" | "username" | "poster_avatar" | "is_stale" | "stale_reason" | "stale_detected_at" | "payment_intent_id">;
+        Update: Partial<Omit<Bounty, "id" | "created_at" | "distance" | "averageRating" | "ratingCount" | "username" | "poster_avatar">>;
+      };
       skills: {
-        Row: Skill
-        Insert: Omit<Skill, "id" | "created_at">
-        Update: Partial<Omit<Skill, "id" | "created_at">>
-      }
+        Row: Skill;
+        Insert: Omit<Skill, "id" | "created_at">;
+        Update: Partial<Omit<Skill, "id" | "created_at">>;
+      };
       bounty_requests: {
-        Row: BountyRequest
-        Insert: Omit<BountyRequest, "id" | "created_at" | "updated_at">
-        Update: Partial<Omit<BountyRequest, "id" | "created_at">>
-      }
-    }
+        Row: BountyRequest;
+        Insert: Omit<BountyRequest, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<BountyRequest, "id" | "created_at">>;
+      };
+      // Additional tables used in consolidated routes
+      wallet_transactions: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      outbox_events: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      stripe_events: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      completion_submissions: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      conversations: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      messages: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+      conversation_participants: {
+        Row: Record<string, any>;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+      };
+    };
     Views: {
-      [key: string]: {
-        Row: Record<string, unknown>
-        Insert: Record<string, unknown>
-        Update: Record<string, unknown>
-      }
-    }
+      [_ in never]: never;
+    };
     Functions: {
-      [key: string]: {
-        Args: Record<string, unknown>
-        Returns: unknown
-      }
-    }
-  }
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
+  };
 }

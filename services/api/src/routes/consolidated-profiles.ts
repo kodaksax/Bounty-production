@@ -108,7 +108,7 @@ interface Profile {
  */
 let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
 
-function getSupabaseAdmin() {
+function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
   if (!supabaseAdmin) {
     supabaseAdmin = createClient<Database>(
       config.supabase.url,
