@@ -66,7 +66,7 @@ describe('WebSocket Bounty Updates', () => {
       const { useBounties } = await import('../../hooks/useBounties');
       const { renderHook } = await import('@testing-library/react-hooks');
 
-      const { result } = renderHook(() => useBounties());
+      renderHook(() => useBounties());
 
       // Verify WebSocket event subscription
       expect(mockWsAdapter.on).toHaveBeenCalledWith('bounty.status', expect.any(Function));
@@ -328,6 +328,74 @@ describe('WebSocket Bounty Updates', () => {
       expect(mockBountyService.getAll).toHaveBeenCalled();
       expect(result.current.bounties).toHaveLength(2);
       expect(result.current.bounties[0].status).toBe('in_progress');
+    });
+  });
+
+  describe('Add and Remove Bounties', () => {
+    it('should add a bounty to the local state', async () => {
+      const { useBounties } = await import('../../hooks/useBounties');
+      const { renderHook, act } = await import('@testing-library/react-hooks');
+
+      mockBountyService.getAll.mockResolvedValue([
+        { id: 1, status: 'open', title: 'Test Bounty 1' },
+      ]);
+
+      const { result, waitForNextUpdate } = renderHook(() => useBounties());
+      await waitForNextUpdate();
+
+      // Add a new bounty
+      const newBounty = { id: 2, status: 'open', title: 'Test Bounty 2' };
+      act(() => {
+        result.current.addBounty(newBounty);
+      });
+
+      expect(result.current.bounties).toHaveLength(2);
+      expect(result.current.bounties[0]).toEqual(newBounty);
+      expect(result.current.bounties[1].id).toBe(1);
+    });
+
+    it('should remove a bounty from the local state', async () => {
+      const { useBounties } = await import('../../hooks/useBounties');
+      const { renderHook, act } = await import('@testing-library/react-hooks');
+
+      mockBountyService.getAll.mockResolvedValue([
+        { id: 1, status: 'open', title: 'Test Bounty 1' },
+        { id: 2, status: 'open', title: 'Test Bounty 2' },
+      ]);
+
+      const { result, waitForNextUpdate } = renderHook(() => useBounties());
+      await waitForNextUpdate();
+
+      expect(result.current.bounties).toHaveLength(2);
+
+      // Remove a bounty by numeric id
+      act(() => {
+        result.current.removeBounty(1);
+      });
+
+      expect(result.current.bounties).toHaveLength(1);
+      expect(result.current.bounties[0].id).toBe(2);
+    });
+
+    it('should remove a bounty with string id', async () => {
+      const { useBounties } = await import('../../hooks/useBounties');
+      const { renderHook, act } = await import('@testing-library/react-hooks');
+
+      mockBountyService.getAll.mockResolvedValue([
+        { id: 1, status: 'open', title: 'Test Bounty 1' },
+        { id: 2, status: 'open', title: 'Test Bounty 2' },
+      ]);
+
+      const { result, waitForNextUpdate } = renderHook(() => useBounties());
+      await waitForNextUpdate();
+
+      // Remove a bounty by string id
+      act(() => {
+        result.current.removeBounty('2');
+      });
+
+      expect(result.current.bounties).toHaveLength(1);
+      expect(result.current.bounties[0].id).toBe(1);
     });
   });
 });

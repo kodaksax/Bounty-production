@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { logClientInfo, logClientError } from '../lib/services/monitoring';
@@ -18,8 +18,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const webSocketState = useWebSocket();
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'disconnected'>('disconnected');
   const [lastConnectedAt, setLastConnectedAt] = useState<Date | null>(null);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
 
   /**
    * Enhanced reconnect with exponential backoff
@@ -34,40 +34,40 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const baseDelay = 1000; // 1 second
     const maxDelay = 60000; // 60 seconds
 
-    setReconnectAttempts((attempts) => {
-      if (attempts >= maxAttempts) {
-        logClientError('Max reconnection attempts reached', { attempts });
-        setConnectionQuality('disconnected');
-        return attempts;
+    const attempts = reconnectAttemptsRef.current;
+    
+    if (attempts >= maxAttempts) {
+      logClientError('Max reconnection attempts reached', { attempts });
+      setConnectionQuality('disconnected');
+      return;
+    }
+
+    // Clear any existing timeout to prevent race conditions
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+
+    // Calculate delay with exponential backoff
+    const delay = Math.min(baseDelay * Math.pow(2, attempts), maxDelay);
+    
+    logClientInfo(`Reconnecting (attempt ${attempts + 1}/${maxAttempts}) in ${delay}ms`);
+    
+    reconnectTimeoutRef.current = setTimeout(async () => {
+      try {
+        await webSocketState.reconnect();
+        reconnectAttemptsRef.current = 0; // Reset on successful reconnect
+        setConnectionQuality('good');
+        setLastConnectedAt(new Date());
+        reconnectTimeoutRef.current = null;
+      } catch (error) {
+        logClientError('Reconnection failed', { error, attempts: attempts + 1 });
+        reconnectAttemptsRef.current = attempts + 1;
+        setConnectionQuality('poor');
+        reconnectTimeoutRef.current = null;
+        // Schedule next retry
+        enhancedReconnect();
       }
-
-      // Clear any existing timeout to prevent race conditions
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-
-      // Calculate delay with exponential backoff
-      const delay = Math.min(baseDelay * Math.pow(2, attempts), maxDelay);
-      
-      logClientInfo(`Reconnecting (attempt ${attempts + 1}/${maxAttempts}) in ${delay}ms`);
-      
-      reconnectTimeoutRef.current = setTimeout(async () => {
-        try {
-          await webSocketState.reconnect();
-          setReconnectAttempts(0); // Reset on successful reconnect
-          setConnectionQuality('good');
-          setLastConnectedAt(new Date());
-          reconnectTimeoutRef.current = null;
-        } catch (error) {
-          logClientError('Reconnection failed', { error, attempts: attempts + 1 });
-          setReconnectAttempts(attempts + 1);
-          setConnectionQuality('poor');
-          reconnectTimeoutRef.current = null;
-        }
-      }, delay);
-
-      return attempts;
-    });
+    }, delay);
   }, [isLoggedIn, webSocketState]);
 
   /**
@@ -77,7 +77,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     if (webSocketState.isConnected) {
       setConnectionQuality('excellent');
       setLastConnectedAt(new Date());
-      setReconnectAttempts(0);
+      reconnectAttemptsRef.current = 0;
     } else {
       // If we were previously connected, this is a disconnect
       if (lastConnectedAt) {
@@ -88,7 +88,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnectionQuality('disconnected');
       }
     }
-  }, [webSocketState.isConnected, lastConnectedAt]);
+  }, [webSocketState.isConnected, lastConnectedAt, enhancedReconnect]);
 
   /**
    * Manage connection based on auth state
@@ -106,7 +106,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       disconnect();
       setConnectionQuality('disconnected');
       setLastConnectedAt(null);
-      setReconnectAttempts(0);
+      reconnectAttemptsRef.current = 0;
       
       // Clear any pending reconnection timeout
       if (reconnectTimeoutRef.current) {
@@ -116,11 +116,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoggedIn, webSocketState.isConnected, webSocketState.connect, webSocketState.disconnect]);
 
-  const contextValue: WebSocketContextValue = {
+  const contextValue: WebSocketContextValue = useMemo(() => ({
     ...webSocketState,
     connectionQuality,
     lastConnectedAt,
-  };
+  }), [webSocketState, connectionQuality, lastConnectedAt]);
 
   return (
     <WebSocketContext.Provider value={contextValue}>

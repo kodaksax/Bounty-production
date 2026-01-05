@@ -209,7 +209,7 @@ function ConnectionIndicator() {
 ```typescript
 {
   type: 'bounty.status',
-  id: 'bounty-uuid-123',
+  id: 123,
   status: 'in_progress',
   timestamp: '2026-01-03T12:00:00.000Z'
 }

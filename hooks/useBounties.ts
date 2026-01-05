@@ -66,7 +66,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
   const [error, setError] = useState<string | null>(null);
 
   // Store for optimistic updates rollback
-  const [optimisticUpdates_map] = useState<Map<string | number, Bounty>>(new Map());
+  const [optimisticUpdatesMap] = useState<Map<number, Bounty>>(new Map());
 
   /**
    * Fetch bounties from the service
@@ -109,7 +109,8 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
    * Remove a bounty from the local state
    */
   const removeBounty = useCallback((id: string | number) => {
-    setBounties((prev) => prev.filter((b) => b.id !== id));
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    setBounties((prev) => prev.filter((b) => b.id !== numericId));
   }, []);
 
   /**
@@ -122,25 +123,27 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         return;
       }
 
+      // Normalize id to number for consistent comparisons
+      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
       let previousBounty: Bounty | undefined;
 
       if (optimisticUpdates) {
         // Store previous state for rollback
-        previousBounty = bounties.find((b) => b.id === id);
+        previousBounty = bounties.find((b) => b.id === numericId);
         if (previousBounty) {
-          optimisticUpdates_map.set(id, previousBounty);
+          optimisticUpdatesMap.set(numericId, previousBounty);
         }
 
         // Optimistically update UI
         setBounties((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b))
+          prev.map((b) => (b.id === numericId ? { ...b, status: newStatus } : b))
         );
       }
 
       try {
         // Make the actual API call
         const updated = await bountyService.updateStatus(
-          typeof id === 'string' ? parseInt(id, 10) : id,
+          numericId,
           newStatus
         );
 
@@ -149,11 +152,11 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         }
 
         // Clear optimistic update cache on success
-        optimisticUpdates_map.delete(id);
+        optimisticUpdatesMap.delete(numericId);
 
         // Update with the actual response data
         setBounties((prev) =>
-          prev.map((b) => (b.id === id ? updated : b))
+          prev.map((b) => (b.id === numericId ? updated : b))
         );
       } catch (err) {
         logger.error('Error updating bounty status', { id, newStatus, error: err });
@@ -161,17 +164,17 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         // Rollback optimistic update on failure
         if (optimisticUpdates && previousBounty) {
           setBounties((prev) =>
-            prev.map((b) => (b.id === id ? previousBounty : b))
+            prev.map((b) => (b.id === numericId ? previousBounty : b))
           );
         }
 
         // Clear from cache
-        optimisticUpdates_map.delete(id);
+        optimisticUpdatesMap.delete(numericId);
 
         throw err;
       }
     },
-    [bounties, optimisticUpdates, optimisticUpdates_map]
+    [bounties, optimisticUpdates, optimisticUpdatesMap]
   );
 
   /**
@@ -222,8 +225,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
   // Subscribe to WebSocket events for real-time updates
   // Memoize the handler to prevent unnecessary subscription cycles
   useEffect(() => {
-    const unsubscribe = useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
-    return unsubscribe;
+    useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
   }, [handleBountyStatusUpdate]);
 
   // Initial fetch on mount or when dependencies change
