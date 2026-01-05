@@ -37,7 +37,7 @@ export async function initializeIdempotencyService(): Promise<void> {
 
   try {
     // Dynamically import ioredis (optional dependency)
-    Redis = (await import('ioredis' as any)).default;
+    Redis = ((await import('ioredis')) as any).default;
     
     redisClient = new Redis(redisUrl, {
       retryStrategy: (times: number) => {

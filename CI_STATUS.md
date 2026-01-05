@@ -60,9 +60,8 @@ This document provides the current status of the CI/CD pipeline for the Bounty-p
 #### Fixed Issues ✅
 1. ✅ Duplicate imports in `search.ts` and `stale-bounty.ts`
 2. ✅ Missing variable definitions in `wallet.ts`
-3. ✅ Stripe API version mismatch (updated to `2025-08-27.basil`)
-4. ✅ ioredis optional import type issue
-5. ✅ Logger method signature issues (pino structured logging format)
+3. ✅ ioredis optional import type issue
+4. ✅ Logger method signature issues (pino structured logging format)
 
 #### Remaining Issues ⚠️
 The remaining type errors (~117 errors) are primarily in the `services/api` workspace:
