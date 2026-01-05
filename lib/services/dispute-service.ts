@@ -5,6 +5,39 @@ import { cancellationService } from './cancellation-service';
 import { bountyService } from './bounty-service';
 
 /**
+ * Helper to send notification via Supabase direct insert
+ */
+async function sendNotification(
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  data?: Record<string, any>
+): Promise<void> {
+  try {
+    if (!isSupabaseConfigured) {
+      logger.error('Supabase not configured for sending notification');
+      return;
+    }
+
+    const { error } = await supabase.from('notifications').insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      data: data || null,
+      read: false,
+    });
+
+    if (error) {
+      logger.error('Error sending notification', { error, userId, type });
+    }
+  } catch (error) {
+    logger.error('Error sending notification', { error });
+  }
+}
+
+/**
  * Service for handling bounty dispute lifecycle
  */
 export const disputeService = {
@@ -75,6 +108,47 @@ export const disputeService = {
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
+
+      // Send notifications to involved parties
+      try {
+        const bounty = await bountyService.getById(String(data.bounty_id));
+        if (bounty) {
+          // Notify the bounty poster
+          if (bounty.user_id !== initiatorId) {
+            await sendNotification(
+              bounty.user_id,
+              'dispute_created',
+              'Dispute Created',
+              `A dispute has been opened for bounty: ${bounty.title}`,
+              {
+                bountyId: String(data.bounty_id),
+                disputeId: data.id,
+                cancellationId: cancellationId,
+              }
+            );
+          }
+          
+          // If there's a hunter involved (from cancellation), notify them too
+          if (cancellation.requesterId && 
+              cancellation.requesterId !== initiatorId && 
+              cancellation.requesterId !== bounty.user_id) {
+            await sendNotification(
+              cancellation.requesterId,
+              'dispute_created',
+              'Dispute Created',
+              `A dispute has been opened for bounty: ${bounty.title}`,
+              {
+                bountyId: String(data.bounty_id),
+                disputeId: data.id,
+                cancellationId: cancellationId,
+              }
+            );
+          }
+        }
+      } catch (notifError) {
+        // Log but don't fail the dispute creation if notification fails
+        logger.error('Error sending dispute creation notifications', { error: notifError });
+      }
 
       return dispute;
     } catch (err) {
@@ -267,6 +341,12 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // Get the dispute first to access its data
+      const dispute = await this.getDisputeById(disputeId);
+      if (!dispute) {
+        throw new Error('Dispute not found');
+      }
+
       const { error } = await supabase
         .from('bounty_disputes')
         .update({
@@ -280,6 +360,62 @@ export const disputeService = {
       if (error) {
         logger.error('Error resolving dispute', { error, disputeId });
         throw error;
+      }
+
+      // Send notifications to involved parties
+      try {
+        const bounty = await bountyService.getById(dispute.bountyId);
+        if (bounty) {
+          // Notify the dispute initiator
+          await sendNotification(
+            dispute.initiatorId,
+            'dispute_resolved',
+            'Dispute Resolved',
+            `Your dispute for bounty "${bounty.title}" has been resolved.`,
+            {
+              bountyId: dispute.bountyId,
+              disputeId: disputeId,
+              resolution: resolution.substring(0, 100), // Truncate for notification
+            }
+          );
+
+          // Notify the bounty poster if different from initiator
+          if (bounty.user_id !== dispute.initiatorId) {
+            await sendNotification(
+              bounty.user_id,
+              'dispute_resolved',
+              'Dispute Resolved',
+              `A dispute for bounty "${bounty.title}" has been resolved.`,
+              {
+                bountyId: dispute.bountyId,
+                disputeId: disputeId,
+                resolution: resolution.substring(0, 100),
+              }
+            );
+          }
+
+          // Get cancellation to notify other party if exists
+          const cancellation = await cancellationService.getCancellationById(dispute.cancellationId);
+          if (cancellation && 
+              cancellation.requesterId && 
+              cancellation.requesterId !== dispute.initiatorId && 
+              cancellation.requesterId !== bounty.user_id) {
+            await sendNotification(
+              cancellation.requesterId,
+              'dispute_resolved',
+              'Dispute Resolved',
+              `A dispute for bounty "${bounty.title}" has been resolved.`,
+              {
+                bountyId: dispute.bountyId,
+                disputeId: disputeId,
+                resolution: resolution.substring(0, 100),
+              }
+            );
+          }
+        }
+      } catch (notifError) {
+        // Log but don't fail the resolution if notification fails
+        logger.error('Error sending dispute resolution notifications', { error: notifError });
       }
 
       return true;
@@ -335,9 +471,9 @@ export const disputeService = {
   },
 
   /**
-   * Get all open disputes (for admin review)
+   * Get all active disputes (open and under review) for admin review
    */
-  async getOpenDisputes(): Promise<BountyDispute[]> {
+  async getAllActiveDisputes(): Promise<BountyDispute[]> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
@@ -350,7 +486,7 @@ export const disputeService = {
         .order('created_at', { ascending: true });
 
       if (error) {
-        logger.error('Error fetching open disputes', { error });
+        logger.error('Error fetching active disputes', { error });
         return [];
       }
 
@@ -370,7 +506,7 @@ export const disputeService = {
       }));
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in getOpenDisputes', { error: { message: error.message } });
+      logger.error('Error in getAllActiveDisputes', { error: { message: error.message } });
       return [];
     }
   },
