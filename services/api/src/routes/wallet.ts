@@ -153,15 +153,18 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/deposit', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let amount: number | undefined;
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { amount, paymentIntentId } = request.body as {
+      const body = request.body as {
         amount: number;
         paymentIntentId?: string;
       };
+      amount = body.amount;
+      const paymentIntentId = body.paymentIntentId;
 
       if (!amount || amount <= 0) {
         return reply.code(400).send({ error: 'Invalid amount' });
@@ -203,7 +206,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       logErrorWithContext(request, error, {
         operation: 'create_deposit',
         userId: request.userId,
-        amount: body.amountDollars,
+        amount: amount,
       });
       return reply.code(500).send({
         error: 'Failed to create deposit',
@@ -358,15 +361,18 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/connect/transfer', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let amount: number | undefined;
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { amount, currency = 'usd' } = request.body as {
+      const body = request.body as {
         amount: number;
         currency?: string;
       };
+      amount = body.amount;
+      const currency = body.currency || 'usd';
 
       if (!amount || amount <= 0) {
         return reply.code(400).send({ error: 'Invalid amount' });
@@ -437,7 +443,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       logErrorWithContext(request, error, {
         operation: 'process_transfer',
         userId: request.userId,
-        amount: body.amount,
+        amount: amount,
       });
       return reply.code(500).send({
         error: 'Failed to process transfer',
