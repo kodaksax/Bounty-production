@@ -21,6 +21,7 @@ import {
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
+import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
 
 /**
  * Validation schemas using Zod
@@ -219,6 +220,18 @@ export async function registerConsolidatedBountyRoutes(
       );
 
       try {
+        // Generate cache key based on query parameters
+        const cacheKey = `status:${query.status || 'open'}:cat:${query.category || 'all'}:user:${query.user_id || 'all'}:accepted:${query.accepted_by || 'all'}:page:${query.page}:limit:${query.limit}:sort:${query.sortBy}:${query.sortOrder}`;
+        
+        // Try to get from cache first
+        const cachedResult = await redisService.get<any>(cacheKey, CacheKeyPrefix.BOUNTY_LIST);
+        
+        if (cachedResult) {
+          request.log.info({ cacheKey }, 'Bounty list fetched from cache');
+          return cachedResult;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         // Build query
@@ -268,12 +281,7 @@ export async function registerConsolidatedBountyRoutes(
           throw new Error(error.message);
         }
 
-        request.log.info(
-          { count: bounties?.length || 0, total: count },
-          'Bounties listed successfully'
-        );
-
-        return {
+        const result = {
           bounties: bounties || [],
           pagination: {
             page: query.page,
@@ -282,6 +290,16 @@ export async function registerConsolidatedBountyRoutes(
             totalPages: count ? Math.ceil(count / query.limit) : 0,
           },
         };
+
+        // Store in cache for future requests
+        await redisService.set(cacheKey, result, CacheKeyPrefix.BOUNTY_LIST);
+
+        request.log.info(
+          { count: bounties?.length || 0, total: count, cached: false },
+          'Bounties listed successfully'
+        );
+
+        return result;
       } catch (error) {
         request.log.error({ error }, 'Unexpected error listing bounties');
         throw error;
@@ -322,6 +340,15 @@ export async function registerConsolidatedBountyRoutes(
       );
 
       try {
+        // Try to get from cache first
+        const cachedBounty = await redisService.get<any>(id, CacheKeyPrefix.BOUNTY);
+        
+        if (cachedBounty) {
+          request.log.info({ bountyId: id }, 'Bounty fetched from cache');
+          return cachedBounty;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         const { data: bounty, error } = await supabase
@@ -342,8 +369,11 @@ export async function registerConsolidatedBountyRoutes(
           throw new NotFoundError('Bounty', id);
         }
 
+        // Store in cache for future requests
+        await redisService.set(id, bounty, CacheKeyPrefix.BOUNTY);
+
         request.log.info(
-          { bountyId: id },
+          { bountyId: id, cached: false },
           'Bounty fetched successfully'
         );
 
@@ -458,6 +488,9 @@ export async function registerConsolidatedBountyRoutes(
           );
           throw new Error(error.message);
         }
+
+        // Invalidate bounty list caches since a new bounty was created
+        await cacheInvalidation.invalidateBountyLists();
 
         request.log.info(
           { userId, bountyId: bounty.id },
@@ -602,6 +635,10 @@ export async function registerConsolidatedBountyRoutes(
           throw new Error(updateError.message);
         }
 
+        // Invalidate caches
+        await cacheInvalidation.invalidateBounty(bountyId);
+        await cacheInvalidation.invalidateBountyLists();
+
         request.log.info(
           { userId, bountyId },
           'Bounty updated successfully'
@@ -714,6 +751,10 @@ export async function registerConsolidatedBountyRoutes(
           );
           throw new Error(deleteError.message);
         }
+
+        // Invalidate caches
+        await cacheInvalidation.invalidateBounty(bountyId);
+        await cacheInvalidation.invalidateBountyLists();
 
         request.log.info(
           { userId, bountyId },
@@ -846,6 +887,10 @@ export async function registerConsolidatedBountyRoutes(
           throw new ConflictError('This bounty has already been accepted by another user');
         }
 
+        // Invalidate caches since bounty status changed
+        await cacheInvalidation.invalidateBounty(bountyId);
+        await cacheInvalidation.invalidateBountyLists();
+
         request.log.info(
           { userId, bountyId },
           'Bounty accepted successfully'
@@ -964,6 +1009,10 @@ export async function registerConsolidatedBountyRoutes(
           throw new Error(updateError.message);
         }
 
+        // Invalidate caches since bounty status changed
+        await cacheInvalidation.invalidateBounty(bountyId);
+        await cacheInvalidation.invalidateBountyLists();
+
         request.log.info(
           { userId, bountyId },
           'Bounty marked complete successfully'
@@ -1081,6 +1130,10 @@ export async function registerConsolidatedBountyRoutes(
           );
           throw new Error(updateError.message);
         }
+
+        // Invalidate caches since bounty status changed
+        await cacheInvalidation.invalidateBounty(bountyId);
+        await cacheInvalidation.invalidateBountyLists();
 
         request.log.info(
           { userId, bountyId },

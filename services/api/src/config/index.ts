@@ -139,6 +139,21 @@ export const config = {
     ssl: getBoolean('DB_SSL', false),
   },
 
+  // Redis Configuration
+  redis: {
+    host: getOptional('REDIS_HOST', 'localhost'),
+    port: getNumber('REDIS_PORT', 6379),
+    password: getOptional('REDIS_PASSWORD', ''),
+    db: getNumber('REDIS_DB', 0),
+    keyPrefix: getOptional('REDIS_KEY_PREFIX', 'bountyexpo:'),
+    enabled: getBoolean('REDIS_ENABLED', true),
+    ttl: {
+      profile: getNumber('REDIS_TTL_PROFILE', 300), // 5 minutes
+      bounty: getNumber('REDIS_TTL_BOUNTY', 180), // 3 minutes
+      bountyList: getNumber('REDIS_TTL_BOUNTY_LIST', 60), // 1 minute
+    },
+  },
+
   // Supabase Configuration
   supabase: {
     url: getRequired('EXPO_PUBLIC_SUPABASE_URL', ['SUPABASE_URL', 'PUBLIC_SUPABASE_URL']),
@@ -287,6 +302,13 @@ export function getConfigSummary() {
       name: config.database.name,
       hasUrl: !!config.database.url,
       pool: config.database.pool,
+    },
+    redis: {
+      host: config.redis.host,
+      port: config.redis.port,
+      enabled: config.redis.enabled,
+      hasPassword: !!config.redis.password,
+      ttl: config.redis.ttl,
     },
     supabase: {
       url: config.supabase.url,
