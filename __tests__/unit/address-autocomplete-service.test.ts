@@ -32,6 +32,16 @@ jest.mock('expo-constants', () => ({
 import { addressAutocompleteService, isPlaceDetailsError } from '../../lib/services/address-autocomplete-service';
 
 describe.skip('AddressAutocompleteService', () => {
+  // Set up environment variable before all tests to ensure proper configuration
+  beforeAll(() => {
+    process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'test-api-key-12345';
+  });
+
+  afterAll(() => {
+    // Clean up environment variable after tests
+    delete process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     addressAutocompleteService.clearCache();
