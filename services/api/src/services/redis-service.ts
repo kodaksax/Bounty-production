@@ -16,7 +16,7 @@ import { config } from '../config';
 /**
  * Redis client instance (singleton)
  */
-let redisClient: Redis | null = null;
+let redisClient: InstanceType<typeof Redis> | null = null;
 
 /**
  * Connection state tracking
@@ -37,7 +37,7 @@ export const CacheKeyPrefix = {
  * Initialize Redis connection
  * Called automatically on first use or can be called explicitly
  */
-export async function initRedis(): Promise<Redis | null> {
+export async function initRedis(): Promise<InstanceType<typeof Redis> | null> {
   // Return early if Redis is disabled
   if (!config.redis.enabled) {
     console.log('[Redis] Redis caching is disabled in configuration');
@@ -72,7 +72,7 @@ export async function initRedis(): Promise<Redis | null> {
       password: config.redis.password || undefined,
       db: config.redis.db,
       keyPrefix: config.redis.keyPrefix,
-      retryStrategy: (times) => {
+      retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000);
         console.log(`[Redis] Retry attempt ${times}, waiting ${delay}ms`);
         return delay;
@@ -94,7 +94,7 @@ export async function initRedis(): Promise<Redis | null> {
       isConnected = true;
     });
 
-    redisClient.on('error', (err) => {
+    redisClient.on('error', (err: Error) => {
       console.error('[Redis] Redis client error:', err.message);
       isConnected = false;
     });
@@ -120,7 +120,7 @@ export async function initRedis(): Promise<Redis | null> {
         resolve(true);
       });
 
-      redisClient!.once('error', (err) => {
+      redisClient!.once('error', (err: Error) => {
         clearTimeout(timeout);
         reject(err);
       });
@@ -144,7 +144,7 @@ export async function initRedis(): Promise<Redis | null> {
  * Get Redis client instance
  * Initializes connection if not already connected
  */
-async function getRedisClient(): Promise<Redis | null> {
+async function getRedisClient(): Promise<InstanceType<typeof Redis> | null> {
   if (!config.redis.enabled) {
     return null;
   }
@@ -276,7 +276,7 @@ export const redisService = {
 
       // Remove the global prefix from keys before deletion
       // since ioredis client already includes it
-      const keysWithoutGlobalPrefix = keys.map(k => 
+      const keysWithoutGlobalPrefix = keys.map((k: string) => 
         k.startsWith(config.redis.keyPrefix) 
           ? k.slice(config.redis.keyPrefix.length) 
           : k

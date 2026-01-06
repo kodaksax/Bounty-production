@@ -139,7 +139,7 @@ cp .env.example .env
 
 3. **Start Development Stack**
 ```bash
-# Start infrastructure services (PostgreSQL + Stripe Mock)
+# Start infrastructure services (PostgreSQL + Redis + Stripe Mock)
 pnpm dev
 
 # In a new terminal, start the API server  
@@ -147,6 +147,7 @@ pnpm dev:api
 
 # This will:
 # ✅ Start PostgreSQL database on port 5432
+# ✅ Start Redis cache on port 6379
 # ✅ Start Stripe Mock server on port 12111
 # ✅ Start BountyExpo API server on port 3001
 # ✅ Automatically run database migrations
@@ -200,6 +201,7 @@ After running `pnpm dev`, these services will be available:
 |---------|-----|-------------|
 | **API Server** | http://localhost:3001 | Main BountyExpo API |
 | **PostgreSQL** | localhost:5432 | Database server |
+| **Redis** | localhost:6379 | Cache server |
 | **Stripe Mock** | http://localhost:12111 | Mock payment processing |
 | **API Health** | http://localhost:3001/health | Health check endpoint |
 
@@ -505,6 +507,40 @@ rm -rf .expo
 npx expo start --clear
 ```
 
+### Redis Caching (API Layer)
+The API uses Redis for caching frequently accessed data to improve response times and reduce database load.
+
+**Cached Resources:**
+- **Profiles**: Cached for 5 minutes (300s)
+- **Bounties**: Cached for 3 minutes (180s)
+- **Bounty Lists**: Cached for 1 minute (60s)
+
+**Cache Invalidation:**
+- Profile updates automatically invalidate the profile cache
+- Bounty create/update/delete operations invalidate bounty caches
+- Status changes (accept/complete/archive) invalidate related caches
+- List caches are cleared when bounties are modified
+
+**Configuration:**
+Set these environment variables to customize caching behavior:
+
+```bash
+# Redis Configuration
+REDIS_HOST=localhost          # Redis server host
+REDIS_PORT=6379              # Redis server port
+REDIS_ENABLED=true           # Enable/disable caching
+REDIS_TTL_PROFILE=300        # Profile cache TTL (seconds)
+REDIS_TTL_BOUNTY=180         # Bounty cache TTL (seconds)
+REDIS_TTL_BOUNTY_LIST=60     # Bounty list cache TTL (seconds)
+```
+
+**Testing Redis:**
+```bash
+# Test Redis connection and caching operations
+cd services/api
+npx tsx src/test-redis-simple.ts
+```
+
 ### Image Optimization
 - **Auto-caching**: The app uses `expo-image` instead of React Native's `Image` for automatic caching
 - **Lazy loading**: Images in lists are loaded on-demand with thumbnail optimization
@@ -710,6 +746,31 @@ pnpm type-check
 - Ensure you're using test keys (start with `sk_test_` and `pk_test_`)
 - Verify Stripe Mock server is running on port 12111
 - Check the console for payment-related errors
+
+**"Redis connection issues"**
+```bash
+# Check if Redis container is running
+docker ps | grep redis
+
+# Restart Redis service
+docker compose restart redis
+
+# Check Redis logs
+docker logs bountyexpo-redis
+
+# Test Redis connection
+cd services/api
+npx tsx src/test-redis-simple.ts
+```
+
+**"Cache issues or stale data"**
+```bash
+# Flush Redis cache (use with caution)
+docker exec bountyexpo-redis redis-cli FLUSHDB
+
+# Or disable caching temporarily
+# Set REDIS_ENABLED=false in .env
+```
 
 ### Getting Help
 
