@@ -540,10 +540,58 @@ Performance is tracked using:
 - Bundle size < 10MB
 - App launch < 2 seconds
 
-## 🧪 Testing (Planned)
-- Unit: domain helpers & formatting.
-- Integration: navigation flows (Detox / Maestro candidate).
-- Snapshot: stable UI components (BottomNav, PostingCard, ChatBubble).
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run unit tests only
+npm run test:unit
+
+# Run integration tests
+npm run test:integration
+
+# Run end-to-end tests
+npm run test:e2e
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Run with verbose output for debugging
+npm run test:verbose
+```
+
+### Test Status
+
+**Current Coverage** (~20% overall):
+- ✅ **593 tests passing** across unit, integration, and E2E suites
+- ✅ Strong coverage in critical areas:
+  - Phone & Email Verification (100%)
+  - Password Validation (94%)
+  - Sanitization Utilities (93%)
+  - Date Utilities (100%)
+  - Bounty Validation (100%)
+
+**Test Organization**:
+- `__tests__/unit/` - Unit tests for services, utilities, and components
+- `__tests__/integration/` - API integration tests
+- `__tests__/e2e/` - End-to-end user flow tests
+
+### Coverage Improvement
+
+We're actively working to increase test coverage across the codebase. See [COVERAGE_IMPROVEMENT_PLAN.md](./docs/COVERAGE_IMPROVEMENT_PLAN.md) for:
+- Current coverage metrics and goals
+- Prioritized areas for new tests
+- Testing best practices and patterns
+- How to contribute tests
+
+**Note**: Coverage thresholds are currently disabled in CI to allow incremental improvement without blocking development. Coverage reports are still generated and uploaded to Codecov for visibility.
 
 ## 🧭 Roadmap (Signal)
 Short Term:
