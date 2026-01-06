@@ -34,6 +34,16 @@ const { analyticsService } = require('../../../lib/services/analytics-service');
 const { performanceService } = require('../../../lib/services/performance-service');
 
 describe('Stripe Service', () => {
+  // Set up environment variables before all tests to ensure proper configuration
+  beforeAll(() => {
+    process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key_for_testing';
+  });
+
+  afterAll(() => {
+    // Clean up environment variables after tests
+    delete process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset fetch mock before each test
