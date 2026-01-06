@@ -290,7 +290,11 @@ global.console = {
       (
         args[0].includes('DeprecationWarning') ||
         args[0].includes('Some known noisy error') ||
-        args[0].includes('[StripeService]')
+        args[0].includes('[StripeService]') ||
+        args[0].includes('[phone-verification]') ||
+        args[0].includes('[auth-service]') ||
+        args[0].includes('[authProfileService]') ||
+        args[0].includes('Error getting permission status')
       )
     ) {
       return;
