@@ -6,6 +6,11 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { OfflineStatusBadge } from '../../components/offline-status-badge';
 
+// Mock expo vector icons
+jest.mock('@expo/vector-icons', () => ({
+  MaterialIcons: 'MaterialIcons',
+}));
+
 // Mock the useOfflineQueue hook
 jest.mock('../../hooks/useOfflineQueue', () => ({
   useOfflineQueue: jest.fn(),
