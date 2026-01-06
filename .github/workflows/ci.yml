@@ -67,7 +67,6 @@ jobs:
       
       - name: Generate coverage report
         run: npm run test:coverage
-        continue-on-error: true
         env:
           NODE_ENV: test
       
