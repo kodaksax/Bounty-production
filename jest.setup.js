@@ -279,6 +279,19 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock @expo/vector-icons
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  return {
+    MaterialIcons: (props) => React.createElement('MaterialIcons', props),
+    Ionicons: (props) => React.createElement('Ionicons', props),
+    FontAwesome: (props) => React.createElement('FontAwesome', props),
+    AntDesign: (props) => React.createElement('AntDesign', props),
+    Entypo: (props) => React.createElement('Entypo', props),
+    Feather: (props) => React.createElement('Feather', props),
+  };
+});
+
 // Mock console methods to reduce noise in tests, but preserve critical errors
 const originalError = console.error;
 global.console = {
