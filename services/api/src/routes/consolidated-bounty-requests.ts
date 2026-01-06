@@ -128,7 +128,7 @@ function getBountyPosterId(bounty: Bounty): string | null {
 export async function registerConsolidatedBountyRequestRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
-  
+
   /**
    * GET /api/bounty-requests
    * List bounty requests with optional filters
@@ -168,9 +168,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       const query = listRequestsSchema.parse(request.query);
 
       request.log.info(
-        { 
-          userId, 
-          filters: query 
+        {
+          userId,
+          filters: query
         },
         'Listing bounty requests'
       );
@@ -222,7 +222,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Authorization filter: users can only see requests for their bounties or their own applications
         // We'll filter this in application code after fetching since complex OR conditions in Supabase can be tricky
-        
+
         // Apply sorting
         dbQuery = dbQuery.order('created_at', { ascending: false });
 
@@ -242,7 +242,7 @@ export async function registerConsolidatedBountyRequestRoutes(
         // User can see requests if:
         // 1. They are the bounty poster (need to check bounty ownership)
         // 2. They are the hunter (applicant)
-        
+
         // Fetch bounty ownership for authorization
         if (requests && requests.length > 0) {
           const bountyIds = [...new Set(requests.map(r => r.bounty_id))];
@@ -250,7 +250,7 @@ export async function registerConsolidatedBountyRequestRoutes(
             .from('bounties')
             .select('id, user_id, poster_id')
             .in('id', bountyIds);
-          
+
           const bountyOwnership = new Map<string, string>();
           bounties?.forEach(b => {
             const posterId = b.poster_id || b.user_id;
@@ -276,7 +276,7 @@ export async function registerConsolidatedBountyRequestRoutes(
           // even though authorization filtering may reduce the returned items.
           // For large datasets, consider implementing database-level filtering with RLS.
           const total = typeof count === 'number' && Number.isFinite(count) ? count : 0;
-          
+
           return {
             requests: authorizedRequests,
             pagination: {
@@ -415,9 +415,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Get bounty requests by user ID',
-        params: z.object({
+        params: toJsonSchema(z.object({
           userId: z.string().uuid('Invalid user ID format'),
-        }),
+        }), 'GetBountyRequestsByUserParams'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -453,13 +453,13 @@ export async function registerConsolidatedBountyRequestRoutes(
               .from('bounties')
               .select('id, user_id, poster_id')
               .in('id', bountyIds);
-            
+
             // Filter to only requests for this user's bounties
             const userBountyIds = new Set(
               bounties?.filter(b => (b.poster_id || b.user_id) === userId).map(b => b.id) || []
             );
-            
-            const authorizedRequests = requests.filter(req => 
+
+            const authorizedRequests = requests.filter(req =>
               userBountyIds.has(req.bounty_id)
             );
 
@@ -561,7 +561,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Get the poster_id (with fallback to user_id)
         const posterId = getBountyPosterId(bounty);
-        
+
         if (!posterId) {
           throw new ValidationError('Bounty missing poster information');
         }
@@ -628,9 +628,9 @@ export async function registerConsolidatedBountyRequestRoutes(
         reply.code(201);
         return bountyRequest;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof ValidationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof ValidationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
@@ -883,10 +883,10 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         return updatedRequest;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError ||
-            error instanceof ValidationError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError ||
+          error instanceof ValidationError) {
           throw error;
         }
         request.log.error(
@@ -922,9 +922,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Delete bounty request (applicant only, pending status only)',
-        params: z.object({
+        params: toJsonSchema(z.object({
           id: z.string().uuid('Invalid request ID format'),
-        }),
+        }), 'DeleteBountyRequestParams'),
         response: {
           200: {
             type: 'object',
@@ -1009,9 +1009,9 @@ export async function registerConsolidatedBountyRequestRoutes(
           message: 'Bounty request deleted successfully',
         };
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
