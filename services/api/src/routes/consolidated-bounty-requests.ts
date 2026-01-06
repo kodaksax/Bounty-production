@@ -10,19 +10,18 @@
  * Bounty requests = applications from hunters to accept bounties
  */
 
-import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { 
-  asyncHandler, 
-  ValidationError, 
-  NotFoundError, 
-  AuthorizationError,
-  ConflictError
-} from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import {
+  asyncHandler,
+  AuthorizationError,
+  ConflictError,
+  NotFoundError,
+  ValidationError
+} from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
 
 /**

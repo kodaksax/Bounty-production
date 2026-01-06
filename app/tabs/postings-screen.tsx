@@ -10,7 +10,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { getCurrentUserId, CURRENT_USER_ID } from "lib/utils/data-utils"
+import { CURRENT_USER_ID, getCurrentUserId } from "lib/utils/data-utils"
 import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"

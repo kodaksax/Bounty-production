@@ -1,6 +1,5 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import NetInfo from '@react-native-community/netinfo'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { makeRedirectUri, ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
@@ -13,15 +12,14 @@ import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
 import { Checkbox } from '../../components/ui/checkbox'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
+import { setRememberMePreference } from '../../lib/auth-session-storage'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { parseAuthError, generateCorrelationId, getAuthErrorMessage } from '../../lib/utils/auth-errors'
+import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
-import { withTimeout } from '../../lib/utils/withTimeout'
-import { setRememberMePreference } from '../../lib/auth-session-storage'
 
 WebBrowser.maybeCompleteAuthSession()
 

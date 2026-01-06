@@ -8,18 +8,17 @@
  * - api/server.js (lines 348-418)
  */
 
-import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { 
-  asyncHandler, 
-  ValidationError, 
-  NotFoundError, 
-  AuthorizationError 
-} from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import {
+    asyncHandler,
+    AuthorizationError,
+    NotFoundError,
+    ValidationError
+} from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
 
 /**

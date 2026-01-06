@@ -1,8 +1,8 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 import type { BountyDispute, DisputeEvidence } from '../types';
-import { cancellationService } from './cancellation-service';
 import { bountyService } from './bounty-service';
+import { cancellationService } from './cancellation-service';
 
 /**
  * Helper to send notification via Supabase direct insert

@@ -1,15 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { logger } from '../services/logger';
-import { walletService } from '../services/wallet-service';
-import { stripeConnectService } from '../services/stripe-connect-service';
-import { 
-  checkIdempotencyKey, 
-  storeIdempotencyKey, 
-  removeIdempotencyKey
+import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import {
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
 } from '../services/idempotency-service';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
+import { logger } from '../services/logger';
+import { stripeConnectService } from '../services/stripe-connect-service';
+import { walletService } from '../services/wallet-service';
 
 // Platform account ID for fee collection
 // In production, this should be stored in environment variables

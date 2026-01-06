@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import { COLORS, RADIUS, SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
+import { SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'

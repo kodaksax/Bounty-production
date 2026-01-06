@@ -1,17 +1,15 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import * as Sentry from '@sentry/react-native'
+import { BrandingLogo } from "components/ui/branding-logo"
 import { router } from 'expo-router'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
-import { BrandingLogo } from "components/ui/branding-logo"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
-import { markIntentionalSignOut } from "../lib/utils/session-handler"
-import { withTimeout } from "../lib/utils/withTimeout"
 import { clearRememberMePreference } from "../lib/auth-session-storage"
+import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"

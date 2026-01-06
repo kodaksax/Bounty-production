@@ -5,8 +5,8 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
-import { AddCardModal } from "./add-card-modal"
 import { AddBankAccountModal } from "./add-bank-account-modal"
+import { AddCardModal } from "./add-card-modal"
 
 type PaymentMethodType = 'card' | 'bank_account'
 

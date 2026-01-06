@@ -6,18 +6,17 @@
  * Ensures idempotency and atomic balance operations
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { stripe } from '../services/consolidated-payment-service';
-import * as WalletService from '../services/consolidated-wallet-service';
+import { createClient } from '@supabase/supabase-js';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type Stripe from 'stripe';
 import { config } from '../config';
 import {
-  ValidationError,
   ExternalServiceError,
+  ValidationError,
 } from '../middleware/error-handler';
+import { stripe } from '../services/consolidated-payment-service';
+import * as WalletService from '../services/consolidated-wallet-service';
 import { logger } from '../services/logger';
-import { createClient } from '@supabase/supabase-js';
-import type Stripe from 'stripe';
-import { Database } from '../types/database.types';
 
 // Extend FastifyRequest to include rawBody for webhook signature verification
 declare module 'fastify' {

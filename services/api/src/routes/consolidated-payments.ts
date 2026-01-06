@@ -4,10 +4,10 @@
  */
 
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { asyncHandler } from '../middleware/error-handler';
-import * as PaymentService from '../services/consolidated-payment-service';
 import { z } from 'zod';
+import { asyncHandler } from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
+import * as PaymentService from '../services/consolidated-payment-service';
 
 /**
  * Request schemas for validation

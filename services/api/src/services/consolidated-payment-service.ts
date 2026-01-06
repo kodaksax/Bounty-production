@@ -4,14 +4,13 @@
  * Handles Stripe PaymentIntents, payment methods, and webhooks
  */
 
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { config } from '../config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
 import {
-  ValidationError,
   ExternalServiceError,
   handleStripeError,
+  ValidationError,
 } from '../middleware/error-handler';
 
 // Initialize Stripe
@@ -506,3 +505,4 @@ export async function getPaymentIntentStatus(
  * Export Stripe instance for advanced use cases
  */
 export { stripe };
+

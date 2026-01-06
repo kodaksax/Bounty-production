@@ -108,7 +108,6 @@ initializeIdempotencyService().catch((error: Error) => {
   logger.error('[startup] Failed to initialize idempotency service:', error);
 });
 
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 // Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({

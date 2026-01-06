@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { outboxEvents } from '../db/schema';

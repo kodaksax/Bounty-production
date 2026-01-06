@@ -6,12 +6,12 @@
  * - server/index.js (lines 152-202)
  */
 
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { asyncHandler, ValidationError, AuthenticationError, ExternalServiceError } from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import { asyncHandler, AuthenticationError, ExternalServiceError, ValidationError } from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
 import { Database } from '../types/database.types';
 import { toJsonSchema } from '../utils/zod-json';
 

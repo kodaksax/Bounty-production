@@ -13,14 +13,13 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
 import { config } from '../config';
 import {
-  ValidationError,
-  NotFoundError,
   ConflictError,
   ExternalServiceError,
   handleStripeError,
+  NotFoundError,
+  ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
