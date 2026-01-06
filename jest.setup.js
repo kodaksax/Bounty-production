@@ -170,10 +170,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock @stripe/stripe-react-native
-// Provides basic function structure without assumptions about fallback behavior
-// Individual tests should override these mocks as needed for their specific scenarios
+// Simulates SDK unavailability in test environment (expected in non-native environments)
+// Individual tests can override these mocks as needed for their specific scenarios
 jest.mock('@stripe/stripe-react-native', () => ({
-  initStripe: jest.fn().mockResolvedValue(undefined),
+  initStripe: jest.fn().mockRejectedValue(new Error('SDK not available in test environment')),
   createPaymentMethod: jest.fn(),
   confirmPayment: jest.fn(),
   initPaymentSheet: jest.fn(),
@@ -289,7 +289,8 @@ global.console = {
       typeof args[0] === 'string' &&
       (
         args[0].includes('DeprecationWarning') ||
-        args[0].includes('Some known noisy error')
+        args[0].includes('Some known noisy error') ||
+        args[0].includes('[StripeService]')
       )
     ) {
       return;
