@@ -1,16 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastify';
 import { addUserContext } from './request-context';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
-let supabase: any = null;
+let supabase: ReturnType<typeof createClient<Database>> | null = null;
 
 // Support both server-style env names and Expo public env names (fallback)
 const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL
 const supabaseAnon = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 
 if (supabaseUrl && supabaseAnon) {
-  supabase = createClient(supabaseUrl, supabaseAnon)
+  supabase = createClient<Database>(supabaseUrl, supabaseAnon)
   console.log('✅ Supabase auth client initialized')
 } else {
   console.log('⚠️  Supabase credentials not found - auth middleware will be disabled')

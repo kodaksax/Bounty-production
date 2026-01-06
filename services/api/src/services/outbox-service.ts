@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { outboxEvents } from '../db/schema';
@@ -10,7 +11,7 @@ import { outboxEvents } from '../db/schema';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const useSupabase = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
-const supabase = useSupabase ? createClient(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string) : null;
+const supabase = useSupabase ? createClient<Database>(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string) : null;
 
 // Define types directly here to avoid import issues
 export type OutboxEventType = 

@@ -1,39 +1,38 @@
 export type BountyStatus = "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested";
 
 export type Bounty = {
-  id: number
-  title: string
-  description: string
-  amount: number
-  is_for_honor: boolean
-  location: string
-  timeline: string
-  skills_required: string
-  poster_id: string
-  // Backwards-compatible alias for older code expecting user_id
-  user_id?: string
-  created_at: string
-  status: BountyStatus
-  distance?: number
+  id: string;  // uuid in database
+  title: string;
+  description: string;
+  amount: number;
+  is_for_honor: boolean;
+  location: string;
+  timeline: string;
+  skills_required: string;
+  poster_id: string;
+  user_id?: string | null;  // Legacy column (NOT NULL in DB, but optional in API contract for backwards compatibility)
+  created_at: string;
+  status: BountyStatus;
+  distance?: number;
   // New optional fields for enhanced posting metadata
-  work_type?: 'online' | 'in_person'
-  is_time_sensitive?: boolean
-  deadline?: string // ISO date string when is_time_sensitive === true
-  attachments_json?: string // JSON serialized AttachmentMeta[] (storage format)
+  work_type?: 'online' | 'in_person';
+  is_time_sensitive?: boolean;
+  deadline?: string; // ISO date string when is_time_sensitive === true
+  attachments_json?: string; // JSON serialized AttachmentMeta[] (storage format)
   // Rating aggregates for the bounty poster
-  averageRating?: number
-  ratingCount?: number
+  averageRating?: number;
+  ratingCount?: number;
   // If a bounty has been accepted, store the accepting hunter's id (optional)
-  accepted_by?: string
+  accepted_by?: string;
   // Profile data from joined query (populated when fetched with profile join)
-  username?: string
-  poster_avatar?: string
+  username?: string;
+  poster_avatar?: string;
   // Stale bounty fields
-  is_stale?: boolean
-  stale_reason?: string
-  stale_detected_at?: string
+  is_stale?: boolean;
+  stale_reason?: string;
+  stale_detected_at?: string;
   // Stripe payment fields for escrow
-  payment_intent_id?: string // Stripe PaymentIntent ID for escrow
+  payment_intent_id?: string; // Stripe PaymentIntent ID for escrow
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)
@@ -70,24 +69,25 @@ export type Profile = {
 }
 
 export type Skill = {
-  id: number
-  user_id: string
-  icon: string
-  text: string
-  created_at: string
+  id: string;  // uuid in database
+  user_id: string;
+  icon: string;
+  text: string;
+  created_at: string;
 }
 
 export type BountyRequest = {
-  id: number
-  bounty_id: number
-  hunter_id: string
-  status: "pending" | "accepted" | "rejected"
-  created_at: string
+  id: string;  // uuid in database
+  bounty_id: string;  // uuid reference
+  hunter_id: string;
+  user_id?: string | null;  // legacy column; prefer hunter_id
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
 }
 
 export type BountyCancellation = {
   id: string
-  bounty_id: number
+  bounty_id: string  // uuid reference
   requester_id: string
   requester_type: 'poster' | 'hunter'
   reason: string

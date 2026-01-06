@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 import { config } from '../config';
 import {
   ValidationError,
@@ -29,11 +30,11 @@ import {
 import { logger } from './logger';
 
 // Initialize Supabase admin client
-let supabaseAdmin: SupabaseClient | null = null;
+let supabaseAdmin: SupabaseClient<Database> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient {
+function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    supabaseAdmin = createClient<Database>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
