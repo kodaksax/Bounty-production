@@ -297,7 +297,13 @@ global.console = {
       firstArg.includes('[authProfileService]') ||
       firstArg.includes('[AuthSessionStorage]') ||
       firstArg.includes('[portfolio-service]') ||
-      firstArg.includes('Error getting permission status')
+      firstArg.includes('Error getting permission status') ||
+      firstArg.includes('[supabase] Not configured') ||
+      firstArg.includes('react-test-renderer is deprecated') ||
+      firstArg.includes('Draft error') ||
+      firstArg.includes('Preference error') ||
+      firstArg.includes('Token error') ||
+      firstArg.includes('Cleanup errors (non-critical)')
     ) {
       return;
     }
