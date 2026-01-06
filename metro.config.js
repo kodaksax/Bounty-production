@@ -1,9 +1,9 @@
-const { getDefaultConfig } = require('@react-native/metro-config');
+const { getDefaultConfig } = require('expo/metro-config');
 
-const defaultConfig = getDefaultConfig(__dirname);
+const config = getDefaultConfig(__dirname);
 
-defaultConfig.transformer = {
-  ...defaultConfig.transformer,
+config.transformer = {
+  ...config.transformer,
   minifierConfig: {
     keep_classnames: true,
     keep_fnames: true,
@@ -14,9 +14,9 @@ defaultConfig.transformer = {
   },
 };
 
-defaultConfig.resolver = {
-  ...defaultConfig.resolver,
-  sourceExts: Array.from(new Set([...(defaultConfig.resolver?.sourceExts || []), 'cjs'])),
+config.resolver = {
+  ...config.resolver,
+  sourceExts: Array.from(new Set([...(config.resolver?.sourceExts || []), 'cjs'])),
 };
 
-module.exports = defaultConfig;
+module.exports = config;
