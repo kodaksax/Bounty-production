@@ -284,18 +284,20 @@ const originalError = console.error;
 global.console = {
   ...console,
   error: (...args) => {
-    // Only suppress specific known noisy errors (customize as needed)
+    // Convert first argument to string for pattern matching
+    const firstArg = args[0]?.toString() || '';
+    
+    // Only suppress specific known noisy errors from test error paths
     if (
-      typeof args[0] === 'string' &&
-      (
-        args[0].includes('DeprecationWarning') ||
-        args[0].includes('Some known noisy error') ||
-        args[0].includes('[StripeService]') ||
-        args[0].includes('[phone-verification]') ||
-        args[0].includes('[auth-service]') ||
-        args[0].includes('[authProfileService]') ||
-        args[0].includes('Error getting permission status')
-      )
+      firstArg.includes('DeprecationWarning') ||
+      firstArg.includes('Some known noisy error') ||
+      firstArg.includes('[StripeService]') ||
+      firstArg.includes('[phone-verification]') ||
+      firstArg.includes('[auth-service]') ||
+      firstArg.includes('[authProfileService]') ||
+      firstArg.includes('[AuthSessionStorage]') ||
+      firstArg.includes('[portfolio-service]') ||
+      firstArg.includes('Error getting permission status')
     ) {
       return;
     }
