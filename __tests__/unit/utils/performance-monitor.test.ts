@@ -9,9 +9,8 @@ import {
 } from '../../../lib/utils/performance-monitor';
 
 // Mock performance.now() for consistent testing
-// Store the original performance.now for restoration
-const originalPerformanceNow = performance.now;
 const mockPerformanceNow = jest.fn();
+let performanceNowSpy: jest.SpyInstance;
 
 // Mock console methods to verify logging behavior
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -22,11 +21,11 @@ const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 
 // Setup and teardown for performance.now mock
 beforeAll(() => {
-  global.performance.now = mockPerformanceNow;
+  performanceNowSpy = jest.spyOn(global.performance, 'now').mockImplementation(mockPerformanceNow);
 });
 
 afterAll(() => {
-  global.performance.now = originalPerformanceNow;
+  performanceNowSpy.mockRestore();
 });
 
 describe('PerformanceMonitor', () => {
