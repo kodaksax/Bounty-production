@@ -58,6 +58,13 @@ const AsyncStorage = require('@react-native-async-storage/async-storage');
 describe('NotificationService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Suppress console.error for expected errors in tests
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restore console.error after each test
+    (console.error as jest.Mock).mockRestore();
   });
 
   describe('getPermissionStatus', () => {
