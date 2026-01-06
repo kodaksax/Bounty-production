@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "jest",
+      "node",
+      "supertest"
+    ],
+    "moduleResolution": "node"
+  },
+  "include": [
+    "jest.setup.ts",
+    "jest.setup.js",
+    "__tests__/**/*.ts",
+    "__tests__/**/*.tsx",
+    "__tests__/**/*.js",
+    "__tests__/**/*.jsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "tests/**/*.js",
+    "tests/**/*.jsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "server/**/*.ts",
+    "server/**/*.tsx"
+  ]
+}

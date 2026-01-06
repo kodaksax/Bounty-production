@@ -39,9 +39,7 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       isolatedModules: true,
-      tsconfig: {
-        jsx: 'react',
-      },
+      tsconfig: '<rootDir>/tsconfig.jest.json',
     }],
   },
   transformIgnorePatterns: [

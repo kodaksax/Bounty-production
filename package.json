@@ -1,6 +1,6 @@
 {
   "name": "bountyexpo",
-  "main": "expo-router/entry",
+  "main": "expo-router/entry.js",
   "version": "1.0.0",
   "workspaces": [
     "packages/*",
@@ -36,7 +36,9 @@
     "dev:tunnel": "npx localtunnel --port 3001",
     "dev:all": "npx concurrently \"npm:dev:serve\" \"npx expo start --lan\"",
     "type-check": "npm run type-check --workspaces",
-    "audit:deps": "npx depcheck || true"
+    "audit:deps": "npx depcheck || true",
+    "bundle:visualize": "react-native-bundle-visualizer",
+    "bundle:size-check": "node ./scripts/check-bundle-size.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -62,6 +64,7 @@
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
+    "events": "^3.3.0",
     "expo": "^54.0.30",
     "expo-apple-authentication": "~8.0.8",
     "expo-auth-session": "~7.0.10",

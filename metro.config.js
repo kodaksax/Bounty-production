@@ -3,6 +3,17 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
+const projectRoot = __dirname;
+const alias = {
+  app: path.resolve(projectRoot, 'app'),
+  components: path.resolve(projectRoot, 'components'),
+  hooks: path.resolve(projectRoot, 'hooks'),
+  lib: path.resolve(projectRoot, 'lib'),
+  providers: path.resolve(projectRoot, 'providers'),
+  events: require.resolve('events'),
+  '@': path.resolve(projectRoot, 'components'),
+};
+
 config.transformer = {
   ...config.transformer,
   minifierConfig: {
@@ -18,6 +29,14 @@ config.transformer = {
 config.resolver = {
   ...config.resolver,
   sourceExts: Array.from(new Set([...(config.resolver?.sourceExts || []), 'cjs'])),
+  extraNodeModules: new Proxy({}, {
+    get: (target, name) => {
+      if (typeof name === 'string' && alias[name]) {
+        return alias[name];
+      }
+      return path.join(projectRoot, 'node_modules', name.toString());
+    },
+  }),
   // Resolve web-specific implementations
   resolveRequest: (context, moduleName, platform) => {
     // For web platform, provide error-throwing stubs for native-only packages
