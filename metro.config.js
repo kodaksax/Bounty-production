@@ -20,7 +20,7 @@ config.resolver = {
   sourceExts: Array.from(new Set([...(config.resolver?.sourceExts || []), 'cjs'])),
   // Resolve web-specific implementations
   resolveRequest: (context, moduleName, platform) => {
-    // For web platform, provide empty mocks for native-only packages
+    // For web platform, provide error-throwing stubs for native-only packages
     if (platform === 'web' && moduleName === '@stripe/stripe-react-native') {
       return {
         filePath: path.resolve(__dirname, 'lib/services/stripe-mock.web.js'),
