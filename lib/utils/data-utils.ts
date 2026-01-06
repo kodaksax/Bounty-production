@@ -19,7 +19,7 @@ export type Profile = {
 
 // Define Bounty type here for now
 export type Bounty = {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
   amount: number;
@@ -170,9 +170,10 @@ export const createBountyWithValidationUtil = async (
 /**
  * Accept a bounty request and update related data
  */
-export const acceptBountyRequest = async (requestId: number): Promise<{ success: boolean; error: string | null }> => {
+export const acceptBountyRequest = async (requestId: string | number): Promise<{ success: boolean; error: string | null }> => {
   try {
-    const result = await bountyRequestService.acceptRequest(requestId)
+    const numericId = typeof requestId === 'string' ? parseInt(requestId, 10) : requestId
+    const result = await bountyRequestService.acceptRequest(numericId)
 
     if (!result) {
       return { success: false, error: "Failed to accept request" }
@@ -188,9 +189,10 @@ export const acceptBountyRequest = async (requestId: number): Promise<{ success:
 /**
  * Reject a bounty request
  */
-export const rejectBountyRequest = async (requestId: number): Promise<{ success: boolean; error: string | null }> => {
+export const rejectBountyRequest = async (requestId: string | number): Promise<{ success: boolean; error: string | null }> => {
   try {
-    const result = await bountyRequestService.rejectRequest(requestId)
+    const numericId = typeof requestId === 'string' ? parseInt(requestId, 10) : requestId
+    const result = await bountyRequestService.rejectRequest(numericId)
 
     if (!result) {
       return { success: false, error: "Failed to reject request" }

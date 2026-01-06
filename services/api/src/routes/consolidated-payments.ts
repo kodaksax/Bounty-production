@@ -49,9 +49,9 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Create a payment intent for processing a payment',
-        body: createPaymentIntentSchema,
+
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
         response: {
           200: {
             type: 'object',
@@ -98,9 +98,10 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Confirm a payment intent',
-        body: confirmPaymentIntentSchema,
+        
+        
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -130,8 +131,8 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'List all payment methods for the authenticated user',
+        
+        
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -150,9 +151,10 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Attach a payment method to the user account',
-        body: attachPaymentMethodSchema,
+        
+        
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -184,11 +186,9 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Remove a payment method from the user account',
-        params: z.object({
-          id: z.string(),
-        }),
+        
+        
+        params: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -211,8 +211,8 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Create a setup intent for adding a payment method',
+        
+        
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -236,12 +236,11 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Cancel a payment intent',
-        params: z.object({
-          id: z.string(),
-        }),
-        body: cancelPaymentIntentSchema,
+        
+        
+        params: { type: 'object' },
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -266,10 +265,8 @@ export async function registerConsolidatedPaymentRoutes(
       preHandler: authMiddleware,
       schema: {
         tags: ['payments'],
-        description: 'Get payment intent status',
-        params: z.object({
-          id: z.string(),
-        }),
+        
+        params: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {

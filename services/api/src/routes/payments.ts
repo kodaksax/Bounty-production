@@ -68,7 +68,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     logger.warn('[payments] Unable to determine Stripe key mode from STRIPE_SECRET_KEY and/or STRIPE_PUBLISHABLE_KEY. Keys may have an unexpected format.');
     logger.warn('[payments] STRIPE_SECRET_KEY should start with "sk_test_" or "sk_live_".');
     logger.warn('[payments] STRIPE_PUBLISHABLE_KEY (and EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in the mobile app) should start with "pk_test_" or "pk_live_".');
-  } else if (secretKeyMode !== 'unknown') {
+  } else {
     logger.info(`[payments] Stripe configured in ${secretKeyMode} mode`);
     if (!backendPublishableKey) {
       logger.info('[payments] Backend STRIPE_PUBLISHABLE_KEY not set (optional). Make sure EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY in mobile app is in the same mode.');
@@ -86,20 +86,22 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/create-payment-intent', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    const safeBody = request.body as {
+      amountCents: number;
+      currency?: string;
+      metadata?: Record<string, string>;
+      idempotencyKey?: string;
+    };
     let idempotencyKey: string | undefined;
     try {
-      const body = request.body as {
-        amountCents: number;
-        currency?: string;
-        metadata?: Record<string, string>;
-        idempotencyKey?: string;
-      };
-      const { amountCents, currency = 'usd', metadata = {} } = body;
-      idempotencyKey = body.idempotencyKey;
+      const { amountCents, currency = 'usd', metadata = {} } = safeBody;
+      idempotencyKey = safeBody.idempotencyKey;
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
+
+      // Validate amount
 
       // Validate amount
       if (!amountCents || amountCents < 50) {
@@ -152,8 +154,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       // Log error with full context
       logErrorWithContext(request, error, {
         operation: 'create_payment_intent',
-        amountCents: body.amountCents,
-        currency: body.currency,
+        amountCents: safeBody.amountCents,
+        currency: safeBody.currency,
         idempotencyKey,
       });
       
@@ -362,7 +364,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       // Clean up idempotency tracking
       const idempotencyKey = paymentIntent.metadata?.idempotency_key;
       if (idempotencyKey) {
-        pendingPayments.delete(idempotencyKey);
+        await removeIdempotencyKey(idempotencyKey);
       }
 
       logger.info(`[payments] Confirmed payment ${paymentIntentId} for user ${request.userId}`);
@@ -608,6 +610,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   // NOTE: In production, this should be stored in Redis or database for persistence across restarts
   const processedWebhookEvents = new Map<string, number>();
   const WEBHOOK_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 
   function cleanupProcessedWebhookEvents() {
     const now = Date.now();
@@ -949,7 +952,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       
       // Use Stripe error codes for reliable error handling
       let errorMessage = 'Failed to add bank account';
-      const stripeError = error as Stripe.StripeError;
+      const stripeError = error as any;
       
       if (stripeError.type === 'StripeInvalidRequestError') {
         // Check error code or param for more reliable error detection

@@ -947,7 +947,7 @@ export const bountyService = {
   /**
    * Delete a bounty
    */
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string | number): Promise<boolean> {
     try {
       if (isSupabaseConfigured) {
         const { error } = await supabase
@@ -980,7 +980,7 @@ export const bountyService = {
   /**
    * Update a bounty's status with WebSocket notification
    */
-  async updateStatus(id: number, status: BountyStatus): Promise<Bounty | null> {
+  async updateStatus(id: string | number, status: BountyStatus): Promise<Bounty | null> {
     const result = await this.update(id, { status })
     
     // Notify via WebSocket for real-time updates

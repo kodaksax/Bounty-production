@@ -23,6 +23,7 @@ import { config } from '../config';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
@@ -78,15 +79,11 @@ interface BountyRequest {
   hunter_id: string;  // user_id in old code
   poster_id?: string | null;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
-  message?: string | null;
+  message: string;
   proposed_completion_date?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
-
-/**
- * Bounty interface for status checks
- */
 interface Bounty {
   id: string;
   user_id: string;  // poster
@@ -99,11 +96,12 @@ interface Bounty {
 /**
  * Supabase admin client singleton
  */
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
-function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    // Relax typing to avoid PostgREST `never` inference on selects/inserts/updates
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -162,7 +160,8 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'List bounty requests with filters and pagination',
-        querystring: listRequestsSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        querystring: toJsonSchema(listRequestsSchema, 'ListBountyRequestsQuery'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -183,8 +182,13 @@ export async function registerConsolidatedBountyRequestRoutes(
         // Build query with joins to get bounty and profile data
         let dbQuery = supabase
           .from('bounty_requests')
-          .select(`
-            *,
+          .select(
+            `
+            id,
+            bounty_id,
+            hunter_id,
+            status,
+            created_at,
             bounties:bounty_id (
               id,
               title,
@@ -199,7 +203,9 @@ export async function registerConsolidatedBountyRequestRoutes(
               username,
               avatar_url
             )
-          `, { count: 'exact' });
+            `,
+            { count: 'exact' }
+          );
 
         // Apply filters
         if (query.status) {
@@ -320,9 +326,7 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Get bounty request details by ID',
-        params: z.object({
-          id: z.string().uuid('Invalid request ID format'),
-        }),
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid request ID format') }), 'GetBountyRequestParams'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -357,14 +361,14 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Authorization: Check if user is the hunter or the bounty owner
         const isHunter = bountyRequest.hunter_id === userId;
-        
+
         // Fetch bounty to check ownership
         const { data: bounty } = await supabase
           .from('bounties')
           .select('user_id, poster_id')
           .eq('id', bountyRequest.bounty_id)
           .single();
-        
+
         const posterId = bounty ? (bounty.poster_id || bounty.user_id) : null;
         const isPoster = posterId === userId;
 
@@ -510,7 +514,8 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Create a new bounty request/application',
-        body: createRequestSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(createRequestSchema, 'CreateBountyRequestBody'),
         response: {
           201: {
             type: 'object',
@@ -671,10 +676,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Update bounty request status',
-        params: z.object({
-          id: z.string().uuid('Invalid request ID format'),
-        }),
-        body: updateRequestSchema,
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid request ID format') }), 'UpdateBountyRequestParams'),
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(updateRequestSchema, 'UpdateBountyRequestBody'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {

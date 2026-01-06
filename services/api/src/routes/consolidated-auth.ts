@@ -13,6 +13,7 @@ import { config } from '../config';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
@@ -95,7 +96,7 @@ async function authRateLimitMiddleware(
 /**
  * Clean up expired rate limit entries every 5 minutes
  */
-let cleanupIntervalId: NodeJS.Timeout | null = null;
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function startRateLimitCleanup() {
   if (cleanupIntervalId) return; // Already started
@@ -254,7 +255,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Register a new user account',
-        body: registerSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(registerSchema, 'AuthRegisterRequest'),
         response: {
           201: {
             type: 'object',
@@ -295,7 +297,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Sign in with email and password',
-        body: signInSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(signInSchema, 'AuthSignInRequest'),
         response: {
           200: {
             type: 'object',
@@ -406,7 +409,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Sign up for a new account (alternative endpoint)',
-        body: signUpSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(signUpSchema, 'AuthSignUpRequest'),
         response: {
           201: {
             type: 'object',

@@ -110,7 +110,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
    */
   const removeBounty = useCallback((id: string | number) => {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-    setBounties((prev) => prev.filter((b) => b.id !== numericId));
+    setBounties((prev) => prev.filter((b) => String(b.id) !== String(numericId)));
   }, []);
 
   /**
@@ -129,14 +129,14 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
 
       if (optimisticUpdates) {
         // Store previous state for rollback
-        previousBounty = bounties.find((b) => b.id === numericId);
+        previousBounty = bounties.find((b) => String(b.id) === String(numericId));
         if (previousBounty) {
-          optimisticUpdatesMap.set(numericId, previousBounty);
+          optimisticUpdatesMap.set(Number(String(numericId)), previousBounty);
         }
 
         // Optimistically update UI
         setBounties((prev) =>
-          prev.map((b) => (b.id === numericId ? { ...b, status: newStatus } : b))
+          prev.map((b) => (String(b.id) === String(numericId) ? { ...b, status: newStatus } : b))
         );
       }
 
@@ -152,11 +152,11 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         }
 
         // Clear optimistic update cache on success
-        optimisticUpdatesMap.delete(numericId);
+        optimisticUpdatesMap.delete(Number(String(numericId)));
 
         // Update with the actual response data
         setBounties((prev) =>
-          prev.map((b) => (b.id === numericId ? updated : b))
+          prev.map((b) => (String(b.id) === String(numericId) ? updated : b))
         );
       } catch (err) {
         logger.error('Error updating bounty status', { id, newStatus, error: err });
@@ -164,12 +164,12 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         // Rollback optimistic update on failure
         if (optimisticUpdates && previousBounty) {
           setBounties((prev) =>
-            prev.map((b) => (b.id === numericId ? previousBounty : b))
+            prev.map((b) => (String(b.id) === String(numericId) ? previousBounty : b))
           );
         }
 
         // Clear from cache
-        optimisticUpdatesMap.delete(numericId);
+        optimisticUpdatesMap.delete(Number(String(numericId)));
 
         throw err;
       }

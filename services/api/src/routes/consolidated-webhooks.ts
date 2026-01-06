@@ -33,11 +33,12 @@ const CREDIT_AMOUNT = 1;
 const DEBIT_AMOUNT = -1;
 
 // Initialize Supabase admin client
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
-function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    // Relax typing to avoid PostgREST `never` inference on partial selects/upserts
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -479,10 +480,15 @@ async function handleTransferPaid(event: Stripe.Event): Promise<void> {
 async function handleTransferFailed(event: Stripe.Event): Promise<void> {
   const transfer = event.data.object as Stripe.Transfer;
   
+  // Safely access optional failure properties which may not exist on all Transfer shapes
+  const transferRecord = transfer as unknown as Record<string, unknown>;
+  const failureCode = typeof transferRecord.failure_code === 'string' ? transferRecord.failure_code : undefined;
+  const failureMessage = typeof transferRecord.failure_message === 'string' ? transferRecord.failure_message : undefined;
+
   logger.warn({
     transferId: transfer.id,
-    failureCode: transfer.failure_code,
-    failureMessage: transfer.failure_message,
+    failureCode,
+    failureMessage,
   }, 'Transfer failed');
   
   const admin = getSupabaseAdmin();
@@ -508,8 +514,8 @@ async function handleTransferFailed(event: Stripe.Event): Promise<void> {
   const mergedMetadata = {
     ...(existingTx.metadata as Record<string, any> || {}),
     transfer_status: 'failed',
-    failure_code: transfer.failure_code,
-    failure_message: transfer.failure_message,
+    failure_code: failureCode,
+    failure_message: failureMessage,       
     retry_count: 0,
   };
 
@@ -638,7 +644,9 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
   logger.info({ eventType: event.type, eventId: event.id }, 'Processing webhook event');
   
   try {
-    switch (event.type) {
+    // Cast to string to handle any event types not present in the union
+    const evtType = event.type as string;
+    switch (evtType) {
       case 'payment_intent.succeeded':
         await handlePaymentIntentSucceeded(event);
         break;
@@ -680,7 +688,7 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
         break;
       
       default:
-        logger.info({ eventType: event.type }, 'Unhandled webhook event type');
+        logger.info({ eventType: evtType }, 'Unhandled webhook event type');
     }
   } catch (error: any) {
     // Log error and re-throw so Stripe can retry this isolated event type

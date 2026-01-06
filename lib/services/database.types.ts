@@ -1,7 +1,7 @@
 export type BountyStatus = "open" | "in_progress" | "completed" | "archived" | "deleted" | "cancelled" | "cancellation_requested";
 
 export type Bounty = {
-  id: string;  // uuid in database
+  id: string | number;  // uuid or numeric id
   title: string;
   description: string;
   amount: number;

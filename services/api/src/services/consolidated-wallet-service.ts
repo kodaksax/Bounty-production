@@ -25,12 +25,12 @@ import {
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
 
-// Initialize Supabase admin client
-let supabaseAdmin: SupabaseClient<Database> | null = null;
+// Initialize Supabase admin client (relaxed typing to avoid PostgREST `never` inference)
+let supabaseAdmin: SupabaseClient<any> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient<Database> {
+function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -655,7 +655,8 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
   const admin = getSupabaseAdmin();
   
   // Try RPC function first (if it exists in the future)
-  const { error: rpcError } = await admin.rpc('update_balance', {
+  // Use loose typing for RPC until Database.Functions are modeled
+  const { error: rpcError } = await (admin as any).rpc('update_balance', {
     p_user_id: userId,
     p_amount: amount,
   });

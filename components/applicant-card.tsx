@@ -12,9 +12,9 @@ import { VerificationBadge, type VerificationLevel } from './ui/verification-bad
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
-  onAccept: (requestId: number) => Promise<void>;
-  onReject: (requestId: number) => Promise<void>;
-  onRequestMoreInfo?: (requestId: number) => void;
+  onAccept: (requestId: string | number) => Promise<void>;
+  onReject: (requestId: string | number) => Promise<void>;
+  onRequestMoreInfo?: (requestId: string | number) => void;
 }
 
 export function ApplicantCard({

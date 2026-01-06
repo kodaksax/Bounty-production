@@ -114,9 +114,9 @@ export const disputeService = {
         const bounty = await bountyService.getById(String(data.bounty_id));
         if (bounty) {
           // Notify the bounty poster
-          if (bounty.user_id !== initiatorId) {
+          if (bounty.user_id && bounty.user_id !== initiatorId) {
             await sendNotification(
-              bounty.user_id,
+              String(bounty.user_id),
               'dispute_created',
               'Dispute Created',
               `A dispute has been opened for bounty: ${bounty.title}`,
@@ -133,7 +133,7 @@ export const disputeService = {
               cancellation.requesterId !== initiatorId && 
               cancellation.requesterId !== bounty.user_id) {
             await sendNotification(
-              cancellation.requesterId,
+              String(cancellation.requesterId),
               'dispute_created',
               'Dispute Created',
               `A dispute has been opened for bounty: ${bounty.title}`,
@@ -380,9 +380,9 @@ export const disputeService = {
           );
 
           // Notify the bounty poster if different from initiator
-          if (bounty.user_id !== dispute.initiatorId) {
+          if (bounty.user_id && bounty.user_id !== dispute.initiatorId) {
             await sendNotification(
-              bounty.user_id,
+              String(bounty.user_id),
               'dispute_resolved',
               'Dispute Resolved',
               `A dispute for bounty "${bounty.title}" has been resolved.`,

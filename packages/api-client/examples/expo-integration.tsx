@@ -144,7 +144,7 @@ function BountyListExample() {
       <FlatList
         data={data}
         renderItem={renderBounty}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         refreshing={loading}
         onRefresh={refetch}
         onEndReached={hasMore ? loadMore : undefined}

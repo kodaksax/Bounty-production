@@ -16,16 +16,18 @@ import {
 
 // Initialize Stripe
 const stripe = new Stripe(config.stripe.secretKey, {
-  apiVersion: '2024-12-18.acacia',
+  // Align with repository-wide pinned Stripe API version
+  apiVersion: '2025-08-27.basil',
   typescript: true,
 });
 
 // Initialize Supabase admin client
-let supabaseAdmin: SupabaseClient<Database> | null = null;
+let supabaseAdmin: SupabaseClient<any> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient<Database> {
+function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    // Relax typing to avoid PostgREST `never` inference on partial selects
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {

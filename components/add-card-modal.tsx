@@ -51,7 +51,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3): Promise<void> => {
+  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<void> => {
     let lastErr: any
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       try {
@@ -61,8 +61,9 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         lastErr = e
         // Skip backoff after the last attempt
         if (attempt < totalAttempts - 1) {
-          // brief backoff
-          await new Promise(r => setTimeout(r, 600))
+          // brief backoff using provided base delay
+          const backoff = Math.min(baseDelayMs * Math.pow(2, attempt), 4000)
+          await new Promise(r => setTimeout(r, backoff))
         }
       }
     }

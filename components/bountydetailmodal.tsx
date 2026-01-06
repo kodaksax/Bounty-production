@@ -40,14 +40,14 @@ interface DetailRow {
 
 interface BountyDetailModalProps {
   bounty: {
-    id: number
+    id: string | number
     username?: string
     title: string
     price: number
     distance: number | null
     description?: string
-    user_id?: string
-  poster_id?: string
+    user_id?: string | null
+  poster_id?: string | null
     work_type?: 'online' | 'in_person'
     attachments?: AttachmentMeta[]
     attachments_json?: string
@@ -85,7 +85,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
-  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId)
+  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   

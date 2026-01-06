@@ -545,13 +545,13 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     }
   }
 
-  const handleAcceptRequest = async (requestId: number) => {
+  const handleAcceptRequest = async (requestId: string | number) => {
     try {
       // Show quick-refresh UI for list transitions
       setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
 
       // Find the request to get bounty and profile info
-      const request = bountyRequests.find(req => req.id === requestId)
+      const request = bountyRequests.find(req => String(req.id) === String(requestId))
       if (!request) {
         throw new Error("Request not found")
       }
@@ -565,7 +565,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         setBountyRequests((prev) => prev.filter(req => String(req.bounty_id) !== String(resolvedBountyId)))
       } else {
         // If we don't know bounty id, at least remove the single request
-        setBountyRequests((prev) => prev.filter(req => req.id !== requestId))
+        setBountyRequests((prev) => prev.filter(req => String(req.id) !== String(requestId)))
       }
 
       // Optimistically update My Postings to in_progress
@@ -660,7 +660,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
       // Remove all competing requests for this bounty (cleanup)
       const competingRequests = bountyRequests.filter(
-        req => String(req.bounty_id) === String(request.bounty_id) && req.id !== requestId
+        req => String(req.bounty_id) === String(request.bounty_id) && String(req.id) !== String(requestId)
       )
 
       if (competingRequests.length > 0) {
@@ -836,7 +836,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     }
   }
 
-  const handleRejectRequest = async (requestId: number) => {
+  const handleRejectRequest = async (requestId: string | number) => {
     try {
       // Show quick-refresh indicator for requests
       setIsLoading((prev) => ({ ...prev, requests: true }))
@@ -849,7 +849,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       }
 
       // Update local state - remove the rejected request from the list
-      setBountyRequests((prev) => prev.filter((req) => req.id !== requestId))
+      setBountyRequests((prev) => prev.filter((req) => String(req.id) !== String(requestId)))
 
       // Show confirmation toast
       Alert.alert('Request Rejected', 'The request has been rejected and removed.', [{ text: 'OK' }])

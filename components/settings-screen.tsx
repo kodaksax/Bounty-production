@@ -223,26 +223,26 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // Using void to explicitly indicate fire-and-forget behavior
               void Promise.all([
                 // Clear remember me preference
-                clearRememberMePreference().catch(e => 
+                clearRememberMePreference().catch((e: any) => 
                   console.error('[Logout] Failed to clear remember me preference', e)
                 ),
                 // Clear user-specific draft data
-                currentUserId ? authProfileService.clearUserDraftData(currentUserId).catch(e =>
+                currentUserId ? authProfileService.clearUserDraftData(currentUserId).catch((e: any) =>
                   console.error('[Logout] Draft cleanup failed', e)
                 ) : Promise.resolve(),
                 // Clear stored tokens (best-effort)
                 Promise.all([
-                  SecureStore.deleteItemAsync('sb-access-token').catch(e => 
+                  SecureStore.deleteItemAsync('sb-access-token').catch((e: any) => 
                     console.error('[Logout] Failed to delete sb-access-token', e)
                   ),
-                  SecureStore.deleteItemAsync('sb-refresh-token').catch(e =>
+                  SecureStore.deleteItemAsync('sb-refresh-token').catch((e: any) =>
                     console.error('[Logout] Failed to delete sb-refresh-token', e)
                   )
                 ]),
                 // Attempt server sign-out in background (best-effort)
                 // Note: This calls signOut() without scope, which will attempt both local and server.
                 // Since local is already cleared, this effectively only does server-side cleanup.
-                supabase.auth.signOut().catch(e => 
+                supabase.auth.signOut().catch((e: any) => 
                   console.error('[Logout] Background server signout failed (non-critical)', e)
                 )
               ]).catch(e => {

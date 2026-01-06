@@ -30,11 +30,12 @@ import {
 import { logger } from './logger';
 
 // Initialize Supabase admin client
-let supabaseAdmin: SupabaseClient<Database> | null = null;
+let supabaseAdmin: SupabaseClient<any> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient<Database> {
+function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    // Relax typing to avoid PostgREST `never` inference
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {

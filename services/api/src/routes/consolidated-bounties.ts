@@ -21,13 +21,14 @@ import { config } from '../config';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
  */
 
 // Schema for creating a new bounty
-const createBountySchema = z.object({
+const baseBountySchema = z.object({
   title: z.string()
     .min(10, 'Title must be at least 10 characters')
     .max(200, 'Title must be at most 200 characters'),
@@ -48,21 +49,19 @@ const createBountySchema = z.object({
   due_date: z.string()
     .datetime()
     .optional(),
-}).refine(data => {
+});
+
+// Derive refined and partial schemas
+const createBountySchema = baseBountySchema.refine(data => {
   // Honor bounties must have amount = 0
   if (data.isForHonor && data.amount > 0) {
     return false;
   }
-  // Non-honor bounties can have amount = 0 or > 0
-  // (amount = 0 non-honor bounties are allowed for future flexibility)
   return true;
-}, { 
-  message: 'Honor bounties must have amount set to 0',
-  path: ['amount']
-});
+}, { message: 'Honor bounties must have amount set to 0', path: ['amount'] });
 
 // Schema for updating a bounty (partial)
-const updateBountySchema = createBountySchema.partial();
+const updateBountySchema = baseBountySchema.partial();
 
 // Schema for listing bounties with filters
 const listBountiesSchema = z.object({
@@ -118,11 +117,12 @@ interface Bounty {
 /**
  * Supabase admin client singleton
  */
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
-function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<Database>(
+    // Relax typing to avoid PostgREST `never` inference on selects/updates
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -204,7 +204,8 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'List bounties with filters and pagination',
-        querystring: listBountiesSchema,
+        // Provide Fastify with JSON Schema converted from Zod for query validation
+        querystring: toJsonSchema(listBountiesSchema, 'ListBountiesQuery'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -307,9 +308,10 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Get bounty details by ID',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'GetBountyParams'
+        ),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -388,7 +390,8 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Create a new bounty',
-        body: createBountySchema,
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
         response: {
           201: {
             type: 'object',
@@ -501,10 +504,12 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Update bounty fields (owner only)',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
-        body: updateBountySchema,
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'UpdateBountyParams'
+        ),
+        // Provide Fastify with JSON Schema converted from Zod for body validation
+        body: toJsonSchema(updateBountySchema, 'UpdateBountyBody'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -643,9 +648,10 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Delete bounty (owner only)',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'DeleteBountyParams'
+        ),
         response: {
           200: {
             type: 'object',
@@ -757,9 +763,10 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Accept a bounty',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'AcceptBountyParams'
+        ),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -888,9 +895,10 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Mark bounty complete (hunter only)',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'CompleteBountyParams'
+        ),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -1005,9 +1013,10 @@ export async function registerConsolidatedBountyRoutes(
       schema: {
         tags: ['bounties'],
         description: 'Archive bounty (owner only)',
-        params: z.object({
-          id: z.string().uuid('Invalid bounty ID format'),
-        }),
+        params: toJsonSchema(
+          z.object({ id: z.string().uuid('Invalid bounty ID format') }),
+          'ArchiveBountyParams'
+        ),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
