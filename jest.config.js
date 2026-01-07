@@ -4,9 +4,13 @@ module.exports = {
   roots: ['<rootDir>/__tests__', '<rootDir>/lib', '<rootDir>/server'],
   testMatch: [
     '**/__tests__/**/*.test.ts',
+    '**/__tests__/**/*.test.tsx',
     '**/__tests__/**/*.test.js',
+    '**/__tests__/**/*.test.jsx',
     '**/tests/**/*.test.ts',
-    '**/tests/**/*.test.js'
+    '**/tests/**/*.test.tsx',
+    '**/tests/**/*.test.js',
+    '**/tests/**/*.test.jsx'
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   coverageDirectory: 'coverage',
@@ -35,10 +39,11 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
     '^lib/(.*)$': '<rootDir>/lib/$1',
     '^components/(.*)$': '<rootDir>/components/$1',
+    '^hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^providers/(.*)$': '<rootDir>/providers/$1',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      isolatedModules: true,
       tsconfig: '<rootDir>/tsconfig.jest.json',
     }],
   },

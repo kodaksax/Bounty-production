@@ -88,22 +88,39 @@ describe('Data Export Service', () => {
       } as any);
 
       // Mock database queries with proper tracking
-      const mockSelect = jest.fn().mockReturnThis();
-      const mockEq = jest.fn().mockReturnThis();
-      const mockIn = jest.fn().mockReturnThis();
-      const mockSingle = jest.fn<any>().mockResolvedValue({
+      // For queries with .single() (e.g., profiles)
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
         data: { id: mockUserId, username: 'testuser', email: 'test@example.com', balance: 100 },
         error: null,
       } as any);
 
+      // For queries without .single() (e.g., bounties, messages)
+      const mockArrayResult = jest.fn<any>().mockResolvedValue({
+        data: [],
+        error: null,
+      } as any);
+
+      // For queries with .in() (e.g., conversations)
+      const mockInResult = jest.fn<any>().mockResolvedValue({
+        data: [],
+        error: null,
+      } as any);
+
+      // Create eq mock that returns an object with single method
+      const mockEq = jest.fn().mockImplementation(() => {
+        // Return a promise-like object that also has .single() method
+        const promise = mockArrayResult() as any;
+        promise.single = mockSingleResult;
+        return promise;
+      });
+
+      const mockSelect = jest.fn().mockReturnValue({
+        eq: mockEq,
+        in: mockInResult,
+      });
+
       mockSupabaseClient.from.mockImplementation(() => ({
-        select: mockSelect.mockReturnValue({
-          eq: mockEq.mockReturnValue({
-            single: mockSingle,
-            in: mockIn,
-          }),
-          in: mockIn,
-        }),
+        select: mockSelect,
       }));
 
       // Mock file write
@@ -130,13 +147,26 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
-      // Mock all queries to return empty arrays
+      // Mock all queries to return empty arrays or null
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
@@ -177,12 +207,25 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
@@ -203,12 +246,25 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
@@ -238,12 +294,25 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
@@ -308,12 +377,25 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
@@ -341,12 +423,25 @@ describe('Data Export Service', () => {
         error: null,
       } as any);
 
+      const mockArrayResult = {
+        data: [],
+        error: null,
+      } as any;
+
+      const mockSingleResult = jest.fn<any>().mockResolvedValue({
+        data: null,
+        error: null,
+      } as any);
+
       mockSupabaseClient.from.mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn<any>().mockResolvedValue({
-            data: [],
-            error: null,
-          } as any),
+          eq: jest.fn().mockImplementation(() => {
+            // Return a promise that also has .single() method
+            const promise = Promise.resolve(mockArrayResult) as any;
+            promise.single = mockSingleResult;
+            return promise;
+          }),
+          in: jest.fn<any>().mockResolvedValue(mockArrayResult),
         }),
       }));
 
