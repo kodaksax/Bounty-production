@@ -8,7 +8,7 @@ import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
 import { getCurrentUserId } from "lib/utils/data-utils"
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useMemo, useState } from "react"
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -158,13 +158,13 @@ export function MessengerScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleBackToInbox = () => {
+  const handleBackToInbox = useCallback(() => {
     setActiveConversation(null)
     onConversationModeChange?.(false)
     refresh() // Refresh conversation list when returning
-  }
+  }, [onConversationModeChange, refresh])
 
-  const handleDeleteConversation = (conversation: Conversation) => {
+  const handleDeleteConversation = useCallback((conversation: Conversation) => {
     Alert.alert(
       'Delete Conversation',
       `Are you sure you want to delete your conversation with ${conversation.name}?`,
@@ -183,7 +183,7 @@ export function MessengerScreen({
         },
       ]
     )
-  }
+  }, [deleteConversation])
 
   // Optimized keyExtractor for FlatList
   const keyExtractor = useCallback((item: Conversation) => item.id, []);
@@ -195,7 +195,7 @@ export function MessengerScreen({
       onPress={() => handleConversationClick(item.id)}
       onDelete={() => handleDeleteConversation(item)}
     />
-  ), []);
+  ), [handleConversationClick, handleDeleteConversation]);
 
   // Empty list component
   const ListEmptyComponent = useCallback(() => {
@@ -216,7 +216,7 @@ export function MessengerScreen({
         onAction={() => onNavigate?.('bounty')}
       />
     );
-  }, [loading]);
+  }, [loading, onNavigate]);
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
@@ -314,37 +314,52 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
 }) {
   const router = useRouter()
   const currentUserId = getCurrentUserId()
-  const time = formatConversationTime(conversation.updatedAt);
   
-  // Get the other participant's ID (not the current user)
-  const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
+  // Memoize time formatting
+  const time = useMemo(
+    () => formatConversationTime(conversation.updatedAt),
+    [conversation.updatedAt]
+  );
+  
+  // Memoize other participant ID lookup
+  const otherUserId = useMemo(
+    () => conversation.participantIds?.find(id => id !== currentUserId),
+    [conversation.participantIds, currentUserId]
+  );
   
   // Fetch the other user's profile for 1:1 chats
   const { profile: otherUserProfile } = useNormalizedProfile(otherUserId)
   
-  // Use profile data if available for 1:1 chats
-  const displayName = !conversation.isGroup && otherUserProfile?.username 
-    ? otherUserProfile.username 
-    : conversation.name
-  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
-    ? otherUserProfile.avatar 
-    : conversation.avatar
-  
-  // Generate initials for fallback
-  const initials = generateInitials(
-    otherUserProfile?.username,
-    otherUserProfile?.name
+  // Memoize display values
+  const displayName = useMemo(
+    () => !conversation.isGroup && otherUserProfile?.username 
+      ? otherUserProfile.username 
+      : conversation.name,
+    [conversation.isGroup, conversation.name, otherUserProfile?.username]
   );
   
-  const handleAvatarPress = (e: any) => {
+  const avatarUrl = useMemo(
+    () => !conversation.isGroup && otherUserProfile?.avatar 
+      ? otherUserProfile.avatar 
+      : conversation.avatar,
+    [conversation.isGroup, conversation.avatar, otherUserProfile?.avatar]
+  );
+  
+  // Memoize initials generation
+  const initials = useMemo(
+    () => generateInitials(otherUserProfile?.username, otherUserProfile?.name),
+    [otherUserProfile?.username, otherUserProfile?.name]
+  );
+  
+  const handleAvatarPress = useCallback((e: any) => {
     e.stopPropagation()
     if (otherUserId && !conversation.isGroup) {
       router.push(`/profile/${otherUserId}`)
     }
-  }
+  }, [otherUserId, conversation.isGroup, router]);
   
-  // Render swipe action (delete button)
-  const renderRightActions = () => (
+  // Memoize swipe action render
+  const renderRightActions = useCallback(() => (
     <TouchableOpacity
       className="bg-red-500 justify-center items-center px-6 rounded-lg my-1 mr-2"
       onPress={onDelete}
@@ -352,7 +367,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       <MaterialIcons name="delete" size={24} color="white" />
       <Text className="text-white text-xs mt-1">Delete</Text>
     </TouchableOpacity>
-  );
+  ), [onDelete]);
   
   return (
     <Swipeable

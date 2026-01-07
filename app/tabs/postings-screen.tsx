@@ -1023,6 +1023,61 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Using shared MyPostingExpandable for consistent look-and-feel; no extra helpers needed here
 
+  // ---- Optimized FlatList callbacks ----
+  // Memoized keyExtractor functions
+  const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
+  const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
+  
+  // Memoized render functions for better performance
+  const renderMyPostingItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
+    <View
+      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
+      collapsable={false}
+    >
+      <MyPostingRow
+        bounty={bounty}
+        currentUserId={currentUserId}
+        expanded={!!expandedMap[String(bounty.id)]}
+        onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
+        onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
+        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty.id) : undefined}
+        onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
+        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
+        variant={'owner'}
+        isListScrolling={isListScrolling}
+        onRefresh={refreshAll}
+      />
+    </View>
+  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, refreshAll]);
+
+  const renderInProgressItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
+    <View
+      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
+      collapsable={false}
+    >
+      <MyPostingRow
+        bounty={bounty}
+        currentUserId={currentUserId}
+        expanded={!!expandedMap[String(bounty.id)]}
+        onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
+        onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
+        onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
+        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
+        variant={'hunter'}
+        isListScrolling={isListScrolling}
+        onRefresh={refreshAll}
+      />
+    </View>
+  ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+
+  const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
+    <ApplicantCard
+      request={request}
+      onAccept={handleAcceptRequest}
+      onReject={handleRejectRequest}
+    />
+  ), [handleAcceptRequest, handleRejectRequest]);
+
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
       <View className="flex-1 bg-emerald-600">
@@ -1187,7 +1242,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <FlatList
                   ref={inProgressListRef}
                   data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
-                  keyExtractor={(item) => item.id.toString()}
+                  keyExtractor={keyExtractorBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
@@ -1210,26 +1265,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       })}
                     </View>
                   )}
-                  renderItem={({ item: bounty, index }) => (
-                    <View
-                      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
-                      collapsable={false}
-                    >
-                      <MyPostingRow
-                        bounty={bounty}
-                        currentUserId={currentUserId}
-                        expanded={!!expandedMap[String(bounty.id)]}
-                        onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-                        onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
-                        // For hunter view, route to hunter-specific flows when applicable
-                        onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
-                        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
-                        variant={'hunter'}
-                        isListScrolling={isListScrolling}
-                        onRefresh={refreshAll}
-                      />
-                    </View>
-                  )}
+                  renderItem={renderInProgressItem}
                   ListEmptyComponent={
                     isLoading.inProgress ? (
                       <View className="px-4 py-6">
@@ -1273,14 +1309,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               ) : activeTab === "requests" ? (
                 <FlatList
                   data={bountyRequests}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item: request }) => (
-                    <ApplicantCard
-                      request={request}
-                      onAccept={handleAcceptRequest}
-                      onReject={handleRejectRequest}
-                    />
-                  )}
+                  keyExtractor={keyExtractorRequest}
+                  renderItem={renderRequestItem}
                   ListEmptyComponent={
                     isLoading.requests ? (
                       <View className="px-4 py-6">
@@ -1324,7 +1354,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <FlatList
                   ref={myPostingsListRef}
                   data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
-                  keyExtractor={(item) => item.id.toString()}
+                  keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
@@ -1347,26 +1377,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       })}
                     </View>
                   )}
-                  renderItem={({ item: bounty, index }) => (
-                    <View
-                      ref={(r) => { if (r) itemRefs.current[String(bounty.id)] = r }}
-                      collapsable={false}
-                    >
-                      <MyPostingRow
-                        bounty={bounty}
-                        currentUserId={currentUserId}
-                        expanded={!!expandedMap[String(bounty.id)]}
-                        onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
-                        onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
-                        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
-                        onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
-                        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
-                        variant={'owner'}
-                        isListScrolling={isListScrolling}
-                        onRefresh={refreshAll}
-                      />
-                    </View>
-                  )}
+                  renderItem={renderMyPostingItem}
                   ListEmptyComponent={
                     isLoading.myBounties ? (
                       <View className="px-4 py-6">
