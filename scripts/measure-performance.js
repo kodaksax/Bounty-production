@@ -130,9 +130,12 @@ async function benchmarkQuery(client, query, params, iterations = 10) {
 
 /**
  * Run EXPLAIN ANALYZE and get query plan details
+ * Note: Query is from predefined benchmarks only (not user input)
  */
 async function getQueryPlan(client, query, params) {
   try {
+    // Using parameterized query with EXPLAIN ANALYZE
+    // The query comes from predefined benchmarks, not user input
     const result = await client.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query}`, params);
     const plan = result.rows[0]['QUERY PLAN'][0];
     

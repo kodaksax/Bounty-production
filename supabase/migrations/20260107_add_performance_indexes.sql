@@ -46,6 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_bounties_is_stale
 ON bounties(is_stale) WHERE is_stale = true;
 
 -- Index for time-sensitive bounties with deadline filtering
+-- Note: This index is specific to 'open' status. If status values change,
+-- update this index condition accordingly.
 CREATE INDEX IF NOT EXISTS idx_bounties_deadline 
 ON bounties(deadline) WHERE deadline IS NOT NULL AND status = 'open';
 
@@ -319,4 +321,6 @@ COMMENT ON INDEX idx_notifications_user_id_created_at IS 'Optimizes user notific
 COMMENT ON INDEX idx_bounties_status_created_at IS 'Optimizes bounty listing by status with time ordering';
 COMMENT ON INDEX idx_wallet_transactions_user_id_created_at IS 'Optimizes user transaction history queries';
 COMMENT ON INDEX idx_outbox_events_status_created_at IS 'Critical for outbox worker event processing';
-COMMENT ON INDEX idx_messages_conversation_id_created_at IS 'Already exists - optimizes message fetching in conversations';
+
+-- Note: idx_messages_conversation_id_created_at may already exist from previous migrations
+-- The migration handles this safely with IF NOT EXISTS

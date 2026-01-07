@@ -22,7 +22,7 @@ fi
 
 echo ""
 echo "📋 Listing existing tables..."
-psql "$DATABASE_URL" -c "\dt" 2>&1 | grep -E "public\s+\|" || echo "   No tables found (fresh database)"
+psql "$DATABASE_URL" -t -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" | sed 's/^/   /' || echo "   No tables found (fresh database)"
 
 echo ""
 echo "📊 Checking existing indexes..."
