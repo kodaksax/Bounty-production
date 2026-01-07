@@ -20,6 +20,7 @@ import {
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
+import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
 
 /**
  * Validation schemas using Zod
@@ -218,6 +219,24 @@ export async function registerConsolidatedProfileRoutes(
       );
 
       try {
+        // Try to get from cache first
+        // Note: We cache the full profile data from the database, then apply
+        // sanitization based on the requester's ownership when serving.
+        // This means the same cached profile can show different fields
+        // depending on who requests it (owner sees sensitive fields, others don't).
+        const cachedProfile = await redisService.get<any>(id, CacheKeyPrefix.PROFILE);
+        
+        if (cachedProfile) {
+          request.log.info({ profileId: id }, 'Profile fetched from cache');
+          
+          // Check if requester is the profile owner
+          const isOwner = request.userId === id;
+          const sanitized = sanitizeProfile(cachedProfile, isOwner);
+          
+          return sanitized;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         const { data: profile, error } = await supabase
@@ -238,13 +257,16 @@ export async function registerConsolidatedProfileRoutes(
           throw new NotFoundError('Profile', id);
         }
 
+        // Store in cache for future requests
+        await redisService.set(id, profile, CacheKeyPrefix.PROFILE);
+
         // Check if requester is the profile owner
         const isOwner = request.userId === id;
 
         const sanitized = sanitizeProfile(profile, isOwner);
 
         request.log.info(
-          { profileId: id, isOwner },
+          { profileId: id, isOwner, cached: false },
           'Profile fetched successfully'
         );
 
@@ -305,6 +327,16 @@ export async function registerConsolidatedProfileRoutes(
       );
 
       try {
+        // Try to get from cache first
+        const cachedProfile = await redisService.get<any>(userId, CacheKeyPrefix.PROFILE);
+        
+        if (cachedProfile) {
+          request.log.info({ userId }, 'Current user profile fetched from cache');
+          const sanitized = sanitizeProfile(cachedProfile, true);
+          return sanitized;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         const { data: profile, error } = await supabase
@@ -325,11 +357,14 @@ export async function registerConsolidatedProfileRoutes(
           throw new NotFoundError('Profile', userId);
         }
 
+        // Store in cache for future requests
+        await redisService.set(userId, profile, CacheKeyPrefix.PROFILE);
+
         // Return full profile for owner
         const sanitized = sanitizeProfile(profile, true);
 
         request.log.info(
-          { userId },
+          { userId, cached: false },
           'Current user profile fetched successfully'
         );
 
@@ -456,6 +491,9 @@ export async function registerConsolidatedProfileRoutes(
           
           throw new Error(error.message);
         }
+
+        // Invalidate cache for this profile
+        await cacheInvalidation.invalidateProfile(userId);
 
         const sanitized = sanitizeProfile(profile, true);
 
@@ -603,6 +641,9 @@ export async function registerConsolidatedProfileRoutes(
         if (!profile) {
           throw new NotFoundError('Profile', profileId);
         }
+
+        // Invalidate cache for this profile
+        await cacheInvalidation.invalidateProfile(profileId);
 
         const sanitized = sanitizeProfile(profile, true);
 
