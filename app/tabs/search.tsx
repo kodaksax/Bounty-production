@@ -140,7 +140,7 @@ export default function EnhancedSearchScreen() {
     };
   }, [query]);
 
-  const handleSuggestionPress = (suggestion: AutocompleteSuggestion) => {
+  const handleSuggestionPress = useCallback((suggestion: AutocompleteSuggestion) => {
     setShowSuggestions(false);
     
     if (suggestion.type === 'bounty') {
@@ -159,9 +159,9 @@ export default function EnhancedSearchScreen() {
           : [...(prev.skills || []), suggestion.text]
       }));
     }
-  };
+  }, [router]);
 
-  const mapBounty = (b: Bounty): BountyRowItem => ({
+  const mapBounty = useCallback((b: Bounty): BountyRowItem => ({
     id: b.id.toString(),
     title: b.title || 'Untitled',
     description: b.description || '',
@@ -170,7 +170,7 @@ export default function EnhancedSearchScreen() {
     is_for_honor: (b as any).is_for_honor,
     location: (b as any).location,
     status: (b as any).status,
-  });
+  }), []);
 
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
@@ -195,7 +195,7 @@ export default function EnhancedSearchScreen() {
         setIsSearching(false);
       }
     },
-    []
+    [mapBounty]
   );
 
   const performUserSearch = useCallback(async (searchQuery: string) => {
@@ -237,26 +237,26 @@ export default function EnhancedSearchScreen() {
     };
   }, [query, filters, activeTab, performBountySearch, performUserSearch]);
 
-  const handleRecentSearchClick = (search: RecentSearch) => {
+  const handleRecentSearchClick = useCallback((search: RecentSearch) => {
     setQuery(search.query);
     if (search.filters && activeTab === 'bounties') {
       setFilters(search.filters as BountySearchFilters);
     }
-  };
+  }, [activeTab]);
 
-  const handleRemoveRecentSearch = async (searchId: string) => {
+  const handleRemoveRecentSearch = useCallback(async (searchId: string) => {
     await recentSearchService.removeSearch(searchId);
     await loadRecentSearches();
-  };
+  }, []);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilters({
       sortBy: 'date_desc',
       status: ['open'],
     });
-  };
+  }, []);
 
-  const renderBountyItem = ({ item }: { item: BountyRowItem }) => {
+  const renderBountyItem = useCallback(({ item }: { item: BountyRowItem }) => {
     const priceLabel = item.is_for_honor ? 'for honor' : item.amount != null ? `$${item.amount}` : '';
     const locationLabel = item.location ? `, in ${item.location}` : '';
     const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
@@ -302,9 +302,9 @@ export default function EnhancedSearchScreen() {
         )}
       </TouchableOpacity>
     );
-  };
+  }, [router]);
 
-  const renderUserItem = ({ item }: { item: UserProfile }) => {
+  const renderUserItem = useCallback(({ item }: { item: UserProfile }) => {
     const verifiedLabel = item.verificationStatus === 'verified' ? ', verified user' : '';
     const skillsLabel = item.skills && item.skills.length > 0 ? `, skills: ${item.skills.slice(0, 3).join(', ')}` : '';
     const accessibilityLabel = `${item.username}${verifiedLabel}${skillsLabel}`;
@@ -339,9 +339,9 @@ export default function EnhancedSearchScreen() {
         )}
       </TouchableOpacity>
     );
-  };
+  }, [router]);
 
-  const renderRecentSearch = ({ item }: { item: RecentSearch }) => (
+  const renderRecentSearch = useCallback(({ item }: { item: RecentSearch }) => (
     <View style={styles.recentSearchItem}>
       <TouchableOpacity
         style={styles.recentSearchContent}
@@ -362,15 +362,21 @@ export default function EnhancedSearchScreen() {
         <MaterialIcons name="close" size={18} color="#93e5c7" accessibilityElementsHidden={true} />
       </TouchableOpacity>
     </View>
-  );
+  ), [handleRecentSearchClick, handleRemoveRecentSearch]);
 
-  const hasActiveFilters = 
+  const keyExtractorBounty = useCallback((item: BountyRowItem) => item.id, []);
+  const keyExtractorUser = useCallback((item: UserProfile) => item.id, []);
+  const keyExtractorRecent = useCallback((item: RecentSearch) => item.id, []);
+
+  const hasActiveFilters = useMemo(() => 
     filters.location ||
     filters.minAmount !== undefined ||
     filters.maxAmount !== undefined ||
     filters.workType ||
     filters.isForHonor !== undefined ||
-    (filters.status && filters.status.length > 1);
+    (filters.status && filters.status.length > 1),
+    [filters]
+  );
 
   return (
     <View style={styles.container}>
@@ -539,7 +545,7 @@ export default function EnhancedSearchScreen() {
           </View>
           <FlatList
             data={recentSearches}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractorRecent}
             renderItem={renderRecentSearch}
             scrollEnabled={false}
             removeClippedSubviews={true}
@@ -554,7 +560,7 @@ export default function EnhancedSearchScreen() {
       {activeTab === 'bounties' ? (
         <FlatList
           data={bountyResults}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractorBounty}
           renderItem={renderBountyItem}
           contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
           keyboardDismissMode="on-drag"
@@ -573,7 +579,7 @@ export default function EnhancedSearchScreen() {
       ) : (
         <FlatList
           data={userResults}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractorUser}
           renderItem={renderUserItem}
           contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
           keyboardDismissMode="on-drag"

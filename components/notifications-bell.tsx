@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,13 +14,55 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '../lib/context/notification-context';
 import type { Notification } from '../lib/types';
 
+/**
+ * Memoized notification item component to prevent unnecessary re-renders in the list.
+ */
+const NotificationItem = React.memo<{
+  item: Notification;
+  onPress: (notification: Notification) => void;
+  getIcon: (type: string) => keyof typeof MaterialIcons.glyphMap;
+}>(function NotificationItem({ item, onPress, getIcon }) {
+  // Memoize time formatting
+  const timeAgo = useMemo(
+    () => formatDistanceToNow(new Date(item.created_at), { addSuffix: true }),
+    [item.created_at]
+  );
+
+  // Stable press handler
+  const handlePress = useCallback(() => {
+    onPress(item);
+  }, [item, onPress]);
+
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      className={"border-b border-gray-200 p-4 bg-white"}
+      activeOpacity={0.7}
+    >
+      <View className="flex-row items-start">
+        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${!item.read ? 'bg-emerald-600' : 'bg-gray-400'}`}>
+          <MaterialIcons name={getIcon(item.type)} size={20} color="white" />
+        </View>
+        <View className="flex-1">
+          <Text className="font-semibold text-gray-900 mb-1">{item.title}</Text>
+          <Text className="text-gray-600 text-sm mb-1">{item.body}</Text>
+          <Text className="text-gray-400 text-xs">{timeAgo}</Text>
+        </View>
+        {!item.read && (
+          <View className="w-2 h-2 rounded-full bg-emerald-600 ml-2 mt-2" />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 export function NotificationsBell() {
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead, fetchNotifications } = useNotifications();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const handleNotificationPress = async (notification: Notification) => {
+  const handleNotificationPress = useCallback(async (notification: Notification) => {
     // Mark as read
     if (!notification.read) {
       await markAsRead([notification.id]);
@@ -42,13 +84,14 @@ export function NotificationsBell() {
     } else if (data.followerId) {
       router.push(`/profile/${data.followerId}` as '/profile/[id]');
     }
-  };
+  }, [markAsRead, router]);
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
     await markAllAsRead();
-  };
+  }, [markAllAsRead]);
 
-  const getNotificationIcon = (type: string): keyof typeof MaterialIcons.glyphMap => {
+  // Memoize icon mapping function
+  const getNotificationIcon = useCallback((type: string): keyof typeof MaterialIcons.glyphMap => {
     switch (type) {
       case 'application':
         return 'person-add';
@@ -65,30 +108,30 @@ export function NotificationsBell() {
       default:
         return 'notifications';
     }
-  };
+  }, []);
 
-  const renderNotification = ({ item }: { item: Notification }) => (
-    <TouchableOpacity
-      onPress={() => handleNotificationPress(item)}
-      className={"border-b border-gray-200 p-4 bg-white"}
-      activeOpacity={0.7}
-    >
-      <View className="flex-row items-start">
-        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${!item.read ? 'bg-emerald-600' : 'bg-gray-400'}`}>
-          <MaterialIcons name={getNotificationIcon(item.type)} size={20} color="white" />
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-900 mb-1">{item.title}</Text>
-          <Text className="text-gray-600 text-sm mb-1">{item.body}</Text>
-          <Text className="text-gray-400 text-xs">
-            {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-          </Text>
-        </View>
-        {!item.read && (
-          <View className="w-2 h-2 rounded-full bg-emerald-600 ml-2 mt-2" />
-        )}
-      </View>
-    </TouchableOpacity>
+  // Memoized render item function
+  const renderNotification = useCallback(({ item }: { item: Notification }) => (
+    <NotificationItem 
+      item={item} 
+      onPress={handleNotificationPress}
+      getIcon={getNotificationIcon}
+    />
+  ), [handleNotificationPress, getNotificationIcon]);
+
+  // Memoized key extractor
+  const keyExtractor = useCallback((item: Notification) => item.id, []);
+
+  // Memoized accessibility label
+  const bellAccessibilityLabel = useMemo(
+    () => `Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`,
+    [unreadCount]
+  );
+
+  // Memoized badge count display
+  const badgeCount = useMemo(
+    () => unreadCount > 99 ? '99+' : unreadCount,
+    [unreadCount]
   );
 
   return (
@@ -96,14 +139,14 @@ export function NotificationsBell() {
       <TouchableOpacity
         onPress={() => setDropdownVisible(true)}
         className="relative"
-        accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+        accessibilityLabel={bellAccessibilityLabel}
         accessibilityRole="button"
       >
         <MaterialIcons name="notifications" size={24} color="#fff" />
         {unreadCount > 0 && (
           <View className="absolute -right-1 -top-1 bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
             <Text className="text-white text-[10px] font-bold">
-              {unreadCount > 99 ? '99+' : unreadCount}
+              {badgeCount}
             </Text>
           </View>
         )}
@@ -160,10 +203,14 @@ export function NotificationsBell() {
             <FlatList
               data={notifications}
               renderItem={renderNotification}
-              keyExtractor={item => item.id}
+              keyExtractor={keyExtractor}
               contentContainerStyle={{ paddingBottom: insets.bottom }}
               onRefresh={fetchNotifications}
               refreshing={loading}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              initialNumToRender={10}
             />
           )}
         </View>

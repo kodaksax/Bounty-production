@@ -3,7 +3,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { getAvatarInitials, getValidAvatarUrl } from "lib/utils/avatar-utils"
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 
 interface BountyRequestItemProps {
@@ -21,7 +21,11 @@ interface BountyRequestItemProps {
   deadline?: string
 }
 
-export function BountyRequestItem({
+/**
+ * Optimized bounty request item component with React.memo to prevent unnecessary re-renders.
+ * Memoizes expensive computations like avatar validation and string operations.
+ */
+function BountyRequestItemComponent({
   username,
   title,
   amount,
@@ -32,8 +36,17 @@ export function BountyRequestItem({
   workType,
   deadline,
 }: BountyRequestItemProps) {
-  // Validate avatar URL
-  const validAvatarUrl = getValidAvatarUrl(avatarSrc);
+  // Memoize expensive avatar validation
+  const validAvatarUrl = useMemo(() => getValidAvatarUrl(avatarSrc), [avatarSrc]);
+  
+  // Memoize avatar initials computation
+  const avatarInitials = useMemo(() => getAvatarInitials(username), [username]);
+  
+  // Memoize deadline truncation
+  const displayDeadline = useMemo(() => {
+    if (!deadline) return null;
+    return deadline.length > 16 ? deadline.slice(0, 16) + '…' : deadline;
+  }, [deadline]);
   
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
@@ -43,7 +56,7 @@ export function BountyRequestItem({
             <Avatar className="h-8 w-8">
               <AvatarImage src={validAvatarUrl} alt={username} />
               <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
-                {getAvatarInitials(username)}
+                {avatarInitials}
               </AvatarFallback>
             </Avatar>
           </View>
@@ -65,9 +78,9 @@ export function BountyRequestItem({
                   <Text className="text-emerald-200 text-[10px] uppercase tracking-wide">{workType === 'online' ? 'Online' : 'In Person'}</Text>
                 </View>
               )}
-              {deadline && (
+              {displayDeadline && (
                 <View className="bg-emerald-900/40 px-2 py-0.5 rounded">
-                  <Text className="text-emerald-300 text-[10px] tracking-wide">Due: {deadline.length > 16 ? deadline.slice(0,16)+'…' : deadline}</Text>
+                  <Text className="text-emerald-300 text-[10px] tracking-wide">Due: {displayDeadline}</Text>
                 </View>
               )}
             </View>
@@ -82,3 +95,23 @@ export function BountyRequestItem({
     </View>
   )
 }
+
+/**
+ * Memoized version to prevent re-renders when parent updates but props haven't changed.
+ * Only re-renders when actual prop values change.
+ */
+export const BountyRequestItem = React.memo(BountyRequestItemComponent, (prevProps, nextProps) => {
+  // Custom comparison for better performance
+  return (
+    prevProps.username === nextProps.username &&
+    prevProps.title === nextProps.title &&
+    prevProps.amount === nextProps.amount &&
+    prevProps.distance === nextProps.distance &&
+    prevProps.timeAgo === nextProps.timeAgo &&
+    prevProps.avatarSrc === nextProps.avatarSrc &&
+    prevProps.onMenuClick === nextProps.onMenuClick &&
+    prevProps.status === nextProps.status &&
+    prevProps.workType === nextProps.workType &&
+    prevProps.deadline === nextProps.deadline
+  );
+});
