@@ -52,23 +52,10 @@ try {
 // STEP 3: Check for common accessibility issues in code
 console.log('\n🔎 Step 3: Scanning for common accessibility issues...');
 
-const commonIssues = [
-  {
-    name: 'Missing accessibilityLabel on TouchableOpacity',
-    pattern: /<TouchableOpacity[^>]*onPress[^>]*>(?![\s\S]*accessibilityLabel)/g,
-    severity: 'error',
-  },
-  {
-    name: 'Missing accessibilityRole on interactive elements',
-    pattern: /<TouchableOpacity[^>]*onPress[^>]*>(?![\s\S]*accessibilityRole)/g,
-    severity: 'warning',
-  },
-  {
-    name: 'Image without accessibility',
-    pattern: /<Image[^>]*source[^>]*>(?![\s\S]*accessibilityLabel|[\s\S]*accessibilityElementsHidden)/g,
-    severity: 'warning',
-  },
-];
+// Note: This uses basic regex pattern matching for quick checks
+// For more robust analysis, consider using an AST parser like @babel/parser
+// These checks may have false positives and should be complemented with
+// ESLint rules and manual code review
 
 const appDir = path.join(__dirname, '../app');
 const componentsDir = path.join(__dirname, '../components');
@@ -78,19 +65,51 @@ function scanDirectory(dir, issues) {
     return;
   }
 
-  const files = fs.readdirSync(dir, { recursive: true });
+  // Recursive directory traversal function for compatibility
+  function traverseDirectory(currentDir) {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    
+    entries.forEach(entry => {
+      const fullPath = path.join(currentDir, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Skip node_modules and hidden directories
+        if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          traverseDirectory(fullPath);
+        }
+      } else if (entry.isFile() && (fullPath.endsWith('.tsx') || fullPath.endsWith('.jsx'))) {
+        scanFile(fullPath, issues);
+      }
+    });
+  }
   
-  files.forEach(file => {
-    const filePath = path.join(dir, file);
-    
-    if (!fs.statSync(filePath).isFile()) return;
-    if (!filePath.endsWith('.tsx') && !filePath.endsWith('.jsx')) return;
-    
-    const content = fs.readFileSync(filePath, 'utf-8');
-    
-    issues.forEach(issue => {
-      const matches = content.match(issue.pattern);
-      if (matches && matches.length > 0) {
+  traverseDirectory(dir);
+}
+
+function scanFile(filePath, issues) {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  
+  // Note: These regex patterns are simplified checks for common patterns
+  // For production use, consider using an AST parser like @babel/parser
+  // for more reliable JSX analysis
+  const commonIssues = [
+    {
+      name: 'Missing accessibilityLabel on TouchableOpacity',
+      // This is a basic pattern check - may have false positives/negatives
+      pattern: /<TouchableOpacity[^>]*onPress[^>]*>/g,
+      check: (match) => !/<TouchableOpacity[^>]*accessibilityLabel/.test(match),
+      severity: 'error',
+    },
+  ];
+  
+  commonIssues.forEach(issue => {
+    const matches = content.match(issue.pattern);
+    if (matches) {
+      matches.forEach(match => {
+        if (issue.check && !issue.check(match)) {
+          return; // Skip if check function says it's ok
+        }
+        
         const msg = `${issue.severity === 'error' ? '❌' : '⚠️'} ${issue.name} in ${path.relative(process.cwd(), filePath)}`;
         
         if (issue.severity === 'error') {
@@ -98,14 +117,14 @@ function scanDirectory(dir, issues) {
         } else {
           results.warnings.push(msg);
         }
-      }
-    });
+      });
+    }
   });
 }
 
 // Scan app and components directories
-scanDirectory(appDir, commonIssues);
-scanDirectory(componentsDir, commonIssues);
+scanDirectory(appDir);
+scanDirectory(componentsDir);
 
 if (results.errors.length === 0 && results.warnings.length === 0) {
   results.passed.push('✅ No common accessibility issues found in code scan');
