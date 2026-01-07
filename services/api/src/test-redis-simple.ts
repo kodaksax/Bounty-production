@@ -34,7 +34,12 @@ async function testRedisConnection() {
     
     await redis.set(testKey, JSON.stringify(testValue), 'EX', 60);
     const retrieved = await redis.get(testKey);
-    const parsed = JSON.parse(retrieved!);
+    
+    if (retrieved === null) {
+      throw new Error(`Expected value for key "${testKey}" but got null from Redis`);
+    }
+    
+    const parsed = JSON.parse(retrieved);
     
     console.log(`   Set value: ✅`);
     console.log(`   Retrieved value: ✅`);
@@ -86,15 +91,48 @@ async function testRedisConnection() {
     await redis.set('bounty:list:2', 'data2');
     await redis.set('bounty:list:3', 'data3');
     
-    const keys = await redis.keys('bountyexpo:bounty:list:*');
-    console.log(`   Created ${keys.length} test keys`);
+    // Use SCAN instead of KEYS for production-safe iteration
+    const keysToDelete: string[] = [];
+    const stream = redis.scanStream({
+      match: 'bountyexpo:bounty:list:*',
+      count: 100,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (keys: string[]) => {
+        if (keys && keys.length > 0) {
+          keysToDelete.push(...keys);
+        }
+      });
+      stream.on('end', () => resolve());
+      stream.on('error', (err: Error) => reject(err));
+    });
+
+    console.log(`   Created ${keysToDelete.length} test keys using SCAN`);
     
-    if (keys.length > 0) {
+    if (keysToDelete.length > 0) {
       // Remove prefix before deletion
-      const keysWithoutPrefix = keys.map((k: string) => k.replace('bountyexpo:', ''));
+      const keysWithoutPrefix = keysToDelete.map((k: string) => k.replace('bountyexpo:', ''));
       await redis.del(...keysWithoutPrefix);
-      const keysAfterDelete = await redis.keys('bountyexpo:bounty:list:*');
-      console.log(`   Bulk delete successful: ${keysAfterDelete.length === 0 ? '✅' : '❌'}\n`);
+      
+      // Verify deletion using SCAN
+      const remainingKeys: string[] = [];
+      const verifyStream = redis.scanStream({
+        match: 'bountyexpo:bounty:list:*',
+        count: 100,
+      });
+      
+      await new Promise<void>((resolve, reject) => {
+        verifyStream.on('data', (keys: string[]) => {
+          if (keys && keys.length > 0) {
+            remainingKeys.push(...keys);
+          }
+        });
+        verifyStream.on('end', () => resolve());
+        verifyStream.on('error', (err: Error) => reject(err));
+      });
+      
+      console.log(`   Bulk delete successful: ${remainingKeys.length === 0 ? '✅' : '❌'}\n`);
     }
 
     // Test 7: Server info

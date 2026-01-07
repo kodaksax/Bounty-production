@@ -220,6 +220,10 @@ export async function registerConsolidatedProfileRoutes(
 
       try {
         // Try to get from cache first
+        // Note: We cache the full profile data from the database, then apply
+        // sanitization based on the requester's ownership when serving.
+        // This means the same cached profile can show different fields
+        // depending on who requests it (owner sees sensitive fields, others don't).
         const cachedProfile = await redisService.get<any>(id, CacheKeyPrefix.PROFILE);
         
         if (cachedProfile) {

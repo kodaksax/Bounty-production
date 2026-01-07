@@ -24,6 +24,26 @@ import { toJsonSchema } from '../utils/zod-json';
 import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
 
 /**
+ * Generate a normalized cache key for bounty list queries
+ * Ensures consistent key generation regardless of parameter order
+ */
+function generateBountyListCacheKey(query: any): string {
+  // Create an array of key-value pairs and sort them for consistency
+  const params = [
+    ['status', query.status || 'open'],
+    ['category', query.category || 'all'],
+    ['user_id', query.user_id || 'all'],
+    ['accepted_by', query.accepted_by || 'all'],
+    ['page', query.page],
+    ['limit', query.limit],
+    ['sortBy', query.sortBy],
+    ['sortOrder', query.sortOrder],
+  ].sort((a, b) => a[0].localeCompare(b[0]));
+
+  return params.map(([key, value]) => `${key}:${value}`).join(':');
+}
+
+/**
  * Validation schemas using Zod
  */
 
@@ -220,8 +240,8 @@ export async function registerConsolidatedBountyRoutes(
       );
 
       try {
-        // Generate cache key based on query parameters
-        const cacheKey = `status:${query.status || 'open'}:cat:${query.category || 'all'}:user:${query.user_id || 'all'}:accepted:${query.accepted_by || 'all'}:page:${query.page}:limit:${query.limit}:sort:${query.sortBy}:${query.sortOrder}`;
+        // Generate normalized cache key based on query parameters
+        const cacheKey = generateBountyListCacheKey(query);
         
         // Try to get from cache first
         const cachedResult = await redisService.get<any>(cacheKey, CacheKeyPrefix.BOUNTY_LIST);

@@ -52,9 +52,21 @@ export async function initRedis(): Promise<InstanceType<typeof Redis> | null> {
   // Prevent multiple simultaneous connection attempts
   if (isConnecting) {
     console.log('[Redis] Connection already in progress, waiting...');
-    // Wait for existing connection attempt
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return redisClient;
+    // Wait for the ongoing connection attempt to either succeed or fail
+    const maxWaitMs = 5000;
+    const pollIntervalMs = 100;
+    const start = Date.now();
+
+    while (isConnecting && !isConnected && Date.now() - start < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    // If connection succeeded, return the client; otherwise return null
+    if (isConnected && redisClient) {
+      return redisClient;
+    }
+
+    return null;
   }
 
   try {
@@ -157,10 +169,40 @@ async function getRedisClient(): Promise<InstanceType<typeof Redis> | null> {
 }
 
 /**
+ * Simple metrics tracking for cache operations
+ */
+const cacheMetrics = {
+  hits: 0,
+  misses: 0,
+  errors: 0,
+  getHitRate: () => {
+    const total = cacheMetrics.hits + cacheMetrics.misses;
+    return total > 0 ? (cacheMetrics.hits / total) * 100 : 0;
+  },
+  reset: () => {
+    cacheMetrics.hits = 0;
+    cacheMetrics.misses = 0;
+    cacheMetrics.errors = 0;
+  },
+};
+
+/**
  * Check if Redis is available and connected
  */
 export function isRedisAvailable(): boolean {
   return config.redis.enabled && isConnected && redisClient !== null;
+}
+
+/**
+ * Get cache metrics
+ */
+export function getCacheMetrics() {
+  return {
+    hits: cacheMetrics.hits,
+    misses: cacheMetrics.misses,
+    errors: cacheMetrics.errors,
+    hitRate: cacheMetrics.getHitRate(),
+  };
 }
 
 /**
@@ -177,6 +219,7 @@ export const redisService = {
     try {
       const client = await getRedisClient();
       if (!client) {
+        cacheMetrics.misses++;
         return null;
       }
 
@@ -184,12 +227,16 @@ export const redisService = {
       const value = await client.get(fullKey);
       
       if (!value) {
+        cacheMetrics.misses++;
         return null;
       }
 
+      cacheMetrics.hits++;
       return JSON.parse(value) as T;
     } catch (error) {
+      cacheMetrics.errors++;
       console.error('[Redis] Error getting cache value:', error);
+      // Log error for monitoring but return null for graceful degradation
       return null;
     }
   },
@@ -256,6 +303,7 @@ export const redisService = {
 
   /**
    * Delete multiple keys matching a pattern
+   * Uses SCAN for non-blocking iteration instead of KEYS
    * @param pattern - Pattern to match (without prefix)
    * @param keyPrefix - Key prefix (e.g., CacheKeyPrefix.BOUNTY_LIST)
    * @returns Number of keys deleted
@@ -268,22 +316,42 @@ export const redisService = {
       }
 
       const fullPattern = config.redis.keyPrefix + keyPrefix + pattern;
-      const keys = await client.keys(fullPattern);
-      
-      if (keys.length === 0) {
-        return 0;
-      }
+      let totalDeleted = 0;
 
-      // Remove the global prefix from keys before deletion
-      // since ioredis client already includes it
-      const keysWithoutGlobalPrefix = keys.map((k: string) => 
-        k.startsWith(config.redis.keyPrefix) 
-          ? k.slice(config.redis.keyPrefix.length) 
-          : k
-      );
+      const stream = client.scanStream({
+        match: fullPattern,
+        count: 100,
+      });
 
-      await client.del(...keysWithoutGlobalPrefix);
-      return keys.length;
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', async (keys: string[]) => {
+          if (!keys || keys.length === 0) {
+            return;
+          }
+
+          // Remove the global prefix from keys before deletion
+          // since ioredis client already includes it
+          const keysWithoutGlobalPrefix = keys.map((k: string) =>
+            k.startsWith(config.redis.keyPrefix)
+              ? k.slice(config.redis.keyPrefix.length)
+              : k
+          );
+
+          if (keysWithoutGlobalPrefix.length > 0) {
+            try {
+              await client.del(...keysWithoutGlobalPrefix);
+              totalDeleted += keys.length;
+            } catch (err) {
+              stream.destroy(err as Error);
+            }
+          }
+        });
+
+        stream.on('end', () => resolve());
+        stream.on('error', (err: Error) => reject(err));
+      });
+
+      return totalDeleted;
     } catch (error) {
       console.error('[Redis] Error deleting pattern:', error);
       return 0;
