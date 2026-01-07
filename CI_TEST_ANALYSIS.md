@@ -1,5 +1,9 @@
 # CI Test Analysis - Auth Persistence Test
 
+**Date**: January 6, 2026  
+**Branch**: copilot/fix-auth-persistence-test  
+**Base Commit**: 77cace5
+
 ## Issue Summary
 The issue reported that `__tests__/integration/auth-persistence.test.tsx` was failing to run, with a suggestion to change the import from `@testing-library/react-native` to `@testing-library/react`.
 
@@ -36,6 +40,23 @@ Consider using the "jsdom" test environment.
    - `__tests__/integration/websocket-bounty-updates.test.ts`
    - `__tests__/components/offline-status-badge.test.tsx`
    - `__tests__/unit/hooks/useConversations.test.ts`
+
+### When to Use Which Testing Library?
+
+**Use `@testing-library/react-native`** (current setup) when:
+- Testing React Native components (View, Text, TouchableOpacity, etc.)
+- Testing React components in a React Native project context
+- Jest is configured with `testEnvironment: 'node'`
+- Component integrates with React Native APIs or libraries (e.g., `@sentry/react-native`)
+- Project uses Expo or React Native CLI
+
+**Use `@testing-library/react`** when:
+- Testing pure React components for web applications
+- Jest is configured with `testEnvironment: 'jsdom'`
+- Components use browser-specific APIs (DOM, window, document)
+- Project is a React web application (not React Native)
+
+**Key Difference**: `@testing-library/react` requires a DOM environment (jsdom) and uses `react-dom` for rendering, while `@testing-library/react-native` uses `react-test-renderer` and works in a Node environment without requiring a DOM.
 
 ### Alternative Solution Status
 The issue provided two solutions:
