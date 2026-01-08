@@ -12,8 +12,15 @@ const fs = require('fs');
 const path = require('path');
 
 // Database connection
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error('Error: DATABASE_URL environment variable is not set. Please set DATABASE_URL before running analyze-slow-queries.');
+  process.exit(1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://bountyexpo:bountyexpo123@localhost:5432/bountyexpo'
+  connectionString,
 });
 
 /**
