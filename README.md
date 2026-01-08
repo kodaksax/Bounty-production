@@ -783,6 +783,64 @@ docker exec bountyexpo-redis redis-cli FLUSHDB
    - Complete error messages
    - Steps to reproduce
 
+## 🚀 Production Deployment
+
+### Quick Start
+
+For rapid deployment to production using Expo Application Services (EAS):
+
+**📖 Start here:** [PRODUCTION_QUICK_START.md](./PRODUCTION_QUICK_START.md)
+
+### Comprehensive Guides
+
+| Guide | Description |
+|-------|-------------|
+| **[PRODUCTION_DEPLOYMENT_EAS.md](./PRODUCTION_DEPLOYMENT_EAS.md)** | Complete EAS build and deployment guide |
+| **[MONITORING_ALERTING_SETUP.md](./MONITORING_ALERTING_SETUP.md)** | Error tracking, analytics, and alerts |
+| **[GITHUB_SECRETS_GUIDE.md](./GITHUB_SECRETS_GUIDE.md)** | CI/CD secrets configuration |
+| **[DEPLOYMENT.md](./DEPLOYMENT.md)** | Backend infrastructure and API deployment |
+
+### Key Deployment Features
+
+✅ **Automated CI/CD**
+- GitHub Actions workflows for EAS builds
+- Automated testing before deployment
+- Docker image builds for API server
+
+✅ **Environment Management**
+- Staging and production profiles
+- Environment-specific configurations
+- Secure secrets management
+
+✅ **Monitoring & Alerts**
+- Sentry error tracking
+- Mixpanel analytics
+- Health check endpoints
+- Alert notifications
+
+✅ **OTA Updates**
+- Push JavaScript updates without app store review
+- Gradual rollout support
+- Quick rollback capabilities
+
+### Quick Commands
+
+```bash
+# Build for production
+eas build --profile production --platform all
+
+# Push OTA update
+eas update --branch production --message "Bug fixes"
+
+# Check build status
+eas build:list
+
+# Monitor API health
+curl https://api.bountyexpo.com/health
+```
+
+---
+
 ## 🤝 Contributing
 
 ### Getting Started
