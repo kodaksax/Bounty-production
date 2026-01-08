@@ -64,7 +64,7 @@ export default function AdminBountyDetailScreen() {
     );
   };
 
-  const statusTransitions: Record<AdminBounty['status'], Array<{ status: AdminBounty['status']; label: string; icon: string }>> = {
+  const statusTransitions: Record<AdminBounty['status'], { status: AdminBounty['status']; label: string; icon: string }[]> = {
     open: [
       { status: 'in_progress', label: 'Start Progress', icon: 'play-arrow' },
       { status: 'archived', label: 'Archive', icon: 'archive' },
@@ -101,7 +101,7 @@ export default function AdminBountyDetailScreen() {
           <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
           <Text style={styles.errorTitle}>Failed to load bounty</Text>
           <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadBounty}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -151,7 +151,7 @@ export default function AdminBountyDetailScreen() {
           <Text style={styles.sectionTitle}>Status Actions</Text>
           <View style={styles.actionsGrid}>
             {statusTransitions[bounty.status]?.map((action) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={action.status}
                 style={styles.actionButton}
                 onPress={() => handleStatusChange(action.status)}

@@ -32,7 +32,7 @@ export function NotFoundScreen({
         <Text style={styles.message}>{message}</Text>
         
         {onAction && (
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={onAction}
             style={styles.button}
             activeOpacity={0.8}

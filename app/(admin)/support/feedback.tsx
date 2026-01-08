@@ -85,7 +85,7 @@ export default function AdminFeedbackScreen() {
             <Text style={styles.sectionTitle}>Type of Feedback</Text>
             <View style={styles.typeGrid}>
               {feedbackTypes.map((item) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={item.id}
                   style={[
                     styles.typeCard,
@@ -117,7 +117,7 @@ export default function AdminFeedbackScreen() {
             <Text style={styles.sectionTitle}>Priority</Text>
             <View style={styles.priorityRow}>
               {priorities.map((item) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={item.id}
                   style={[
                     styles.priorityChip,
@@ -147,7 +147,7 @@ export default function AdminFeedbackScreen() {
           {/* Title */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Title *</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.textInput}
               placeholder="Brief summary of your feedback"
               placeholderTextColor="rgba(255,254,245,0.4)"
@@ -161,7 +161,7 @@ export default function AdminFeedbackScreen() {
           {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description *</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={[styles.textInput, styles.textArea]}
               placeholder="Provide detailed information about your feedback..."
               placeholderTextColor="rgba(255,254,245,0.4)"
@@ -177,7 +177,7 @@ export default function AdminFeedbackScreen() {
           {type === 'bug' && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Steps to Reproduce</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={[styles.textInput, styles.textArea]}
                 placeholder="1. Go to...&#10;2. Click on...&#10;3. Observe that..."
                 placeholderTextColor="rgba(255,254,245,0.4)"
@@ -200,7 +200,7 @@ export default function AdminFeedbackScreen() {
           </View>
 
           {/* Submit Button */}
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={isSubmitting}

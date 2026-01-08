@@ -459,7 +459,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
           <View style={styles.formFieldBlock}>
             <Text style={styles.fieldLabel}>Card Number</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={cardNumber}
               onChangeText={handleCardNumberChange}
               placeholder="1244 1234 1345 3255"
@@ -473,7 +473,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
           <View style={styles.formFieldBlock}>
             <Text style={styles.fieldLabel}>Cardholder Name</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={cardholderName}
               onChangeText={(text) => {
                 setCardholderName(text)
@@ -492,7 +492,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           <View style={styles.inlineRow}>
             <View style={[styles.formFieldBlock, styles.inlineHalf]}>
               <Text style={styles.fieldLabel}>Expiry Date</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={expiryDate}
                 onChangeText={handleExpiryDateChange}
                 placeholder="MM/YY"
@@ -505,7 +505,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             </View>
             <View style={[styles.formFieldBlock, styles.inlineHalf]}>
               <Text style={styles.fieldLabel}>Security Code</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={securityCode}
                 onChangeText={(text) => {
                   const cleaned = text.replace(/\D/g, '').slice(0, 4)
@@ -600,7 +600,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
           <View style={styles.formFieldBlock}>
             <Text style={styles.fieldLabel}>Card Number</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={cardNumber}
               onChangeText={handleCardNumberChange}
               placeholder="1244 1234 1345 3255"
@@ -614,7 +614,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
           <View style={styles.formFieldBlock}>
             <Text style={styles.fieldLabel}>Cardholder Name</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={cardholderName}
               onChangeText={(text) => {
                 setCardholderName(text)
@@ -633,7 +633,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           <View style={styles.inlineRow}>
             <View style={[styles.formFieldBlock, styles.inlineHalf]}>
               <Text style={styles.fieldLabel}>Expiry Date</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={expiryDate}
                 onChangeText={handleExpiryDateChange}
                 placeholder="MM/YY"
@@ -646,7 +646,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             </View>
             <View style={[styles.formFieldBlock, styles.inlineHalf]}>
               <Text style={styles.fieldLabel}>Security Code</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={securityCode}
                 onChangeText={(text) => {
                   const cleaned = text.replace(/\D/g, '').slice(0, 4)

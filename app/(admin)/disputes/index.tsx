@@ -167,7 +167,7 @@ export default function AdminDisputesScreen() {
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {(['all', 'open', 'under_review', 'resolved'] as const).map((status) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={status}
                 onPress={() => setFilter(status)}
                 style={[
@@ -197,7 +197,7 @@ export default function AdminDisputesScreen() {
           <View style={styles.errorBanner}>
             <MaterialIcons name="error-outline" size={20} color="#f44336" />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={loadDisputes} style={styles.retryButton}>
+            <TouchableOpacity accessibilityRole="button" onPress={loadDisputes} style={styles.retryButton}>
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -219,7 +219,7 @@ export default function AdminDisputesScreen() {
         ) : (
           <View style={styles.disputesList}>
             {filteredDisputes.map((dispute) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={dispute.id}
                 onPress={() => handleDisputePress(dispute.id)}
                 style={styles.disputeCard}
@@ -284,7 +284,7 @@ export default function AdminDisputesScreen() {
                   {/* Quick Actions */}
                   {dispute.status === 'open' && (
                     <View style={styles.quickActions}>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         onPress={(e) => {
                           e.stopPropagation();
                           handleMarkUnderReview(dispute.id);

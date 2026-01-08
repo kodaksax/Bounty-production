@@ -130,11 +130,11 @@ export default function AdminHelpCenterScreen() {
           <View style={styles.articleFooter}>
             <Text style={styles.footerLabel}>Was this article helpful?</Text>
             <View style={styles.feedbackButtons}>
-              <TouchableOpacity style={styles.feedbackButton}>
+              <TouchableOpacity accessibilityRole="button" style={styles.feedbackButton}>
                 <MaterialIcons name="thumb-up" size={20} color="#4caf50" />
                 <Text style={styles.feedbackButtonText}>Yes</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.feedbackButton}>
+              <TouchableOpacity accessibilityRole="button" style={styles.feedbackButton}>
                 <MaterialIcons name="thumb-down" size={20} color="#f44336" />
                 <Text style={styles.feedbackButtonText}>No</Text>
               </TouchableOpacity>
@@ -154,7 +154,7 @@ export default function AdminHelpCenterScreen() {
         {/* Search */}
         <View style={styles.searchContainer}>
           <MaterialIcons name="search" size={20} color="rgba(255,254,245,0.5)" />
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             style={styles.searchInput}
             placeholder="Search help articles..."
             placeholderTextColor="rgba(255,254,245,0.4)"
@@ -162,7 +162,7 @@ export default function AdminHelpCenterScreen() {
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setSearchQuery('')}>
               <MaterialIcons name="close" size={20} color="rgba(255,254,245,0.5)" />
             </TouchableOpacity>
           )}
@@ -171,7 +171,7 @@ export default function AdminHelpCenterScreen() {
         {/* Categories */}
         {filteredCategories.map((category) => (
           <View key={category.id} style={styles.categoryContainer}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.categoryHeader}
               onPress={() => toggleCategory(category.id)}
             >
@@ -190,7 +190,7 @@ export default function AdminHelpCenterScreen() {
             {(expandedCategory === category.id || searchQuery) && (
               <View style={styles.articlesList}>
                 {category.articles.map((article) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={article.id}
                     style={styles.articleItem}
                     onPress={() => setSelectedArticle(article)}

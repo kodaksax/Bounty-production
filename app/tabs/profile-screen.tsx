@@ -262,7 +262,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
           <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
             <Text className="text-white text-sm flex-1">{updateMessage}</Text>
-            <TouchableOpacity onPress={() => setUpdateMessage(null)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setUpdateMessage(null)}>
               <MaterialIcons name="close" size={18} color="white" />
             </TouchableOpacity>
           </View>
@@ -342,7 +342,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Skillsets</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.editButton}
               onPress={() => setIsEditing(true)}
             >
@@ -370,7 +370,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
         {/* History Link (raised by 20px) */}
         <View style={{ marginTop: -20 }} className="px-4 py-2">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
             onPress={() => {
               // Navigate to history screen

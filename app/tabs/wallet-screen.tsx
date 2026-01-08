@@ -174,7 +174,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 <PaymentMethodSkeleton />
               </View>
             ) : paymentMethods.length === 0 ? (
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.accountCard}
                 onPress={() => setShowPaymentMethods(true)}
               >
@@ -213,7 +213,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}> 
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Transaction History</Text>
-            <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowTransactionHistory(true)}>
               <Text style={styles.sectionManage}>View All</Text>
             </TouchableOpacity>
           </View>

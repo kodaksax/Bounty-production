@@ -166,7 +166,7 @@ export function DisputeSubmissionForm({
         <Text className="text-sm text-gray-600 mb-3">
           Clearly explain why you believe this dispute should be reviewed.
         </Text>
-        <TextInput
+        <TextInput accessibilityLabel="Text input field"
           value={reason}
           onChangeText={setReason}
           placeholder="Describe the issue in detail..."
@@ -219,7 +219,7 @@ export function DisputeSubmissionForm({
                     {item.description || item.content}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => handleRemoveEvidence(item.id)}
                   disabled={isSubmitting}
                   className="ml-2 p-2"
@@ -233,7 +233,7 @@ export function DisputeSubmissionForm({
 
         {/* Text Evidence Input */}
         <View className="mb-3">
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             value={textEvidence}
             onChangeText={setTextEvidence}
             placeholder="Describe evidence or add details..."
@@ -244,7 +244,7 @@ export function DisputeSubmissionForm({
             style={{ minHeight: 80 }}
             editable={!isSubmitting}
           />
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleAddTextEvidence}
             disabled={isSubmitting || !textEvidence.trim()}
             className={`rounded-lg py-2 px-4 flex-row items-center justify-center ${
@@ -268,7 +268,7 @@ export function DisputeSubmissionForm({
 
         {/* Upload Buttons */}
         <View className="flex-row gap-2">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handlePickImage}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
@@ -289,7 +289,7 @@ export function DisputeSubmissionForm({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handlePickDocument}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
@@ -314,7 +314,7 @@ export function DisputeSubmissionForm({
 
       {/* Action Buttons */}
       <View className="gap-3 pb-6">
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}
           className={`rounded-lg py-4 ${
@@ -331,7 +331,7 @@ export function DisputeSubmissionForm({
         </TouchableOpacity>
 
         {onCancel && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={onCancel}
             disabled={isSubmitting}
             className="py-3"

@@ -30,13 +30,13 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
         </View>
 
         <View className="flex items-center gap-2">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={onAccept}
             className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center hover:bg-emerald-400 transition-colors"
           >
             <MaterialIcons name="check" size={20} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={onReject}
             className="h-8 w-8 rounded-full bg-red-500/70 flex items-center justify-center hover:bg-red-400/70 transition-colors"
           >

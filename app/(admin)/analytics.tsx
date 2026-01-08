@@ -97,7 +97,7 @@ export default function AnalyticsDashboard() {
         {/* Error state with retry */}
         {error && (
           <View style={styles.errorContainer}>
-            <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+            <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={handleRefresh}>
               <MaterialIcons name="refresh" size={20} color="#fffef5" />
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>

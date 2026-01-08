@@ -36,7 +36,7 @@ export default function VerifyPhoneScreen() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   // Handle resend cooldown
   useEffect(() => {
@@ -191,7 +191,7 @@ export default function VerifyPhoneScreen() {
       >
         {/* Header */}
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
@@ -215,7 +215,7 @@ export default function VerifyPhoneScreen() {
         {/* OTP Input */}
         <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               key={index}
               ref={(ref) => { inputRefs.current[index] = ref; }}
               style={[
@@ -243,7 +243,7 @@ export default function VerifyPhoneScreen() {
         )}
 
         {/* Verify Button */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.verifyButton, isVerifying && styles.buttonDisabled]}
           onPress={() => handleVerify()}
           disabled={isVerifying || otp.some(d => !d)}
@@ -266,7 +266,7 @@ export default function VerifyPhoneScreen() {
               Resend in {resendCooldown}s
             </Text>
           ) : (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleResend}
               disabled={isResending}
               style={styles.resendButton}
@@ -281,7 +281,7 @@ export default function VerifyPhoneScreen() {
         </View>
 
         {/* Skip Button */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.skipButton}
           onPress={handleSkip}
         >

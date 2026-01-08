@@ -75,11 +75,11 @@ export function EscrowExplainer({
         accessible={true}
         accessibilityLabel="Escrow protection explanation"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setShowModal(false)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Modal Header */}
               <View style={styles.modalHeader}>

@@ -18,7 +18,7 @@ export interface AnalyticsMetrics {
   eventsWeek: number;
   
   // Top events
-  topEvents: Array<{ name: string; count: number }>;
+  topEvents: { name: string; count: number }[];
   
   // Bounty metrics
   bountiesCreatedToday: number;
@@ -43,7 +43,7 @@ export interface AnalyticsMetrics {
   // Error tracking
   errorsToday: number;
   errorsWeek: number;
-  topErrors: Array<{ message: string; count: number }>;
+  topErrors: { message: string; count: number }[];
 }
 
 interface AnalyticsMetricsCardProps {

@@ -241,10 +241,10 @@ export default function BountyDashboard() {
       <SafeAreaView style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Failed to load bounty'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -259,7 +259,7 @@ export default function BountyDashboard() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bounty Dashboard</Text>
@@ -308,7 +308,7 @@ export default function BountyDashboard() {
               This posting is visible in the feed. You’ll receive requests from hunters and can review them from the Postings screen.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.back()}>
+              <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={() => router.back()}>
                 <Text style={styles.secondaryBtnText}>Back to My Postings</Text>
               </TouchableOpacity>
             </View>
@@ -326,7 +326,7 @@ export default function BountyDashboard() {
               const isAccessible = stageIndex <= currentIndex;
 
               return (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={stage.id}
                   style={[
                     styles.stageItem,
@@ -376,7 +376,7 @@ export default function BountyDashboard() {
           <Text style={styles.sectionTitle}>Quick Message</Text>
           {conversation ? (
             <View style={styles.messageInputContainer}>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.messageInput}
                 placeholder="Type a message to the hunter..."
                 placeholderTextColor="rgba(110, 231, 183, 0.4)"
@@ -385,7 +385,7 @@ export default function BountyDashboard() {
                 multiline
                 numberOfLines={3}
               />
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.sendButton, (!messageText.trim() || isSendingMessage) && styles.sendButtonDisabled]}
                 onPress={handleSendMessage}
                 disabled={!messageText.trim() || isSendingMessage}
@@ -415,7 +415,7 @@ export default function BountyDashboard() {
             {descriptionExpanded ? bounty.description : descriptionPreview}
           </Text>
           {bounty.description.length > 150 && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.expandButton}
               onPress={() => setDescriptionExpanded(!descriptionExpanded)}
             >
@@ -453,7 +453,7 @@ export default function BountyDashboard() {
 
         {/* Next Button */}
         {currentStage !== 'payout' && (
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <TouchableOpacity accessibilityRole="button" style={styles.nextButton} onPress={handleNext}>
             <Text style={styles.nextButtonText}>
               {currentStage === 'review_verify' ? 'Go to Review & Verify' : 'Next Stage'}
             </Text>
@@ -462,7 +462,7 @@ export default function BountyDashboard() {
         )}
 
         {currentStage === 'payout' && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.nextButton}
             onPress={() => routeBountyId && router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: routeBountyId } })}
           >

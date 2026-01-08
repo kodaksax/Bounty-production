@@ -717,7 +717,7 @@ export default function AdminReportsScreen() {
           : 'Try adjusting your filters to see more reports.'}
       </Text>
       {statusFilter !== 'all' && (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.viewAllButton}
           onPress={() => setStatusFilter('all')}
         >
@@ -734,7 +734,7 @@ export default function AdminReportsScreen() {
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchReports}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={fetchReports}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>

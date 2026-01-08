@@ -277,7 +277,7 @@ export default function UserProfileScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -299,7 +299,7 @@ export default function UserProfileScreen() {
     return (
       <View style={styles.container}>
         <View style={[styles.header, { paddingTop: Math.max(insets.top - 8, 6) }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <BrandingLogo size="small" />
@@ -310,7 +310,7 @@ export default function UserProfileScreen() {
           <Text style={styles.errorText}>
             {error || "This user profile could not be loaded."}
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -324,7 +324,7 @@ export default function UserProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -345,18 +345,18 @@ export default function UserProfileScreen() {
 
       {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
       {showMoreMenu && !isOwnProfile && (
-        <Pressable style={styles.moreMenuWrapper} onPress={() => setShowMoreMenu(false)}>
+        <Pressable accessibilityRole="button" style={styles.moreMenuWrapper} onPress={() => setShowMoreMenu(false)}>
           <View style={styles.moreMenuBackdrop} />
           <View style={[styles.moreMenuContainer, { top: 48 }]}>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
+            <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleShare}>
               <MaterialIcons name="share" size={20} color="#a7f3d0" />
               <Text style={styles.moreMenuText}>Share Profile</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
+            <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleReport}>
               <MaterialIcons name="report" size={20} color="#fbbf24" />
               <Text style={styles.moreMenuText}>Report</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
+            <TouchableOpacity accessibilityRole="button" style={styles.moreMenuItem} onPress={handleBlock}>
               <MaterialIcons name="block" size={20} color="#ef4444" />
               <Text style={styles.moreMenuText}>Block</Text>
             </TouchableOpacity>
@@ -368,7 +368,7 @@ export default function UserProfileScreen() {
       {displayError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error || followError}</Text>
-          <TouchableOpacity onPress={() => setDismissedError(true)}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setDismissedError(true)}>
             <MaterialIcons name="close" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -393,13 +393,13 @@ export default function UserProfileScreen() {
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
-            <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleEditProfile}>
               <MaterialIcons name="edit" size={18} color="#065f46" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]} 
                 onPress={handleMessage}
                 disabled={isCreatingChat}
@@ -414,7 +414,7 @@ export default function UserProfileScreen() {
                 )}
               </TouchableOpacity>
               {FOLLOW_FEATURE_ENABLED && (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.secondaryButton, isFollowing && styles.followingButton]}
                   onPress={toggleFollow}
                   disabled={followLoading}
@@ -442,12 +442,12 @@ export default function UserProfileScreen() {
         {/* Stats */}
         {FOLLOW_FEATURE_ENABLED && (
           <View style={styles.statsContainer}>
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowersPress}>
+            <TouchableOpacity accessibilityRole="button" style={styles.statItem} onPress={handleFollowersPress}>
               <Text style={styles.statValue}>{followerCount}</Text>
               <Text style={styles.statLabel}>Followers</Text>
             </TouchableOpacity>
             <View style={styles.statDivider} />
-            <TouchableOpacity style={styles.statItem} onPress={handleFollowingPress}>
+            <TouchableOpacity accessibilityRole="button" style={styles.statItem} onPress={handleFollowingPress}>
               <Text style={styles.statValue}>{followingCount}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </TouchableOpacity>

@@ -13,7 +13,7 @@ interface PinnedMessageHeaderProps {
  */
 export function PinnedMessageHeader({ text, onPress, onDismiss }: PinnedMessageHeaderProps) {
   return (
-    <TouchableOpacity 
+    <TouchableOpacity accessibilityRole="button" 
       style={styles.container}
       onPress={onPress}
       activeOpacity={0.8}
@@ -28,7 +28,7 @@ export function PinnedMessageHeader({ text, onPress, onDismiss }: PinnedMessageH
         </View>
       </View>
       {onDismiss && (
-        <TouchableOpacity 
+        <TouchableOpacity accessibilityRole="button" 
           style={styles.dismissButton}
           onPress={(e) => {
             e.stopPropagation();

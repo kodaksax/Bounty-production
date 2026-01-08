@@ -247,7 +247,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Security</Text>
@@ -292,7 +292,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Two-Factor Authentication</Text>
           <View style={styles.card}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
               disabled={isEnabling2FA}
@@ -334,7 +334,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Password</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.settingRow} onPress={handleChangePassword}>
+            <TouchableOpacity accessibilityRole="button" style={styles.settingRow} onPress={handleChangePassword}>
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Change Password</Text>
                 <Text style={styles.settingDescription}>

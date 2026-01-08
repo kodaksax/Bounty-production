@@ -38,7 +38,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
     <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
       <View style={styles.row}>
         {(onBack || showBack) && (
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
         )}

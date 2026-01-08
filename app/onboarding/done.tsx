@@ -235,7 +235,7 @@ export default function DoneScreen() {
 
       {/* Continue Button */}
       <Animated.View style={{ opacity: fadeAnim }}>
-        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+        <TouchableOpacity accessibilityRole="button" style={styles.continueButton} onPress={handleContinue}>
           <Text style={styles.continueButtonText}>Start Exploring</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
         </TouchableOpacity>

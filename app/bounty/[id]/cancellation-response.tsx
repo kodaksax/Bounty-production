@@ -194,14 +194,14 @@ export default function CancellationResponseScreen() {
           The cancellation request could not be loaded. Please contact support if you believe this is an error.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleContactSupport}
             className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
@@ -235,7 +235,7 @@ export default function CancellationResponseScreen() {
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           {isRejected && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleOpenDispute}
               className="bg-amber-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
@@ -244,7 +244,7 @@ export default function CancellationResponseScreen() {
             </TouchableOpacity>
           )}
           {isDisputed && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleContactSupport}
               className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
@@ -252,7 +252,7 @@ export default function CancellationResponseScreen() {
               <Text className="text-white font-semibold ml-2">Contact Support</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
@@ -271,7 +271,7 @@ export default function CancellationResponseScreen() {
       <ScrollView className="flex-1">
         {/* Header */}
         <View className="bg-emerald-600 px-4 py-6 pt-12">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="mb-4"
           >
@@ -334,7 +334,7 @@ export default function CancellationResponseScreen() {
                 ? 'Please explain why you are rejecting this request (required).'
                 : 'Optional: Add a message to the requester.'}
             </Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={responseMessage}
               onChangeText={setResponseMessage}
               placeholder="Enter your message..."
@@ -348,7 +348,7 @@ export default function CancellationResponseScreen() {
           
           {/* Action Buttons */}
           <View className="space-y-3">
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleAccept}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 ${
@@ -367,7 +367,7 @@ export default function CancellationResponseScreen() {
               )}
             </TouchableOpacity>
             
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleReject}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 border-2 ${
@@ -387,7 +387,7 @@ export default function CancellationResponseScreen() {
             </TouchableOpacity>
           </View>
           
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             disabled={submitting}
             className="mt-4 py-4"
@@ -409,14 +409,14 @@ export default function CancellationResponseScreen() {
                   If you're unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">Email Support</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
                     className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
                   >

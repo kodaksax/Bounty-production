@@ -105,7 +105,7 @@ export function EditPostingModal({
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>Edit Posting</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={handleClose}
                 disabled={isSubmitting}
                 style={styles.closeButton}
@@ -126,7 +126,7 @@ export function EditPostingModal({
               {/* Title */}
               <View style={styles.field}>
                 <Text style={styles.label}>Title *</Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   style={styles.input}
                   placeholder="Enter title"
                   placeholderTextColor="#6ee7b780"
@@ -142,7 +142,7 @@ export function EditPostingModal({
               {/* Description */}
               <View style={styles.field}>
                 <Text style={styles.label}>Description *</Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   style={[styles.input, styles.textArea]}
                   placeholder="Describe what you need"
                   placeholderTextColor="#6ee7b780"
@@ -158,7 +158,7 @@ export function EditPostingModal({
               </View>
 
               {/* For Honor toggle */}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.toggleRow}
                 onPress={() =>
                   setFormData({ ...formData, isForHonor: !formData.isForHonor })
@@ -188,7 +188,7 @@ export function EditPostingModal({
               {!formData.isForHonor && (
                 <View style={styles.field}>
                   <Text style={styles.label}>Amount ($) *</Text>
-                  <TextInput
+                  <TextInput accessibilityLabel="Text input field"
                     style={styles.input}
                     placeholder="0"
                     placeholderTextColor="#6ee7b780"
@@ -206,7 +206,7 @@ export function EditPostingModal({
               {/* Location */}
               <View style={styles.field}>
                 <Text style={styles.label}>Location (optional)</Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   style={styles.input}
                   placeholder="Enter location"
                   placeholderTextColor="#6ee7b780"
@@ -228,7 +228,7 @@ export function EditPostingModal({
               )}
 
               {/* Actions */}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.saveButton}
                 onPress={handleSave}
                 disabled={isSubmitting}
@@ -240,7 +240,7 @@ export function EditPostingModal({
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.cancelButton}
                 onPress={handleClose}
                 disabled={isSubmitting}

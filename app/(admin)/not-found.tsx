@@ -36,12 +36,12 @@ export default function AdminNotFoundScreen() {
         </Text>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleGoToDashboard}>
+          <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToDashboard}>
             <MaterialIcons name="dashboard" size={20} color="#fffef5" />
             <Text style={styles.primaryButtonText}>Go to Dashboard</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleGoBack}>
+          <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={handleGoBack}>
             <MaterialIcons name="arrow-back" size={20} color="#00dc50" />
             <Text style={styles.secondaryButtonText}>Go Back</Text>
           </TouchableOpacity>
@@ -49,7 +49,7 @@ export default function AdminNotFoundScreen() {
 
         <View style={styles.helpSection}>
           <Text style={styles.helpText}>Need help?</Text>
-          <TouchableOpacity onPress={() => router.push(ROUTES.ADMIN.SUPPORT.INDEX as any)}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push(ROUTES.ADMIN.SUPPORT.INDEX as any)}>
             <Text style={styles.helpLink}>Visit Support Center</Text>
           </TouchableOpacity>
         </View>

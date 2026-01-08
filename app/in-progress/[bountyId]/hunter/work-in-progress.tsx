@@ -233,13 +233,13 @@ export default function HunterWorkInProgressScreen() {
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -255,7 +255,7 @@ export default function HunterWorkInProgressScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Hunter Dashboard</Text>
@@ -343,7 +343,7 @@ export default function HunterWorkInProgressScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Message</Text>
             <View style={styles.messageInputContainer}>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.messageInput}
                 placeholder="Type a message to the poster..."
                 placeholderTextColor="rgba(255,254,245,0.4)"
@@ -352,7 +352,7 @@ export default function HunterWorkInProgressScreen() {
                 multiline
                 maxLength={500}
               />
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
                 onPress={handleSendMessage}
                 disabled={!messageText.trim() || isSendingMessage}
@@ -371,7 +371,7 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Progress Updates</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.addUpdateButton}
               onPress={() => setShowProgressForm(!showProgressForm)}
             >
@@ -388,7 +388,7 @@ export default function HunterWorkInProgressScreen() {
 
           {showProgressForm && (
             <View style={styles.progressFormContainer}>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.progressInput}
                 placeholder="Describe your progress..."
                 placeholderTextColor="rgba(255,254,245,0.4)"
@@ -398,7 +398,7 @@ export default function HunterWorkInProgressScreen() {
                 numberOfLines={4}
                 maxLength={500}
               />
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.postUpdateButton,
                   (!progressUpdate.trim() || isPostingUpdate) && styles.postUpdateButtonDisabled,
@@ -433,7 +433,7 @@ export default function HunterWorkInProgressScreen() {
             {descriptionExpanded ? bounty.description : descriptionPreview}
           </Text>
           {bounty.description.length > 150 && (
-            <TouchableOpacity onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
               <Text style={styles.expandText}>
                 {descriptionExpanded ? 'Show Less' : 'Show More'}
               </Text>
@@ -458,13 +458,13 @@ export default function HunterWorkInProgressScreen() {
         </View>
 
         {/* Mark as Complete Button */}
-        <TouchableOpacity style={styles.completeButton} onPress={handleMarkAsComplete}>
+        <TouchableOpacity accessibilityRole="button" style={styles.completeButton} onPress={handleMarkAsComplete}>
           <MaterialIcons name="check-circle" size={20} color="#fff" />
           <Text style={styles.completeButtonText}>Mark as Complete</Text>
         </TouchableOpacity>
 
         {/* Next Button */}
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+        <TouchableOpacity accessibilityRole="button" style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextButtonText}>Next</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>

@@ -127,7 +127,7 @@ export default function CancellationRequestScreen() {
       <View className="flex-1 bg-white items-center justify-center p-6">
         <AlertCircle size={48} color="#dc2626" />
         <Text className="text-lg font-semibold text-gray-900 mt-4">Bounty not found</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => router.back()}
           className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
         >
@@ -147,21 +147,21 @@ export default function CancellationRequestScreen() {
           This bounty has already been completed. If you have an issue, please contact support for dispute resolution.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleContactSupport}
             className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Email Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleCallSupport}
             className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Phone size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Call Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg"
           >
@@ -181,7 +181,7 @@ export default function CancellationRequestScreen() {
         <Text className="text-gray-600 text-center mt-2">
           This bounty has already been cancelled.
         </Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => router.back()}
           className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
         >
@@ -201,14 +201,14 @@ export default function CancellationRequestScreen() {
           A cancellation request is already pending for this bounty. Please wait for the other party to respond.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleContactSupport}
             className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <HelpCircle size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
@@ -230,7 +230,7 @@ export default function CancellationRequestScreen() {
       <ScrollView className="flex-1">
         {/* Header */}
         <View className="bg-emerald-600 px-4 py-6 pt-12">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="mb-4"
           >
@@ -285,7 +285,7 @@ export default function CancellationRequestScreen() {
             <Text className="text-sm text-gray-600 mb-3">
               Please explain why you want to cancel this bounty. This will be shared with the other party.
             </Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={reason}
               onChangeText={setReason}
               placeholder="Enter your reason..."
@@ -298,7 +298,7 @@ export default function CancellationRequestScreen() {
           </View>
           
           {/* Submit Button */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleSubmitCancellation}
             disabled={submitting || !reason.trim()}
             className={`rounded-lg py-4 ${
@@ -328,14 +328,14 @@ export default function CancellationRequestScreen() {
                   If you have questions about the cancellation process or need assistance with a dispute, our support team is here to help.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">Email</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
                     className="flex-row items-center bg-blue-500 px-3 py-2 rounded-lg"
                   >
@@ -347,7 +347,7 @@ export default function CancellationRequestScreen() {
             </View>
           </View>
           
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             disabled={submitting}
             className="mt-4 py-4"

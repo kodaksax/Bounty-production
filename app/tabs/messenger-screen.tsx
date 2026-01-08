@@ -243,7 +243,7 @@ export function MessengerScreen({
 
         {/* Right-side actions: refresh, create new group (icon), and offline badge */}
         <View className="flex-row items-center gap-4">
-          <TouchableOpacity onPress={refresh} className="p-2 rounded">
+          <TouchableOpacity accessibilityRole="button" onPress={refresh} className="p-2 rounded">
             <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>
 
@@ -360,7 +360,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   
   // Memoize swipe action render
   const renderRightActions = useCallback(() => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       className="bg-red-500 justify-center items-center px-6 rounded-lg my-1 mr-2"
       onPress={onDelete}
     >
@@ -375,8 +375,8 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       overshootRight={false}
       friction={2}
     >
-      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-emerald-600" onPress={onPress}>
-        <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
+      <TouchableOpacity accessibilityRole="button" className="flex-row items-center p-3 rounded-lg bg-emerald-600" onPress={onPress}>
+        <TouchableOpacity accessibilityRole="button" onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
           <View className="relative">
             {conversation.isGroup ? (
               <GroupAvatar />

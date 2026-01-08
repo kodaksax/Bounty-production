@@ -142,7 +142,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   // Render a single transaction item
   const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       key={transaction.id}
       style={styles.transactionCard}
       onPress={() => setSelectedTransaction(transaction)}
@@ -208,7 +208,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
   // Flatten grouped transactions for FlatList with section headers
   const flatListData = useMemo(() => {
-    const data: Array<{ type: 'header'; date: Date } | { type: 'transaction'; transaction: Transaction }> = []
+    const data: ({ type: 'header'; date: Date } | { type: 'transaction'; transaction: Transaction })[] = []
     groupedTransactions.forEach(group => {
       data.push({ type: 'header', date: group.date })
       group.transactions.forEach(tx => {
@@ -242,7 +242,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
           <Text className="text-xl font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity accessibilityRole="button" 
           onPress={onBack} 
           style={{ 
             padding: 10, 
@@ -268,7 +268,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8 }}
         style={{ maxHeight: 70 }}
       >
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -287,7 +287,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>All Transactions</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -307,7 +307,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>Deposits</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -327,7 +327,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}>Withdrawals</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{
             paddingHorizontal: 18,
             paddingVertical: 10,
@@ -352,7 +352,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {error && (
         <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
           <Text style={{ color: '#fff', fontSize: 14 }}>{error}</Text>
-          <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
+          <TouchableOpacity accessibilityRole="button" style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
             <Text style={{ color: '#fff', fontSize: 16 }}>✕</Text>
           </TouchableOpacity>
         </View>

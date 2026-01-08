@@ -210,7 +210,7 @@ export default function EditProfileScreen() {
       {displayError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error || saveError}</Text>
-          <TouchableOpacity onPress={() => setDismissedError(true)}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setDismissedError(true)}>
             <MaterialIcons name="close" size={20} color="#fff" />
           </TouchableOpacity>
         </View>

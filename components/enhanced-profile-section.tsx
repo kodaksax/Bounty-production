@@ -319,7 +319,7 @@ export function EnhancedProfileSection({
           </View>
 
           {!isOwnProfile && (
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={toggleFollow}
               disabled={followLoading}
               className={`px-4 py-2 rounded-lg ${
@@ -366,7 +366,7 @@ export function EnhancedProfileSection({
             >
               <View style={{ padding: 16 }}>
                 <View style={{ backgroundColor: '#065f46', borderRadius: 16, overflow: 'hidden' }}>
-                  <TouchableOpacity 
+                  <TouchableOpacity accessibilityRole="button" 
                     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
                     onPress={handleReportUser}
                   >
@@ -376,7 +376,7 @@ export function EnhancedProfileSection({
                   
                   <View style={{ height: 1, backgroundColor: 'rgba(16, 185, 129, 0.2)', marginHorizontal: 20 }} />
                   
-                  <TouchableOpacity 
+                  <TouchableOpacity accessibilityRole="button" 
                     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
                     onPress={handleBlockUser}
                     disabled={blockLoading}
@@ -393,7 +393,7 @@ export function EnhancedProfileSection({
                   
                   <View style={{ height: 1, backgroundColor: 'rgba(16, 185, 129, 0.2)', marginHorizontal: 20 }} />
                   
-                  <TouchableOpacity 
+                  <TouchableOpacity accessibilityRole="button" 
                     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 }}
                     onPress={() => setShowMoreActions(false)}
                   >
@@ -470,7 +470,7 @@ export function EnhancedProfileSection({
           {isOwnProfile && (
             <View className="flex-row items-center gap-2">
               {items.length > 1 && (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
                   onPress={() => setIsReordering(!isReordering)}
                 >
@@ -479,7 +479,7 @@ export function EnhancedProfileSection({
                   </Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
                 onPress={pickAndUpload}
                 disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
@@ -524,7 +524,7 @@ export function EnhancedProfileSection({
                   createdAt: new Date().toISOString(),
                 } as PortfolioItem].concat(items) : items
               ).map((item, index) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={item.id}
                   className="relative"
                   onPress={() => !isReordering && setSelectedPortfolioItem(item)}
@@ -564,7 +564,7 @@ export function EnhancedProfileSection({
                       <View className="absolute inset-0 bg-black/30 items-center justify-center">
                         <View className="flex-row gap-2">
                           {index > 0 && (
-                            <TouchableOpacity
+                            <TouchableOpacity accessibilityRole="button"
                               className="bg-emerald-500 rounded-full p-2"
                               onPress={async () => {
                                 const newOrder = [...items];
@@ -577,7 +577,7 @@ export function EnhancedProfileSection({
                             </TouchableOpacity>
                           )}
                           {index < items.length - 1 && (
-                            <TouchableOpacity
+                            <TouchableOpacity accessibilityRole="button"
                               className="bg-emerald-500 rounded-full p-2"
                               onPress={async () => {
                                 const newOrder = [...items];
@@ -594,7 +594,7 @@ export function EnhancedProfileSection({
                     )}
                   </View>
                   {isOwnProfile && !isReordering && (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
                       onPress={() => handleDeletePortfolioItem(item.id)}
                     >
@@ -616,15 +616,15 @@ export function EnhancedProfileSection({
         animationType="fade"
         onRequestClose={() => setSelectedPortfolioItem(null)}
       >
-        <Pressable
+        <Pressable accessibilityRole="button"
           style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)' }}
           onPress={() => setSelectedPortfolioItem(null)}
         >
-          <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
+          <Pressable accessibilityRole="button" onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
             <View className="bg-emerald-800 rounded-xl p-4 m-4 max-w-lg w-full">
               <View className="flex-row justify-between items-center mb-3">
                 <Text className="text-lg font-bold text-white">Portfolio Item</Text>
-                <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setSelectedPortfolioItem(null)}>
                   <MaterialIcons name="close" size={24} color="white" />
                 </TouchableOpacity>
               </View>
@@ -715,7 +715,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
         {isOwnProfile && (
           <View className="flex-row items-center gap-2">
             {items.length > 1 && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
                 onPress={() => setIsReordering(!isReordering)}
               >
@@ -724,7 +724,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                 </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`} 
               onPress={pickAndUpload} 
               disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
@@ -760,7 +760,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                 createdAt: new Date().toISOString(),
               } as PortfolioItem].concat(items) : items
             ).map((item, index) => (
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 key={item.id} 
                 className="relative" 
                 onPress={() => !isReordering && setSelectedPortfolioItem(item)}
@@ -789,7 +789,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                     <View className="absolute inset-0 bg-black/30 items-center justify-center">
                       <View className="flex-row gap-2">
                         {index > 0 && (
-                          <TouchableOpacity
+                          <TouchableOpacity accessibilityRole="button"
                             className="bg-emerald-500 rounded-full p-2"
                             onPress={async () => {
                               const newOrder = [...items];
@@ -802,7 +802,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                           </TouchableOpacity>
                         )}
                         {index < items.length - 1 && (
-                          <TouchableOpacity
+                          <TouchableOpacity accessibilityRole="button"
                             className="bg-emerald-500 rounded-full p-2"
                             onPress={async () => {
                               const newOrder = [...items];
@@ -819,7 +819,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                   )}
                 </View>
                 {isOwnProfile && !isReordering && (
-                  <TouchableOpacity className="absolute top-1 right-1 bg-red-500 rounded-full p-1" onPress={() => handleDeletePortfolioItem(item.id)}>
+                  <TouchableOpacity accessibilityRole="button" className="absolute top-1 right-1 bg-red-500 rounded-full p-1" onPress={() => handleDeletePortfolioItem(item.id)}>
                     <MaterialIcons name="close" size={16} color="white" />
                   </TouchableOpacity>
                 )}
@@ -830,12 +830,12 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
       )}
 
       <Modal visible={!!selectedPortfolioItem} transparent animationType="fade" onRequestClose={() => setSelectedPortfolioItem(null)}>
-        <Pressable style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)' }} onPress={() => setSelectedPortfolioItem(null)}>
-          <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
+        <Pressable accessibilityRole="button" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)' }} onPress={() => setSelectedPortfolioItem(null)}>
+          <Pressable accessibilityRole="button" onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
             <View className="bg-emerald-800 rounded-xl p-4 m-4 max-w-lg w-full">
             <View className="flex-row justify-between items-center mb-3">
               <Text className="text-lg font-bold text-white">Portfolio Item</Text>
-              <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setSelectedPortfolioItem(null)}>
                 <MaterialIcons name="close" size={24} color="white" />
               </TouchableOpacity>
             </View>

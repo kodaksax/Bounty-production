@@ -70,7 +70,7 @@ export function RatingPromptModal({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Rate this experience</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleClose}
               disabled={isSubmitting}
               style={styles.closeButton}
@@ -96,7 +96,7 @@ export function RatingPromptModal({
               <Text style={styles.label}>How was your experience?</Text>
               <View style={styles.stars}>
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={star}
                     onPress={() => setScore(star as 1 | 2 | 3 | 4 | 5)}
                     disabled={isSubmitting}
@@ -115,7 +115,7 @@ export function RatingPromptModal({
             {/* Comment */}
             <View style={styles.commentContainer}>
               <Text style={styles.label}>Add a comment (optional)</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.commentInput}
                 placeholder="Share your thoughts..."
                 placeholderTextColor="#6ee7b780"
@@ -138,7 +138,7 @@ export function RatingPromptModal({
             )}
 
             {/* Submit button */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.submitButton, !score && styles.submitButtonDisabled]}
               onPress={handleSubmit}
               disabled={!score || isSubmitting}
@@ -151,7 +151,7 @@ export function RatingPromptModal({
             </TouchableOpacity>
 
             {/* Skip button */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.skipButton}
               onPress={handleClose}
               disabled={isSubmitting}

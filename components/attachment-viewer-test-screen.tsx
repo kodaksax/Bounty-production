@@ -129,7 +129,7 @@ export function AttachmentViewerTestScreen() {
           <Text style={styles.sectionTitle}>Sample Attachments</Text>
 
           {sampleAttachments.map((attachment) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={attachment.id}
               style={styles.attachmentCard}
               onPress={() => handleViewAttachment(attachment)}

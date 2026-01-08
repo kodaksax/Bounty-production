@@ -58,7 +58,7 @@ export default function AdminSettingsScreen() {
 
         <View style={styles.sectionsContainer}>
           {settingsSections.map((section) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={section.id}
               style={styles.sectionCard}
               onPress={() => router.push(section.route as any)}

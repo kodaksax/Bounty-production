@@ -141,11 +141,11 @@ export function TrustBadges({
         accessible={true}
         accessibilityLabel="Security badge details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setSelectedBadge(null)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             {selectedBadge && (
               <>
                 <View style={styles.modalHeader}>
@@ -222,11 +222,11 @@ export function TrustBadgesCompact() {
         accessible={true}
         accessibilityLabel="Security badge details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setSelectedBadge(null)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             {selectedBadge && (
               <>
                 <View style={styles.modalHeader}>

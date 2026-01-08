@@ -402,7 +402,7 @@ export function SignInForm() {
 
               <View>
                 <Text className="text-sm text-white/80 mb-1">Email</Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   nativeID="identifier"
                   value={identifier}
                   onChangeText={(text) => {
@@ -425,12 +425,12 @@ export function SignInForm() {
               <View>
                 <View className="flex-row items-center justify-between mb-1">
                   <Text className="text-sm text-white/80">Password</Text>
-                  <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/auth/reset-password')}>
                     <Text className="text-[11px] text-emerald-200">Forgot?</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="relative">
-                  <TextInput
+                  <TextInput accessibilityLabel="Text input field"
                     nativeID="password"
                     value={password}
                     onChangeText={(text) => {
@@ -463,7 +463,7 @@ export function SignInForm() {
                   onCheckedChange={setRememberMe}
                   disabled={isSubmitting}
                 />
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
                   disabled={isSubmitting}
                 >
@@ -471,7 +471,7 @@ export function SignInForm() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+              <TouchableOpacity accessibilityRole="button" onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
                 {isSubmitting ? (
                   <>
                     <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
@@ -561,7 +561,7 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 disabled={!isGoogleConfigured || isSubmitting || !request}
                 onPress={() => promptAsync()}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
@@ -571,7 +571,7 @@ export function SignInForm() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/auth/sign-up-form')}>
                 <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
               </TouchableOpacity>
             </View>

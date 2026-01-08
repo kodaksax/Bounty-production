@@ -14,10 +14,10 @@ export default function AdminBountiesScreen() {
   const [filters, setFilters] = useState<AdminBountyFilters>({ status: 'all' });
   const { bounties, isLoading, error, refetch } = useAdminBounties(filters);
 
-  const statusOptions: Array<AdminBountyFilters['status']> = ['all', 'open', 'in_progress', 'completed', 'archived'];
+  const statusOptions: AdminBountyFilters['status'][] = ['all', 'open', 'in_progress', 'completed', 'archived'];
 
   const renderBountyItem = ({ item }: { item: AdminBounty }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.bountyCard}
       onPress={() => router.push(ROUTES.ADMIN.BOUNTY_DETAIL(item.id))}
     >
@@ -68,7 +68,7 @@ export default function AdminBountiesScreen() {
       <Text style={styles.emptyText}>
         {filters.status !== 'all' ? `No ${filters.status} bounties` : 'No bounties match this filter'}
       </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.refreshButton} onPress={refetch}>
         <Text style={styles.refreshButtonText}>Refresh</Text>
       </TouchableOpacity>
     </View>
@@ -79,7 +79,7 @@ export default function AdminBountiesScreen() {
       <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
       <Text style={styles.errorTitle}>Failed to load bounties</Text>
       <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={refetch}>
         <Text style={styles.retryButtonText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -97,7 +97,7 @@ export default function AdminBountiesScreen() {
           data={statusOptions}
           keyExtractor={(item) => item || 'all'}
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.filterChip, filters.status === item && styles.filterChipActive]}
               onPress={() => setFilters({ ...filters, status: item })}
             >

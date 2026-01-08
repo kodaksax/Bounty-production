@@ -233,7 +233,7 @@ export function TransactionHistory({
   };
 
   const renderTransaction = ({ item }: { item: Transaction }) => (
-    <Pressable
+    <Pressable accessibilityRole="button"
       style={styles.transactionItem}
       onPress={() => onTransactionPress?.(item)}
     >
@@ -293,7 +293,7 @@ export function TransactionHistory({
     if (!hasMore) return null;
 
     return (
-      <Pressable style={styles.loadMore} onPress={onLoadMore}>
+      <Pressable accessibilityRole="button" style={styles.loadMore} onPress={onLoadMore}>
         <Text style={styles.loadMoreText}>Load More</Text>
       </Pressable>
     );
@@ -313,7 +313,7 @@ export function TransactionHistory({
       <View style={styles.errorContainer}>
         <XCircle size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retryButton} onPress={() => loadTransactions()}>
+        <Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => loadTransactions()}>
           <Text style={styles.retryButtonText}>Try Again</Text>
         </Pressable>
       </View>

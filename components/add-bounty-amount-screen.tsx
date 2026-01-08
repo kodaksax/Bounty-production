@@ -287,7 +287,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.headerButton}>
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.headerButton}>
           <MaterialIcons name="close" size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
@@ -321,7 +321,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
             />
           </View>
         </View>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => setIsForHonor(!isForHonor)}
           style={[
             styles.toggle,
@@ -349,7 +349,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       <View style={styles.keypadContainer}>
         <View style={styles.keypadGrid}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={num}
               style={styles.keypadButton}
               onPress={() => handleNumberPress(num)}
@@ -357,19 +357,19 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               <Text style={styles.keypadButtonText}>{num}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={handleDecimalPress}
           >
             <Text style={styles.keypadButtonText}>.</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={() => handleNumberPress(0)}
           >
             <Text style={styles.keypadButtonText}>0</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.keypadButton}
             onPress={handleDeletePress}
           >
@@ -380,7 +380,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Add Button */}
       <View style={styles.bottomButtonContainer}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[
             styles.bottomButton,
             Number.parseFloat(amount) > 0 || isForHonor

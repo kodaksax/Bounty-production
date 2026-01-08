@@ -335,12 +335,12 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         <View className="bg-black/30 rounded-xl p-4 mb-5">
           <SectionHeader icon="lock" title="Password" subtitle="Change your password to keep account secure." />
           <Text className="text-xs text-emerald-200 mb-1">Current Password</Text>
-          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+          <TextInput accessibilityLabel="Text input field" value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">New Password</Text>
-            <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+            <TextInput accessibilityLabel="Text input field" value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">Confirm New Password</Text>
-          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
-          <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-emerald-700">
+          <TextInput accessibilityLabel="Text input field" value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
+          <TouchableOpacity accessibilityRole="button" onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-emerald-700">
             <Text className="text-white text-xs font-medium">Update Password</Text>
           </TouchableOpacity>
         </View>
@@ -390,7 +390,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
                 <Text className="text-emerald-300 text-[10px]">{s.location}</Text>
               </View>
               {s.active ? (
-                <TouchableOpacity onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-emerald-700">
+                <TouchableOpacity accessibilityRole="button" onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-emerald-700">
                   <Text className="text-white text-[10px] font-medium">Revoke</Text>
                 </TouchableOpacity>
               ) : (
@@ -407,7 +407,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
             title="Data Export (GDPR)" 
             subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more." 
           />
-          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}> 
+          <TouchableOpacity accessibilityRole="button" disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}> 
             <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
           </TouchableOpacity>
         </View>

@@ -52,7 +52,7 @@ export default function FollowersScreen() {
   };
 
   const renderFollower = ({ item }: { item: UserProfile }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.followerItem}
       onPress={() => handleProfilePress(item.id)}
     >
@@ -84,7 +84,7 @@ export default function FollowersScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Followers</Text>
@@ -93,7 +93,7 @@ export default function FollowersScreen() {
       {error && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error}</Text>
-          <TouchableOpacity onPress={loadFollowers}>
+          <TouchableOpacity accessibilityRole="button" onPress={loadFollowers}>
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>

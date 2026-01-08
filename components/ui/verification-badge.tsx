@@ -116,11 +116,11 @@ export function VerificationBadge({
         accessible={true}
         accessibilityLabel="Verification status explanation"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay} 
           onPress={() => setShowModal(false)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <View style={[styles.modalIconCircle, { backgroundColor: config.backgroundColor }]}>
                 <MaterialIcons name={config.icon} size={32} color={config.color} />

@@ -239,7 +239,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       {/* Header */}
       <View className="sticky top-0 z-10 bg-emerald-600 px-4 pt-safe pb-2">
         <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} className="p-2 touch-target-min">
             <MaterialIcons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View className="flex-row items-center gap-2">
@@ -271,7 +271,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         {[ [1,2,3], [4,5,6], [7,8,9] ].map((row, idx) => (
           <View key={idx} className="flex-row justify-between mb-4">
             {row.map((num) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={num}
                 className="rounded-full items-center justify-center"
                 style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
@@ -284,7 +284,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           </View>
         ))}
         <View className="flex-row justify-between">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             className="rounded-full items-center justify-center"
             style={{ width: 64, height: 64 }}
             onPress={handleDecimalPress}
@@ -292,7 +292,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           >
             <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>.</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             className="rounded-full items-center justify-center"
             style={{ width: 64, height: 64 }}
             onPress={() => handleNumberPress(0)}
@@ -300,7 +300,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           >
             <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>0</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             className="rounded-full items-center justify-center"
             style={{ width: 64, height: 64 }}
             onPress={handleDeletePress}
@@ -316,7 +316,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         <View className="px-4">
             {/* Apple Pay button (iOS only) */}
             {Platform.OS === 'ios' && isApplePayAvailable && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
                 style={{ backgroundColor: '#000000' }}
                 onPress={handleApplePayPress}
@@ -340,7 +340,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             {/* Pay with Card removed per request */}
 
             {/* Original Add Money button (keeps compatibility) */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               className={cn(
                 "w-full py-4 rounded-full flex-row items-center justify-center",
                 Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"

@@ -286,7 +286,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               </Text>
 
               <Text className="text-emerald-200 text-sm mb-1">Label</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={formLabel}
                 onChangeText={setFormLabel}
                 placeholder="e.g., Home, Office, Studio"
@@ -295,7 +295,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               />
 
               <Text className="text-emerald-200 text-sm mb-1">Address</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={formAddress}
                 onChangeText={setFormAddress}
                 placeholder="Full address (e.g., 123 Main St, City, State)"

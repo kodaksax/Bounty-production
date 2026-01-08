@@ -74,7 +74,7 @@ export function DisputeModal({
           <View style={styles.header}>
             <MaterialIcons name="report-problem" size={24} color="#fbbf24" />
             <Text style={styles.title}>Open Dispute</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleClose}
               disabled={isSubmitting}
               style={styles.closeButton}
@@ -137,10 +137,10 @@ export function DisputeModal({
                   <MaterialIcons name="support-agent" size={20} color="#10b981" />
                   <View style={styles.supportTextContainer}>
                     <Text style={styles.supportLabel}>Need help now?</Text>
-                    <TouchableOpacity onPress={handleContactSupport}>
+                    <TouchableOpacity accessibilityRole="button" onPress={handleContactSupport}>
                       <Text style={styles.supportEmail}>{SUPPORT_EMAIL}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleCallSupport}>
+                    <TouchableOpacity accessibilityRole="button" onPress={handleCallSupport}>
                       <Text style={styles.supportPhone}>{SUPPORT_PHONE}</Text>
                     </TouchableOpacity>
                   </View>
@@ -155,7 +155,7 @@ export function DisputeModal({
                 )}
 
                 {/* Actions */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.primaryButton}
                   onPress={() => setShowConfirm(true)}
                   disabled={isSubmitting}
@@ -163,7 +163,7 @@ export function DisputeModal({
                   <Text style={styles.primaryButtonText}>Continue</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.secondaryButton}
                   onPress={handleClose}
                   disabled={isSubmitting}
@@ -192,7 +192,7 @@ export function DisputeModal({
                 )}
 
                 {/* Actions */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.primaryButton, styles.dangerButton]}
                   onPress={handleSubmit}
                   disabled={isSubmitting}
@@ -206,7 +206,7 @@ export function DisputeModal({
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.secondaryButton}
                   onPress={() => setShowConfirm(false)}
                   disabled={isSubmitting}

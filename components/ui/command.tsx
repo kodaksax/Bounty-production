@@ -39,7 +39,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             style={styles.input}
             placeholder={placeholder}
             value={query}
@@ -53,7 +53,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               data={filteredItems}
               keyExtractor={(item) => item.value}
               renderItem={({ item }) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.item, item.disabled && styles.disabled]}
                   onPress={() => !item.disabled && onSelect(item)}
                   disabled={item.disabled}
@@ -64,7 +64,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               )}
             />
           )}
-          <TouchableOpacity style={styles.close} onPress={onClose}>
+          <TouchableOpacity accessibilityRole="button" style={styles.close} onPress={onClose}>
             <Text style={styles.closeText}>Close</Text>
           </TouchableOpacity>
         </View>

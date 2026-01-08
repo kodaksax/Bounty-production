@@ -166,14 +166,14 @@ export default function DisputeScreen() {
           Unable to load the dispute information. This may occur if the bounty was not found or no cancellation request exists.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleContactSupport}
             className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
@@ -189,7 +189,7 @@ export default function DisputeScreen() {
       <ScrollView className="flex-1">
         {/* Header */}
         <View className="bg-emerald-600 px-4 py-6 pt-12">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             className="mb-4"
           >
@@ -276,7 +276,7 @@ export default function DisputeScreen() {
                   <Text className="text-sm text-gray-600 mb-3">
                     Provide additional text evidence to support your dispute. For images or documents, please contact support.
                   </Text>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={() => setShowEvidenceModal(true)}
                     className="flex-row items-center justify-center rounded-lg py-3 bg-emerald-600"
                   >
@@ -311,14 +311,14 @@ export default function DisputeScreen() {
                   Our support team typically responds within {SUPPORT_RESPONSE_TIMES.dispute}. For urgent matters, please call us directly.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-emerald-600 px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_EMAIL}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleCallSupport}
                     className="flex-row items-center bg-emerald-500 px-3 py-2 rounded-lg"
                   >
@@ -330,7 +330,7 @@ export default function DisputeScreen() {
             </View>
           </View>
           
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => router.back()}
             disabled={submitting}
             className="mt-4 py-4"
@@ -355,7 +355,7 @@ export default function DisputeScreen() {
             <Text style={styles.modalSubtitle}>
               Describe the additional evidence
             </Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               value={evidenceInput}
               onChangeText={setEvidenceInput}
               placeholder="Enter evidence details..."
@@ -366,7 +366,7 @@ export default function DisputeScreen() {
               editable={!submitting}
             />
             <View style={styles.modalButtons}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={handleSubmitEvidence}
                 disabled={submitting || !evidenceInput.trim()}
                 style={[
@@ -381,7 +381,7 @@ export default function DisputeScreen() {
                   <Text style={styles.modalButtonText}>Submit</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => {
                   setShowEvidenceModal(false);
                   setEvidenceInput('');

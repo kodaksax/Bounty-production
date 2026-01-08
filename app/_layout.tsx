@@ -23,14 +23,14 @@ import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
+// Ensure Sentry is initialized as early as possible so that Sentry.wrap
+// (used at the bottom of this file) is called after initialization.
+import { initializeSentry } from '../lib/services/sentry-init';
+
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-
-// Ensure Sentry is initialized as early as possible so that Sentry.wrap
-// (used at the bottom of this file) is called after initialization.
-import { initializeSentry } from '../lib/services/sentry-init';
 initializeSentry();
 
 if (__DEV__) {
@@ -112,7 +112,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
           // ignore analytics failures
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
+         
         console.error('[Mixpanel] init failed', e);
       }
 
@@ -157,14 +157,14 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       const sonner = require('../stubs/sonner')
       const themes = require('../stubs/next-themes')
       // Avoid verbose output; just confirm default/named exports shape.
-      // eslint-disable-next-line no-console
+       
       console.log('[RuntimeCheck] radix-slot keys:', Object.keys(slot), 'default' in slot ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
+       
       console.log('[RuntimeCheck] sonner keys:', Object.keys(sonner), 'default' in sonner ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
+       
       console.log('[RuntimeCheck] next-themes keys:', Object.keys(themes), 'default' in themes ? 'hasDefault' : 'noDefault')
     } catch (e) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[RuntimeCheck] instrumentation failed', e)
     }
   }

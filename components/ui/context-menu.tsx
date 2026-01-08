@@ -26,7 +26,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     animationType="fade"
     onRequestClose={onClose}
   >
-    <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+    <TouchableOpacity accessibilityRole="button" style={styles.overlay} activeOpacity={1} onPress={onClose}>
       <View
         style={[
           styles.menu,
@@ -36,7 +36,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         ]}
       >
         {items.map((item, idx) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={item.label + idx}
             style={styles.menuItem}
             onPress={() => {

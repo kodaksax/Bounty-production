@@ -33,7 +33,7 @@ export function TaskCard({
 
   return (
     <>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         className="bg-black/30 backdrop-blur-sm rounded-xl overflow-hidden cursor-pointer transition-transform active:scale-[0.98] touch-target-min shadow-md"
         onPress={() => setShowDetail(true)}
         style={containerStyle}
@@ -45,7 +45,7 @@ export function TaskCard({
               <View className="h-6 w-6 rounded-full bg-gray-700 flex items-center justify-center mr-2">{icon}</View>
               <Text className="text-sm text-gray-300">{username}</Text>
             </View>
-            <TouchableOpacity style={{ padding: 8 }}>
+            <TouchableOpacity accessibilityRole="button" style={{ padding: 8 }}>
               <MaterialIcons name="more-vert" size={20} color="#9ca3af" />
             </TouchableOpacity>
           </View>

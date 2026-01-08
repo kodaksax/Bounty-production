@@ -77,7 +77,7 @@ export const MessageBubble = memo(({
   };
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       activeOpacity={0.8}
       onLongPress={handleLongPress}
       delayLongPress={500}
@@ -103,7 +103,7 @@ export const MessageBubble = memo(({
         </View>
         {/* Retry button for failed messages */}
         {status === 'failed' && isUser && onRetry && (
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={handleRetry}
             style={styles.retryButton}
             activeOpacity={0.7}

@@ -14,10 +14,10 @@ export default function AdminUsersScreen() {
   const [filters, setFilters] = useState<AdminUserFilters>({ status: 'all' });
   const { users, isLoading, error, refetch } = useAdminUsers(filters);
 
-  const statusOptions: Array<AdminUserFilters['status']> = ['all', 'active', 'suspended', 'banned'];
+  const statusOptions: AdminUserFilters['status'][] = ['all', 'active', 'suspended', 'banned'];
 
   const renderUserItem = ({ item }: { item: AdminUserSummary }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.userCard}
       onPress={() => router.push(ROUTES.ADMIN.USER_DETAIL(item.id))}
     >
@@ -65,7 +65,7 @@ export default function AdminUsersScreen() {
       <Text style={styles.emptyText}>
         {filters.status !== 'all' ? `No ${filters.status} users` : 'No users match this filter'}
       </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.refreshButton} onPress={refetch}>
         <Text style={styles.refreshButtonText}>Refresh</Text>
       </TouchableOpacity>
     </View>
@@ -76,7 +76,7 @@ export default function AdminUsersScreen() {
       <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
       <Text style={styles.errorTitle}>Failed to load users</Text>
       <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={refetch}>
         <Text style={styles.retryButtonText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -94,7 +94,7 @@ export default function AdminUsersScreen() {
           data={statusOptions}
           keyExtractor={(item) => item || 'all'}
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.filterChip, filters.status === item && styles.filterChipActive]}
               onPress={() => setFilters({ ...filters, status: item })}
             >

@@ -25,7 +25,7 @@ interface AddressAutocompleteProps extends Omit<TextInputProps, 'onChangeText'> 
   minChars?: number;
   debounceMs?: number;
   showSavedAddresses?: boolean;
-  savedAddresses?: Array<{ id: string; label: string; address: string }>;
+  savedAddresses?: { id: string; label: string; address: string }[];
   userLocation?: { latitude: number; longitude: number };
   searchRadius?: number;
   countryCode?: string; // e.g., 'us' for United States

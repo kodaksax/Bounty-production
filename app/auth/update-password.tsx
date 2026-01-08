@@ -146,13 +146,13 @@ export function UpdatePasswordScreen() {
           <Text className="text-white/70 text-center text-sm px-4 mb-6">
             {error || 'This password reset link is invalid or has expired.'}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={() => router.push('/auth/reset-password')}
             className="bg-emerald-600 rounded-lg py-3 px-6 mb-4"
           >
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/auth/sign-in-form')}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/auth/sign-in-form')}>
             <Text className="text-white/80">Back to Sign In</Text>
           </TouchableOpacity>
         </View>
@@ -172,7 +172,7 @@ export function UpdatePasswordScreen() {
           <Text className="text-white/70 text-center text-sm px-4 mb-6">
             Your password has been successfully updated. You can now sign in with your new password.
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={() => router.replace('/auth/sign-in-form')}
             className="bg-emerald-600 rounded-lg py-3 px-6"
           >
@@ -213,7 +213,7 @@ export function UpdatePasswordScreen() {
               <View className="ml-3 flex-1">
                 <Text className="text-red-200 text-sm">{error}</Text>
               </View>
-              <TouchableOpacity onPress={() => setError(null)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setError(null)}>
                 <MaterialIcons name="close" size={20} color="#f87171" />
               </TouchableOpacity>
             </View>
@@ -224,7 +224,7 @@ export function UpdatePasswordScreen() {
             <View>
               <Text className="text-white/80 text-sm mb-1">New Password</Text>
               <View className="relative">
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={password}
                   onChangeText={(text) => {
                     setPassword(text)
@@ -310,7 +310,7 @@ export function UpdatePasswordScreen() {
             <View>
               <Text className="text-white/80 text-sm mb-1">Confirm Password</Text>
               <View className="relative">
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text)
@@ -367,7 +367,7 @@ export function UpdatePasswordScreen() {
             </View>
 
             {/* Update Password Button */}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={handleUpdatePassword} 
               disabled={loading || !passwordStrength?.isValid || password !== confirmPassword}
               className={`w-full rounded-lg py-4 items-center flex-row justify-center ${
@@ -387,7 +387,7 @@ export function UpdatePasswordScreen() {
             </TouchableOpacity>
 
             {/* Cancel Link */}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={() => router.push('/auth/sign-in-form')} 
               className="py-3 items-center"
             >

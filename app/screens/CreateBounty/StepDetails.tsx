@@ -214,7 +214,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           {uploadError && (
             <View className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-3 flex-row items-center justify-between">
               <Text className="text-red-200 flex-1 text-sm">{uploadError}</Text>
-              <TouchableOpacity onPress={clearError}>
+              <TouchableOpacity accessibilityRole="button" onPress={clearError}>
                 <MaterialIcons name="close" size={20} color="#fca5a5" />
               </TouchableOpacity>
             </View>

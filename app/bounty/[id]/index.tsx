@@ -119,7 +119,7 @@ export default function BountyDetailRouter() {
           <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.5)" />
           <Text style={styles.errorTitle}>Unable to Load Bounty</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={handleGoBack}>
             <MaterialIcons name="arrow-back" size={20} color="#fffef5" />
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>

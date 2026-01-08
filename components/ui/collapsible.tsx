@@ -17,7 +17,7 @@ export const CollapsibleSection: React.FC<CollapsibleProps> = ({
 
   return (
     <View>
-      <TouchableOpacity onPress={() => setCollapsed(!collapsed)}>
+      <TouchableOpacity accessibilityRole="button" onPress={() => setCollapsed(!collapsed)}>
         <Text>{title}</Text>
       </TouchableOpacity>
       <Collapsible collapsed={collapsed}>

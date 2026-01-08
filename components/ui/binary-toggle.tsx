@@ -18,7 +18,7 @@ export function BinaryToggle<T extends string>({ value, onChange, options, size 
       {options.map(opt => {
         const selected = value === opt.id
         return (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={opt.id}
             onPress={() => onChange(opt.id)}
             className={cn('flex-1 items-center justify-center',

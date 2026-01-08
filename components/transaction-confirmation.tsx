@@ -88,7 +88,7 @@ export function TransactionConfirmation({
       {/* Actions */}
       <View style={styles.actions}>
         {onViewTransaction && (
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={styles.secondaryButton}
             onPress={onViewTransaction}
           >
@@ -96,7 +96,7 @@ export function TransactionConfirmation({
           </TouchableOpacity>
         )}
         
-        <TouchableOpacity 
+        <TouchableOpacity accessibilityRole="button" 
           style={styles.primaryButton}
           onPress={onContinue}
         >

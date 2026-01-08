@@ -100,7 +100,7 @@ export function ResetPasswordScreen() {
               <View className="ml-3 flex-1">
                 <Text className="text-red-200 text-sm">{error}</Text>
               </View>
-              <TouchableOpacity onPress={() => setError(null)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setError(null)}>
                 <MaterialIcons name="close" size={20} color="#f87171" />
               </TouchableOpacity>
             </View>
@@ -166,7 +166,7 @@ export function ResetPasswordScreen() {
                 </Button>
 
                 {/* Resend Email */}
-                <TouchableOpacity 
+                <TouchableOpacity accessibilityRole="button" 
                   onPress={handleResend} 
                   disabled={loading}
                   className="py-3 items-center"
@@ -206,7 +206,7 @@ export function ResetPasswordScreen() {
             )}
 
             {/* Back to Sign In */}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={() => router.push('/auth/sign-in-form')} 
               className="flex-row items-center justify-center py-3 mt-2"
             >

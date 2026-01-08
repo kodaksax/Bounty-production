@@ -35,7 +35,7 @@ const Drawer: React.FC<DrawerProps> = ({ visible, onClose, children, style }) =>
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <TouchableWithoutFeedback onPress={onClose}>
+      <TouchableWithoutFeedback accessibilityRole="button" onPress={onClose}>
         <View style={styles.overlay} />
       </TouchableWithoutFeedback>
       <Animated.View style={[styles.content, style, { transform: [{ translateY }] }]}> 

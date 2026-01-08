@@ -98,14 +98,14 @@ export default function SimpleBountySearchScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Search Bounties</Text>
       </View>
       <View style={styles.searchRow}>
         <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} />
-        <TextInput
+        <TextInput accessibilityLabel="Text input field"
           value={query}
             placeholder="Search title or description..."
           placeholderTextColor="#93e5c7"
@@ -115,7 +115,7 @@ export default function SimpleBountySearchScreen() {
           style={styles.input}
         />
         {!!query && !isSearching && (
-          <TouchableOpacity onPress={() => setQuery('')} style={{ padding: 4 }}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setQuery('')} style={{ padding: 4 }}>
             <MaterialIcons name="close" size={18} color="#6ee7b7" />
           </TouchableOpacity>
         )}
@@ -124,7 +124,7 @@ export default function SimpleBountySearchScreen() {
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>⚠ {error}</Text>
-          <TouchableOpacity onPress={() => performSearch(query)} style={styles.retryBtn}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => performSearch(query)} style={styles.retryBtn}>
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -132,7 +132,7 @@ export default function SimpleBountySearchScreen() {
       {(!query && initial.length === 0 && !isSearching && !error) && (
         <View style={{ padding: 16 }}>
           <Text style={{ color: '#d1fae5', fontSize: 14 }}>No bounties loaded yet.</Text>
-          <TouchableOpacity onPress={() => performSearch('')} style={[styles.retryBtn,{marginTop:8}]}> 
+          <TouchableOpacity accessibilityRole="button" onPress={() => performSearch('')} style={[styles.retryBtn,{marginTop:8}]}> 
             <Text style={styles.retryText}>Refresh</Text>
           </TouchableOpacity>
         </View>

@@ -73,7 +73,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
           <MaterialIcons name="archive" size={24} color="#ffffff" />
           <Text className="text-lg font-bold tracking-wider text-white">ARCHIVED BOUNTIES</Text>
         </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>

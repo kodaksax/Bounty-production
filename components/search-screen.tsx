@@ -194,7 +194,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       {/* Search Header */}
       <View className="p-4 pt-8">
         <View className="flex items-center gap-3">
-          <TouchableOpacity onPress={onBack} className="text-white">
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} className="text-white">
             <MaterialIcons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
           <Text className="text-xl font-bold text-white">Search</Text>
@@ -211,7 +211,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
         >
 
           <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ position: 'absolute', left: 12, zIndex: 1 }} />
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             ref={inputRef}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -223,7 +223,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             style={{ paddingLeft: 40, paddingRight: 40 }}
           />
           {searchQuery && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ position: 'absolute', right: 12 }}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setSearchQuery("")} style={{ position: 'absolute', right: 12 }}>
               <MaterialIcons name="close" size={16} color="#6ee7b7" />
             </TouchableOpacity>
           )}
@@ -242,7 +242,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                     ? 'Could not reach API server. If on a physical device, ensure API_BASE_URL points to your computer\'s LAN IP (not localhost).'
                     : 'There are currently no open bounties.'}
                 </Text>
-                <TouchableOpacity onPress={refreshBounties} className="bg-emerald-600 rounded-full px-3 py-1 self-start">
+                <TouchableOpacity accessibilityRole="button" onPress={refreshBounties} className="bg-emerald-600 rounded-full px-3 py-1 self-start">
                   <Text className="text-white text-xs">Retry</Text>
                 </TouchableOpacity>
               </View>
@@ -256,13 +256,13 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
               <View className="mb-4">
                 <View className="flex justify-between items-center mb-2">
                   <Text className="text-sm font-medium text-emerald-200">Recent searches</Text>
-                  <TouchableOpacity onPress={() => setRecentSearches([])} className="text-xs text-emerald-300">
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setRecentSearches([])} className="text-xs text-emerald-300">
                     Clear all
                   </TouchableOpacity>
                 </View>
                 <View className="space-y-2">
                   {recentSearches.map((search, index) => (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={index}
                       onPress={() => handleSearch(search)}
                       className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
@@ -271,7 +271,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                         <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                         <Text className="text-white">{search}</Text>
                       </View>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
 
                         onPress={(e) => {
                           e.stopPropagation()
@@ -288,14 +288,14 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             <View>
               <Text className="text-sm font-medium text-emerald-200 mb-2">Suggested searches</Text>
               <View className="space-y-2">
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => handleSearch("@Jon_Doe")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
                   <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                   <Text className="text-white">@Jon_Doe</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => handleSearch("package")}
                   className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
                 >
@@ -314,7 +314,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
           <View className="flex flex-col items-center justify-center mt-12">
             <Text className="mb-2 text-emerald-100 font-medium">Search failed</Text>
             <Text className="text-xs text-emerald-300/80 mb-4 text-center px-4">{searchError}</Text>
-            <TouchableOpacity onPress={() => runSearch(searchQuery)} className="bg-emerald-600 rounded-full px-4 py-2">
+            <TouchableOpacity accessibilityRole="button" onPress={() => runSearch(searchQuery)} className="bg-emerald-600 rounded-full px-4 py-2">
               <Text className="text-white text-sm">Retry</Text>
             </TouchableOpacity>
           </View>
@@ -355,10 +355,10 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       {/* Search Bar at Bottom */}
       <View className="p-4 mt-auto">
         <View className="flex items-center justify-between bg-white/20 backdrop-blur-sm rounded-full p-1">
-          <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
+          <TouchableOpacity accessibilityRole="button" className="h-10 w-10 rounded-full flex items-center justify-center text-white">
             <MaterialIcons name="search" size={20} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity className="h-10 w-10 rounded-full flex items-center justify-center text-white">
+          <TouchableOpacity accessibilityRole="button" className="h-10 w-10 rounded-full flex items-center justify-center text-white">
             <MaterialIcons name="mic" size={20} color="white" />
           </TouchableOpacity>
         </View>

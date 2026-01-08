@@ -120,7 +120,7 @@ export default function EmailConfirmationScreen() {
 
       {/* Action Button */}
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
+        <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={handleGoToSignIn}>
           <Text style={styles.primaryButtonText}>Go to Sign In</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
         </TouchableOpacity>

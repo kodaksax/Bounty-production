@@ -29,7 +29,7 @@ const NotificationItem = React.memo<{
   );
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       onPress={() => onPress(item)}
       className={"border-b border-gray-200 p-4 bg-white"}
       activeOpacity={0.7}
@@ -161,7 +161,7 @@ export function NotificationsBell() {
               <MaterialIcons name="notifications" size={24} color="#fff" />
               <Text className="text-xl font-bold ml-2 text-white">Notifications</Text>
             </View>
-            <TouchableOpacity onPress={() => setDropdownVisible(false)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setDropdownVisible(false)}>
               <MaterialIcons name="close" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -173,7 +173,7 @@ export function NotificationsBell() {
                 {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
               </Text>
               {unreadCount > 0 && (
-                <TouchableOpacity onPress={handleMarkAllRead}>
+                <TouchableOpacity accessibilityRole="button" onPress={handleMarkAllRead}>
                   <Text className="text-sm font-semibold text-emerald-200">Mark all read</Text>
                 </TouchableOpacity>
               )}

@@ -142,7 +142,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>History</Text>

@@ -202,7 +202,7 @@ export default function DetailsScreen() {
       >
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
@@ -213,7 +213,7 @@ export default function DetailsScreen() {
 
         {/* Avatar picker - Prominent placement at top */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} disabled={uploading}>
+          <TouchableOpacity accessibilityRole="button" style={styles.avatarContainer} onPress={pickAvatar} disabled={uploading}>
             {avatarUri ? (
               <View style={styles.avatarImageWrapper}>
                 <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
@@ -248,7 +248,7 @@ export default function DetailsScreen() {
           {/* Display Name */}
           <View style={styles.field}>
             <Text style={styles.label}>Display Name</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.input}
               value={displayName}
               onChangeText={setDisplayName}
@@ -262,7 +262,7 @@ export default function DetailsScreen() {
           {/* Title/Profession */}
           <View style={styles.field}>
             <Text style={styles.label}>Title/Profession</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.input}
               value={title}
               onChangeText={setTitle}
@@ -276,7 +276,7 @@ export default function DetailsScreen() {
           {/* Bio */}
           <View style={styles.field}>
             <Text style={styles.label}>Bio</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={[styles.input, styles.bioInput]}
               value={bio}
               onChangeText={setBio}
@@ -292,7 +292,7 @@ export default function DetailsScreen() {
           {/* Location */}
           <View style={styles.field}>
             <Text style={styles.label}>Location</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.input}
               value={location}
               onChangeText={setLocation}
@@ -313,7 +313,7 @@ export default function DetailsScreen() {
             {/* Common skills as chips */}
             <View style={styles.skillsContainer}>
               {COMMON_SKILLS.map((skill) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={skill}
                   style={[
                     styles.skillChip,
@@ -339,7 +339,7 @@ export default function DetailsScreen() {
                 {skills.filter(s => !COMMON_SKILLS.includes(s)).map((skill) => (
                   <View key={skill} style={styles.customSkillChip}>
                     <Text style={styles.customSkillText}>{skill}</Text>
-                    <TouchableOpacity onPress={() => removeSkill(skill)}>
+                    <TouchableOpacity accessibilityRole="button" onPress={() => removeSkill(skill)}>
                       <MaterialIcons name="close" size={16} color="#a7f3d0" />
                     </TouchableOpacity>
                   </View>
@@ -349,7 +349,7 @@ export default function DetailsScreen() {
 
             {/* Add custom skill */}
             <View style={styles.customSkillInput}>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.input}
                 value={customSkill}
                 onChangeText={setCustomSkill}
@@ -359,7 +359,7 @@ export default function DetailsScreen() {
                 returnKeyType="done"
               />
               {customSkill.trim() && (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.addSkillButton}
                   onPress={addCustomSkill}
                 >
@@ -372,7 +372,7 @@ export default function DetailsScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.nextButton}
             onPress={handleNext}
             disabled={saving}
@@ -383,7 +383,7 @@ export default function DetailsScreen() {
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleSkip} style={styles.skipButton}>
             <Text style={styles.skipButtonText}>Skip for now</Text>
           </TouchableOpacity>
         </View>

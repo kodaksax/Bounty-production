@@ -110,7 +110,7 @@ export default function AdminBlockedUsersScreen() {
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchBlockedUsers}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={fetchBlockedUsers}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -183,7 +183,7 @@ export default function AdminBlockedUsersScreen() {
                 </View>
 
                 {/* Action */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.unblockButton}
                   onPress={() => handleUnblock(block.id)}
                 >

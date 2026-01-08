@@ -258,10 +258,10 @@ export default function PayoutScreen() {
       <View style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadBounty}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -272,7 +272,7 @@ export default function PayoutScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payout</Text>
@@ -355,7 +355,7 @@ export default function PayoutScreen() {
             </View>
 
             {/* Receipt Download */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.receiptButton}
               onPress={() => {
                 // TODO (Post-Launch): Implement actual receipt generation and download
@@ -375,7 +375,7 @@ export default function PayoutScreen() {
         {bounty.status !== 'completed' && (
           <View style={styles.actionButtons}>
             {!bounty.is_for_honor && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.releaseButton, (!confirmRelease || isProcessing) && styles.buttonDisabled]}
                 onPress={handleReleasePayout}
                 disabled={!confirmRelease || isProcessing}
@@ -391,7 +391,7 @@ export default function PayoutScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
               onPress={handleMarkComplete}
               disabled={isProcessing}
@@ -406,7 +406,7 @@ export default function PayoutScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
               onPress={handleDeleteBounty}
               disabled={isProcessing}

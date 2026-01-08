@@ -427,7 +427,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           <View style={styles.bountyCard}>
             <View style={styles.cardContent}>
               {/* User info - Clickable to navigate to profile */}
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.userInfo}
                 onPress={() => {
                   if (posterId) {
@@ -552,7 +552,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                         const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
 
                         return (
-                          <TouchableOpacity
+                          <TouchableOpacity accessibilityRole="button"
                             key={attachment.id}
                             style={styles.attachmentItem}
                             onPress={() => handleAttachmentOpen(attachment)}
@@ -592,7 +592,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
         {/* Accept Bounty Button - With safe area inset */}
         <View style={styles.actionContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={[
               styles.acceptButton,
               (hasApplied || isApplying) && styles.acceptButtonDisabled

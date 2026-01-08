@@ -496,7 +496,7 @@ export function PosterReviewModal({
               />
 
               <View style={styles.warningActions}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.warningCancelButton, isProcessing && styles.buttonDisabled]}
                   onPress={() => setShowPayoutWarning(false)}
                   disabled={isProcessing}
@@ -527,7 +527,7 @@ export function PosterReviewModal({
                 />
               </View>
 
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.commentInput}
                 placeholder="Add an optional comment (visible to hunter)..."
                 placeholderTextColor="rgba(255,254,245,0.4)"
@@ -539,7 +539,7 @@ export function PosterReviewModal({
                 textAlignVertical="top"
               />
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
                 onPress={handleSubmitRating}
                 disabled={isProcessing || rating === 0}
@@ -565,7 +565,7 @@ export function PosterReviewModal({
                 Explain what needs to be improved or changed.
               </Text>
 
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.feedbackInput}
                 placeholder="Describe the changes needed..."
                 placeholderTextColor="rgba(255,254,245,0.4)"
@@ -578,14 +578,14 @@ export function PosterReviewModal({
               />
 
               <View style={styles.buttonRow}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.secondaryButton}
                   onPress={() => setShowRevisionForm(false)}
                 >
                   <Text style={styles.secondaryButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
                   onPress={handleRequestRevision}
                   disabled={isProcessing}
@@ -645,7 +645,7 @@ export function PosterReviewModal({
 
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.rejectButton}
                 onPress={() => setShowRevisionForm(true)}
                 disabled={isProcessing}
@@ -654,7 +654,7 @@ export function PosterReviewModal({
                 <Text style={styles.rejectButtonText}>Request Changes</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.approveButton, isProcessing && styles.buttonDisabled]}
                 onPress={() => setShowPayoutWarning(true)}
                 disabled={isProcessing}

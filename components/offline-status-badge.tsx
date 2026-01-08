@@ -20,7 +20,7 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
   const icon = hasFailures ? 'error-outline' : isOnline ? 'sync' : 'cloud-off';
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity accessibilityRole="button" 
       onPress={onPress}
       style={[styles.container, { backgroundColor }]}
       activeOpacity={0.7}

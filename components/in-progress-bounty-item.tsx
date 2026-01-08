@@ -35,7 +35,7 @@ export function InProgressBountyItem({
   }
 
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+    <TouchableOpacity accessibilityRole="button" onPress={handlePress} activeOpacity={0.7}>
       <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
         <View className="p-3">
           <View className="flex items-center gap-3">

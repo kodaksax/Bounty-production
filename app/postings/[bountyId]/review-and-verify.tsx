@@ -295,7 +295,7 @@ export default function ReviewAndVerifyScreen() {
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <TouchableOpacity style={styles.viewButton} onPress={() => openAttachment(item)}>
+      <TouchableOpacity accessibilityRole="button" style={styles.viewButton} onPress={() => openAttachment(item)}>
         <MaterialIcons name="visibility" size={20} color="#6ee7b7" />
       </TouchableOpacity>
     </View>
@@ -315,10 +315,10 @@ export default function ReviewAndVerifyScreen() {
       <View style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Bounty not found'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
+        <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadBounty}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -329,7 +329,7 @@ export default function ReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'postings' } } as any)}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Review & Verify</Text>
@@ -409,7 +409,7 @@ export default function ReviewAndVerifyScreen() {
           {/* Star Rating */}
           <View style={styles.ratingContainer}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={star}
                 onPress={() => handleRatingPress(star)}
                 style={styles.starButton}
@@ -435,7 +435,7 @@ export default function ReviewAndVerifyScreen() {
 
           {/* Optional Comment */}
           <Text style={styles.commentLabel}>Add a comment (optional)</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             style={styles.commentInput}
             placeholder="Share your experience with this hunter..."
             placeholderTextColor="rgba(110, 231, 183, 0.4)"
@@ -449,7 +449,7 @@ export default function ReviewAndVerifyScreen() {
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           {/* Request Revision Button */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.revisionButton, isRequestingRevision && styles.revisionButtonDisabled]}
             onPress={handleRequestRevision}
             disabled={isRequestingRevision}
@@ -465,7 +465,7 @@ export default function ReviewAndVerifyScreen() {
           </TouchableOpacity>
 
           {/* Next Button */}
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <TouchableOpacity accessibilityRole="button" style={styles.nextButton} onPress={handleNext}>
             <Text style={styles.nextButtonText}>Approve & Proceed to Payout</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>

@@ -19,7 +19,7 @@ export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
         </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
       </View>
@@ -31,7 +31,7 @@ export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {
             <Text className="text-emerald-200 text-xs leading-5">{f.a}</Text>
           </View>
         ))}
-        <TouchableOpacity onPress={onBack} className="mt-2 self-start px-4 py-2 rounded-md bg-emerald-700">
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} className="mt-2 self-start px-4 py-2 rounded-md bg-emerald-700">
           <Text className="text-white text-sm font-medium">Back to Settings</Text>
         </TouchableOpacity>
       </ScrollView>

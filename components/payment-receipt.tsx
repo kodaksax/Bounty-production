@@ -214,21 +214,21 @@ export function PaymentReceipt({
         {/* Actions */}
         <View style={styles.actions}>
           {onDownload && (
-            <Pressable style={styles.actionButton} onPress={onDownload}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onDownload}>
               <Download size={20} color="#047857" />
               <Text style={styles.actionText}>Download</Text>
             </Pressable>
           )}
 
           {onShare && (
-            <Pressable style={styles.actionButton} onPress={onShare}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onShare}>
               <Share2 size={20} color="#047857" />
               <Text style={styles.actionText}>Share</Text>
             </Pressable>
           )}
 
           {onEmail && (
-            <Pressable style={styles.actionButton} onPress={onEmail}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onEmail}>
               <Mail size={20} color="#047857" />
               <Text style={styles.actionText}>Email</Text>
             </Pressable>
@@ -245,7 +245,7 @@ export function PaymentReceipt({
 
         {/* Close Button */}
         {onClose && (
-          <Pressable style={styles.closeButton} onPress={onClose}>
+          <Pressable accessibilityRole="button" style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>Close</Text>
           </Pressable>
         )}

@@ -209,7 +209,7 @@ export default function AuditLogsScreen() {
 
   // Category filter chips
   const CategoryFilters = () => {
-    const categories: Array<{ id: CategoryFilter; label: string; icon: string }> = [
+    const categories: { id: CategoryFilter; label: string; icon: string }[] = [
       { id: 'all', label: 'All', icon: 'list' },
       { id: 'moderation', label: 'Moderation', icon: 'shield' },
       { id: 'user', label: 'Users', icon: 'person' },
@@ -266,7 +266,7 @@ export default function AuditLogsScreen() {
             ? { color: '#a7f3d0', bg: 'transparent', label: 'All' }
             : getSeverityConfig(sev);
         return (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={sev}
             style={[
               styles.severityChip,
@@ -471,7 +471,7 @@ export default function AuditLogsScreen() {
         <View style={styles.modalContainer}>
           {/* Modal header */}
           <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => setShowDetailModal(false)}
               style={styles.modalCloseButton}
             >
@@ -631,7 +631,7 @@ export default function AuditLogsScreen() {
           : 'Audit logs will appear here as system events occur.'}
       </Text>
       {(categoryFilter !== 'all' || severityFilter !== 'all') && (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.clearFiltersButton}
           onPress={() => {
             setCategoryFilter('all');
@@ -652,7 +652,7 @@ export default function AuditLogsScreen() {
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchLogs}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={fetchLogs}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>

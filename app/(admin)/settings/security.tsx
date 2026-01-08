@@ -25,7 +25,7 @@ export default function AdminSecuritySettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof security, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setSecurity((prev) => ({ ...prev, [key]: option })),
     }));
@@ -82,7 +82,7 @@ export default function AdminSecuritySettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Authentication</Text>
           <AdminCard>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={handleEnable2FA}
             >
@@ -115,7 +115,7 @@ export default function AdminSecuritySettingsScreen() {
                 thumbColor={security.requireReauth ? '#00dc50' : '#f4f3f4'}
               />
             </View>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('passwordExpiry', ['30', '60', '90', 'never'], 'Password Expiry (days)')}
             >
@@ -137,7 +137,7 @@ export default function AdminSecuritySettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Session Management</Text>
           <AdminCard>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('sessionTimeout', ['15', '30', '60', '120'], 'Session Timeout (minutes)')}
             >
@@ -150,7 +150,7 @@ export default function AdminSecuritySettingsScreen() {
                 <MaterialIcons name="chevron-right" size={20} color="rgba(255,254,245,0.4)" />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={handleRevokeAllSessions}
             >
@@ -222,7 +222,7 @@ export default function AdminSecuritySettingsScreen() {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <TouchableOpacity accessibilityRole="button" style={styles.saveButton} onPress={handleSave}>
           <MaterialIcons name="check" size={20} color="#fffef5" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>

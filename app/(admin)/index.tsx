@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   ];
 
   const renderQuickLinkItem = ({ item }: { item: typeof quickLinks[0] }) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.quickLinkCard}
       onPress={() => router.push(item.route as any)}
     >
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="rgba(255,254,245,0.6)" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={refetch}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>

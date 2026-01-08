@@ -225,13 +225,13 @@ export default function HunterPayoutScreen() {
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -242,7 +242,7 @@ export default function HunterPayoutScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payout</Text>
@@ -389,7 +389,7 @@ export default function HunterPayoutScreen() {
 
             {/* Actions */}
             <View style={styles.actionsContainer}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.archiveButton]}
                 onPress={handleArchive}
                 disabled={isProcessing}
@@ -397,7 +397,7 @@ export default function HunterPayoutScreen() {
                 <MaterialIcons name="archive" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>Archive</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.deleteButton]}
                 onPress={handleDelete}
                 disabled={isProcessing}

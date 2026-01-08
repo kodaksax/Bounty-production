@@ -185,13 +185,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
             try {
               // Lazy imports to avoid bundling server-only code
               // Use the shared supabase client
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
+               
               const { supabase } = require('../lib/supabase');
               // SecureStore to clear tokens
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
+               
               const SecureStore = require('expo-secure-store');
               // Auth profile service to clear drafts
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
+               
               const { authProfileService } = require('../lib/services/auth-profile-service');
 
               // Get current user ID before signing out
@@ -207,7 +207,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               // OPTIMIZATION: Navigate immediately after local sign-out for perceived speed
               // Navigation itself provides sufficient feedback to the user
               try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                 
                 const { router } = require('expo-router');
                 if (router && typeof router.replace === 'function') {
                   router.replace('/auth/sign-in-form');
@@ -273,13 +273,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                   style: 'destructive',
                   onPress: async () => {
                     // Lazy imports
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                     
                     const { supabase } = require('../lib/supabase');
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                     
                     const SecureStore = require('expo-secure-store');
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                     
                     const { authProfileService } = require('../lib/services/auth-profile-service');
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                     
                     const { deleteUserAccount } = require('../lib/services/account-deletion-service');
 
                     // Get current user ID before deleting
@@ -341,7 +341,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
                               // Route to sign-in screen
                               try {
-                                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                                 
                                 const { router } = require('expo-router');
                                 if (router && typeof router.replace === 'function') {
                                   router.replace('/auth/sign-in-form');
@@ -367,7 +367,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           icon="delete-forever"
         />
         <View className="mt-6 mb-10">
-          <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
             <Text className="text-white text-sm font-medium">Back to Home</Text>
           </TouchableOpacity>
         </View>
@@ -384,7 +384,7 @@ interface SettingsItemProps {
 
 function SettingsItem({ icon, label, onClick }: SettingsItemProps) {
   return (
-    <TouchableOpacity className="w-full flex-row items-center justify-between px-4 py-3" onPress={onClick}>
+    <TouchableOpacity accessibilityRole="button" className="w-full flex-row items-center justify-between px-4 py-3" onPress={onClick}>
       <View className="flex-row items-center">
         {icon}
         <Text className="ml-3">{label}</Text>
@@ -413,11 +413,11 @@ const SettingsCard = ({ title, description, primaryLabel, secondaryLabel, onPrim
       </View>
       <Text className="text-emerald-200 text-xs leading-4 mb-3" numberOfLines={4}>{description}</Text>
       <View className="flex-row gap-2">
-        <TouchableOpacity onPress={onPrimary} className="px-3 py-1 rounded-md bg-emerald-700">
+        <TouchableOpacity accessibilityRole="button" onPress={onPrimary} className="px-3 py-1 rounded-md bg-emerald-700">
           <Text className="text-white text-xs font-medium">{primaryLabel}</Text>
         </TouchableOpacity>
         {secondaryLabel && onSecondary && (
-          <TouchableOpacity onPress={onSecondary} className="px-3 py-1 rounded-md bg-black/40">
+          <TouchableOpacity accessibilityRole="button" onPress={onSecondary} className="px-3 py-1 rounded-md bg-black/40">
             <Text className="text-white text-xs font-medium">{secondaryLabel}</Text>
           </TouchableOpacity>
         )}

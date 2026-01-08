@@ -133,7 +133,7 @@ const DialogContent = React.forwardRef<View, DialogContentProps>(
             {...props}
           >
             {children}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               className="absolute right-4 top-4 rounded-sm opacity-70"
               onPress={() => onOpenChange(false)}
             >

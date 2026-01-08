@@ -96,7 +96,7 @@ export function BountyCard({
   };
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       activeOpacity={0.8}
       style={styles.card}
       onPress={onPress}
@@ -200,7 +200,7 @@ export function BountyCard({
           <Text style={styles.ownerLabel}>Your posting</Text>
           <View style={styles.actionButtons}>
             {onEdit && bounty.status !== 'cancelled' && bounty.status !== 'cancellation_requested' && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.actionButton}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -213,7 +213,7 @@ export function BountyCard({
             )}
             {/* Show Delete only for open bounties without an accepted hunter (defensive check for race conditions) */}
             {onDelete && bounty.status === 'open' && !bounty.accepted_by && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.actionButton}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -225,7 +225,7 @@ export function BountyCard({
               </TouchableOpacity>
             )}
             {onCancel && bounty.status === 'in_progress' && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.cancelButton]}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -237,7 +237,7 @@ export function BountyCard({
               </TouchableOpacity>
             )}
             {onViewCancellation && bounty.status === 'cancellation_requested' && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.viewButton]}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -249,7 +249,7 @@ export function BountyCard({
               </TouchableOpacity>
             )}
             {onViewDispute && hasDispute && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.actionButton, styles.disputeButton]}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -260,7 +260,7 @@ export function BountyCard({
                 <Text style={[styles.actionButtonText, styles.disputeButtonText]}>View Dispute</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.actionButton}
               onPress={(e) => {
                 e.stopPropagation();

@@ -182,7 +182,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
         </View>
         <View className="flex-row items-center">
           {syncing && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-          <TouchableOpacity onPress={onBack} className="p-2">
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} className="p-2">
             <MaterialIcons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -255,7 +255,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
               prefs.reminders && (
                 <View className="mt-3">
                   <Text className="text-[10px] text-emerald-100 mb-1">Minutes before due date</Text>
-                  <TextInput 
+                  <TextInput accessibilityLabel="Text input field" 
                     keyboardType="numeric" 
                     value={prefs.reminderLeadMinutes} 
                     onChangeText={v => /^(\d{0,3})$/.test(v) && persist({ reminderLeadMinutes: v })} 

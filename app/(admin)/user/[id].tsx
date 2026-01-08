@@ -55,7 +55,7 @@ export default function AdminUserDetailScreen() {
           <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
           <Text style={styles.errorTitle}>Failed to load user</Text>
           <Text style={styles.errorText}>{error || 'User not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadUser}>
+          <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={loadUser}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>

@@ -425,7 +425,7 @@ function BountyAppInner() {
       ) : (
         <>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
             <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </>
@@ -656,7 +656,7 @@ function BountyAppInner() {
                   <View style={[styles.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }] }>
                     {permission?.granted && userLocation ? (
                       DISTANCE_OPTIONS.map((m) => (
-                        <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
+                        <TouchableOpacity accessibilityRole="button" key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
                           <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
                         </TouchableOpacity>
                       ))
@@ -670,7 +670,7 @@ function BountyAppInner() {
               <View style={styles.distanceDropdown}>
                 {permission?.granted && userLocation ? (
                   DISTANCE_OPTIONS.map((m) => (
-                    <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
+                    <TouchableOpacity accessibilityRole="button" key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
                       <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
                     </TouchableOpacity>
                   ))

@@ -188,7 +188,7 @@ export default function OnboardingCarousel() {
       </View>
 
       {/* Skip button */}
-      <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+      <TouchableOpacity accessibilityRole="button" style={styles.skipButton} onPress={handleSkip}>
         <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
@@ -213,7 +213,7 @@ export default function OnboardingCarousel() {
 
       {/* Action buttons */}
       <View style={styles.actionContainer}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.nextButton}
           onPress={handleNext}
         >

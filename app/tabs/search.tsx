@@ -520,7 +520,7 @@ export default function EnhancedSearchScreen() {
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>⚠ {error}</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={() => {
               if (activeTab === 'bounties') {
                 performBountySearch(query, filters);
@@ -540,7 +540,7 @@ export default function EnhancedSearchScreen() {
         <View style={styles.recentSection}>
           <View style={styles.recentHeader}>
             <Text style={styles.recentTitle}>Recent Searches</Text>
-            <TouchableOpacity onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}>
               <Text style={styles.clearText}>Clear</Text>
             </TouchableOpacity>
           </View>
@@ -604,7 +604,7 @@ export default function EnhancedSearchScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Bounties</Text>
-              <TouchableOpacity onPress={() => setShowFilters(false)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowFilters(false)}>
                 <MaterialIcons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -619,7 +619,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'amount_desc', label: 'Highest Amount' },
                   { value: 'amount_asc', label: 'Lowest Amount' },
                 ].map((option) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.value}
                     style={[
                       styles.filterOption,
@@ -647,7 +647,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'in_progress', label: 'In Progress' },
                   { value: 'completed', label: 'Completed' },
                 ].map((option) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.value}
                     style={[
                       styles.filterOption,
@@ -681,7 +681,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'online', label: 'Online' },
                   { value: 'in_person', label: 'In Person' },
                 ].map((option) => (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={option.label}
                     style={[
                       styles.filterOption,
@@ -704,7 +704,7 @@ export default function EnhancedSearchScreen() {
               {/* Amount Range */}
               <Text style={styles.filterLabel}>Amount Range</Text>
               <View style={styles.amountRow}>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   style={styles.amountInput}
                   placeholder="Min"
                   placeholderTextColor="#93e5c7"
@@ -715,7 +715,7 @@ export default function EnhancedSearchScreen() {
                   }
                 />
                 <Text style={styles.amountSeparator}>-</Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   style={styles.amountInput}
                   placeholder="Max"
                   placeholderTextColor="#93e5c7"
@@ -729,10 +729,10 @@ export default function EnhancedSearchScreen() {
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.clearFiltersBtn} onPress={clearFilters}>
+              <TouchableOpacity accessibilityRole="button" style={styles.clearFiltersBtn} onPress={clearFilters}>
                 <Text style={styles.clearFiltersBtnText}>Clear All</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.applyFiltersBtn}
                 onPress={() => setShowFilters(false)}
               >

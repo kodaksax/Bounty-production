@@ -12,7 +12,7 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, on
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
         </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} className="p-2">
           <MaterialIcons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
       </View>
@@ -33,7 +33,7 @@ const SupportBlock = ({ title, description, icon, actionLabel, onPress }: { titl
       <Text className="ml-2 text-white font-medium">{title}</Text>
     </View>
     <Text className="text-emerald-200 text-xs leading-4 mb-3">{description}</Text>
-    <TouchableOpacity onPress={onPress} className="self-start px-3 py-1 rounded-md bg-emerald-700">
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} className="self-start px-3 py-1 rounded-md bg-emerald-700">
       <Text className="text-xs text-white font-medium">{actionLabel}</Text>
     </TouchableOpacity>
   </View>

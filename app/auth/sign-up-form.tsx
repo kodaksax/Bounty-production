@@ -145,7 +145,7 @@ export function SignUpForm() {
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Email</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text)
@@ -167,7 +167,7 @@ export function SignUpForm() {
             <View>
               <Text className="text-sm text-white/80 mb-1">Password</Text>
               <View className="relative">
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={password}
                   onChangeText={(text) => {
                     setPassword(text)
@@ -197,7 +197,7 @@ export function SignUpForm() {
             <View>
               <Text className="text-sm text-white/80 mb-1">Confirm Password</Text>
               <View className="relative">
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text)
@@ -248,11 +248,11 @@ export function SignUpForm() {
                 </TouchableOpacity>
                 <View className="flex-1 flex-row flex-wrap">
                   <Text className="text-white/90">I accept the </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/terms')}>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/legal/terms')}>
                     <Text className="text-white underline">Terms of Service</Text>
                   </TouchableOpacity>
                   <Text className="text-white/90"> and </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/privacy')}>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/legal/privacy')}>
                     <Text className="text-white underline">Privacy Policy</Text>
                   </TouchableOpacity>
                 </View>
@@ -260,11 +260,11 @@ export function SignUpForm() {
               {fieldErrors.termsAccepted && <Text className="text-xs text-red-400 mt-1 ml-9">{fieldErrors.termsAccepted}</Text>}
             </View>
 
-            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+            <TouchableOpacity accessibilityRole="button" onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-medium">Create Account</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => router.back()}>
               <Text className="text-white/80 text-center mt-6">Back to Sign In</Text>
             </TouchableOpacity>
           </View>

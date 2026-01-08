@@ -84,7 +84,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [startTime] = useState(Date.now())
   const [completionMessage, setCompletionMessage] = useState('')
-  const [proofItems, setProofItems] = useState<Array<{ id: string; type: 'image' | 'file'; name: string; size?: number }>>([])
+  const [proofItems, setProofItems] = useState<{ id: string; type: 'image' | 'file'; name: string; size?: number }[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionPending, setSubmissionPending] = useState(false)
   const [hunterName, setHunterName] = useState<string>('Hunter')
@@ -598,7 +598,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   
                   {/* Show review button if submission is pending */}
                   {hasSubmission && (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={styles.reviewSubmissionBtn}
                       onPress={() => setShowReviewModal(true)}
                     >
@@ -648,7 +648,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   
                   <AttachmentsList attachments={attachments} />
                   
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
                     onPress={async () => {
                       // Persist ready state and advance UI
@@ -693,7 +693,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   </Text>
                 </View>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.reviewSubmissionBtn}
                   onPress={() => setShowReviewModal(true)}
                 >
@@ -706,7 +706,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
                 {/* Navigate to full review screen option */}
                 {onGoToReview && (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.primaryBtn, { backgroundColor: 'rgba(16, 185, 129, 0.3)' }]}
                     onPress={() => onGoToReview(String(bounty.id))}
                   >
@@ -743,7 +743,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     {/* Message Input */}
                     <View>
                       <Text style={styles.sectionTitle}>Message (cont):</Text>
-                      <TextInput
+                      <TextInput accessibilityLabel="Text input field"
                         style={styles.messageTextArea}
                         placeholder="Describe your completed work..."
                         placeholderTextColor="rgba(255,254,245,0.4)"
@@ -772,12 +772,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                             <Text style={styles.proofName}>{item.name}</Text>
                             <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
                           </View>
-                          <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
+                          <TouchableOpacity accessibilityRole="button" onPress={() => handleRemoveProof(item.id)}>
                             <MaterialIcons name="close" size={20} color="#ef4444" />
                           </TouchableOpacity>
                         </View>
                       ))}
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         style={[styles.addFileBtn, !(readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
                         onPress={handleAddProof}
                         disabled={!(readyToSubmitPressed || !!readyRecord)}
@@ -788,7 +788,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     </View>
 
                     {/* Submit Button */}
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[styles.primaryBtn, isSubmitting && styles.buttonDisabled]}
                       onPress={handleSubmitCompletion}
                       disabled={isSubmitting}

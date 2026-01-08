@@ -160,7 +160,7 @@ export default function SavedSearchesScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backBtn}>
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Saved Searches</Text>
@@ -176,11 +176,11 @@ export default function SavedSearchesScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Searches</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => setShowNewSearchModal(true)}
           style={styles.addBtn}
         >
@@ -200,7 +200,7 @@ export default function SavedSearchesScreen() {
         <View style={styles.emptyContainer}>
           <MaterialIcons name="bookmark-outline" size={48} color="#6b7280" />
           <Text style={styles.emptyText}>No saved searches yet</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.createBtn}
             onPress={() => setShowNewSearchModal(true)}
           >
@@ -222,14 +222,14 @@ export default function SavedSearchesScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Saved Search</Text>
-              <TouchableOpacity onPress={() => setShowNewSearchModal(false)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowNewSearchModal(false)}>
                 <MaterialIcons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalBody}>
               <Text style={styles.inputLabel}>Search Name</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.textInput}
                 placeholder="e.g., Remote React Jobs"
                 placeholderTextColor="#6b7280"
@@ -238,7 +238,7 @@ export default function SavedSearchesScreen() {
               />
 
               <Text style={styles.inputLabel}>Search Keywords (optional)</Text>
-              <TextInput
+              <TextInput accessibilityLabel="Text input field"
                 style={styles.textInput}
                 placeholder="e.g., react, typescript"
                 placeholderTextColor="#6b7280"
@@ -252,13 +252,13 @@ export default function SavedSearchesScreen() {
             </View>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.cancelBtn}
                 onPress={() => setShowNewSearchModal(false)}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.saveBtn, !newSearchName.trim() && styles.saveBtnDisabled]}
                 onPress={handleCreateSearch}
                 disabled={!newSearchName.trim()}

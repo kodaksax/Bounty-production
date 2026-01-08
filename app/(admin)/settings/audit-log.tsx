@@ -198,7 +198,7 @@ export default function AdminAuditLogScreen() {
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         {filterOptions.map((option) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={option}
             style={[styles.filterTab, filter === option && styles.filterTabActive]}
             onPress={() => setFilter(option)}

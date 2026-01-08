@@ -113,10 +113,10 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 					<Text style={styles.devBannerTitle}>Dev server unreachable</Text>
 					<Text style={styles.devBannerMsg}>{`Cannot reach ${API_BASE_URL} — ${devHealthMsg || ''}`}</Text>
 					<View style={styles.devBannerActions}>
-						<TouchableOpacity onPress={handleRetry} style={styles.devBtn}>
+						<TouchableOpacity accessibilityRole="button" onPress={handleRetry} style={styles.devBtn}>
 							<Text style={styles.devBtnText}>Retry</Text>
 						</TouchableOpacity>
-						<TouchableOpacity onPress={() => setDevBannerDismissed(true)} style={[styles.devBtn, styles.devBtnSecondary]}>
+						<TouchableOpacity accessibilityRole="button" onPress={() => setDevBannerDismissed(true)} style={[styles.devBtn, styles.devBtnSecondary]}>
 							<Text style={[styles.devBtnText, styles.devBtnSecondaryText]}>Continue</Text>
 						</TouchableOpacity>
 					</View>

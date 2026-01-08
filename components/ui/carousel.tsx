@@ -54,7 +54,7 @@ CarouselItem.displayName = "CarouselItem";
 
 const CarouselPrevious = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, { onPress: () => void; disabled?: boolean; style?: any }>(
   ({ onPress, disabled, style }, ref) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       ref={ref}
       onPress={onPress}
       disabled={disabled}
@@ -69,7 +69,7 @@ CarouselPrevious.displayName = "CarouselPrevious";
 
 const CarouselNext = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, { onPress: () => void; disabled?: boolean; style?: any }>(
   ({ onPress, disabled, style }, ref) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       ref={ref}
       onPress={onPress}
       disabled={disabled}

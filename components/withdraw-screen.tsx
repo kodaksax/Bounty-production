@@ -247,7 +247,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={20} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
@@ -272,7 +272,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       </View>
       <View style={styles.amountBox}>
         <Text style={styles.amountLabel}>Amount:</Text>
-        <TextInput
+        <TextInput accessibilityLabel="Text input field"
           style={styles.amountInput}
           keyboardType="numeric"
           value={withdrawalAmount ? withdrawalAmount.toString() : ""}
@@ -290,7 +290,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           
           {/* Bank Account - Stripe Connect */}
           {hasConnectedAccount ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.methodRow, styles.methodRowActive]}
               onPress={() => setSelectedMethod('')}
             >
@@ -306,7 +306,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               </View>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.methodRow, styles.methodRowInactive]}
               onPress={handleConnectOnboarding}
               disabled={isOnboarding}
@@ -349,7 +349,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
             </View>
           ) : (
             paymentMethods.map((method) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={method.id}
                 style={[
                   styles.methodRow,
@@ -392,7 +392,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         </View>
       </ScrollView>
       <View style={styles.bottomButtonBox}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={handleWithdraw}
           style={[
             styles.bottomButton,

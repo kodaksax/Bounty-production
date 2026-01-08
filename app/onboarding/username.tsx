@@ -282,7 +282,7 @@ export default function UsernameScreen() {
         <View style={styles.inputSection}>
           <View style={styles.inputWrapper}>
             <Text style={styles.atSymbol}>@</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.input}
               value={username}
               onChangeText={(text) => setUsername(text.toLowerCase())}
@@ -347,7 +347,7 @@ export default function UsernameScreen() {
         </View>
 
         {/* Next Button */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.nextButton, (!isValid || checking || !accepted) && styles.nextButtonDisabled]}
           onPress={handleNext}
           disabled={!isValid || checking || !accepted}

@@ -188,7 +188,7 @@ export function ApplicantCard({
 
       {/* Action buttons */}
       <View style={styles.actions}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.button, styles.rejectButton]}
           onPress={handleReject}
           disabled={isProcessing || request.status !== 'pending'}
@@ -204,7 +204,7 @@ export function ApplicantCard({
         </TouchableOpacity>
 
         {onRequestMoreInfo && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.button, styles.infoButton]}
             onPress={handleRequestInfo}
             disabled={isProcessing || request.status !== 'pending'}
@@ -214,7 +214,7 @@ export function ApplicantCard({
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.button, styles.acceptButton]}
           onPress={handleAccept}
           disabled={isProcessing || request.status !== 'pending'}

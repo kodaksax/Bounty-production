@@ -362,7 +362,7 @@ export default function AdminDisputeDetailScreen() {
 
             {/* Status Update Buttons */}
             {dispute.status === 'open' && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => handleUpdateStatus('under_review')}
                 style={styles.actionButton}
               >
@@ -373,7 +373,7 @@ export default function AdminDisputeDetailScreen() {
 
             {/* Resolve Form */}
             {!showResolveForm ? (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => setShowResolveForm(true)}
                 style={[styles.actionButton, styles.resolveButton]}
               >
@@ -386,7 +386,7 @@ export default function AdminDisputeDetailScreen() {
                 <Text style={styles.resolveFormHint}>
                   Describe how this dispute was resolved and any actions taken.
                 </Text>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={resolution}
                   onChangeText={setResolution}
                   placeholder="Enter resolution details..."
@@ -398,7 +398,7 @@ export default function AdminDisputeDetailScreen() {
                   editable={!resolving}
                 />
                 <View style={styles.resolveFormActions}>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={handleResolveDispute}
                     disabled={resolving || !resolution.trim()}
                     style={[
@@ -416,7 +416,7 @@ export default function AdminDisputeDetailScreen() {
                       </>
                     )}
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={() => {
                       setShowResolveForm(false);
                       setResolution('');
@@ -433,7 +433,7 @@ export default function AdminDisputeDetailScreen() {
             )}
 
             {/* Close Dispute */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => handleUpdateStatus('closed')}
               style={[styles.actionButton, styles.closeButton]}
             >

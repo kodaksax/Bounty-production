@@ -167,10 +167,10 @@ export function ChatDetailScreen({
         style={{ borderBottomColor: '#047857' }}
       >
         <View className="flex-row items-center flex-1">
-          <TouchableOpacity onPress={onBack} className="mr-3">
+          <TouchableOpacity accessibilityRole="button" onPress={onBack} className="mr-3">
             <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={() => {
               if (otherUserId && !conversation.isGroup) {
                 router.push(`/profile/${otherUserId}`)
@@ -196,10 +196,10 @@ export function ChatDetailScreen({
           </TouchableOpacity>
         </View>
         <View className="flex-row gap-3">
-          <TouchableOpacity className="text-white">
+          <TouchableOpacity accessibilityRole="button" className="text-white">
             <MaterialIcons name="phone" size={24} color="#fffef5" />
           </TouchableOpacity>
-          <TouchableOpacity className="text-white">
+          <TouchableOpacity accessibilityRole="button" className="text-white">
             <MaterialIcons name="videocam" size={24} color="#fffef5" />
           </TouchableOpacity>
         </View>
@@ -251,7 +251,7 @@ export function ChatDetailScreen({
             />
             {/* Message Input */}
             <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10), bottom: BOTTOM_NAV_OFFSET }] }>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.inputButton}
                 onPress={() => {
                   setComposerText('')
@@ -284,7 +284,7 @@ export function ChatDetailScreen({
         onRequestClose={() => setShowComposer(false)}
       >
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowComposer(false)} />
+          <TouchableOpacity accessibilityRole="button" style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowComposer(false)} />
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
@@ -293,7 +293,7 @@ export function ChatDetailScreen({
             <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12), marginBottom: BOTTOM_NAV_OFFSET }] }>
               <Text style={styles.sheetTitle}>Send Message</Text>
               <View style={styles.inputWrapper}>
-                <TextInput
+                <TextInput accessibilityLabel="Text input field"
                   value={composerText}
                   onChangeText={setComposerText}
                   placeholder="Type your message..."
@@ -304,10 +304,10 @@ export function ChatDetailScreen({
                 />
               </View>
               <View style={styles.sheetButtons}>
-                <TouchableOpacity style={[styles.sheetBtn, styles.cancelBtn]} onPress={() => setShowComposer(false)}>
+                <TouchableOpacity accessibilityRole="button" style={[styles.sheetBtn, styles.cancelBtn]} onPress={() => setShowComposer(false)}>
                   <Text style={styles.cancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.sheetBtn, styles.sendBtn]}
                   onPress={async () => {
                     const t = composerText.trim()

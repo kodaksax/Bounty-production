@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet , Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Linking } from 'react-native';
 import ConnectOnboardingButton from '../../components/ConnectOnboardingButton';
 import { showToast } from '../../lib/utils/toast';
 import { stripeService } from '../../lib/services/stripe-service';

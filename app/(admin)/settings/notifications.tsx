@@ -34,7 +34,7 @@ export default function AdminNotificationSettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof notifications, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setNotifications((prev) => ({ ...prev, [key]: option })),
     }));
@@ -170,7 +170,7 @@ export default function AdminNotificationSettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Alert Thresholds</Text>
           <AdminCard>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('reportThreshold', ['immediate', 'hourly', 'daily'], 'Report Alert Frequency')}
             >
@@ -183,7 +183,7 @@ export default function AdminNotificationSettingsScreen() {
                 <MaterialIcons name="chevron-right" size={20} color="rgba(255,254,245,0.4)" />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('flagThreshold', ['1', '3', '5', '10'], 'Flag Threshold')}
             >
@@ -200,7 +200,7 @@ export default function AdminNotificationSettingsScreen() {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <TouchableOpacity accessibilityRole="button" style={styles.saveButton} onPress={handleSave}>
           <MaterialIcons name="check" size={20} color="#fffef5" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>

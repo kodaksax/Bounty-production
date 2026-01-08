@@ -42,7 +42,7 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
 
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
         {renderMarkdownLike(content)}
-        <TouchableOpacity onPress={onBack} className="mt-4 self-start px-4 py-2 rounded-md bg-emerald-700">
+        <TouchableOpacity accessibilityRole="button" onPress={onBack} className="mt-4 self-start px-4 py-2 rounded-md bg-emerald-700">
           <Text className="text-white text-sm font-medium">Back to Settings</Text>
         </TouchableOpacity>
       </ScrollView>

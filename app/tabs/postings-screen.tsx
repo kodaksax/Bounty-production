@@ -1079,7 +1079,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   ), [handleAcceptRequest, handleRejectRequest]);
 
   return (
-    <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+    <TouchableWithoutFeedback accessibilityRole="button" onPress={() => Keyboard.dismiss()}>
       <View className="flex-1 bg-emerald-600">
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
@@ -1200,7 +1200,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           {error && (
             <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
               <Text style={{ color: 'white', fontSize: 14 }}>{error}</Text>
-              <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
+              <TouchableOpacity accessibilityRole="button" style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
                 <Text style={{ color: 'white', fontSize: 16 }}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -1451,7 +1451,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 const selected = formData.amount === amt && !formData.isForHonor;
                 const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={amt}
                     onPress={() => handleChooseAmount(amt)}
                     className={cn(
@@ -1484,7 +1484,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 const highlight = otherSelected || lowBalance;
                 const displayLabel = otherSelected ? `$${formData.amount}` : 'Other…';
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     onPress={() => setShowAddBountyAmount(true)}
                     className={cn(
                       "px-4 py-2 rounded-full border",
@@ -1548,7 +1548,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               })
               return (
                 <Animated.View style={{ transform: [{ translateX: shakeTranslate }] }}>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     ref={postButtonRef}
                     onPress={handlePress}
                     className={cn(

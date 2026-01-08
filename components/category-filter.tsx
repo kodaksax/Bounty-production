@@ -13,7 +13,7 @@ interface CategoryFilterProps {
 
 export function CategoryFilter({ label, icon, isActive = false, onClick }: CategoryFilterProps) {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       onPress={onClick}
       className={cn(
         "flex items-center space-x-2 px-5 py-2.5 rounded-full whitespace-nowrap touch-target-min shadow-sm",

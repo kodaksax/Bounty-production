@@ -34,7 +34,7 @@ type RadioGroupItemProps = {
 
 export const RadioGroupItem = ({ value, checked, onPress, className }: RadioGroupItemProps) => {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       onPress={onPress}
       // @ts-ignore
       className={cn(

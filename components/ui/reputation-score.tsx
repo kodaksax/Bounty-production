@@ -203,11 +203,11 @@ export function ReputationScore({
         accessible={true}
         accessibilityLabel="Reputation score details"
       >
-        <Pressable 
+        <Pressable accessibilityRole="button" 
           style={styles.modalOverlay}
           onPress={() => setShowModal(false)}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalContent} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Reputation Score</Text>
               <View style={styles.modalScoreDisplay}>

@@ -75,7 +75,7 @@ export default function AdminSupportScreen() {
           <Text style={styles.sectionTitle}>Get Help</Text>
           <View style={styles.linksContainer}>
             {supportLinks.map((item) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={item.id}
                 style={styles.linkCard}
                 onPress={() => handlePress(item)}
@@ -102,7 +102,7 @@ export default function AdminSupportScreen() {
           <Text style={styles.sectionTitle}>Quick Resources</Text>
           <View style={styles.resourcesGrid}>
             {quickResources.map((resource) => (
-              <TouchableOpacity key={resource.id} style={styles.resourceCard}>
+              <TouchableOpacity accessibilityRole="button" key={resource.id} style={styles.resourceCard}>
                 <MaterialIcons name={resource.icon as any} size={24} color="#00dc50" />
                 <Text style={styles.resourceTitle}>{resource.title}</Text>
               </TouchableOpacity>
@@ -145,7 +145,7 @@ export default function AdminSupportScreen() {
               For critical issues, contact the on-call engineer
             </Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={styles.emergencyButton}
             onPress={() => Linking.openURL('tel:+1-555-BOUNTY')}
           >

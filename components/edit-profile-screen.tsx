@@ -333,7 +333,7 @@ export function EditProfileScreen({
           <Text className="text-emerald-200 text-sm mt-2 text-center">
             {localProfileError || normalizedError}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={onBack}
             className="mt-6 px-6 py-3 bg-emerald-700 rounded-lg"
           >
@@ -351,7 +351,7 @@ export function EditProfileScreen({
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
           <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
             <Text className="text-white text-sm flex-1">{uploadMessage}</Text>
-            <TouchableOpacity onPress={() => setUploadMessage(null)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setUploadMessage(null)}>
               <MaterialIcons name="close" size={18} color="white" />
             </TouchableOpacity>
           </View>
@@ -403,7 +403,7 @@ export function EditProfileScreen({
                 </AvatarFallback>
               )}
             </View>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
               onPress={handleAvatarClick}
               disabled={isUploadingAvatar}
@@ -423,7 +423,7 @@ export function EditProfileScreen({
         {/* Fields - Twitter style inputs */}
         <View className="px-4 py-3 bg-emerald-900/30 mt-1">
           <Text className="text-xs text-emerald-300 mb-1">Name</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             value={name}
             onChangeText={setName}
             placeholder="Your name"
@@ -433,7 +433,7 @@ export function EditProfileScreen({
 
         <View className="px-4 py-3 bg-emerald-900/30 mt-1">
           <Text className="text-xs text-emerald-300 mb-1">Title</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             value={title}
             onChangeText={setTitle}
             placeholder="e.g., Full Stack Developer"
@@ -443,7 +443,7 @@ export function EditProfileScreen({
 
         <View className="px-4 py-3 bg-emerald-900/30 mt-1">
           <Text className="text-xs text-emerald-300 mb-1">Location</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             value={location}
             onChangeText={setLocation}
             placeholder="City, Country"
@@ -453,7 +453,7 @@ export function EditProfileScreen({
 
         <View className="px-4 py-3 bg-emerald-900/30 mt-1">
           <Text className="text-xs text-emerald-300 mb-1">Portfolio</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             value={portfolio}
             onChangeText={setPortfolio}
             placeholder="https://yourportfolio.com"
@@ -462,7 +462,7 @@ export function EditProfileScreen({
             className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
           />
           <View className="flex-row items-center mt-3">
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={pickPortfolioItem}
               className="bg-emerald-600 rounded-lg px-3 py-2"
               disabled={isUploadingPortfolio}
@@ -477,7 +477,7 @@ export function EditProfileScreen({
 
         <View className="px-4 py-3 bg-emerald-900/30 mt-1">
           <Text className="text-xs text-emerald-300 mb-1">Bio</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             placeholder="Tell us about yourself"
             multiline
             numberOfLines={4}

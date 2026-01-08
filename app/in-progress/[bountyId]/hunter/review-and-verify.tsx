@@ -335,7 +335,7 @@ export default function HunterReviewAndVerifyScreen() {
         </Text>
         <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
       </View>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.removeButton}
         onPress={() => handleRemoveProof(item.id)}
       >
@@ -370,13 +370,13 @@ export default function HunterReviewAndVerifyScreen() {
       <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={styles.errorText}>{error || 'Data not found'}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.retryButton}
           onPress={() => routeBountyId && loadData(routeBountyId)}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -387,7 +387,7 @@ export default function HunterReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Review & Verify</Text>
@@ -467,7 +467,7 @@ export default function HunterReviewAndVerifyScreen() {
         {/* Message Input */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Message (cont):</Text>
-          <TextInput
+          <TextInput accessibilityLabel="Text input field"
             style={styles.messageTextArea}
             placeholder="Describe your completed work..."
             placeholderTextColor="rgba(255,254,245,0.4)"
@@ -500,14 +500,14 @@ export default function HunterReviewAndVerifyScreen() {
               <Text style={styles.emptyProofText}>No proof attached yet</Text>
             </View>
           )}
-          <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
+          <TouchableOpacity accessibilityRole="button" style={styles.addProofButton} onPress={handleAddProof}>
             <MaterialIcons name="add" size={20} color="#fff" />
             <Text style={styles.addProofText}>Add Proof</Text>
           </TouchableOpacity>
         </View>
 
         {/* Submit Button */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
           onPress={handleRequestReview}
           disabled={isSubmitting}

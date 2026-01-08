@@ -52,7 +52,7 @@ export function EmailVerificationBanner({ email, onDismiss }: EmailVerificationB
           {resendSuccess ? (
             <Text style={styles.successText}>✓ Verification email sent!</Text>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={handleResend} 
               disabled={isResending}
               style={styles.resendButton}

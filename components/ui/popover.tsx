@@ -17,7 +17,7 @@ function Popover({ children }: PopoverProps) {
 Popover.displayName = 'Popover'
 
 function PopoverTrigger({ children }: { children: React.ReactNode }) {
-  return <TouchableOpacity>{children as any}</TouchableOpacity>
+  return <TouchableOpacity accessibilityRole="button">{children as any}</TouchableOpacity>
 }
 PopoverTrigger.displayName = 'PopoverTrigger'
 

@@ -13,7 +13,7 @@ export default function AdminTransactionsScreen() {
   const [filters, setFilters] = useState<AdminTransactionFilters>({ type: 'all' });
   const { transactions, isLoading, error, refetch } = useAdminTransactions(filters);
 
-  const typeOptions: Array<AdminTransactionFilters['type']> = ['all', 'escrow', 'release', 'refund', 'deposit', 'withdrawal'];
+  const typeOptions: AdminTransactionFilters['type'][] = ['all', 'escrow', 'release', 'refund', 'deposit', 'withdrawal'];
 
   const getTypeIcon = (type: string): string => {
     switch (type) {
@@ -76,7 +76,7 @@ export default function AdminTransactionsScreen() {
       <Text style={styles.emptyText}>
         {filters.type !== 'all' ? `No ${filters.type} transactions` : 'No transactions match this filter'}
       </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.refreshButton} onPress={refetch}>
         <Text style={styles.refreshButtonText}>Refresh</Text>
       </TouchableOpacity>
     </View>
@@ -87,7 +87,7 @@ export default function AdminTransactionsScreen() {
       <MaterialIcons name="error-outline" size={64} color="rgba(255,254,245,0.3)" />
       <Text style={styles.errorTitle}>Failed to load transactions</Text>
       <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+      <TouchableOpacity accessibilityRole="button" style={styles.retryButton} onPress={refetch}>
         <Text style={styles.retryButtonText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -105,7 +105,7 @@ export default function AdminTransactionsScreen() {
           data={typeOptions}
           keyExtractor={(item) => item || 'all'}
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.filterChip, filters.type === item && styles.filterChipActive]}
               onPress={() => setFilters({ ...filters, type: item })}
             >

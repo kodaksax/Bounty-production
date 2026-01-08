@@ -34,7 +34,7 @@ export default function AdminGeneralSettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof settings, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setSettings((prev) => ({ ...prev, [key]: option })),
     }));
@@ -97,7 +97,7 @@ export default function AdminGeneralSettingsScreen() {
                 thumbColor={settings.autoRefresh ? '#00dc50' : '#f4f3f4'}
               />
             </View>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('itemsPerPage', ['10', '25', '50', '100'], 'Items Per Page')}
             >
@@ -129,7 +129,7 @@ export default function AdminGeneralSettingsScreen() {
                 thumbColor={settings.showArchivedBounties ? '#00dc50' : '#f4f3f4'}
               />
             </View>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('defaultBountyFilter', ['all', 'open', 'in_progress', 'completed'], 'Default Bounty Filter')}
             >
@@ -149,7 +149,7 @@ export default function AdminGeneralSettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Regional</Text>
           <AdminCard>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.settingRow}
               onPress={() => handleSelectOption('timezone', ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo'], 'Timezone')}
             >
@@ -166,7 +166,7 @@ export default function AdminGeneralSettingsScreen() {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <TouchableOpacity accessibilityRole="button" style={styles.saveButton} onPress={handleSave}>
           <MaterialIcons name="check" size={20} color="#fffef5" />
           <Text style={styles.saveButtonText}>Save Settings</Text>
         </TouchableOpacity>

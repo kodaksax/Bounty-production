@@ -405,7 +405,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                         Expires {item.card.exp_month.toString().padStart(2, '0')}/{item.card.exp_year}
                       </Text>
                     </View>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       onPress={() => handleRemovePaymentMethod(item.id)}
                       style={{ 
                         padding: 12,

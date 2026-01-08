@@ -145,7 +145,7 @@ export default function PhoneScreen() {
       >
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleBack} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
@@ -193,7 +193,7 @@ export default function PhoneScreen() {
         <View style={styles.inputSection}>
           <View style={styles.field}>
             <Text style={styles.label}>Phone Number</Text>
-            <TextInput
+            <TextInput accessibilityLabel="Text input field"
               style={styles.input}
               value={getDisplayPhone()}
               onChangeText={formatPhoneDisplay}
@@ -221,7 +221,7 @@ export default function PhoneScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.nextButton}
             onPress={handleNext}
             disabled={saving}
@@ -232,7 +232,7 @@ export default function PhoneScreen() {
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={handleSkip} style={styles.skipButton}>
             <Text style={styles.skipButtonText}>I'll do this later</Text>
           </TouchableOpacity>
         </View>

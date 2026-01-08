@@ -170,7 +170,7 @@ export function ChatDetailScreen({
       {/* Chat Header */}
       <View className="px-4 py-2 flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
   onPress={() => {
     // exit conversation first if possible
     if (typeof onBack === 'function') {
@@ -185,7 +185,7 @@ export function ChatDetailScreen({
 >
   <MaterialIcons name="arrow-back" size={24} color="#000000" />
 </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             className="flex-row items-center"
             onPress={() => {
               if (otherUserId && !conversation.isGroup) {
@@ -207,10 +207,10 @@ export function ChatDetailScreen({
           </TouchableOpacity>
         </View>
         <View className="flex-row gap-3">
-          <TouchableOpacity className="text-white">
+          <TouchableOpacity accessibilityRole="button" className="text-white">
             <MaterialIcons name="phone" size={24} color="#000000" />
           </TouchableOpacity>
-          <TouchableOpacity className="text-white">
+          <TouchableOpacity accessibilityRole="button" className="text-white">
             <MaterialIcons name="videocam" size={24} color="#000000" />
           </TouchableOpacity>
         </View>

@@ -26,7 +26,7 @@ export function RevisionFeedbackBanner({
           <Text style={styles.headerTitle}>Revision Requested</Text>
         </View>
         {showDismiss && onDismiss && (
-          <TouchableOpacity onPress={onDismiss} style={styles.dismissButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={onDismiss} style={styles.dismissButton}>
             <MaterialIcons name="close" size={18} color="rgba(255,254,245,0.7)" />
           </TouchableOpacity>
         )}

@@ -96,7 +96,7 @@ export default function ChoosePeopleScreen() {
   const renderItem = ({ item }: { item: any }) => {
     const checked = selectedIds.includes(item.id)
     return (
-      <TouchableOpacity style={styles.row} onPress={() => toggleSelect(item.id)}>
+      <TouchableOpacity accessibilityRole="button" style={styles.row} onPress={() => toggleSelect(item.id)}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Avatar className="h-12 w-12">
             <AvatarImage src={item.avatar || '/placeholder.svg?height=48&width=48'} alt={item.name || item.username} />
@@ -120,7 +120,7 @@ export default function ChoosePeopleScreen() {
       {/* Lift the main content up 30px while leaving the bottom bar (Done button and divider) in place */}
       <View style={styles.contentLift}>
         <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={() => {
               // Prefer going back if possible, otherwise navigate to the in-app Messenger
               // by pushing the bounty-app route with screen=create (this matches the left-most bottom-nav behavior).
@@ -146,7 +146,7 @@ export default function ChoosePeopleScreen() {
       <View style={styles.searchWrapper}>
         <View style={[styles.searchInput, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
           <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.8)" style={{ marginRight: 8 }} />
-          <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor="rgba(255,255,255,0.7)" style={{ flex: 1, color: '#fff' }} />
+          <TextInput accessibilityLabel="Text input field" value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor="rgba(255,255,255,0.7)" style={{ flex: 1, color: '#fff' }} />
         </View>
       </View>
 
@@ -163,7 +163,7 @@ export default function ChoosePeopleScreen() {
                       <AvatarImage src={p.avatar || '/placeholder.svg?height=56&width=56'} alt={p.name || p.username} />
                       <AvatarFallback className="bg-emerald-700 text-emerald-200">{(p.name || '').split(' ').map((s: string) => s[0]).slice(0,2).join('')}</AvatarFallback>
                     </Avatar>
-                    <TouchableOpacity style={styles.removeBadge} onPress={() => onRemoveSelected(id)}>
+                    <TouchableOpacity accessibilityRole="button" style={styles.removeBadge} onPress={() => onRemoveSelected(id)}>
                       <MaterialIcons name="close" size={14} color="#052e1b" />
                     </TouchableOpacity>
                   </View>
