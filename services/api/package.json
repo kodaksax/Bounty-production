@@ -19,6 +19,7 @@
     "test:stripe-connect": "tsx src/test-consolidated-stripe-connect.ts",
     "test:wallet": "tsx src/test-consolidated-wallet.ts",
     "test:websocket": "tsx src/__tests__/websocket-integration.test.ts",
+    "test:rate-limiting": "tsx src/test-rate-limiting.ts",
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
