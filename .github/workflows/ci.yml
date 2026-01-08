@@ -38,12 +38,20 @@ jobs:
       
       - name: Run linter
         run: npm run lint --if-present
-        continue-on-error: true
+        # continue-on-error: true
       
       - name: Run type check
         run: npm run type-check --if-present
-        continue-on-error: true
-      
+        # continue-on-error: true
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true  # OK - This is for visibility only
+
+      - name: Run dependency check
+        run: npm run audit:deps
+        continue-on-error: true  # OK - This is for visibility only
+  
       - name: Run unit tests
         run: npm run test:unit
         env:
