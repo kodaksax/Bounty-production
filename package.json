@@ -32,6 +32,8 @@
     "dev:stop": "docker compose down",
     "dev:logs": "docker compose logs -f",
     "dev:api": "pnpm --filter @bountyexpo/api dev",
+    "analyze:slow-queries": "node scripts/analyze-slow-queries.js",
+    "measure:performance": "node scripts/measure-performance.js",
     "dev:serve": "node server/index.js",
     "dev:tunnel": "npx localtunnel --port 3001",
     "dev:all": "npx concurrently \"npm:dev:serve\" \"npx expo start --lan\"",
