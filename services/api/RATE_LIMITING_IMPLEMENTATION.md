@@ -143,12 +143,15 @@ Check Redis keys to verify rate limiting is working:
 # Connect to Redis
 redis-cli
 
-# List rate limit keys
+# List rate limit keys (using configured key prefix)
+KEYS "<your-redis-key-prefix>rl:auth:*"
+
+# For default config:
 KEYS "bountyexpo:rl:auth:*"
 
 # Check specific key
-GET "bountyexpo:rl:auth:127.0.0.1-test@example.com"
-TTL "bountyexpo:rl:auth:127.0.0.1-test@example.com"
+GET "<your-redis-key-prefix>rl:auth:127.0.0.1-test@example.com"
+TTL "<your-redis-key-prefix>rl:auth:127.0.0.1-test@example.com"
 ```
 
 ## Monitoring

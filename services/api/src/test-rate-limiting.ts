@@ -156,12 +156,13 @@ async function testRateLimiting() {
  */
 async function main() {
   try {
-    // Check if server is running
+    // Check if server is running - try the root endpoint
     try {
-      await fetch(`${API_URL}/health`);
+      await fetch(`${API_URL}/`);
     } catch (error) {
       console.error('❌ API server is not running!');
       console.error(`Please start the server with: npm run dev`);
+      console.error(`Expected server at: ${API_URL}`);
       process.exit(1);
     }
 

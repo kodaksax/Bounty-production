@@ -27,20 +27,28 @@ let rateLimitRedis: InstanceType<typeof Redis> | null = null;
  */
 function getRedisClient(): InstanceType<typeof Redis> {
   if (!rateLimitRedis) {
-    // Construct REDIS_URL from config if not explicitly set
-    const redisUrl = process.env.REDIS_URL || 
-                     `redis://${config.redis.password ? `:${config.redis.password}@` : ''}${config.redis.host}:${config.redis.port}/${config.redis.db}`;
-    
-    rateLimitRedis = new Redis(redisUrl, {
+    // Use connection options object instead of URL to avoid password exposure in logs
+    const redisOptions: any = {
+      host: config.redis.host,
+      port: config.redis.port,
+      db: config.redis.db,
       // Rate limiting should be fast - use shorter timeouts
       connectTimeout: 1000,
       maxRetriesPerRequest: 2,
       enableOfflineQueue: false, // Don't queue commands if disconnected
       lazyConnect: false,
-    });
+    };
+
+    // Add password only if configured
+    if (config.redis.password) {
+      redisOptions.password = config.redis.password;
+    }
+
+    rateLimitRedis = new Redis(redisOptions);
 
     rateLimitRedis.on('error', (err: Error) => {
-      console.error('[RateLimit] Redis error:', err.message);
+      // Log error without exposing connection details
+      console.error('[RateLimit] Redis connection error occurred');
     });
 
     rateLimitRedis.on('connect', () => {
@@ -72,7 +80,8 @@ class RedisRateLimitStore {
   async incr(key: string, callback: (err: Error | null, result?: { current: number; ttl: number }) => void): Promise<void> {
     try {
       const redisKey = `${this.namespace}${key}`;
-      const ttl = 900; // 15 minutes in seconds for auth endpoints
+      // Use configured time window for TTL (convert from ms to seconds)
+      const ttl = Math.ceil(config.rateLimit.auth.windowMs / 1000);
       
       // Use MULTI/EXEC for atomic operations
       const multi = this.redis.multi();
@@ -121,6 +130,22 @@ class RedisRateLimitStore {
 }
 
 /**
+ * Sanitize email for use in Redis key
+ * Prevents key collision attacks and Redis injection
+ */
+function sanitizeEmail(email: string): string {
+  // Convert to lowercase and trim
+  const normalized = email.toLowerCase().trim();
+  
+  // Only allow valid email characters: alphanumeric, @, ., -, _, +
+  // Replace any other characters with empty string
+  const sanitized = normalized.replace(/[^a-z0-9@.\-_+]/g, '');
+  
+  // Limit length to prevent extremely long keys
+  return sanitized.slice(0, 254); // RFC 5321 max email length
+}
+
+/**
  * Aggressive rate limiter for authentication endpoints
  * - 5 attempts per 15 minutes
  * - Keys by IP + email to prevent brute force attacks
@@ -137,7 +162,9 @@ export const authLimiterConfig = {
   // Key generator: IP + email for targeted limiting
   keyGenerator: (request: FastifyRequest) => {
     const body = request.body as { email?: string } | undefined;
-    const email = body?.email || 'unknown';
+    const rawEmail = body?.email || 'unknown';
+    // Sanitize email to prevent key collision attacks
+    const email = sanitizeEmail(rawEmail);
     const ip = request.ip || 'unknown';
     return `${ip}-${email}`;
   },
