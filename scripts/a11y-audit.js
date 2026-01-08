@@ -96,8 +96,10 @@ function scanFile(filePath, issues) {
     {
       name: 'Missing accessibilityLabel on TouchableOpacity',
       // This is a basic pattern check - may have false positives/negatives
-      pattern: /<TouchableOpacity[^>]*onPress[^>]*>/g,
-      check: (match) => !/<TouchableOpacity[^>]*accessibilityLabel/.test(match),
+      // Use [\s\S]*? so we match multiline opening tags non-greedily
+      pattern: /<TouchableOpacity[\s\S]*?onPress[\s\S]*?>/g,
+      // Match within the captured opening tag; this works across newlines
+      check: (match) => !/accessibilityLabel/.test(match),
       severity: 'error',
     },
   ];
