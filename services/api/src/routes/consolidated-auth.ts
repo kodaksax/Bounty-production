@@ -8,12 +8,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { z } from 'zod';
 import { config } from '../config';
 import { asyncHandler, AuthenticationError, ExternalServiceError, ValidationError } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
 import { Database } from '../types/database.types';
 import { toJsonSchema } from '../utils/zod-json';
+import { authLimiterConfig } from '../middleware/rate-limiter';
 
 /**
  * Validation schemas using Zod
@@ -36,90 +38,12 @@ const signUpSchema = z.object({
 });
 
 /**
- * Rate limiting store for authentication endpoints
- * Key: IP address, Value: { count, resetTime }
+ * Note: Rate limiting is now handled by Redis-backed @fastify/rate-limit
+ * Configuration is imported from middleware/rate-limiter.ts
+ * 
+ * Old in-memory rate limiting has been replaced with distributed Redis-backed
+ * rate limiting for better scalability across multiple server instances.
  */
-const authRateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-/**
- * Custom rate limiting middleware for auth endpoints
- * Limits to 5 requests per 15 minutes per IP address
- */
-async function authRateLimitMiddleware(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
-  const ip = request.ip || 'unknown';
-  const now = Date.now();
-  const windowMs = config.rateLimit.auth.windowMs;
-  const maxRequests = config.rateLimit.auth.max;
-
-  let record = authRateLimitStore.get(ip);
-
-  // Clean up expired record or create new one
-  if (!record || now > record.resetTime) {
-    record = {
-      count: 0,
-      resetTime: now + windowMs,
-    };
-    authRateLimitStore.set(ip, record);
-  }
-
-  // Check if rate limit exceeded BEFORE incrementing
-  if (record.count >= maxRequests) {
-    const retryAfterSeconds = Math.ceil((record.resetTime - now) / 1000);
-    reply.header('Retry-After', retryAfterSeconds.toString());
-    
-    request.log.warn(
-      { ip, count: record.count, maxRequests },
-      'Auth rate limit exceeded'
-    );
-
-    reply.code(429).send({
-      error: 'Too Many Requests',
-      message: `Too many authentication attempts. Please try again in ${retryAfterSeconds} seconds.`,
-      code: 'RATE_LIMIT_EXCEEDED',
-      retryAfter: retryAfterSeconds,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  // Increment request count after check
-  record.count++;
-
-  // Add rate limit headers
-  reply.header('X-RateLimit-Limit', maxRequests.toString());
-  reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - record.count).toString());
-  reply.header('X-RateLimit-Reset', new Date(record.resetTime).toISOString());
-}
-
-/**
- * Clean up expired rate limit entries every 5 minutes
- */
-let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
-
-function startRateLimitCleanup() {
-  if (cleanupIntervalId) return; // Already started
-  
-  cleanupIntervalId = setInterval(() => {
-    const now = Date.now();
-    for (const [ip, record] of authRateLimitStore.entries()) {
-      if (now > record.resetTime + 60000) { // Keep for 1 extra minute after reset
-        authRateLimitStore.delete(ip);
-      }
-    }
-  }, 5 * 60 * 1000);
-}
-
-/**
- * Stop rate limit cleanup (for graceful shutdown)
- */
-export function stopRateLimitCleanup() {
-  if (cleanupIntervalId) {
-    clearInterval(cleanupIntervalId);
-    cleanupIntervalId = null;
-  }
-}
 
 /**
  * Supabase admin client singleton for user management operations
@@ -231,8 +155,12 @@ export async function registerConsolidatedAuthRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
   
-  // Start rate limit cleanup on route registration
-  startRateLimitCleanup();
+  // Register rate limiting plugin with auth-specific configuration
+  // This creates a rate limiter that can be applied per-route
+  await fastify.register(rateLimit, {
+    global: false, // Don't apply globally, we'll use it per-route
+    ...authLimiterConfig,
+  });
   
   /**
    * POST /auth/register
@@ -251,7 +179,9 @@ export async function registerConsolidatedAuthRoutes(
   fastify.post(
     '/auth/register',
     {
-      preHandler: authRateLimitMiddleware,
+      config: {
+        rateLimit: authLimiterConfig,
+      },
       schema: {
         tags: ['auth'],
         description: 'Register a new user account',
@@ -293,7 +223,9 @@ export async function registerConsolidatedAuthRoutes(
   fastify.post(
     '/auth/sign-in',
     {
-      preHandler: authRateLimitMiddleware,
+      config: {
+        rateLimit: authLimiterConfig,
+      },
       schema: {
         tags: ['auth'],
         description: 'Sign in with email and password',
@@ -405,7 +337,9 @@ export async function registerConsolidatedAuthRoutes(
   fastify.post(
     '/auth/sign-up',
     {
-      preHandler: authRateLimitMiddleware,
+      config: {
+        rateLimit: authLimiterConfig,
+      },
       schema: {
         tags: ['auth'],
         description: 'Sign up for a new account (alternative endpoint)',

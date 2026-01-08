@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@bountyexpo/domain-types": "file:../../packages/domain-types",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^10.0.1",
     "@sentry/node": "^10.25.0",
     "@supabase/supabase-js": "^2.38.5",
