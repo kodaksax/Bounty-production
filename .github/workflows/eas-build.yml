@@ -1,0 +1,190 @@
+name: EAS Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'assets/**'
+      - 'app.json'
+      - 'package.json'
+      - 'eas.json'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - preview
+          - production
+      platform:
+        description: 'Platform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ios
+          - android
+
+jobs:
+  build:
+    name: EAS Build (${{ github.event.inputs.profile || 'staging' }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      
+      - name: Run tests
+        run: npm run test:ci
+        env:
+          NODE_ENV: test
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      
+      - name: Determine build profile
+        id: profile
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "profile=production" >> $GITHUB_OUTPUT
+          else
+            echo "profile=staging" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Determine platform
+        id: platform
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "platform=${{ github.event.inputs.platform }}" >> $GITHUB_OUTPUT
+          else
+            echo "platform=all" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build iOS app
+        if: steps.platform.outputs.platform == 'ios' || steps.platform.outputs.platform == 'all'
+        run: |
+          eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --non-interactive --no-wait
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_STAGING_API_URL: ${{ secrets.EXPO_PUBLIC_STAGING_API_URL }}
+          EXPO_PUBLIC_PRODUCTION_API_URL: ${{ secrets.EXPO_PUBLIC_PRODUCTION_API_URL }}
+          EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EXPO_PUBLIC_MIXPANEL_TOKEN: ${{ secrets.EXPO_PUBLIC_MIXPANEL_TOKEN }}
+          EXPO_PUBLIC_GOOGLE_PLACES_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      
+      - name: Build Android app
+        if: steps.platform.outputs.platform == 'android' || steps.platform.outputs.platform == 'all'
+        run: |
+          eas build --platform android --profile ${{ steps.profile.outputs.profile }} --non-interactive --no-wait
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_STAGING_API_URL: ${{ secrets.EXPO_PUBLIC_STAGING_API_URL }}
+          EXPO_PUBLIC_PRODUCTION_API_URL: ${{ secrets.EXPO_PUBLIC_PRODUCTION_API_URL }}
+          EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EXPO_PUBLIC_MIXPANEL_TOKEN: ${{ secrets.EXPO_PUBLIC_MIXPANEL_TOKEN }}
+          EXPO_PUBLIC_GOOGLE_PLACES_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_KEY_PATH: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY_PATH }}
+      
+      - name: Notify build started
+        if: always()
+        run: |
+          echo "🚀 EAS Build started for profile: ${{ steps.profile.outputs.profile }}"
+          echo "📱 Platform: ${{ steps.platform.outputs.platform }}"
+          echo "🔗 Check build status: https://expo.dev/accounts/your-account/projects/BOUNTYExpo/builds"
+
+  update:
+    name: OTA Update (${{ github.event.inputs.profile || 'staging' }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      
+      - name: Determine update channel
+        id: channel
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "channel=production" >> $GITHUB_OUTPUT
+            echo "message=Production update - $(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+          else
+            echo "channel=staging" >> $GITHUB_OUTPUT
+            echo "message=Staging update - $(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Publish OTA update
+        run: |
+          eas update --branch ${{ steps.channel.outputs.channel }} --message "${{ steps.channel.outputs.message }}" --non-interactive
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_STAGING_API_URL: ${{ secrets.EXPO_PUBLIC_STAGING_API_URL }}
+          EXPO_PUBLIC_PRODUCTION_API_URL: ${{ secrets.EXPO_PUBLIC_PRODUCTION_API_URL }}
+          EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_STRIPE_LIVE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EXPO_PUBLIC_MIXPANEL_TOKEN: ${{ secrets.EXPO_PUBLIC_MIXPANEL_TOKEN }}
+          EXPO_PUBLIC_GOOGLE_PLACES_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY }}
+      
+      - name: Notify update published
+        if: always()
+        run: |
+          echo "✅ OTA Update published to channel: ${{ steps.channel.outputs.channel }}"
+          echo "📝 Message: ${{ steps.channel.outputs.message }}"
