@@ -1,5 +1,5 @@
 {
-  "extends": "./node_modules/expo/tsconfig.base.json",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
@@ -7,7 +7,6 @@
       "./types",
       "./node_modules/@types"
     ],
-
     "paths": {
       "@/*": [
         "components/*"
@@ -18,7 +17,25 @@
       "@bountyexpo/domain-types/*": [
         "packages/domain-types/src/*"
       ]
-    }
+    },
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "jest"
+    ],
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": [
     "**/*.ts",
@@ -26,8 +43,7 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
-  ]
-  ,
+  ],
   "exclude": [
     "node_modules",
     "**/.history/**",

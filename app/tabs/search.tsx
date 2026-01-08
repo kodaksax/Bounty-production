@@ -1,24 +1,23 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { bountyService } from '../../lib/services/bounty-service';
-import { userSearchService } from '../../lib/services/user-search-service';
+import type { Bounty } from '../../lib/services/database.types';
 import { recentSearchService } from '../../lib/services/recent-search-service';
 import { searchService } from '../../lib/services/search-service';
-import { logger } from '../../lib/utils/error-logger';
-import type { Bounty } from '../../lib/services/database.types';
+import { userSearchService } from '../../lib/services/user-search-service';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
+import { logger } from '../../lib/utils/error-logger';
 
 type SearchTab = 'bounties' | 'users';
 

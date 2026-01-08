@@ -1040,7 +1040,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
         onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
-        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty.id) : undefined}
+        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
         onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
         variant={'owner'}
