@@ -100,15 +100,16 @@ export default function EnhancedSearchScreen() {
     };
   }, [filters, filtersLoaded]);
 
-  // Load recent searches on mount
-  useEffect(() => {
-    loadRecentSearches();
-  }, [activeTab]);
-
-  const loadRecentSearches = async () => {
+  // Load recent searches function - memoized to be used in dependency arrays
+  const loadRecentSearches = useCallback(async () => {
     const searches = await recentSearchService.getRecentSearchesByType(activeTab === 'bounties' ? 'bounty' : 'user');
     setRecentSearches(searches);
-  };
+  }, [activeTab]);
+
+  // Load recent searches on mount and when activeTab changes
+  useEffect(() => {
+    loadRecentSearches();
+  }, [loadRecentSearches]);
   
   // Autocomplete suggestions with 500ms debounce
   useEffect(() => {
@@ -247,7 +248,7 @@ export default function EnhancedSearchScreen() {
   const handleRemoveRecentSearch = useCallback(async (searchId: string) => {
     await recentSearchService.removeSearch(searchId);
     await loadRecentSearches();
-  }, []);
+  }, [loadRecentSearches]);
 
   const clearFilters = useCallback(() => {
     setFilters({

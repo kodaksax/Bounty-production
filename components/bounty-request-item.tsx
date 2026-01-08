@@ -99,9 +99,11 @@ function BountyRequestItemComponent({
 /**
  * Memoized version to prevent re-renders when parent updates but props haven't changed.
  * Only re-renders when actual prop values change.
+ * Note: onMenuClick is excluded from comparison - parent should memoize it with useCallback.
  */
 export const BountyRequestItem = React.memo(BountyRequestItemComponent, (prevProps, nextProps) => {
   // Custom comparison for better performance
+  // onMenuClick is intentionally excluded - the parent should memoize it with useCallback
   return (
     prevProps.username === nextProps.username &&
     prevProps.title === nextProps.title &&
@@ -109,7 +111,6 @@ export const BountyRequestItem = React.memo(BountyRequestItemComponent, (prevPro
     prevProps.distance === nextProps.distance &&
     prevProps.timeAgo === nextProps.timeAgo &&
     prevProps.avatarSrc === nextProps.avatarSrc &&
-    prevProps.onMenuClick === nextProps.onMenuClick &&
     prevProps.status === nextProps.status &&
     prevProps.workType === nextProps.workType &&
     prevProps.deadline === nextProps.deadline

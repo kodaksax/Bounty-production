@@ -55,7 +55,7 @@ Shows components sorted by render time:
 ### Key Metrics
 
 1. **Render Duration**: Total time spent rendering
-2. **Commit Count**: Number of times component committed to DOM
+2. **Commit Count**: Number of times React committed updates for the component (to native views)
 3. **Props Changes**: Which props changed and triggered re-renders
 4. **Why Did This Render?**: Shows the reason for re-render
 
@@ -138,6 +138,7 @@ function Parent() {
     <Item 
       key={item.id}
       expanded={expanded[item.id]}
+      // Inline arrow function creates new reference on every render, breaking memoization
       onToggle={() => setExpanded({...expanded, [item.id]: !expanded[item.id]})}
     />
   ));
@@ -147,7 +148,7 @@ function Parent() {
 ✅ **Good:**
 ```tsx
 const Item = React.memo(function Item({ id, expanded, onToggle }) {
-  return <TouchableOpacity onPress={onToggle}>...</TouchableOpacity>;
+  return <TouchableOpacity onPress={() => onToggle(id)}>...</TouchableOpacity>;
 });
 
 function Parent() {

@@ -28,14 +28,9 @@ const NotificationItem = React.memo<{
     [item.created_at]
   );
 
-  // Stable press handler
-  const handlePress = useCallback(() => {
-    onPress(item);
-  }, [item, onPress]);
-
   return (
     <TouchableOpacity
-      onPress={handlePress}
+      onPress={() => onPress(item)}
       className={"border-b border-gray-200 p-4 bg-white"}
       activeOpacity={0.7}
     >

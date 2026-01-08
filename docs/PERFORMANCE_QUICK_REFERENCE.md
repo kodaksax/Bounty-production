@@ -25,11 +25,25 @@ export function ListItem({ id, title, onPress }) {
 }
 
 // ✅ After - Only re-renders when props actually change
+// Note: For React.memo to be effective, the parent must pass stable props.
+// If onPress is recreated on every render, React.memo won't help.
 export const ListItem = React.memo(function ListItem({ id, title, onPress }) {
   return <TouchableOpacity onPress={onPress}><Text>{title}</Text></TouchableOpacity>;
 });
 
+// 🎯 Parent component should memoize callbacks for React.memo to work
+function Parent({ items }) {
+  const handlePress = useCallback((id) => {
+    doSomething(id);
+  }, []);
+
+  return items.map(item => (
+    <ListItem key={item.id} id={item.id} title={item.title} onPress={handlePress} />
+  ));
+}
+
 // ✅ Advanced - Custom comparison for fine control
+// Omit onPress from comparison if parent memoizes it with useCallback
 export const ListItem = React.memo(
   ListItemComponent,
   (prev, next) => prev.id === next.id && prev.title === next.title

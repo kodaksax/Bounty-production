@@ -861,10 +861,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     }
   }
 
-  const handleEditBounty = (bounty: Bounty) => {
+  const handleEditBounty = React.useCallback((bounty: Bounty) => {
     setEditingBounty(bounty)
     setShowEditModal(true)
-  }
+  }, [])
 
   const handleSaveEdit = async (updates: Partial<Bounty>) => {
     if (!editingBounty) return
@@ -899,7 +899,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     }
   }
 
-  const handleDeleteBounty = (bounty: Bounty) => {
+  const handleDeleteBounty = React.useCallback((bounty: Bounty) => {
     Alert.alert(
       "Delete Posting",
       "Delete this posting? This can't be undone.",
@@ -950,7 +950,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       ],
       { cancelable: true }
     )
-  }
+  }, [refundEscrow, loadMyBounties])
 
   const handleWithdrawApplication = async (bountyId: number | string) => {
     Alert.alert(
