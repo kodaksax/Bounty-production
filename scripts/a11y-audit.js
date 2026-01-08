@@ -60,7 +60,7 @@ console.log('\n🔎 Step 3: Scanning for common accessibility issues...');
 const appDir = path.join(__dirname, '../app');
 const componentsDir = path.join(__dirname, '../components');
 
-function scanDirectory(dir, issues) {
+function scanDirectory(dir) {
   if (!fs.existsSync(dir)) {
     return;
   }
@@ -78,7 +78,7 @@ function scanDirectory(dir, issues) {
           traverseDirectory(fullPath);
         }
       } else if (entry.isFile() && (fullPath.endsWith('.tsx') || fullPath.endsWith('.jsx'))) {
-        scanFile(fullPath, issues);
+        scanFile(fullPath);
       }
     });
   }
@@ -86,7 +86,7 @@ function scanDirectory(dir, issues) {
   traverseDirectory(dir);
 }
 
-function scanFile(filePath, issues) {
+function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
   
   // Note: These regex patterns are simplified checks for common patterns
@@ -95,8 +95,7 @@ function scanFile(filePath, issues) {
   const commonIssues = [
     {
       name: 'Missing accessibilityLabel on TouchableOpacity',
-      // This is a basic pattern check - may have false positives/negatives
-      // Use [\s\S]*? so we match multiline opening tags non-greedily
+      // Use [\s\S]*? to match multiline opening tags non-greedily
       pattern: /<TouchableOpacity[\s\S]*?onPress[\s\S]*?>/g,
       // Match within the captured opening tag; this works across newlines
       check: (match) => !/accessibilityLabel/.test(match),

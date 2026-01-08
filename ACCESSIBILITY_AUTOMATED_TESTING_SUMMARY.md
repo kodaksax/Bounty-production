@@ -236,12 +236,12 @@ The app meets or exceeds the following WCAG 2.1 AA standards:
 ## Files Created
 
 1. **Test Infrastructure**:
-   - `__tests__/utils/accessibility-helpers.ts` - Test utilities (244 lines)
-   - `__tests__/accessibility/button.test.tsx` - Button tests (113 lines)
-   - `__tests__/accessibility/bottom-nav.test.tsx` - Nav tests (108 lines)
+   - `__tests__/utils/accessibility-helpers.ts` - Test utilities (256 lines)
+   - `__tests__/accessibility/button.test.tsx` - Button tests (118 lines)
+   - `__tests__/accessibility/bottom-nav.test.tsx` - Nav tests (123 lines)
 
 2. **Automation**:
-   - `scripts/a11y-audit.js` - Audit script (196 lines)
+   - `scripts/a11y-audit.js` - Audit script (217 lines)
 
 3. **Documentation**:
    - `VOICEOVER_TALKBACK_TESTING_CHECKLIST.md` - Testing guide (369 lines)
@@ -256,7 +256,7 @@ The app meets or exceeds the following WCAG 2.1 AA standards:
 ```json
 {
   "devDependencies": {
-    "eslint-plugin-react-native-a11y": "^3.3.0"
+    "eslint-plugin-react-native-a11y": "^3.5.1"
   }
 }
 ```

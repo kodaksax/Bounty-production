@@ -5,8 +5,6 @@
  * @jest-environment node
  */
 
-import React from 'react';
-
 // Mock haptic feedback
 jest.mock('../../lib/haptic-feedback', () => ({
   useHapticFeedback: () => ({ triggerHaptic: jest.fn() }),
@@ -19,67 +17,146 @@ describe('BottomNav Accessibility', () => {
   });
 
   describe('WCAG 4.1.2 - Name, Role, Value', () => {
-    it('should have accessibility labels for all nav items', () => {
-      // BottomNav has accessibilityLabel on all TouchableOpacity items
-      // This is enforced by ESLint rules
-      expect(true).toBe(true);
+    it('should verify accessibility props are implemented', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify BottomNav uses proper accessibility props
+      expect(content).toContain('accessibilityLabel');
+      expect(content).toContain('accessibilityRole');
+      expect(content).toContain('accessibilityState');
     });
 
-    it('should use button role for nav items', () => {
-      // Each nav item uses accessibilityRole="button"
-      expect(true).toBe(true);
+    it('should verify button role is used for nav items', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Each nav item should use accessibilityRole="button"
+      expect(content).toContain('accessibilityRole="button"');
     });
 
-    it('should communicate selection state', () => {
-      // Uses accessibilityState={{ selected }} for active items
-      expect(true).toBe(true);
+    it('should verify selection state is communicated', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify uses accessibilityState with selected property
+      expect(content).toContain('selected');
     });
   });
 
   describe('WCAG 2.5.5 - Touch Target Size', () => {
-    it('should have minimum touch target size', () => {
-      // navButton style has minWidth and minHeight >= 44pt
-      const minSize = 44;
-      expect(minSize).toBeGreaterThanOrEqual(44);
+    it('should verify minimum touch target size implementation', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify uses SIZING constants from accessibility
+      expect(content).toContain('SIZING');
+      
+      // Verify imports MIN_TOUCH_TARGET or similar
+      expect(content).toContain('accessibility');
     });
 
-    it('should have larger center button for emphasis', () => {
-      // Center bounty button is larger for visual hierarchy
-      const centerSize = 64;
-      expect(centerSize).toBeGreaterThan(44);
+    it('should verify center button is larger for emphasis', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify CENTER_ICON_SIZE is defined and larger than standard
+      expect(content).toContain('CENTER_ICON_SIZE');
+      
+      const centerMatch = content.match(/CENTER_ICON_SIZE\s*=\s*(\d+)/);
+      const navMatch = content.match(/NAV_ICON_SIZE\s*=\s*(\d+)/);
+      
+      if (centerMatch && navMatch) {
+        const centerSize = parseInt(centerMatch[1]);
+        const navSize = parseInt(navMatch[1]);
+        expect(centerSize).toBeGreaterThan(navSize);
+      }
     });
   });
 
   describe('Navigation Features', () => {
-    it('should have 5 main navigation items', () => {
-      // create, wallet, bounty, postings, profile
-      const navItems = 5;
-      expect(navItems).toBe(5);
+    it('should verify navigation screen types are defined', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify ScreenKey type includes all main screens
+      const screens = ['create', 'wallet', 'bounty', 'postings', 'profile'];
+      screens.forEach(screen => {
+        expect(content).toContain(`"${screen}"`);
+      });
     });
 
-    it('should support optional admin button', () => {
-      // showAdmin prop adds 6th button
-      expect(true).toBe(true);
+    it('should verify admin button support', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify showAdmin prop is defined
+      expect(content).toContain('showAdmin');
+      expect(content).toContain('"admin"');
     });
 
-    it('should have haptic feedback on navigation', () => {
-      // Different haptic types for different actions
-      // medium for main screen, selection for others
-      expect(true).toBe(true);
+    it('should verify haptic feedback implementation', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify uses haptic feedback hook
+      expect(content).toContain('useHapticFeedback');
+      expect(content).toContain('triggerHaptic');
+      
+      // Verify different haptic types are used
+      expect(content).toContain("'medium'");
+      expect(content).toContain("'selection'");
     });
   });
 
   describe('Visual Feedback', () => {
-    it('should animate center button on activation', () => {
-      // Uses Animated.parallel for scale and rotation
-      // Duration: A11Y.ANIMATION_NORMAL (250ms)
-      expect(250).toBeGreaterThan(0);
+    it('should verify animation implementation', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify uses Animated for center button
+      expect(content).toContain('Animated');
+      expect(content).toContain('centerButtonScale');
+      expect(content).toContain('centerButtonRotation');
     });
 
-    it('should use consistent animation duration', () => {
-      // Uses A11Y.ANIMATION_NORMAL constant
-      // Ensures predictable, comfortable animations
-      expect(true).toBe(true);
+    it('should verify uses standardized animation duration', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify uses A11Y.ANIMATION constants
+      expect(content).toContain('A11Y');
+      expect(content).toContain('ANIMATION');
     });
   });
 
@@ -110,13 +187,28 @@ describe('BottomNav Accessibility', () => {
   });
 
   describe('Icon Sizes', () => {
-    it('should have consistent icon sizes', () => {
-      // NAV_ICON_SIZE = 26, CENTER_ICON_SIZE = 32
-      // Provides visual hierarchy
-      const navIconSize = 26;
-      const centerIconSize = 32;
+    it('should verify icon size constants provide visual hierarchy', () => {
+      const fs = require('fs');
+      const path = require('path');
       
-      expect(centerIconSize).toBeGreaterThan(navIconSize);
+      const bottomNavPath = path.join(__dirname, '../../components/ui/bottom-nav.tsx');
+      const content = fs.readFileSync(bottomNavPath, 'utf-8');
+      
+      // Verify both icon size constants are defined
+      expect(content).toContain('NAV_ICON_SIZE');
+      expect(content).toContain('CENTER_ICON_SIZE');
+      
+      // Extract values and verify center is larger
+      const navMatch = content.match(/NAV_ICON_SIZE\s*=\s*(\d+)/);
+      const centerMatch = content.match(/CENTER_ICON_SIZE\s*=\s*(\d+)/);
+      
+      if (navMatch && centerMatch) {
+        const navSize = parseInt(navMatch[1]);
+        const centerSize = parseInt(centerMatch[1]);
+        
+        expect(centerSize).toBeGreaterThan(navSize);
+        expect(navSize).toBeGreaterThan(0);
+      }
     });
   });
 });

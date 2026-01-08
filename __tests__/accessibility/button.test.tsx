@@ -5,8 +5,6 @@
  * @jest-environment node
  */
 
-import React from 'react';
-
 // Mock haptic feedback
 jest.mock('../../lib/haptic-feedback', () => ({
   useHapticFeedback: () => ({ triggerHaptic: jest.fn() }),
@@ -51,67 +49,135 @@ describe('Button Accessibility', () => {
       }
     });
 
-    it('should have accessibility role defined', () => {
-      // Button components should use accessibilityRole="button"
-      // This is enforced by ESLint rules and code review
-      expect(true).toBe(true);
+    it('should verify button styles meet accessibility standards', () => {
+      // Verify button implementation file exists and has required styles
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      expect(fs.existsSync(buttonPath)).toBe(true);
+      
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify accessibility props are used
+      expect(content).toContain('accessibilityRole');
+      expect(content).toContain('accessibilityLabel');
+      expect(content).toContain('accessibilityHint');
+      expect(content).toContain('accessibilityState');
     });
 
-    it('should support accessibility labels', () => {
-      // Button component interface supports accessibilityLabel
-      // This is verified through TypeScript types
-      expect(true).toBe(true);
-    });
-
-    it('should support accessibility hints', () => {
-      // Button component interface supports accessibilityHint
-      // This is verified through TypeScript types
-      expect(true).toBe(true);
-    });
-
-    it('should communicate disabled state', () => {
-      // Button component uses accessibilityState for disabled
-      // This is enforced by the component implementation
-      expect(true).toBe(true);
+    it('should verify focus state styles are implemented', () => {
+      // Check that button implementation has focus state styles
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify focus state exists with visible indicators
+      expect(content).toContain('focused');
+      expect(content).toContain('borderWidth');
+      expect(content).toContain('borderColor');
     });
   });
 
   describe('WCAG 2.5.5 - Touch Target Size', () => {
-    it('should have minimum 48pt default height', () => {
-      // buttonStyles.base.minHeight = 48 in implementation
-      // This meets WCAG 2.5.5 (Target Size Level AAA: 44x44pt minimum)
-      expect(48).toBeGreaterThanOrEqual(44);
+    it('should verify button minHeight meets WCAG standards', () => {
+      // Read button implementation to verify actual minHeight values
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify minHeight is defined in base styles
+      expect(content).toContain('minHeight');
+      
+      // Extract minHeight value from base style (48)
+      const baseStyleMatch = content.match(/base:\s*{[\s\S]*?minHeight:\s*(\d+)/);
+      if (baseStyleMatch) {
+        const minHeight = parseInt(baseStyleMatch[1]);
+        expect(minHeight).toBeGreaterThanOrEqual(44); // WCAG minimum
+      }
     });
 
-    it('should have accessible sizes for all variants', () => {
-      // sm: 40pt, default: 48pt, lg: 56pt
-      // All meet or exceed WCAG minimum
-      const sizes = { sm: 40, default: 48, lg: 56 };
-      Object.values(sizes).forEach(size => {
-        expect(size).toBeGreaterThanOrEqual(40);
-      });
+    it('should verify size variants meet accessibility standards', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify sm size meets minimum
+      const smMatch = content.match(/sm:\s*{[\s\S]*?minHeight:\s*(\d+)/);
+      if (smMatch) {
+        const smHeight = parseInt(smMatch[1]);
+        expect(smHeight).toBeGreaterThanOrEqual(40);
+      }
+      
+      // Verify lg size is larger than default
+      const lgMatch = content.match(/lg:\s*{[\s\S]*?minHeight:\s*(\d+)/);
+      if (lgMatch) {
+        const lgHeight = parseInt(lgMatch[1]);
+        expect(lgHeight).toBeGreaterThan(44);
+      }
     });
   });
 
   describe('WCAG 2.4.7 - Focus Visible', () => {
-    it('should have focus state styles defined', () => {
-      // Button component has focused state with visible indicators
-      // borderWidth: 3, borderColor: emerald for visibility
-      expect(true).toBe(true);
+    it('should verify focus state implementation', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify focus state has visible indicators per WCAG 2.4.7
+      expect(content).toContain('focused');
+      
+      // Look for focused style section (need to capture more content)
+      const focusedSectionMatch = content.match(/focused:\s*{[\s\S]{0,500}}/);
+      if (focusedSectionMatch) {
+        const focusedSection = focusedSectionMatch[0];
+        
+        // Check for visible border indicators
+        expect(focusedSection).toContain('borderWidth');
+        expect(focusedSection).toContain('borderColor');
+        
+        // Extract borderWidth value (should be >= 3 for visibility)
+        const borderWidthMatch = focusedSection.match(/borderWidth:\s*(\d+)/);
+        if (borderWidthMatch) {
+          const borderWidth = parseInt(borderWidthMatch[1]);
+          expect(borderWidth).toBeGreaterThanOrEqual(3);
+        }
+      }
     });
   });
 
   describe('Best Practices', () => {
-    it('should have haptic feedback for better UX', () => {
-      // Button triggers haptic feedback on press
-      // Improves accessibility for users who rely on tactile feedback
-      expect(true).toBe(true);
+    it('should verify haptic feedback implementation', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
+      // Verify button uses haptic feedback hook
+      expect(content).toContain('useHapticFeedback');
+      expect(content).toContain('triggerHaptic');
     });
 
-    it('should support multiple variants', () => {
-      // default, destructive, outline, secondary, ghost, link
+    it('should verify all button variants are defined', () => {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const buttonPath = path.join(__dirname, '../../components/ui/button.tsx');
+      const content = fs.readFileSync(buttonPath, 'utf-8');
+      
       const variants = ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'];
-      expect(variants.length).toBe(6);
+      variants.forEach(variant => {
+        expect(content).toContain(`${variant}:`);
+      });
     });
   });
 });
