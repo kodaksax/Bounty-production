@@ -13,7 +13,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "lint:a11y": "eslint app/**/*.{tsx,jsx} components/**/*.{tsx,jsx} || true",
+    "lint:a11y": "eslint app/**/*.{tsx,jsx} components/**/*.{tsx,jsx}",
     "a11y-audit": "node scripts/a11y-audit.js",
     "test:a11y": "jest __tests__/accessibility",
     "api": "node api/server.js",
