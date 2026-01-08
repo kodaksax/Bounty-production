@@ -1,4 +1,7 @@
 {
+  // TypeScript configuration for Expo 54+
+  // Updated from './node_modules/expo/tsconfig.base.json' to 'expo/tsconfig.base'
+  // as per Expo 54+ requirements. See: https://docs.expo.dev/guides/typescript/
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
