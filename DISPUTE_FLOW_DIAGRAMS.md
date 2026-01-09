@@ -291,7 +291,7 @@ START (User views resolved dispute)
            ▼
 ┌─────────────────────────────┐
 │ Validate Appeal             │
-│ • Reason ≥ 50 characters    │
+│ • Reason is required        │
 │ • Not already appealed      │
 │ • Within appeal window      │
 │   (e.g., 7 days)            │

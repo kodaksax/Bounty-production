@@ -16,7 +16,7 @@ import { disputeService } from '../../lib/services/dispute-service';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
 
-type LocalLocalEvidenceItem = {
+type LocalEvidenceItem = {
   id: string;
   type: 'text' | 'image' | 'document' | 'link';
   content: string;
@@ -25,9 +25,9 @@ type LocalLocalEvidenceItem = {
 };
 
 export default function CreateDisputeScreen() {
-  const { cancellationId, bountyId } = useLocalSearchParams<{
+  const { cancellationId } = useLocalSearchParams<{
     cancellationId: string;
-    bountyId: string;
+    bountyId?: string;
   }>();
   const router = useRouter();
   const { session } = useAuthContext();
@@ -74,6 +74,12 @@ export default function CreateDisputeScreen() {
 
     if (!reason.trim()) {
       Alert.alert('Error', 'Please provide a reason for the dispute');
+      return;
+    }
+
+    // Validate minimum reason length
+    if (reason.trim().length < 20) {
+      Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
       return;
     }
 

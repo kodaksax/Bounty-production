@@ -129,7 +129,7 @@ CREATE POLICY "Anyone can view resolutions for disputes they're involved in" ON 
       SELECT 1 FROM bounty_disputes bd
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_resolutions.dispute_id
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -152,7 +152,7 @@ CREATE POLICY "Users can view public comments on their disputes" ON dispute_comm
       SELECT 1 FROM bounty_disputes bd
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_comments.dispute_id
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -172,7 +172,7 @@ CREATE POLICY "Users can add comments to their disputes" ON dispute_comments
       SELECT 1 FROM bounty_disputes bd
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_comments.dispute_id
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -195,7 +195,7 @@ CREATE POLICY "Anyone can view evidence for disputes they're involved in" ON dis
       SELECT 1 FROM bounty_disputes bd
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_evidence.dispute_id
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -206,7 +206,7 @@ CREATE POLICY "Users can add evidence to their disputes" ON dispute_evidence
       SELECT 1 FROM bounty_disputes bd
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_evidence.dispute_id
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -234,7 +234,7 @@ CREATE POLICY "Users can create appeals for their disputes" ON dispute_appeals
       JOIN bounties b ON bd.bounty_id = b.id
       WHERE bd.id = dispute_appeals.dispute_id
       AND bd.status = 'resolved'
-      AND (bd.initiator_id = auth.uid() OR b.poster_id = auth.uid() OR b.hunter_id = auth.uid())
+      AND (bd.initiator_id = auth.uid() OR b.creator_id = auth.uid() OR b.hunter_id = auth.uid())
     )
   );
 
@@ -259,9 +259,16 @@ CREATE POLICY "Admins can view all audit logs" ON dispute_audit_log
     )
   );
 
-CREATE POLICY "System can insert audit logs" ON dispute_audit_log
+CREATE POLICY "Only system and admins can insert audit logs" ON dispute_audit_log
   FOR INSERT
-  WITH CHECK (TRUE);
+  WITH CHECK (
+    -- Only allow inserts from service layer with proper actor verification
+    -- Service layer should use service role, not user auth
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
 -- Create trigger to update last_activity_at on disputes
 CREATE OR REPLACE FUNCTION update_dispute_last_activity()
@@ -326,18 +333,19 @@ CREATE TRIGGER dispute_status_change_trigger
   FOR EACH ROW
   EXECUTE FUNCTION log_dispute_status_change();
 
--- Create function to automatically set auto_close_at when dispute is created
+-- Create function to automatically set and update auto_close_at based on activity
 CREATE OR REPLACE FUNCTION set_dispute_auto_close()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Auto-close after 7 days if no response
-  NEW.auto_close_at := NEW.created_at + INTERVAL '7 days';
+  -- Auto-close after 7 days of inactivity
+  -- Use last_activity_at if set, otherwise use created_at
+  NEW.auto_close_at := COALESCE(NEW.last_activity_at, NEW.created_at) + INTERVAL '7 days';
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER set_dispute_auto_close_trigger
-  BEFORE INSERT ON bounty_disputes
+  BEFORE INSERT OR UPDATE OF last_activity_at ON bounty_disputes
   FOR EACH ROW
   EXECUTE FUNCTION set_dispute_auto_close();
 

@@ -259,7 +259,7 @@ await disputeService.logAuditEvent(
 
 ### 1. Auto-Close Stale Disputes
 
-**Trigger:** Disputes with no activity for 7 days
+**Trigger:** Disputes with no activity for 7 days (based on last_activity_at)
 **Action:** Automatically close with system-generated resolution
 **Implementation:**
 
@@ -269,9 +269,11 @@ const closedCount = await disputeService.autoCloseStaleDisputes();
 ```
 
 **Database Support:**
-- `auto_close_at` field automatically set on dispute creation
+- `auto_close_at` field automatically set on dispute creation and updated on activity
+- `last_activity_at` updated by triggers when evidence or comments are added
+- Trigger recalculates `auto_close_at` when `last_activity_at` changes
 - Index on `auto_close_at` for efficient querying
-- Trigger updates `last_activity_at` on evidence/comment additions
+- Disputes auto-close 7 days after last activity, not 7 days after creation
 
 ### 2. Escalation System
 

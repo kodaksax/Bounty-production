@@ -692,22 +692,32 @@ export const disputeService = {
         throw new Error('Bounty not found');
       }
 
+      // Check if this is an honor bounty (no monetary value)
+      const isHonorBounty = bounty.is_for_honor || !bounty.amount || bounty.amount <= 0;
+
       // Calculate amounts based on outcome
       let amountToHunter = decision.amountToHunter || 0;
       let amountToPoster = decision.amountToPoster || 0;
 
-      if (decision.outcome === 'release') {
-        // Full payment to hunter
-        amountToHunter = bounty.amount || 0;
-        amountToPoster = 0;
-      } else if (decision.outcome === 'refund') {
-        // Full refund to poster
+      // Only allocate funds for non-honor bounties
+      if (!isHonorBounty) {
+        if (decision.outcome === 'release') {
+          // Full payment to hunter
+          amountToHunter = bounty.amount || 0;
+          amountToPoster = 0;
+        } else if (decision.outcome === 'refund') {
+          // Full refund to poster
+          amountToHunter = 0;
+          amountToPoster = bounty.amount || 0;
+        }
+      } else {
+        // For honor bounties, ensure no funds are allocated
         amountToHunter = 0;
-        amountToPoster = bounty.amount || 0;
+        amountToPoster = 0;
       }
 
       // Create resolution record
-      const { data: resolutionData, error: resolutionError } = await supabase
+      const { error: resolutionError } = await supabase
         .from('dispute_resolutions')
         .insert({
           dispute_id: disputeId,
@@ -726,7 +736,7 @@ export const disputeService = {
         throw resolutionError;
       }
 
-      // Update dispute status
+      // Update dispute status (this will send notifications to all parties)
       await this.resolveDispute(disputeId, decision.rationale, adminId);
 
       // Log audit event
@@ -735,39 +745,6 @@ export const disputeService = {
         amountToHunter,
         amountToPoster,
       });
-
-      // Send notifications
-      try {
-        // Notify initiator
-        await sendNotification(
-          dispute.initiatorId,
-          'dispute_resolved',
-          'Dispute Resolved',
-          `A resolution has been made for your dispute. Outcome: ${decision.outcome}`,
-          {
-            disputeId,
-            bountyId: dispute.bountyId,
-            outcome: decision.outcome,
-          }
-        );
-
-        // Notify other parties
-        if (bounty.user_id && bounty.user_id !== dispute.initiatorId) {
-          await sendNotification(
-            String(bounty.user_id),
-            'dispute_resolved',
-            'Dispute Resolved',
-            `A resolution has been made for the dispute on bounty: ${bounty.title}`,
-            {
-              disputeId,
-              bountyId: dispute.bountyId,
-              outcome: decision.outcome,
-            }
-          );
-        }
-      } catch (notifError) {
-        logger.error('Error sending resolution notifications', { error: notifError });
-      }
 
       return true;
     } catch (err) {
@@ -935,7 +912,7 @@ export const disputeService = {
           reason: 'No activity for 7 days',
         });
 
-        // Send notification
+        // Send notification - use snake_case as returned from direct DB query
         try {
           await sendNotification(
             dispute.initiator_id,
@@ -1041,7 +1018,6 @@ export const disputeService = {
       }
 
       const evidence = await this.getDisputeEvidence(disputeId);
-      const comments = await this.getDisputeComments(disputeId);
 
       // Simple heuristic-based suggestion
       // In a production system, this could use ML or more sophisticated logic
@@ -1064,18 +1040,19 @@ export const disputeService = {
             ? EVIDENCE_SCORE_DOCUMENT 
             : EVIDENCE_SCORE_TEXT;
             
+          // Use poster_id and hunter_id as returned by bountyService.getById
           if (ev.uploaded_by === bounty.hunter_id) {
             hunterScore += scoreValue;
-          } else if (ev.uploaded_by === bounty.user_id) {
+          } else if (ev.uploaded_by === bounty.poster_id) {
             posterScore += scoreValue;
           }
         });
       }
 
       // Determine outcome
-      let suggestedOutcome: 'release' | 'refund' | 'split' = 'split';
-      let confidence = 0.5;
-      let reasoning = '';
+      let suggestedOutcome: 'release' | 'refund' | 'split';
+      let confidence: number;
+      let reasoning: string;
 
       const totalScore = hunterScore + posterScore;
       if (totalScore === 0) {

@@ -9,12 +9,12 @@
  * Usage:
  *   node scripts/dispute-automation-cron.js
  * 
- * Cron schedule (runs daily at 2 AM):
+ * Cron schedule (runs daily at 2 AM, performing both tasks in a single job):
  *   0 2 * * * cd /path/to/Bounty-production && node scripts/dispute-automation-cron.js
  */
 
-import { disputeService } from '../lib/services/dispute-service.js';
-import { logger } from '../lib/utils/error-logger.js';
+const { disputeService } = require('../lib/services/dispute-service.js');
+const { logger } = require('../lib/utils/error-logger.js');
 
 async function runDisputeAutomation() {
   console.log('=== Dispute Automation Cron Job Started ===');
