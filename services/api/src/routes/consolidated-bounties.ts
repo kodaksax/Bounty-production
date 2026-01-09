@@ -521,21 +521,42 @@ export async function registerConsolidatedBountyRoutes(
 
         // For paid bounties, we need to ensure atomicity between bounty creation and wallet deduction
         // We'll create the wallet transaction first, then the bounty, and rollback the transaction if bounty creation fails
-        let walletTransaction: any = null;
+        let walletTransactionId: string | null = null;
+        
+        /**
+         * Helper function to rollback wallet transaction
+         */
+        const rollbackWalletTransaction = async (transactionId: string, context: string) => {
+          try {
+            await db.delete(walletTransactions)
+              .where(eq(walletTransactions.id, transactionId));
+            request.log.info(
+              { transactionId, context },
+              'Wallet transaction rolled back'
+            );
+          } catch (rollbackError) {
+            request.log.error(
+              { error: rollbackError, transactionId, context },
+              'Failed to rollback wallet transaction'
+            );
+          }
+        };
         
         try {
           // For paid bounties, create wallet transaction first
           if (!body.isForHonor && body.amount > 0) {
             // Use a temporary bounty ID placeholder - we'll update it after bounty creation
-            walletTransaction = await db.insert(walletTransactions).values({
+            const walletTxResult = await db.insert(walletTransactions).values({
               user_id: userId,
               bounty_id: null, // Will be updated after bounty creation
               type: 'bounty_posted',
               amount_cents: Math.round(body.amount * 100),
             }).returning();
             
+            walletTransactionId = walletTxResult[0].id;
+            
             request.log.info(
-              { userId, transactionId: walletTransaction[0].id },
+              { userId, transactionId: walletTransactionId },
               'Wallet transaction created, proceeding to create bounty'
             );
           }
@@ -554,23 +575,18 @@ export async function registerConsolidatedBountyRoutes(
             );
             
             // Rollback: Delete the wallet transaction if bounty creation failed
-            if (walletTransaction) {
-              await db.delete(walletTransactions)
-                .where(eq(walletTransactions.id, walletTransaction[0].id));
-              request.log.info(
-                { transactionId: walletTransaction[0].id },
-                'Wallet transaction rolled back'
-              );
+            if (walletTransactionId) {
+              await rollbackWalletTransaction(walletTransactionId, 'bounty_creation_failed');
             }
             
             throw new Error(error.message);
           }
 
           // Update the wallet transaction with the bounty ID
-          if (walletTransaction) {
+          if (walletTransactionId) {
             await db.update(walletTransactions)
               .set({ bounty_id: bounty.id })
-              .where(eq(walletTransactions.id, walletTransaction[0].id));
+              .where(eq(walletTransactions.id, walletTransactionId));
             
             request.log.info(
               { userId, bountyId: bounty.id, amount: body.amount },
@@ -590,20 +606,8 @@ export async function registerConsolidatedBountyRoutes(
           return bounty;
         } catch (error) {
           // If we get here and have a wallet transaction but no bounty, ensure rollback
-          if (walletTransaction) {
-            try {
-              await db.delete(walletTransactions)
-                .where(eq(walletTransactions.id, walletTransaction[0].id));
-              request.log.info(
-                { transactionId: walletTransaction[0].id },
-                'Wallet transaction rolled back due to error'
-              );
-            } catch (rollbackError) {
-              request.log.error(
-                { error: rollbackError, transactionId: walletTransaction[0].id },
-                'Failed to rollback wallet transaction'
-              );
-            }
+          if (walletTransactionId) {
+            await rollbackWalletTransaction(walletTransactionId, 'unexpected_error');
           }
           throw error;
         }
