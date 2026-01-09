@@ -11,13 +11,14 @@
  */
 
 import { disputeService } from '../../lib/services/dispute-service';
-import { supabase } from '../../lib/supabase';
 
-// Mock Supabase
+// Mock Supabase with proper method chaining
+const mockFrom = jest.fn();
+
 jest.mock('../../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
-    from: jest.fn(),
+    from: mockFrom,
   },
 }));
 
@@ -47,7 +48,7 @@ describe('DisputeService', () => {
         updated_at: new Date().toISOString(),
       };
 
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
             single: jest.fn().mockResolvedValue({
@@ -83,7 +84,7 @@ describe('DisputeService', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
             single: jest.fn().mockResolvedValue({
@@ -109,7 +110,7 @@ describe('DisputeService', () => {
 
   describe('uploadEvidence', () => {
     it('should upload evidence to a dispute', async () => {
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         insert: jest.fn().mockResolvedValue({ error: null }),
       });
 
@@ -128,7 +129,7 @@ describe('DisputeService', () => {
 
   describe('addComment', () => {
     it('should add a public comment', async () => {
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         insert: jest.fn().mockResolvedValue({ error: null }),
       });
 
@@ -143,7 +144,7 @@ describe('DisputeService', () => {
     });
 
     it('should add an internal admin comment', async () => {
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         insert: jest.fn().mockResolvedValue({ error: null }),
       });
 
@@ -178,7 +179,7 @@ describe('DisputeService', () => {
         amount: 50000, // $500
       };
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -221,8 +222,8 @@ describe('DisputeService', () => {
       });
 
       // Mock bountyService
-      const bountyService = require('../../lib/services/bounty-service');
-      bountyService.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      const bountyServiceModule = require('../../lib/services/bounty-service');
+      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
 
       const result = await disputeService.makeResolutionDecision(
         'dispute-123',
@@ -256,10 +257,10 @@ describe('DisputeService', () => {
       const mockBounty = {
         id: 'bounty-123',
         hunter_id: 'hunter-123',
-        user_id: 'poster-123',
+        poster_id: 'poster-123',
       };
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -298,8 +299,8 @@ describe('DisputeService', () => {
         }
       });
 
-      const bountyService = require('../../lib/services/bounty-service');
-      bountyService.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      const bountyServiceModule = require('../../lib/services/bounty-service');
+      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
 
       const suggestion = await disputeService.calculateSuggestedResolution('dispute-123');
 
@@ -322,10 +323,10 @@ describe('DisputeService', () => {
       const mockBounty = {
         id: 'bounty-123',
         hunter_id: 'hunter-123',
-        user_id: 'poster-123',
+        poster_id: 'poster-123',
       };
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -364,8 +365,8 @@ describe('DisputeService', () => {
         }
       });
 
-      const bountyService = require('../../lib/services/bounty-service');
-      bountyService.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      const bountyServiceModule = require('../../lib/services/bounty-service');
+      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
 
       const suggestion = await disputeService.calculateSuggestedResolution('dispute-123');
 
@@ -395,7 +396,7 @@ describe('DisputeService', () => {
         },
       ];
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -436,7 +437,7 @@ describe('DisputeService', () => {
         },
       ];
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -473,7 +474,7 @@ describe('DisputeService', () => {
         bounty_id: 'bounty-123',
       };
 
-      (supabase.from as jest.Mock).mockImplementation((table) => {
+      mockFrom.mockImplementation((table) => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -512,7 +513,7 @@ describe('DisputeService', () => {
         bounty_id: 'bounty-123',
       };
 
-      (supabase.from as jest.Mock).mockReturnValue({
+      mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
             single: jest.fn().mockResolvedValue({
