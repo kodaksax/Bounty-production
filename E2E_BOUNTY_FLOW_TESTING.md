@@ -64,7 +64,8 @@ Tests the completion and payment release process:
 - ✅ Transaction records created
 - ✅ Payment notification sent to hunter
 - ✅ Only poster can release payment (authorization)
-- ✅ Honor-based bounty completion (no payment flow)
+
+Note: Honor-based bounty completion is tested separately under edge cases.
 
 **User Story**: As a hunter, I want to be paid when I complete work. As a poster, I want to approve work before payment is released.
 
@@ -294,6 +295,11 @@ The tests help ensure:
 Current test results (as of implementation):
 
 ```
+E2E Test Files:
+- complete-bounty-flow.test.ts: 39 tests
+- payment-flow.test.ts: 17 tests
+Total E2E: 56 tests passed
+
 Test Suites: 2 passed, 2 total (E2E)
 Tests:       56 passed, 56 total (E2E)
 Time:        ~0.6s

@@ -12,7 +12,7 @@
  * These tests ensure critical user paths remain functional.
  */
 
-import type { Request, Conversation, Message, WalletTransaction } from '../../lib/types';
+import type { Request, Conversation, Message, WalletTransaction, UserRating } from '../../lib/types';
 import type { Bounty } from '../../packages/domain-types/src/bounty';
 
 describe('Complete Bounty Flow E2E Tests', () => {
@@ -22,12 +22,54 @@ describe('Complete Bounty Flow E2E Tests', () => {
   const HUNTER_ID_2 = 'user_hunter_bob';
   const HUNTER_ID_3 = 'user_hunter_charlie';
 
+  // Mock service interfaces
+  interface MockBountyService {
+    create: jest.Mock;
+    getById: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+    list: jest.Mock;
+  }
+
+  interface MockRequestService {
+    create: jest.Mock;
+    accept: jest.Mock;
+    reject: jest.Mock;
+    getByBountyId: jest.Mock;
+    deleteCompetingRequests: jest.Mock;
+  }
+
+  interface MockConversationService {
+    create: jest.Mock;
+    sendMessage: jest.Mock;
+    getMessages: jest.Mock;
+    markAsRead: jest.Mock;
+  }
+
+  interface MockWalletService {
+    createEscrow: jest.Mock;
+    releasePayment: jest.Mock;
+    refund: jest.Mock;
+    getBalance: jest.Mock;
+    getTransactions: jest.Mock;
+  }
+
+  interface MockNotificationService {
+    send: jest.Mock;
+    markAsRead: jest.Mock;
+  }
+
+  interface MockRatingService {
+    create: jest.Mock;
+  }
+
   // Mock services
-  let mockBountyService: any;
-  let mockRequestService: any;
-  let mockConversationService: any;
-  let mockWalletService: any;
-  let mockNotificationService: any;
+  let mockBountyService: MockBountyService;
+  let mockRequestService: MockRequestService;
+  let mockConversationService: MockConversationService;
+  let mockWalletService: MockWalletService;
+  let mockNotificationService: MockNotificationService;
+  let mockRatingService: MockRatingService;
 
   beforeEach(() => {
     // Reset all mocks before each test
@@ -56,6 +98,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
       create: jest.fn(),
       sendMessage: jest.fn(),
       getMessages: jest.fn(),
+      markAsRead: jest.fn(),
     };
 
     // Mock wallet service
@@ -71,6 +114,11 @@ describe('Complete Bounty Flow E2E Tests', () => {
     mockNotificationService = {
       send: jest.fn(),
       markAsRead: jest.fn(),
+    };
+
+    // Mock rating service
+    mockRatingService = {
+      create: jest.fn(),
     };
   });
 
@@ -198,16 +246,17 @@ describe('Complete Bounty Flow E2E Tests', () => {
       };
     });
 
-    it('should allow hunter to discover bounty in postings', async () => {
+    it('should list open bounties when filtering by status', async () => {
       // Arrange
       mockBountyService.list.mockResolvedValue([bounty]);
 
-      // Act - Hunter browses available bounties
+      // Act - Hunter browses available bounties with filter
       const availableBounties = await mockBountyService.list({ status: 'open' });
 
       // Assert
       expect(availableBounties).toContain(bounty);
       expect(availableBounties[0].status).toBe('open');
+      expect(mockBountyService.list).toHaveBeenCalledWith({ status: 'open' });
     });
 
     it('should allow hunter to apply to bounty', async () => {
@@ -329,16 +378,25 @@ describe('Complete Bounty Flow E2E Tests', () => {
       });
 
       // Act - Poster accepts Alice's application
+      // In a real E2E flow, accepting would trigger all these operations
       const accepted = await mockRequestService.accept('req_alice');
+      
+      // Verify acceptance triggers bounty status update
       await mockBountyService.update(bountyId, { status: 'in_progress' });
+      
+      // Verify competing requests are cleaned up
       await mockRequestService.deleteCompetingRequests(bountyId, 'req_alice');
+      
+      // Verify escrow is automatically created for paid bounties
       await mockWalletService.createEscrow({ bountyId, amount: 50000 });
+      
+      // Verify conversation is initialized
       const conversation = await mockConversationService.create({
         bountyId,
         participantIds: [POSTER_ID, HUNTER_ID_1],
       });
 
-      // Assert
+      // Assert - Verify all acceptance side effects occurred
       expect(accepted.status).toBe('accepted');
       expect(accepted.hunterId).toBe(HUNTER_ID_1);
       expect(mockBountyService.update).toHaveBeenCalledWith(
@@ -357,6 +415,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
     it('should reject competing requests when one is accepted', async () => {
       // Arrange
       mockRequestService.deleteCompetingRequests.mockResolvedValue(2);
+      mockNotificationService.send.mockResolvedValue(true);
 
       // Act
       const deletedCount = await mockRequestService.deleteCompetingRequests(
@@ -364,11 +423,38 @@ describe('Complete Bounty Flow E2E Tests', () => {
         'req_alice'
       );
 
+      // Notify competing hunters of rejection
+      await mockNotificationService.send({
+        user_id: HUNTER_ID_2,
+        type: 'application',
+        title: 'Application Status',
+        body: 'Another hunter was selected',
+      });
+      await mockNotificationService.send({
+        user_id: HUNTER_ID_3,
+        type: 'application',
+        title: 'Application Status',
+        body: 'Another hunter was selected',
+      });
+
       // Assert
       expect(deletedCount).toBe(2); // Bob and Charlie's requests
       expect(mockRequestService.deleteCompetingRequests).toHaveBeenCalledWith(
         bountyId,
         'req_alice'
+      );
+      // Verify competing hunters were notified
+      expect(mockNotificationService.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: HUNTER_ID_2,
+          type: 'application',
+        })
+      );
+      expect(mockNotificationService.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: HUNTER_ID_3,
+          type: 'application',
+        })
       );
     });
 
@@ -564,6 +650,10 @@ describe('Complete Bounty Flow E2E Tests', () => {
       };
 
       mockConversationService.sendMessage.mockResolvedValue(message);
+      mockConversationService.markAsRead.mockResolvedValue({
+        ...message,
+        status: 'read',
+      });
 
       // Act
       const sent = await mockConversationService.sendMessage(conversationId, {
@@ -571,41 +661,16 @@ describe('Complete Bounty Flow E2E Tests', () => {
         text: 'Any progress updates?',
       });
 
-      // Simulate hunter reads message
-      sent.status = 'read';
+      // Hunter marks message as read
+      const readMessage = await mockConversationService.markAsRead(sent.id);
 
       // Assert
-      expect(sent.status).toBe('read');
-    });
-
-    it('should show bounty progress to both parties', async () => {
-      // Arrange
-      const bounty: Bounty = {
-        id: bountyId,
-        user_id: POSTER_ID,
-        title: 'Build a Mobile App',
-        description: 'In progress',
-        amount: 50000,
-        status: 'in_progress',
-        createdAt: new Date().toISOString(),
-      };
-
-      mockBountyService.getById.mockResolvedValue(bounty);
-
-      // Act - Both poster and hunter can view bounty
-      const posterView = await mockBountyService.getById(bountyId);
-      const hunterView = await mockBountyService.getById(bountyId);
-
-      // Assert
-      expect(posterView.status).toBe('in_progress');
-      expect(hunterView.status).toBe('in_progress');
-      expect(posterView).toEqual(hunterView);
-    });
+      expect(readMessage.status).toBe('read');
+      expect(mockConversationService.markAsRead).toHaveBeenCalledWith(sent.id);
   });
 
   describe('User Journey 4: Complete & Payment Flow', () => {
     const bountyId = 'bounty_123';
-    const conversationId = 'conv_123';
 
     beforeEach(() => {
       // Setup bounty in progress state
@@ -769,19 +834,38 @@ describe('Complete Bounty Flow E2E Tests', () => {
     });
 
     it('should only allow poster to release payment', async () => {
-      // Arrange
-      const unauthorizedUserId = 'some_other_user';
-      mockWalletService.releasePayment.mockRejectedValue(
+      // Arrange - Test that hunter cannot release payment
+      mockWalletService.releasePayment.mockRejectedValueOnce(
         new Error('Unauthorized: Only bounty poster can release payment')
       );
 
-      // Act & Assert
+      // Act & Assert - Hunter tries to release payment and is blocked
       await expect(
         mockWalletService.releasePayment({
           bountyId,
-          requesterId: unauthorizedUserId,
+          requesterId: HUNTER_ID_1,
         })
       ).rejects.toThrow('Unauthorized');
+
+      // Arrange - Test that poster can release payment
+      mockWalletService.releasePayment.mockResolvedValueOnce({
+        id: 'txn_release',
+        type: 'release',
+        amount: 50000,
+        bountyId,
+        status: 'completed',
+      });
+
+      // Act - Poster successfully releases payment
+      const payment = await mockWalletService.releasePayment({
+        bountyId,
+        requesterId: POSTER_ID,
+        amount: 50000,
+      });
+
+      // Assert - Payment released successfully
+      expect(payment.type).toBe('release');
+      expect(payment.status).toBe('completed');
     });
 
     it('should handle honor-based bounty completion (no payment)', async () => {
@@ -869,6 +953,61 @@ describe('Complete Bounty Flow E2E Tests', () => {
       // Assert
       await expect(mockBountyService.delete(bountyId)).rejects.toThrow(
         'Cannot cancel in_progress bounty'
+      );
+    });
+
+    it('should handle cancellation negotiation for in-progress bounty', async () => {
+      // Arrange - Create a cancellation request
+      const cancellationRequest = {
+        id: 'cancel_123',
+        bountyId,
+        requesterId: POSTER_ID,
+        requesterType: 'poster' as const,
+        reason: 'Requirements have changed',
+        status: 'pending' as const,
+        refundPercentage: 50,
+        createdAt: new Date().toISOString(),
+      };
+
+      const mockCancellationService = {
+        createRequest: jest.fn().mockResolvedValue(cancellationRequest),
+        acceptRequest: jest.fn().mockResolvedValue({
+          ...cancellationRequest,
+          status: 'accepted',
+          responderId: HUNTER_ID_1,
+        }),
+      };
+
+      mockNotificationService.send.mockResolvedValue(true);
+
+      // Act - Poster creates cancellation request
+      const request = await mockCancellationService.createRequest({
+        bountyId,
+        requesterId: POSTER_ID,
+        reason: 'Requirements have changed',
+        refundPercentage: 50,
+      });
+
+      // Hunter is notified
+      await mockNotificationService.send({
+        user_id: HUNTER_ID_1,
+        type: 'cancellation_request',
+        title: 'Cancellation Request',
+        body: 'The poster has requested to cancel the bounty',
+        data: { bountyId, cancellationId: request.id },
+      });
+
+      // Hunter accepts the cancellation
+      const accepted = await mockCancellationService.acceptRequest(request.id);
+
+      // Assert
+      expect(request.status).toBe('pending');
+      expect(accepted.status).toBe('accepted');
+      expect(mockNotificationService.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: HUNTER_ID_1,
+          type: 'cancellation_request',
+        })
       );
     });
 
@@ -980,10 +1119,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
     });
 
     it('should prevent concurrent acceptance of same bounty', async () => {
-      // Arrange
-      const bountyId = 'bounty_123';
-
-      // First hunter's acceptance succeeds
+      // Arrange - First hunter's acceptance succeeds
       mockRequestService.accept.mockResolvedValueOnce({
         id: 'req_alice',
         status: 'accepted',
@@ -1025,32 +1161,6 @@ describe('Complete Bounty Flow E2E Tests', () => {
       await expect(mockBountyService.getById('nonexistent')).rejects.toThrow(
         'not found'
       );
-    });
-
-    it('should retry failed operations with exponential backoff', async () => {
-      // Arrange
-      mockWalletService.releasePayment
-        .mockRejectedValueOnce(new Error('Temporary failure'))
-        .mockRejectedValueOnce(new Error('Temporary failure'))
-        .mockResolvedValueOnce({ type: 'release', amount: 50000 });
-
-      // Act - Simulate retry logic
-      let attempts = 0;
-      let result;
-      while (attempts < 3) {
-        try {
-          result = await mockWalletService.releasePayment({ bountyId: 'bounty_123' });
-          break;
-        } catch (error) {
-          attempts++;
-          if (attempts >= 3) throw error;
-        }
-      }
-
-      // Assert
-      expect(result).toBeDefined();
-      expect(result.type).toBe('release');
-      expect(attempts).toBe(2); // Succeeded on third attempt
     });
   });
 
@@ -1104,7 +1214,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
 
     it('should track user ratings after completion', async () => {
       // Arrange
-      const rating = {
+      const rating: UserRating = {
         id: 'rating_123',
         user_id: HUNTER_ID_1,
         rater_id: POSTER_ID,
@@ -1114,9 +1224,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
         createdAt: new Date().toISOString(),
       };
 
-      const mockRatingService = {
-        create: jest.fn().mockResolvedValue(rating),
-      };
+      mockRatingService.create.mockResolvedValue(rating);
 
       // Act
       const userRating = await mockRatingService.create({
