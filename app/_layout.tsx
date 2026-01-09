@@ -23,14 +23,14 @@ import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
+// Ensure Sentry is initialized as early as possible so that Sentry.wrap
+// (used at the bottom of this file) is called after initialization.
+import { initializeSentry } from '../lib/services/sentry-init';
+
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-
-// Ensure Sentry is initialized as early as possible so that Sentry.wrap
-// (used at the bottom of this file) is called after initialization.
-import { initializeSentry } from '../lib/services/sentry-init';
 initializeSentry();
 
 if (__DEV__) {

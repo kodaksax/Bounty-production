@@ -1,14 +1,14 @@
 // Create a new file for centralized error logging
-export type ErrorLogLevel = "info" | "warning" | "error" | "critical"
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import NetInfo from '@react-native-community/netinfo';
+export type ErrorLogLevel = "info" | "warning" | "error" | "critical"
 interface ErrorLogEntry {
   level: ErrorLogLevel
   message: string
   context?: Record<string, any>
   timestamp: Date
 }
-
-import NetInfo from '@react-native-community/netinfo';
 
 class ErrorLogger {
   private logs: ErrorLogEntry[] = []

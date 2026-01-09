@@ -64,7 +64,7 @@ export default function AdminBountyDetailScreen() {
     );
   };
 
-  const statusTransitions: Record<AdminBounty['status'], Array<{ status: AdminBounty['status']; label: string; icon: string }>> = {
+  const statusTransitions: Record<AdminBounty['status'], { status: AdminBounty['status']; label: string; icon: string }[]> = {
     open: [
       { status: 'in_progress', label: 'Start Progress', icon: 'play-arrow' },
       { status: 'archived', label: 'Archive', icon: 'archive' },

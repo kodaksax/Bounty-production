@@ -14,7 +14,7 @@ export default function AdminBountiesScreen() {
   const [filters, setFilters] = useState<AdminBountyFilters>({ status: 'all' });
   const { bounties, isLoading, error, refetch } = useAdminBounties(filters);
 
-  const statusOptions: Array<AdminBountyFilters['status']> = ['all', 'open', 'in_progress', 'completed', 'archived'];
+  const statusOptions: AdminBountyFilters['status'][] = ['all', 'open', 'in_progress', 'completed', 'archived'];
 
   const renderBountyItem = ({ item }: { item: AdminBounty }) => (
     <TouchableOpacity

@@ -36,7 +36,7 @@ export default function VerifyPhoneScreen() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   // Handle resend cooldown
   useEffect(() => {
