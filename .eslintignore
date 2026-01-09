@@ -1,0 +1,18 @@
+# ESLint ignore file for the monorepo
+# Keep workspace packages/ and services/ included for linting (do NOT add them here)
+
+# Ignore common build / tooling outputs and deps
+node_modules/
+.expo/
+dist/
+build/
+coverage/
+*.log
+
+# Ignore local editor backup/history files
+.history/
+/.history/**
+**/.history/**
+*.bak
+
+# If CI needs specific include paths, update the lint job to run from repo root
