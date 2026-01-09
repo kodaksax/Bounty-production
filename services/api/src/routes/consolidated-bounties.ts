@@ -22,6 +22,35 @@ import {
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
 import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
+import { walletService } from '../services/wallet-service';
+import { db } from '../db/connection';
+import { walletTransactions } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+// Transaction types that add to balance (inflow)
+const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
+// Transaction types that subtract from balance (outflow)
+const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
+
+/**
+ * Calculate wallet balance from transactions
+ */
+async function calculateUserBalance(userId: string): Promise<number> {
+  const transactions = await db
+    .select()
+    .from(walletTransactions)
+    .where(eq(walletTransactions.user_id, userId));
+
+  let balanceCents = 0;
+  for (const tx of transactions) {
+    if (INFLOW_TYPES.includes(tx.type)) {
+      balanceCents += tx.amount_cents;
+    } else if (OUTFLOW_TYPES.includes(tx.type)) {
+      balanceCents -= tx.amount_cents;
+    }
+  }
+  return balanceCents;
+}
 
 /**
  * Generate a normalized cache key for bounty list queries
@@ -472,6 +501,25 @@ export async function registerConsolidatedBountyRoutes(
       try {
         const supabase = getSupabaseAdmin();
 
+        // For paid bounties (non-honor with amount > 0), check and deduct wallet balance
+        if (!body.isForHonor && body.amount > 0) {
+          const balanceCents = await calculateUserBalance(userId);
+          const amountCents = Math.round(body.amount * 100);
+          
+          if (balanceCents < amountCents) {
+            request.log.warn(
+              { userId, required: amountCents, available: balanceCents },
+              'Insufficient wallet balance for bounty creation'
+            );
+            return reply.code(400).send({ 
+              error: 'Insufficient wallet balance',
+              required: body.amount,
+              available: balanceCents / 100,
+              message: `You need $${body.amount.toFixed(2)} to post this bounty, but only have $${(balanceCents / 100).toFixed(2)} in your wallet. Please add funds to your wallet first.`
+            });
+          }
+        }
+
         // Prepare bounty data
         // Note: created_at and updated_at are omitted to use database defaults
         const bountyData: Partial<Bounty> & { 
@@ -507,6 +555,31 @@ export async function registerConsolidatedBountyRoutes(
             'Bounty creation failed'
           );
           throw new Error(error.message);
+        }
+
+        // For paid bounties, create a wallet transaction to deduct the funds
+        if (!body.isForHonor && body.amount > 0) {
+          try {
+            await walletService.createTransaction({
+              user_id: userId,
+              bountyId: bounty.id,
+              type: 'bounty_posted',
+              amount: body.amount,
+            });
+            
+            request.log.info(
+              { userId, bountyId: bounty.id, amount: body.amount },
+              'Wallet funds deducted for bounty posting'
+            );
+          } catch (walletError) {
+            // If wallet transaction fails, we should ideally rollback the bounty
+            // For now, log the error - in production, this should use a database transaction
+            request.log.error(
+              { error: walletError, bountyId: bounty.id },
+              'Failed to create wallet transaction for bounty'
+            );
+            throw new Error('Failed to deduct funds from wallet');
+          }
         }
 
         // Invalidate bounty list caches since a new bounty was created

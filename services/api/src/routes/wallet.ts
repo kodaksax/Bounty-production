@@ -44,6 +44,36 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   }
 
   /**
+   * Get user's wallet balance
+   */
+  fastify.get('/wallet/balance', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const balanceCents = await calculateUserBalance(request.userId);
+
+      return {
+        balance: balanceCents / 100, // Convert cents to dollars
+        balanceCents: balanceCents,
+        currency: 'USD',
+      };
+    } catch (error) {
+      logErrorWithContext(request, error, {
+        operation: 'fetch_wallet_balance',
+        userId: request.userId,
+      });
+      return reply.code(500).send({
+        error: 'Failed to fetch wallet balance',
+        requestId: getRequestContext(request).requestId,
+      });
+    }
+  });
+
+  /**
    * Get user's wallet transactions
    */
   fastify.get('/wallet/transactions', {
