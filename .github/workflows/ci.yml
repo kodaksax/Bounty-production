@@ -129,8 +129,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
       
-      - name: Build workspace packages
-        run: npm run build --if-present --workspaces
+      - name: Build packages
+        run: npm run build
       
       - name: Check bundle size budget
         if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
