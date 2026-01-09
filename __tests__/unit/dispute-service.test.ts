@@ -10,17 +10,43 @@
  * - Automation features
  */
 
-import { disputeService } from '../../lib/services/dispute-service';
-
-// Mock Supabase with proper method chaining
+// Mock Supabase with proper method chaining - must be defined before import
 const mockFrom = jest.fn();
 
+// Mock dependencies before importing the service
 jest.mock('../../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     from: mockFrom,
   },
 }));
+
+// Mock logger to avoid errors
+jest.mock('../../lib/utils/error-logger', () => ({
+  logger: {
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+// Mock bounty service
+jest.mock('../../lib/services/bounty-service', () => ({
+  bountyService: {
+    getById: jest.fn(),
+  },
+}));
+
+// Mock cancellation service
+jest.mock('../../lib/services/cancellation-service', () => ({
+  cancellationService: {
+    getById: jest.fn(),
+  },
+}));
+
+// Import after mocking
+import { disputeService } from '../../lib/services/dispute-service';
 
 describe('DisputeService', () => {
   beforeEach(() => {
@@ -221,9 +247,9 @@ describe('DisputeService', () => {
         };
       });
 
-      // Mock bountyService
-      const bountyServiceModule = require('../../lib/services/bounty-service');
-      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      // Update the mock for this test
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
 
       const result = await disputeService.makeResolutionDecision(
         'dispute-123',
@@ -299,8 +325,9 @@ describe('DisputeService', () => {
         }
       });
 
-      const bountyServiceModule = require('../../lib/services/bounty-service');
-      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      // Update the mock for this test
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
 
       const suggestion = await disputeService.calculateSuggestedResolution('dispute-123');
 
@@ -365,8 +392,9 @@ describe('DisputeService', () => {
         }
       });
 
-      const bountyServiceModule = require('../../lib/services/bounty-service');
-      bountyServiceModule.bountyService.getById = jest.fn().mockResolvedValue(mockBounty);
+      // Update the mock for this test
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
 
       const suggestion = await disputeService.calculateSuggestedResolution('dispute-123');
 
