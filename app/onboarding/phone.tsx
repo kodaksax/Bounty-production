@@ -233,7 +233,11 @@ export default function PhoneScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-            <Text style={styles.skipButtonText}>I'll do this later</Text>
+            <Text style={styles.skipButtonText}>
+              I
+              {"'"}
+              ll do this later
+            </Text>
           </TouchableOpacity>
         </View>
 

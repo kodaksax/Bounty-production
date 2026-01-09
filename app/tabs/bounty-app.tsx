@@ -45,26 +45,6 @@ function BountyAppInner() {
   const { session, isLoading } = useAuthContext()
   const currentUserId = session?.user?.id
   
-  // Auth Guard: Show loading or redirect BEFORE rendering any content
-  // This prevents the bounty app from rendering at all if not authenticated
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-emerald-600">
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text className="text-white mt-4 text-base">Loading...</Text>
-      </View>
-    )
-  }
-  
-  // If not authenticated, redirect immediately and show nothing
-  if (!session) {
-    if (__DEV__) {
-      console.log('[bounty-app] Not authenticated, redirecting to index')
-    }
-    // Use declarative Redirect component for reliable redirection
-    return <Redirect href="/" />
-  }
-  
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
@@ -727,6 +707,21 @@ function BountyAppInner() {
     </View>
   )
 
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-emerald-600">
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text className="text-white mt-4 text-base">Loading...</Text>
+      </View>
+    )
+  }
+
+  if (!session) {
+    if (__DEV__) {
+      console.log('[bounty-app] Not authenticated, redirecting to index')
+    }
+    return <Redirect href="/" />
+  }
 
   return (
     <View style={styles.container}>
@@ -761,7 +756,7 @@ function BountyAppInner() {
 
       {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} />}
     </View>
-  )
+    )
 }
 
 export function BountyApp() {

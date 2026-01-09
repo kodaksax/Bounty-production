@@ -22,6 +22,10 @@ import {
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
 import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
+import { db } from '../db/connection';
+import { walletTransactions } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Generate a normalized cache key for bounty list queries
@@ -472,6 +476,24 @@ export async function registerConsolidatedBountyRoutes(
       try {
         const supabase = getSupabaseAdmin();
 
+        // For paid bounties (non-honor with amount > 0), check and deduct wallet balance
+        if (!body.isForHonor && body.amount > 0) {
+          const balanceCents = await calculateUserBalance(userId);
+          const amountCents = Math.round(body.amount * 100);
+          
+          if (balanceCents < amountCents) {
+            request.log.warn(
+              { userId, required: amountCents, available: balanceCents },
+              'Insufficient wallet balance for bounty creation'
+            );
+            return reply.code(400).send({ 
+              error: 'Insufficient wallet balance',
+              required: body.amount,
+              available: balanceCents / 100,
+            });
+          }
+        }
+
         // Prepare bounty data
         // Note: created_at and updated_at are omitted to use database defaults
         const bountyData: Partial<Bounty> & { 
@@ -495,30 +517,98 @@ export async function registerConsolidatedBountyRoutes(
         if (body.skills_required) bountyData.skills_required = body.skills_required;
         if (body.due_date) bountyData.due_date = body.due_date;
 
-        const { data: bounty, error } = await supabase
-          .from('bounties')
-          .insert(bountyData)
-          .select()
-          .single();
+        // For paid bounties, we need to ensure atomicity between bounty creation and wallet deduction
+        // We'll create the wallet transaction first, then the bounty, and rollback the transaction if bounty creation fails
+        let walletTransactionId: string | null = null;
+        
+        /**
+         * Helper function to rollback wallet transaction
+         */
+        const rollbackWalletTransaction = async (transactionId: string, context: string) => {
+          try {
+            await db.delete(walletTransactions)
+              .where(eq(walletTransactions.id, transactionId));
+            request.log.info(
+              { transactionId, context },
+              'Wallet transaction rolled back'
+            );
+          } catch (rollbackError) {
+            request.log.error(
+              { error: rollbackError, transactionId, context },
+              'Failed to rollback wallet transaction'
+            );
+          }
+        };
+        
+        try {
+          // For paid bounties, create wallet transaction first
+          if (!body.isForHonor && body.amount > 0) {
+            // Use a temporary bounty ID placeholder - we'll update it after bounty creation
+            const walletTxResult = await db.insert(walletTransactions).values({
+              user_id: userId,
+              bounty_id: null, // Will be updated after bounty creation
+              type: 'bounty_posted',
+              amount_cents: Math.round(body.amount * 100),
+            }).returning();
+            
+            walletTransactionId = walletTxResult[0].id;
+            
+            request.log.info(
+              { userId, transactionId: walletTransactionId },
+              'Wallet transaction created, proceeding to create bounty'
+            );
+          }
 
-        if (error) {
-          request.log.error(
-            { error: error.message, userId },
-            'Bounty creation failed'
+          // Create the bounty via Supabase
+          const { data: bounty, error } = await supabase
+            .from('bounties')
+            .insert(bountyData)
+            .select()
+            .single();
+
+          if (error) {
+            request.log.error(
+              { error: error.message, userId },
+              'Bounty creation failed, rolling back wallet transaction'
+            );
+            
+            // Rollback: Delete the wallet transaction if bounty creation failed
+            if (walletTransactionId) {
+              await rollbackWalletTransaction(walletTransactionId, 'bounty_creation_failed');
+            }
+            
+            throw new Error(error.message);
+          }
+
+          // Update the wallet transaction with the bounty ID
+          if (walletTransactionId) {
+            await db.update(walletTransactions)
+              .set({ bounty_id: bounty.id })
+              .where(eq(walletTransactions.id, walletTransactionId));
+            
+            request.log.info(
+              { userId, bountyId: bounty.id, amount: body.amount },
+              'Wallet transaction updated with bounty ID'
+            );
+          }
+
+          // Invalidate bounty list caches since a new bounty was created
+          await cacheInvalidation.invalidateBountyLists();
+
+          request.log.info(
+            { userId, bountyId: bounty.id },
+            'Bounty created successfully'
           );
-          throw new Error(error.message);
+
+          reply.code(201);
+          return bounty;
+        } catch (error) {
+          // If we get here and have a wallet transaction but no bounty, ensure rollback
+          if (walletTransactionId) {
+            await rollbackWalletTransaction(walletTransactionId, 'unexpected_error');
+          }
+          throw error;
         }
-
-        // Invalidate bounty list caches since a new bounty was created
-        await cacheInvalidation.invalidateBountyLists();
-
-        request.log.info(
-          { userId, bountyId: bounty.id },
-          'Bounty created successfully'
-        );
-
-        reply.code(201);
-        return bounty;
       } catch (error) {
         request.log.error(
           { error, userId },

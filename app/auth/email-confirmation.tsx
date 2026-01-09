@@ -75,7 +75,9 @@ export default function EmailConfirmationScreen() {
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Open your inbox</Text>
               <Text style={styles.stepDescription}>
-                We've sent a confirmation link to your email address
+                We
+                {"'"}
+                ve sent a confirmation link to your email address
               </Text>
             </View>
           </View>
@@ -113,7 +115,9 @@ export default function EmailConfirmationScreen() {
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            Can't find the email? Check your spam folder or request a new confirmation email.
+            Can
+            {"'"}
+            t find the email? Check your spam folder or request a new confirmation email.
           </Text>
         </View>
       </View>

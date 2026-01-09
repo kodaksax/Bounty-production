@@ -146,7 +146,11 @@ export default function SimpleBountySearchScreen() {
         ListEmptyComponent={
           query && !isSearching && !error ? (
             <View style={{ padding: 24, alignItems: 'center' }}>
-              <Text style={{ color: '#ecfdf5' }}>No results for "{query}"</Text>
+              <Text style={{ color: '#ecfdf5' }}>
+                No results for {"\""}
+                {query}
+                {"\""}
+              </Text>
             </View>
           ) : null
         }

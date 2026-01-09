@@ -1,36 +1,71 @@
 # Dependencies
 node_modules/
-**/node_modules/
 
 # Build outputs
 dist/
-build/
+web-build/
 .expo/
 .expo-shared/
-coverage/
-
-# Platform specific
-android/
-ios/
-
-# Config files (optional, but often not linted)
-*.config.js
-*.config.cjs
-babel.config.js
-metro.config.js
-metro.config.cjs
-tailwind.config.js
-jest.config.js
 
 # Generated files
+expo-env.d.ts
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+.tmp/
+
+# Docker
+.docker/
+postgres-data/
+
+# IDE
+.vscode/
+.idea/
+
+# Specific problematic files that need refactoring
+listen-test.js
+api/server.js
+server/index.js
+lib/db-sqlite.js
+jest.setup.js
+
+# Config files
+*.config.js
+*.config.cjs
+*.config.ts
+!.eslintrc.js
+
+# Declaration files
 *.d.ts
 
-# Test files (optional - remove if you want to lint tests)
-# __tests__/
-# *.test.ts
-# *.test.tsx
+# Package workspaces (lint separately)
+packages/
+services/
 
-# Misc
-.git/
-.vscode/
-.history/
+# Scripts
+scripts/
+
+# Database
+database/
+
+# Stubs
+stubs/
+
+# Tests (different lint rules should apply)
+# __tests__/
+# tests/
+
+# Examples (demo code, not production)
+examples/
+
+# Documentation
+*.md

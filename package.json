@@ -12,7 +12,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint",
+    "lint": "eslint \"app/**/*.{js,jsx,ts,tsx}\" \"services/*/src/**/*.{js,jsx,ts,tsx}\" \"lib/**/*.{js,jsx,ts,tsx}\" --ignore-pattern \"**/dist/**\" --ignore-pattern \"**/node_modules/**\"",
     "lint:a11y": "eslint app/**/*.{tsx,jsx} components/**/*.{tsx,jsx}",
     "a11y-audit": "node scripts/a11y-audit.js",
     "test:a11y": "jest __tests__/accessibility",

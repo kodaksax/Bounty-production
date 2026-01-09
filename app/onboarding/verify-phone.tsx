@@ -260,7 +260,11 @@ export default function VerifyPhoneScreen() {
 
         {/* Resend Code */}
         <View style={styles.resendContainer}>
-          <Text style={styles.resendLabel}>Didn't receive the code?</Text>
+          <Text style={styles.resendLabel}>
+            Didn
+            {"'"}
+            t receive the code?
+          </Text>
           {resendCooldown > 0 ? (
             <Text style={styles.resendCooldown}>
               Resend in {resendCooldown}s

@@ -75,7 +75,9 @@ export default function FollowingScreen() {
       <MaterialIcons name="people-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>Not following anyone yet</Text>
       <Text style={styles.emptyText}>
-        When this user follows others, they'll appear here.
+        When this user follows others, they
+        {"'"}
+        ll appear here.
       </Text>
     </View>
   );

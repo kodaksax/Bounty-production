@@ -1,3 +1,4 @@
+/* eslint-disable expo/no-dynamic-env-var */
 /**
  * Unified Configuration Management
  * Centralizes all environment variables and configuration for the consolidated backend service

@@ -256,7 +256,11 @@ export default function DetailsScreen() {
               placeholderTextColor="rgba(255,255,255,0.4)"
               autoCapitalize="words"
             />
-            <Text style={styles.hint}>How you'd like to be called</Text>
+            <Text style={styles.hint}>
+              How you
+              {"'"}
+              d like to be called
+            </Text>
           </View>
 
           {/* Title/Profession */}
