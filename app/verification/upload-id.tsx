@@ -201,7 +201,9 @@ export default function UploadIDScreen() {
             >
               <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'driversLicense' && styles.docTypeTextActive]}>
-                Driver's License
+                Driver
+                {"'"}
+                s License
               </Text>
             </TouchableOpacity>
 

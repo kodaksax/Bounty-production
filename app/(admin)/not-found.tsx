@@ -32,7 +32,11 @@ export default function AdminNotFoundScreen() {
         <Text style={styles.errorCode}>404</Text>
         <Text style={styles.title}>Page Not Found</Text>
         <Text style={styles.description}>
-          The admin page you're looking for doesn't exist or may have been moved.
+          The admin page you
+          {"'"}
+          re looking for doesn
+          {"'"}
+          t exist or may have been moved.
         </Text>
 
         <View style={styles.actions}>

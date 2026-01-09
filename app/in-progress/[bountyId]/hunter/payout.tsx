@@ -315,7 +315,9 @@ export default function HunterPayoutScreen() {
             <Text style={styles.waitingTitle}>Waiting for Payout Release</Text>
             <Text style={styles.waitingText}>
               Your work has been submitted for review. The poster will verify your work and release
-              the payment. You'll be notified when the payout is ready.
+              the payment. You
+              {"'"}
+              ll be notified when the payout is ready.
             </Text>
             <View style={styles.statusBadge}>
               <MaterialIcons name="pending" size={16} color="#fbbf24" />

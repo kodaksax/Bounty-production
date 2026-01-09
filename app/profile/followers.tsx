@@ -75,7 +75,9 @@ export default function FollowersScreen() {
       <MaterialIcons name="people-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>No followers yet</Text>
       <Text style={styles.emptyText}>
-        When people follow this user, they'll appear here.
+        When people follow this user, they
+        {"'"}
+        ll appear here.
       </Text>
     </View>
   );

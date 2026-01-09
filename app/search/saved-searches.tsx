@@ -121,7 +121,9 @@ export default function SavedSearchesScreen() {
         </View>
         {item.query && (
           <Text style={styles.searchQuery} numberOfLines={1}>
-            "{item.query}"
+            {"\""}
+            {item.query}
+            {"\""}
           </Text>
         )}
         <Text style={styles.searchDate}>
@@ -247,7 +249,9 @@ export default function SavedSearchesScreen() {
               />
 
               <Text style={styles.hintText}>
-                You'll receive notifications when new bounties match this search.
+                You
+                {"'"}
+                ll receive notifications when new bounties match this search.
               </Text>
             </View>
 

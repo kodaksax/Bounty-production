@@ -344,7 +344,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                         Payment Released
                       </Text>
                       <Text className="text-emerald-200/70 text-sm">
-                        Funds are transferred to the hunter's wallet
+                        Funds are transferred to the hunter
+                        {"'"}
+                        s wallet
                       </Text>
                     </View>
                   </View>
@@ -357,7 +359,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   Service Fee: 2.9% + $0.30
                 </Text>
                 <Text className="text-emerald-200/70 text-sm">
-                  Standard payment processing fee. You'll see the exact amount before confirming.
+                  Standard payment processing fee. You
+                  {"'"}
+                  ll see the exact amount before confirming.
                 </Text>
               </View>
 
@@ -372,7 +376,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   />
                   <View className="flex-1">
                     <Text className="text-emerald-200/70 text-sm">
-                      Your funds are never released without your approval. If there's an issue, our support team can help resolve disputes.
+                      Your funds are never released without your approval. If there
+                      {"'"}
+                      s an issue, our support team can help resolve disputes.
                     </Text>
                   </View>
                 </View>

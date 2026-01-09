@@ -151,7 +151,11 @@ export default function DoneScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
-          <Text style={styles.title}>You're All Set!</Text>
+          <Text style={styles.title}>
+            You
+            {"'"}
+            re All Set!
+          </Text>
           <Text style={styles.subtitle}>
             Welcome to Bounty, @{displayUsername || 'user'}!
           </Text>

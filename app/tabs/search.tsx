@@ -567,7 +567,11 @@ export default function EnhancedSearchScreen() {
           ListEmptyComponent={
             query && !isSearching && !error ? (
               <View style={{ padding: 24, alignItems: 'center' }}>
-                <Text style={{ color: '#ecfdf5' }}>No bounties found for "{query}"</Text>
+                <Text style={{ color: '#ecfdf5' }}>
+                  No bounties found for {"\""}
+                  {query}
+                  {"\""}
+                </Text>
               </View>
             ) : null
           }
@@ -586,7 +590,11 @@ export default function EnhancedSearchScreen() {
           ListEmptyComponent={
             query && !isSearching && !error ? (
               <View style={{ padding: 24, alignItems: 'center' }}>
-                <Text style={{ color: '#ecfdf5' }}>No users found for "{query}"</Text>
+                <Text style={{ color: '#ecfdf5' }}>
+                  No users found for {"\""}
+                  {query}
+                  {"\""}
+                </Text>
               </View>
             ) : null
           }

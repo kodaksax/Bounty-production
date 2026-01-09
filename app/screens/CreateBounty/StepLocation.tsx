@@ -236,7 +236,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                   style={{ marginRight: 6, marginTop: 2 }}
                 />
                 <Text className="text-emerald-200/70 text-xs flex-1">
-                  Your exact address won't be shared until you accept someone for the job. Start typing to see suggestions from Google Places and your saved addresses.
+                  Your exact address won
+                  {"'"}
+                  t be shared until you accept someone for the job. Start typing to see suggestions from Google Places and your saved addresses.
                 </Text>
               </View>
             </View>

@@ -1000,21 +1000,30 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     )
   }
 
-  if (showArchivedBounties) {
-    return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
-  }
+  let alternateScreen: React.ReactNode = null
 
-  if (showAddBountyAmount) {
-    return (
+  if (showArchivedBounties) {
+    alternateScreen = (
+      <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
+    )
+  } else if (showAddBountyAmount) {
+    alternateScreen = (
       <AddBountyAmountScreen
         onBack={() => setShowAddBountyAmount(false)}
         onAddAmount={handleAddBountyAmount}
         initialAmount={formData.amount}
       />
     )
-  }
-  if (showAddMoney) {
-    return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={(amt: number)=>{ deposit(amt); setShowAddMoney(false) }} />
+  } else if (showAddMoney) {
+    alternateScreen = (
+      <AddMoneyScreen
+        onBack={() => setShowAddMoney(false)}
+        onAddMoney={(amt: number) => {
+          deposit(amt)
+          setShowAddMoney(false)
+        }}
+      />
+    )
   }
   // Local row component to encapsulate expansion state per item
   // NOTE: MyPostingRow is defined as a top-level component below to avoid recreating
@@ -1077,6 +1086,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       onReject={handleRejectRequest}
     />
   ), [handleAcceptRequest, handleRejectRequest]);
+
+  if (alternateScreen) {
+    return alternateScreen
+  }
 
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>

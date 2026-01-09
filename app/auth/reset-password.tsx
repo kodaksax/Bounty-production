@@ -175,7 +175,9 @@ export function ResetPasswordScreen() {
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text className="text-white/80 text-sm">
-                      Didn't receive the email? <Text className="text-emerald-300 underline">Resend</Text>
+                      Didn
+                      {"'"}
+                      t receive the email? <Text className="text-emerald-300 underline">Resend</Text>
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -183,7 +185,9 @@ export function ResetPasswordScreen() {
                 {/* Additional Help */}
                 <View className="bg-white/5 rounded-lg p-4 mt-4">
                   <Text className="text-white/60 text-xs text-center mb-2">
-                    Check your spam folder if you don't see the email.
+                    Check your spam folder if you don
+                    {"'"}
+                    t see the email.
                   </Text>
                   <Text className="text-white/60 text-xs text-center">
                     The reset link will expire in 1 hour.

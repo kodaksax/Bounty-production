@@ -406,7 +406,9 @@ export default function CancellationResponseScreen() {
                   Need Help Deciding?
                 </Text>
                 <Text className="text-blue-800 text-sm mb-3">
-                  If you're unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
+                  If you
+                  {"'"}
+                  re unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   <TouchableOpacity

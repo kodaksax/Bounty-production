@@ -275,7 +275,9 @@ export default function HunterApplyScreen() {
           <Text style={styles.waitingTitle} accessibilityRole="header">Waiting for Selection</Text>
           <Text style={styles.waitingText}>
             Your application has been submitted. The poster is reviewing applications and will
-            select a hunter soon. You'll be notified when a decision is made.
+            select a hunter soon. You
+            {"'"}
+            ll be notified when a decision is made.
           </Text>
           <View style={styles.statusBadge}>
             <MaterialIcons name="pending" size={16} color="#fbbf24" />
