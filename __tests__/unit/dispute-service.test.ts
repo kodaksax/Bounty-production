@@ -149,7 +149,7 @@ describe('DisputeService', () => {
       });
 
       expect(result).toBe(true);
-      expect(supabase.from).toHaveBeenCalledWith('dispute_evidence');
+      expect(mockFrom).toHaveBeenCalledWith('dispute_evidence');
     });
   });
 
