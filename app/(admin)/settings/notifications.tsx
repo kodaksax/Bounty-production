@@ -34,7 +34,7 @@ export default function AdminNotificationSettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof notifications, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setNotifications((prev) => ({ ...prev, [key]: option })),
     }));

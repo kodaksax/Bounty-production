@@ -209,7 +209,7 @@ export default function AuditLogsScreen() {
 
   // Category filter chips
   const CategoryFilters = () => {
-    const categories: Array<{ id: CategoryFilter; label: string; icon: string }> = [
+    const categories: { id: CategoryFilter; label: string; icon: string }[] = [
       { id: 'all', label: 'All', icon: 'list' },
       { id: 'moderation', label: 'Moderation', icon: 'shield' },
       { id: 'user', label: 'Users', icon: 'person' },

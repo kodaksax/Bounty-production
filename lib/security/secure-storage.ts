@@ -174,12 +174,12 @@ export class SecureStorage {
 
   static async clearSecureData(): Promise<{ 
     cleared: string[]; 
-    failed: Array<{ key: string; error: string }> 
+    failed: { key: string; error: string }[] 
   }> {
     console.error('[SecureStorage] clearSecureData called - clearing registered keys');
     
     const cleared: string[] = [];
-    const failed: Array<{ key: string; error: string }> = [];
+    const failed: { key: string; error: string }[] = [];
     
     for (const key of this.KEY_REGISTRY) {
       try {

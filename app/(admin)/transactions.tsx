@@ -13,7 +13,7 @@ export default function AdminTransactionsScreen() {
   const [filters, setFilters] = useState<AdminTransactionFilters>({ type: 'all' });
   const { transactions, isLoading, error, refetch } = useAdminTransactions(filters);
 
-  const typeOptions: Array<AdminTransactionFilters['type']> = ['all', 'escrow', 'release', 'refund', 'deposit', 'withdrawal'];
+  const typeOptions: AdminTransactionFilters['type'][] = ['all', 'escrow', 'release', 'refund', 'deposit', 'withdrawal'];
 
   const getTypeIcon = (type: string): string => {
     switch (type) {

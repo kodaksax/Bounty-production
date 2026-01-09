@@ -274,13 +274,13 @@ export interface BalanceTransactionResponse {
   description?: string | null;
   exchange_rate?: number | null;
   fee: number;
-  fee_details: Array<{
+  fee_details: {
     amount: number;
     application?: string | null;
     currency: string;
     description?: string | null;
     type: string;
-  }>;
+  }[];
   net: number;
   reporting_category: string;
   source?: string | null;
