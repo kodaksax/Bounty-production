@@ -7,31 +7,7 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
-
-// Transaction types that add to balance (inflow)
-const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
-// Transaction types that subtract from balance (outflow)
-const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
-
-/**
- * Calculate wallet balance from transactions
- */
-async function calculateUserBalance(userId: string): Promise<number> {
-  const transactions = await db
-    .select()
-    .from(walletTransactions)
-    .where(eq(walletTransactions.user_id, userId));
-
-  let balanceCents = 0;
-  for (const tx of transactions) {
-    if (INFLOW_TYPES.includes(tx.type)) {
-      balanceCents += tx.amount_cents;
-    } else if (OUTFLOW_TYPES.includes(tx.type)) {
-      balanceCents -= tx.amount_cents;
-    }
-  }
-  return balanceCents;
-}
+import { calculateUserBalance } from '../utils/wallet-utils';
 
 export async function registerWalletRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';

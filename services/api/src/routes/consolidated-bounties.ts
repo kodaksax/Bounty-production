@@ -24,33 +24,9 @@ import { toJsonSchema } from '../utils/zod-json';
 import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
 import { walletService } from '../services/wallet-service';
 import { db } from '../db/connection';
-import { walletTransactions } from '../db/schema';
+import { walletTransactions, bounties as bountiesTable } from '../db/schema';
 import { eq } from 'drizzle-orm';
-
-// Transaction types that add to balance (inflow)
-const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
-// Transaction types that subtract from balance (outflow)
-const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
-
-/**
- * Calculate wallet balance from transactions
- */
-async function calculateUserBalance(userId: string): Promise<number> {
-  const transactions = await db
-    .select()
-    .from(walletTransactions)
-    .where(eq(walletTransactions.user_id, userId));
-
-  let balanceCents = 0;
-  for (const tx of transactions) {
-    if (INFLOW_TYPES.includes(tx.type)) {
-      balanceCents += tx.amount_cents;
-    } else if (OUTFLOW_TYPES.includes(tx.type)) {
-      balanceCents -= tx.amount_cents;
-    }
-  }
-  return balanceCents;
-}
+import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Generate a normalized cache key for bounty list queries
@@ -543,55 +519,94 @@ export async function registerConsolidatedBountyRoutes(
         if (body.skills_required) bountyData.skills_required = body.skills_required;
         if (body.due_date) bountyData.due_date = body.due_date;
 
-        const { data: bounty, error } = await supabase
-          .from('bounties')
-          .insert(bountyData)
-          .select()
-          .single();
-
-        if (error) {
-          request.log.error(
-            { error: error.message, userId },
-            'Bounty creation failed'
-          );
-          throw new Error(error.message);
-        }
-
-        // For paid bounties, create a wallet transaction to deduct the funds
-        if (!body.isForHonor && body.amount > 0) {
-          try {
-            await walletService.createTransaction({
+        // For paid bounties, we need to ensure atomicity between bounty creation and wallet deduction
+        // We'll create the wallet transaction first, then the bounty, and rollback the transaction if bounty creation fails
+        let walletTransaction: any = null;
+        
+        try {
+          // For paid bounties, create wallet transaction first
+          if (!body.isForHonor && body.amount > 0) {
+            // Use a temporary bounty ID placeholder - we'll update it after bounty creation
+            walletTransaction = await db.insert(walletTransactions).values({
               user_id: userId,
-              bountyId: bounty.id,
+              bounty_id: null, // Will be updated after bounty creation
               type: 'bounty_posted',
-              amount: body.amount,
-            });
+              amount_cents: Math.round(body.amount * 100),
+            }).returning();
+            
+            request.log.info(
+              { userId, transactionId: walletTransaction[0].id },
+              'Wallet transaction created, proceeding to create bounty'
+            );
+          }
+
+          // Create the bounty via Supabase
+          const { data: bounty, error } = await supabase
+            .from('bounties')
+            .insert(bountyData)
+            .select()
+            .single();
+
+          if (error) {
+            request.log.error(
+              { error: error.message, userId },
+              'Bounty creation failed, rolling back wallet transaction'
+            );
+            
+            // Rollback: Delete the wallet transaction if bounty creation failed
+            if (walletTransaction) {
+              await db.delete(walletTransactions)
+                .where(eq(walletTransactions.id, walletTransaction[0].id));
+              request.log.info(
+                { transactionId: walletTransaction[0].id },
+                'Wallet transaction rolled back'
+              );
+            }
+            
+            throw new Error(error.message);
+          }
+
+          // Update the wallet transaction with the bounty ID
+          if (walletTransaction) {
+            await db.update(walletTransactions)
+              .set({ bounty_id: bounty.id })
+              .where(eq(walletTransactions.id, walletTransaction[0].id));
             
             request.log.info(
               { userId, bountyId: bounty.id, amount: body.amount },
-              'Wallet funds deducted for bounty posting'
+              'Wallet transaction updated with bounty ID'
             );
-          } catch (walletError) {
-            // If wallet transaction fails, we should ideally rollback the bounty
-            // For now, log the error - in production, this should use a database transaction
-            request.log.error(
-              { error: walletError, bountyId: bounty.id },
-              'Failed to create wallet transaction for bounty'
-            );
-            throw new Error('Failed to deduct funds from wallet');
           }
+
+          // Invalidate bounty list caches since a new bounty was created
+          await cacheInvalidation.invalidateBountyLists();
+
+          request.log.info(
+            { userId, bountyId: bounty.id },
+            'Bounty created successfully'
+          );
+
+          reply.code(201);
+          return bounty;
+        } catch (error) {
+          // If we get here and have a wallet transaction but no bounty, ensure rollback
+          if (walletTransaction) {
+            try {
+              await db.delete(walletTransactions)
+                .where(eq(walletTransactions.id, walletTransaction[0].id));
+              request.log.info(
+                { transactionId: walletTransaction[0].id },
+                'Wallet transaction rolled back due to error'
+              );
+            } catch (rollbackError) {
+              request.log.error(
+                { error: rollbackError, transactionId: walletTransaction[0].id },
+                'Failed to rollback wallet transaction'
+              );
+            }
+          }
+          throw error;
         }
-
-        // Invalidate bounty list caches since a new bounty was created
-        await cacheInvalidation.invalidateBountyLists();
-
-        request.log.info(
-          { userId, bountyId: bounty.id },
-          'Bounty created successfully'
-        );
-
-        reply.code(201);
-        return bounty;
       } catch (error) {
         request.log.error(
           { error, userId },
