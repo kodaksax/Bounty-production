@@ -1,0 +1,188 @@
+name: Load Testing
+
+# This workflow runs load tests against the API
+# Can be triggered manually or on a schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of load test to run'
+        required: true
+        default: 'baseline'
+        type: choice
+        options:
+          - baseline
+          - bounty-flow
+          - spike
+          - stress
+          - mixed
+          - all
+      target_url:
+        description: 'Target API URL (default: staging)'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    # Run load tests weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  load-test:
+    name: Run Load Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+      
+      - name: Verify k6 installation
+        run: k6 version
+      
+      - name: Set target URL
+        id: set-url
+        run: |
+          if [ -n "${{ github.event.inputs.target_url }}" ]; then
+            echo "TARGET_URL=${{ github.event.inputs.target_url }}" >> $GITHUB_ENV
+          elif [ -n "${{ secrets.STAGING_API_URL }}" ]; then
+            echo "TARGET_URL=${{ secrets.STAGING_API_URL }}" >> $GITHUB_ENV
+          else
+            echo "TARGET_URL=http://localhost:3001" >> $GITHUB_ENV
+          fi
+          echo "Testing against: $TARGET_URL"
+      
+      - name: Run baseline test
+        if: github.event.inputs.test_type == 'baseline' || github.event.inputs.test_type == 'all' || github.event_name == 'schedule'
+        run: |
+          k6 run -e BASE_URL=$TARGET_URL \
+            --out json=baseline-results.json \
+            tests/load/baseline-test.js
+        continue-on-error: true
+      
+      - name: Run bounty flow test
+        if: github.event.inputs.test_type == 'bounty-flow' || github.event.inputs.test_type == 'all'
+        run: |
+          k6 run -e BASE_URL=$TARGET_URL \
+            --out json=bounty-flow-results.json \
+            tests/load/bounty-flow.js
+        continue-on-error: true
+      
+      - name: Run spike test
+        if: github.event.inputs.test_type == 'spike' || github.event.inputs.test_type == 'all'
+        run: |
+          k6 run -e BASE_URL=$TARGET_URL \
+            --out json=spike-results.json \
+            tests/load/spike-test.js
+        continue-on-error: true
+      
+      - name: Run stress test
+        if: github.event.inputs.test_type == 'stress'
+        run: |
+          k6 run -e BASE_URL=$TARGET_URL \
+            --out json=stress-results.json \
+            tests/load/stress-test.js
+        continue-on-error: true
+      
+      - name: Run mixed scenario test
+        if: github.event.inputs.test_type == 'mixed'
+        run: |
+          k6 run -e BASE_URL=$TARGET_URL \
+            --out json=mixed-results.json \
+            tests/load/mixed-scenario.js
+        continue-on-error: true
+      
+      - name: Install dependencies for report generation
+        run: npm install --no-save pg
+      
+      - name: Generate HTML reports
+        run: |
+          for file in *-results.json; do
+            if [ -f "$file" ]; then
+              node scripts/generate-load-test-report.js "$file"
+            fi
+          done
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            *-results.json
+            *-results.html
+          retention-days: 30
+      
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read baseline results if available
+            let comment = '## 📊 Load Test Results\n\n';
+            
+            if (fs.existsSync('baseline-results.json')) {
+              const results = JSON.parse(fs.readFileSync('baseline-results.json', 'utf8'));
+              const metrics = results.metrics || {};
+              
+              comment += '### Baseline Test (10 VUs, 5 minutes)\n\n';
+              comment += '| Metric | Value | Target | Status |\n';
+              comment += '|--------|-------|--------|--------|\n';
+              
+              const p95 = metrics.http_req_duration?.values?.['p(95)'] || 0;
+              const errorRate = metrics.http_req_failed?.values?.rate || 0;
+              const totalReqs = metrics.http_reqs?.values?.count || 0;
+              
+              comment += `| p95 Response Time | ${p95.toFixed(2)}ms | < 300ms | ${p95 < 300 ? '✅' : '❌'} |\n`;
+              comment += `| Error Rate | ${(errorRate * 100).toFixed(2)}% | < 1% | ${errorRate < 0.01 ? '✅' : '❌'} |\n`;
+              comment += `| Total Requests | ${totalReqs} | - | - |\n`;
+              
+              comment += '\n[View detailed HTML report in artifacts]';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+      
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Load Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Test Type: ${{ github.event.inputs.test_type || 'baseline (scheduled)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "Target URL: $TARGET_URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts to view detailed HTML reports." >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: load-test
+    if: always() && github.event_name == 'schedule'
+    
+    steps:
+      - name: Send notification
+        run: |
+          echo "Load tests completed. Check artifacts for results."
+          # Add your notification logic here (Slack, email, etc.)
