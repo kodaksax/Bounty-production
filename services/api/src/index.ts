@@ -90,6 +90,7 @@ const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidat
 const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetricsRoutes } = require('./routes/metrics');
+const { closeRateLimitRedis } = require('./middleware/rate-limiter');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -848,6 +849,9 @@ process.on('SIGINT', async () => {
   
   // Stop the outbox worker
   outboxWorker.stop();
+  
+  // Close rate limit Redis connection
+  await closeRateLimitRedis();
   
   // Flush analytics events
   await backendAnalytics.flush();

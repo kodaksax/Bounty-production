@@ -66,53 +66,49 @@ function getRedisClient(): InstanceType<typeof Redis> {
 class RedisRateLimitStore {
   private redis: InstanceType<typeof Redis>;
   private namespace: string;
+  private ttlSeconds: number;
 
-  constructor(namespace: string) {
+  constructor(namespace: string, ttlMs: number) {
     this.redis = getRedisClient();
     this.namespace = namespace;
+    this.ttlSeconds = Math.ceil(ttlMs / 1000);
   }
 
   /**
-   * Increment the request count for a key
+   * Increment the request count for a key using atomic Lua script
    * @param key - The rate limit key (IP, IP+email, etc.)
    * @param callback - Callback with current count and TTL
    */
   async incr(key: string, callback: (err: Error | null, result?: { current: number; ttl: number }) => void): Promise<void> {
     try {
       const redisKey = `${this.namespace}${key}`;
-      // Use configured time window for TTL (convert from ms to seconds)
-      const ttl = Math.ceil(config.rateLimit.auth.windowMs / 1000);
       
-      // Use MULTI/EXEC for atomic operations
-      const multi = this.redis.multi();
-      multi.incr(redisKey);
-      multi.pttl(redisKey);
-      
-      const results = await multi.exec();
-      
-      if (!results || results.length < 2) {
-        return callback(new Error('Redis multi command failed'));
+      // Use Lua script for atomic INCR + EXPIRE + PTTL operations
+      // This ensures the key always has a TTL set atomically
+      const script = `
+        local key = KEYS[1]
+        local ttlSeconds = tonumber(ARGV[1])
+        local current = redis.call("INCR", key)
+        local ttlMs = redis.call("PTTL", key)
+        if ttlMs == -1 or ttlMs == -2 then
+          redis.call("EXPIRE", key, ttlSeconds)
+          ttlMs = ttlSeconds * 1000
+        end
+        return {current, ttlMs}
+      `;
+
+      const result = await this.redis.eval(script, 1, redisKey, this.ttlSeconds) as [number, number];
+
+      if (!Array.isArray(result) || result.length < 2) {
+        return callback(new Error('Redis eval script returned invalid result'));
       }
-      
-      const [incrErr, incrResult] = results[0];
-      const [ttlErr, ttlResult] = results[1];
-      
-      if (incrErr || ttlErr) {
-        return callback((incrErr || ttlErr) as Error);
-      }
-      
-      const current = incrResult as number;
-      let ttlMs = ttlResult as number;
-      
-      // If key is new (no TTL set), set expiration
-      if (ttlMs === -1 || ttlMs === -2) {
-        await this.redis.expire(redisKey, ttl);
-        ttlMs = ttl * 1000;
-      }
-      
+
+      const current = result[0];
+      const ttlMs = result[1];
+
       callback(null, {
         current,
-        ttl: ttlMs > 0 ? Math.ceil(ttlMs / 1000) : ttl,
+        ttl: ttlMs > 0 ? Math.ceil(ttlMs / 1000) : this.ttlSeconds,
       });
     } catch (error) {
       callback(error as Error);
@@ -122,10 +118,14 @@ class RedisRateLimitStore {
   /**
    * Create a child store with a new namespace
    * Used by @fastify/rate-limit for per-route stores
+   * Sanitizes route info to prevent extremely long keys
    */
   child(routeOptions: { routeInfo: { method: string; url: string } }): RedisRateLimitStore {
-    const childNamespace = `${this.namespace}${routeOptions.routeInfo.method}:${routeOptions.routeInfo.url}:`;
-    return new RedisRateLimitStore(childNamespace);
+    const { method, url } = routeOptions.routeInfo;
+    // Sanitize and limit URL length to prevent extremely long Redis keys
+    const sanitizedUrl = url.slice(0, 100).replace(/[^a-zA-Z0-9\-_/]/g, '_');
+    const childNamespace = `${this.namespace}${method}:${sanitizedUrl}:`;
+    return new RedisRateLimitStore(childNamespace, this.ttlSeconds * 1000);
   }
 }
 
@@ -146,6 +146,36 @@ function sanitizeEmail(email: string): string {
 }
 
 /**
+ * Get client IP, respecting X-Forwarded-For header if trustProxy is enabled
+ * Note: Fastify's trustProxy setting must be configured for this to work correctly
+ */
+function getClientIp(request: FastifyRequest): string {
+  // Fastify automatically handles X-Forwarded-For when trustProxy is enabled
+  // request.ip will contain the correct client IP
+  return request.ip || 'unknown';
+}
+
+/**
+ * Lazy initialization functions to avoid module-level instantiation errors
+ */
+let authStoreInstance: RedisRateLimitStore | null = null;
+let apiStoreInstance: RedisRateLimitStore | null = null;
+
+function getAuthStore(): RedisRateLimitStore {
+  if (!authStoreInstance) {
+    authStoreInstance = new RedisRateLimitStore('rl:auth:', config.rateLimit.auth.windowMs);
+  }
+  return authStoreInstance;
+}
+
+function getApiStore(): RedisRateLimitStore {
+  if (!apiStoreInstance) {
+    apiStoreInstance = new RedisRateLimitStore('rl:api:', config.rateLimit.global.windowMs);
+  }
+  return apiStoreInstance;
+}
+
+/**
  * Aggressive rate limiter for authentication endpoints
  * - 5 attempts per 15 minutes
  * - Keys by IP + email to prevent brute force attacks
@@ -155,9 +185,12 @@ export const authLimiterConfig = {
   max: config.rateLimit.auth.max, // 5 attempts
   timeWindow: config.rateLimit.auth.windowMs, // 15 minutes
   cache: 10000, // Keep 10k keys in memory cache for performance
+  skipOnError: true, // Graceful degradation if Redis is unavailable
   
-  // Use custom Redis store
-  redis: new RedisRateLimitStore('rl:auth:'),
+  // Use custom Redis store (lazy initialization)
+  get store() {
+    return getAuthStore();
+  },
   
   // Key generator: IP + email for targeted limiting
   keyGenerator: (request: FastifyRequest) => {
@@ -165,7 +198,7 @@ export const authLimiterConfig = {
     const rawEmail = body?.email || 'unknown';
     // Sanitize email to prevent key collision attacks
     const email = sanitizeEmail(rawEmail);
-    const ip = request.ip || 'unknown';
+    const ip = getClientIp(request);
     return `${ip}-${email}`;
   },
   
@@ -218,12 +251,15 @@ export const apiLimiterConfig = {
   max: config.rateLimit.global.max, // 100 requests
   timeWindow: config.rateLimit.global.windowMs, // 1 minute
   cache: 10000,
+  skipOnError: true, // Graceful degradation if Redis is unavailable
   
-  // Use custom Redis store
-  redis: new RedisRateLimitStore('rl:api:'),
+  // Use custom Redis store (lazy initialization)
+  get store() {
+    return getApiStore();
+  },
   
   keyGenerator: (request: FastifyRequest) => {
-    return request.ip || 'unknown';
+    return getClientIp(request);
   },
   
   errorResponseBuilder: (request: FastifyRequest, context: any) => {
@@ -259,3 +295,26 @@ export async function closeRateLimitRedis(): Promise<void> {
     console.log('[RateLimit] Redis connection closed');
   }
 }
+
+/**
+ * Register process-level shutdown hooks to ensure the rate limit Redis client
+ * is closed properly. Using `once` prevents multiple invocations.
+ */
+function registerRateLimitShutdownHooks(): void {
+  const shutdown = (signal: string) => {
+    try {
+      // Fire-and-forget async cleanup
+      void closeRateLimitRedis();
+      console.log(`[RateLimit] Shutdown hook triggered by ${signal}`);
+    } catch (err) {
+      console.error('[RateLimit] Error during Redis shutdown', err);
+    }
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('beforeExit', () => shutdown('beforeExit'));
+}
+
+// Register shutdown hooks when this module is loaded
+registerRateLimitShutdownHooks();

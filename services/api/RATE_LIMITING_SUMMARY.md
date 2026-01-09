@@ -10,8 +10,8 @@ Successfully implemented Redis-backed rate limiting on authentication endpoints 
 - ✅ Aggressive limits on auth endpoints (5 attempts / 15 minutes)
 - ✅ IP + email keying with sanitization
 - ✅ Standard RFC-compliant headers
-- ✅ Atomic Redis operations
-- ✅ Graceful degradation if Redis unavailable
+- ✅ Atomic Redis operations using Lua scripts
+- ✅ Graceful degradation via skipOnError (continues without rate limiting if Redis unavailable)
 
 ### Security Hardening
 - ✅ Credential protection (no passwords in URLs or logs)

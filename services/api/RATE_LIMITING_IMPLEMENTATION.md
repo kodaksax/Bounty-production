@@ -45,15 +45,12 @@ class RedisRateLimitStore {
 ### Environment Variables
 
 ```bash
-# Redis Connection (option 1: individual settings)
+# Redis Connection
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_DB=0
 REDIS_ENABLED=true
-
-# Redis Connection (option 2: connection string)
-REDIS_URL=redis://[:password@]host:port/db
 
 # Rate Limit Settings
 AUTH_RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
@@ -61,6 +58,21 @@ AUTH_RATE_LIMIT_MAX=5             # 5 attempts
 RATE_LIMIT_WINDOW_MS=60000        # 1 minute
 RATE_LIMIT_MAX_REQUESTS=100       # 100 requests
 ```
+
+### Proxy Configuration
+
+**Important**: If your API is behind a proxy (nginx, AWS ALB, etc.), you must configure Fastify's `trustProxy` option for rate limiting to work correctly. Without this, all requests will appear to come from the proxy's IP address.
+
+```typescript
+// In your Fastify server setup
+const fastify = Fastify({
+  trustProxy: true, // Enable for single proxy
+  // Or for multiple proxies:
+  // trustProxy: ['127.0.0.1', '10.0.0.0/8']
+});
+```
+
+See [Fastify trustProxy documentation](https://fastify.dev/docs/latest/Reference/Server/#trustproxy) for more details.
 
 ### Code Configuration
 
