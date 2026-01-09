@@ -7,6 +7,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "composite": true,
+    "noEmit": false,
     "moduleResolution": "bundler"
   },
   "include": [

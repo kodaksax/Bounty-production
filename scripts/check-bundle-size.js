@@ -22,7 +22,7 @@ const cliArgs = [
   '--expo',
   'true',
   '--entry-file',
-  'expo-router/entry',
+  'expo-router/entry.js',
   '--bundle-output',
   bundleOutput,
   '--format',
