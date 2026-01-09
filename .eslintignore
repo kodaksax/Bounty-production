@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+web-build/
+.expo/
+.expo-shared/
+
+# Generated files
+expo-env.d.ts
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+.tmp/
+
+# Docker
+.docker/
+postgres-data/
+
+# IDE
+.vscode/
+.idea/
+
+# Specific problematic files that need refactoring
+listen-test.js
+api/server.js
+server/index.js
+lib/db-sqlite.js
+jest.setup.js
+
+# Config files
+*.config.js
+*.config.cjs
+*.config.ts
+!.eslintrc.js
+
+# Declaration files
+*.d.ts
+
+# Package workspaces (lint separately)
+packages/
+services/
+
+# Scripts
+scripts/
+
+# Database
+database/
+
+# Stubs
+stubs/
+
+# Tests (different lint rules should apply)
+__tests__/
+tests/
+
+# Examples (demo code, not production)
+examples/
+
+# Documentation
+*.md
