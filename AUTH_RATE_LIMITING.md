@@ -14,17 +14,18 @@ This document describes the rate limiting implementation on authentication endpo
 
 ### Rate Limit Configuration
 
-**Legacy API (api/server.js)**
+**Legacy API (api/server.js)** - ⭐ NEWLY IMPLEMENTED
 - **Window**: 15 minutes (900,000 ms)
 - **Max Requests**: 5 per window per IP
 - **Response**: HTTP 429 with retry information
 - **Headers**: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After
 
-**Consolidated API (services/api/src/routes/consolidated-auth.ts)**
+**Consolidated API (services/api/src/routes/consolidated-auth.ts)** - ✅ ALREADY PROTECTED
 - **Window**: 15 minutes (configurable via `AUTH_RATE_LIMIT_WINDOW_MS`)
 - **Max Requests**: 5 (configurable via `AUTH_RATE_LIMIT_MAX`)
 - **Response**: HTTP 429 with structured error
 - **Implementation**: Custom in-memory rate limiter with cleanup
+- **Note**: This implementation was already in place; this PR adds protection to legacy endpoints
 
 ### Protected Endpoints
 

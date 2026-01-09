@@ -2,6 +2,11 @@
  * Auth Rate Limiting Test
  * Tests brute force protection on authentication endpoints
  * 
+ * REQUIREMENTS:
+ * - API server must be running (default: http://localhost:3000)
+ * - Override with environment variable: API_BASE_URL=http://localhost:3000
+ * - Start server with: npm run api (or node api/server.js)
+ * 
  * This test verifies that:
  * 1. Rate limiting is applied to all auth endpoints
  * 2. Requests are allowed up to the limit (5 per 15 minutes)

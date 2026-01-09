@@ -199,11 +199,15 @@ const authRateLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   handler: (req, res) => {
     console.warn(`[RateLimit] Auth rate limit exceeded for IP: ${req.ip}`);
+    
+    // Calculate retry-after in seconds (15 minutes from now)
+    const retryAfterSeconds = 15 * 60; // 15 minutes
+    
     res.status(429).json({
       error: 'Too Many Requests',
       message: 'Too many authentication attempts. Please try again in 15 minutes.',
       code: 'RATE_LIMIT_EXCEEDED',
-      retryAfter: Math.ceil(req.rateLimit.resetTime / 1000)
+      retryAfter: retryAfterSeconds
     });
   }
 });
