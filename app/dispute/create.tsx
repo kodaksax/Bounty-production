@@ -16,7 +16,7 @@ import { disputeService } from '../../lib/services/dispute-service';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
 
-type EvidenceItem = {
+type LocalLocalEvidenceItem = {
   id: string;
   type: 'text' | 'image' | 'document' | 'link';
   content: string;
@@ -34,7 +34,7 @@ export default function CreateDisputeScreen() {
   const userId = session?.user?.id;
 
   const [reason, setReason] = useState('');
-  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [evidence, setEvidence] = useState<LocalEvidenceItem[]>([]);
   const [newEvidenceType, setNewEvidenceType] = useState<'text' | 'image' | 'document' | 'link'>('text');
   const [newEvidenceContent, setNewEvidenceContent] = useState('');
   const [newEvidenceDescription, setNewEvidenceDescription] = useState('');
@@ -47,7 +47,7 @@ export default function CreateDisputeScreen() {
       return;
     }
 
-    const newEvidence: EvidenceItem = {
+    const newEvidence: LocalEvidenceItem = {
       id: generateEvidenceId(),
       type: newEvidenceType,
       content: newEvidenceContent,
@@ -240,6 +240,8 @@ export default function CreateDisputeScreen() {
           {showAddEvidence && (
             <View style={styles.addEvidenceForm}>
               <Text style={styles.formLabel}>Type</Text>
+              {/* Note: Currently supporting text and link. Image and document upload 
+                  can be added with proper file upload handling and storage integration */}
               <View style={styles.typeSelector}>
                 {(['text', 'link'] as const).map((type) => (
                   <TouchableOpacity

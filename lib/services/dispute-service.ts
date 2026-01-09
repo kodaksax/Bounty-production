@@ -848,7 +848,7 @@ export const disputeService = {
 
       // Send notification to admins (this would need admin notification system)
       // For now, just log it
-      logger.error('New appeal created', { disputeId, appellantId });
+      console.log('New appeal created', { disputeId, appellantId });
 
       return true;
     } catch (err) {
@@ -954,7 +954,7 @@ export const disputeService = {
         closedCount++;
       }
 
-      logger.error(`Auto-closed ${closedCount} stale disputes`, {});
+      console.log(`Auto-closed ${closedCount} stale disputes`);
       return closedCount;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -1016,7 +1016,7 @@ export const disputeService = {
         escalatedCount++;
       }
 
-      logger.error(`Escalated ${escalatedCount} unresolved disputes`, {});
+      console.log(`Escalated ${escalatedCount} unresolved disputes`);
       return escalatedCount;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -1045,6 +1045,12 @@ export const disputeService = {
 
       // Simple heuristic-based suggestion
       // In a production system, this could use ML or more sophisticated logic
+      
+      // Evidence scoring weights
+      const EVIDENCE_SCORE_IMAGE = 3;
+      const EVIDENCE_SCORE_DOCUMENT = 2;
+      const EVIDENCE_SCORE_TEXT = 1;
+      
       let hunterScore = 0;
       let posterScore = 0;
 
@@ -1052,10 +1058,16 @@ export const disputeService = {
       const bounty = await bountyService.getById(dispute.bountyId);
       if (bounty) {
         evidence.forEach((ev: any) => {
+          const scoreValue = ev.type === 'image' 
+            ? EVIDENCE_SCORE_IMAGE 
+            : ev.type === 'document' 
+            ? EVIDENCE_SCORE_DOCUMENT 
+            : EVIDENCE_SCORE_TEXT;
+            
           if (ev.uploaded_by === bounty.hunter_id) {
-            hunterScore += ev.type === 'image' ? 3 : ev.type === 'document' ? 2 : 1;
+            hunterScore += scoreValue;
           } else if (ev.uploaded_by === bounty.user_id) {
-            posterScore += ev.type === 'image' ? 3 : ev.type === 'document' ? 2 : 1;
+            posterScore += scoreValue;
           }
         });
       }

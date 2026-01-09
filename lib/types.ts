@@ -417,8 +417,8 @@ export interface BountyDispute {
 // Dispute Evidence
 export interface DisputeEvidence {
   id: string;
-  disputeId?: string;
-  uploadedBy?: string;
+  disputeId: string; // Required for database operations
+  uploadedBy: string; // Required for database operations
   type: 'text' | 'image' | 'document' | 'link';
   content: string;
   description?: string;

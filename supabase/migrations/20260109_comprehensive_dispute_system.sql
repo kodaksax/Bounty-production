@@ -1,6 +1,11 @@
 -- Comprehensive Dispute Resolution System Migration
 -- This migration enhances the existing dispute system with resolution records, comments, and audit trails
 
+-- Note: Using CREATE TABLE IF NOT EXISTS for bounty_cancellations and bounty_disputes
+-- as these tables may already exist from previous migrations. If they exist, this will
+-- only add new columns if needed. For production, consider using ALTER TABLE statements
+-- to explicitly add new columns to existing tables.
+
 -- First, ensure the bounty_cancellations table exists with all necessary fields
 CREATE TABLE IF NOT EXISTS bounty_cancellations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
