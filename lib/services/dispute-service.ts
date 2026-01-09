@@ -510,4 +510,652 @@ export const disputeService = {
       return [];
     }
   },
+
+  /**
+   * Upload evidence to a dispute using the new evidence table
+   */
+  async uploadEvidence(
+    disputeId: string,
+    userId: string,
+    evidenceData: {
+      type: 'text' | 'image' | 'document' | 'link';
+      content: string;
+      description?: string;
+      mimeType?: string;
+      fileSize?: number;
+    }
+  ): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { error } = await supabase
+        .from('dispute_evidence')
+        .insert({
+          dispute_id: disputeId,
+          uploaded_by: userId,
+          type: evidenceData.type,
+          content: evidenceData.content,
+          description: evidenceData.description,
+          mime_type: evidenceData.mimeType,
+          file_size: evidenceData.fileSize,
+        });
+
+      if (error) {
+        logger.error('Error uploading evidence', { error, disputeId });
+        throw error;
+      }
+
+      // Log audit event
+      await this.logAuditEvent(disputeId, 'evidence_added', userId, 'user', {
+        evidenceType: evidenceData.type,
+      });
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in uploadEvidence', { disputeId, error: { message: error.message } });
+      return false;
+    }
+  },
+
+  /**
+   * Get all evidence for a dispute
+   */
+  async getDisputeEvidence(disputeId: string): Promise<any[]> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_evidence')
+        .select('*')
+        .eq('dispute_id', disputeId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        logger.error('Error fetching dispute evidence', { error, disputeId });
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getDisputeEvidence', { disputeId, error: { message: error.message } });
+      return [];
+    }
+  },
+
+  /**
+   * Add a comment to a dispute
+   */
+  async addComment(
+    disputeId: string,
+    userId: string,
+    comment: string,
+    isInternal: boolean = false
+  ): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { error } = await supabase
+        .from('dispute_comments')
+        .insert({
+          dispute_id: disputeId,
+          user_id: userId,
+          comment,
+          is_internal: isInternal,
+        });
+
+      if (error) {
+        logger.error('Error adding comment', { error, disputeId });
+        throw error;
+      }
+
+      // Log audit event
+      await this.logAuditEvent(disputeId, 'comment_added', userId, isInternal ? 'admin' : 'user', {
+        isInternal,
+      });
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in addComment', { disputeId, error: { message: error.message } });
+      return false;
+    }
+  },
+
+  /**
+   * Get all comments for a dispute
+   */
+  async getDisputeComments(disputeId: string, includeInternal: boolean = false): Promise<any[]> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      let query = supabase
+        .from('dispute_comments')
+        .select('*, profiles:user_id(username, avatar)')
+        .eq('dispute_id', disputeId);
+
+      if (!includeInternal) {
+        query = query.eq('is_internal', false);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: true });
+
+      if (error) {
+        logger.error('Error fetching dispute comments', { error, disputeId });
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getDisputeComments', { disputeId, error: { message: error.message } });
+      return [];
+    }
+  },
+
+  /**
+   * Make a resolution decision with fund distribution
+   */
+  async makeResolutionDecision(
+    disputeId: string,
+    adminId: string,
+    decision: {
+      outcome: 'release' | 'refund' | 'split' | 'other';
+      amountToHunter?: number;
+      amountToPoster?: number;
+      rationale: string;
+      metadata?: Record<string, any>;
+    }
+  ): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      // Get the dispute and bounty details
+      const dispute = await this.getDisputeById(disputeId);
+      if (!dispute) {
+        throw new Error('Dispute not found');
+      }
+
+      const bounty = await bountyService.getById(dispute.bountyId);
+      if (!bounty) {
+        throw new Error('Bounty not found');
+      }
+
+      // Calculate amounts based on outcome
+      let amountToHunter = decision.amountToHunter || 0;
+      let amountToPoster = decision.amountToPoster || 0;
+
+      if (decision.outcome === 'release') {
+        // Full payment to hunter
+        amountToHunter = bounty.amount || 0;
+        amountToPoster = 0;
+      } else if (decision.outcome === 'refund') {
+        // Full refund to poster
+        amountToHunter = 0;
+        amountToPoster = bounty.amount || 0;
+      }
+
+      // Create resolution record
+      const { data: resolutionData, error: resolutionError } = await supabase
+        .from('dispute_resolutions')
+        .insert({
+          dispute_id: disputeId,
+          admin_id: adminId,
+          outcome: decision.outcome,
+          amount_to_hunter: amountToHunter,
+          amount_to_poster: amountToPoster,
+          rationale: decision.rationale,
+          metadata: decision.metadata,
+        })
+        .select()
+        .single();
+
+      if (resolutionError) {
+        logger.error('Error creating resolution', { error: resolutionError, disputeId });
+        throw resolutionError;
+      }
+
+      // Update dispute status
+      await this.resolveDispute(disputeId, decision.rationale, adminId);
+
+      // Log audit event
+      await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {
+        outcome: decision.outcome,
+        amountToHunter,
+        amountToPoster,
+      });
+
+      // Send notifications
+      try {
+        // Notify initiator
+        await sendNotification(
+          dispute.initiatorId,
+          'dispute_resolved',
+          'Dispute Resolved',
+          `A resolution has been made for your dispute. Outcome: ${decision.outcome}`,
+          {
+            disputeId,
+            bountyId: dispute.bountyId,
+            outcome: decision.outcome,
+          }
+        );
+
+        // Notify other parties
+        if (bounty.user_id && bounty.user_id !== dispute.initiatorId) {
+          await sendNotification(
+            String(bounty.user_id),
+            'dispute_resolved',
+            'Dispute Resolved',
+            `A resolution has been made for the dispute on bounty: ${bounty.title}`,
+            {
+              disputeId,
+              bountyId: dispute.bountyId,
+              outcome: decision.outcome,
+            }
+          );
+        }
+      } catch (notifError) {
+        logger.error('Error sending resolution notifications', { error: notifError });
+      }
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in makeResolutionDecision', { 
+        disputeId, 
+        error: { message: error.message } 
+      });
+      return false;
+    }
+  },
+
+  /**
+   * Get resolution for a dispute
+   */
+  async getResolution(disputeId: string): Promise<any | null> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_resolutions')
+        .select('*, admin:admin_id(username, avatar)')
+        .eq('dispute_id', disputeId)
+        .maybeSingle();
+
+      if (error) {
+        logger.error('Error fetching resolution', { error, disputeId });
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getResolution', { disputeId, error: { message: error.message } });
+      return null;
+    }
+  },
+
+  /**
+   * Create an appeal for a resolved dispute
+   */
+  async createAppeal(
+    disputeId: string,
+    appellantId: string,
+    reason: string
+  ): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      // Verify dispute is resolved
+      const dispute = await this.getDisputeById(disputeId);
+      if (!dispute || dispute.status !== 'resolved') {
+        throw new Error('Can only appeal resolved disputes');
+      }
+
+      const { error } = await supabase
+        .from('dispute_appeals')
+        .insert({
+          dispute_id: disputeId,
+          appellant_id: appellantId,
+          reason,
+          status: 'pending',
+        });
+
+      if (error) {
+        logger.error('Error creating appeal', { error, disputeId });
+        throw error;
+      }
+
+      // Log audit event
+      await this.logAuditEvent(disputeId, 'appeal_created', appellantId, 'user', {
+        reason: reason.substring(0, 100),
+      });
+
+      // Send notification to admins (this would need admin notification system)
+      // For now, just log it
+      logger.error('New appeal created', { disputeId, appellantId });
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in createAppeal', { disputeId, error: { message: error.message } });
+      return false;
+    }
+  },
+
+  /**
+   * Get appeals for a dispute
+   */
+  async getAppeals(disputeId: string): Promise<any[]> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_appeals')
+        .select('*, appellant:appellant_id(username, avatar)')
+        .eq('dispute_id', disputeId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching appeals', { error, disputeId });
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getAppeals', { disputeId, error: { message: error.message } });
+      return [];
+    }
+  },
+
+  /**
+   * Auto-close stale disputes (no response after 7 days)
+   */
+  async autoCloseStaleDisputes(): Promise<number> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const now = new Date().toISOString();
+
+      // Find disputes that should be auto-closed
+      const { data: staleDisputes, error: fetchError } = await supabase
+        .from('bounty_disputes')
+        .select('*')
+        .in('status', ['open', 'under_review'])
+        .lte('auto_close_at', now);
+
+      if (fetchError) {
+        logger.error('Error fetching stale disputes', { error: fetchError });
+        return 0;
+      }
+
+      if (!staleDisputes || staleDisputes.length === 0) {
+        return 0;
+      }
+
+      // Close each dispute
+      let closedCount = 0;
+      for (const dispute of staleDisputes) {
+        const { error: updateError } = await supabase
+          .from('bounty_disputes')
+          .update({
+            status: 'closed',
+            resolution: 'Auto-closed due to inactivity after 7 days',
+            resolved_at: now,
+          })
+          .eq('id', dispute.id);
+
+        if (updateError) {
+          logger.error('Error auto-closing dispute', { error: updateError, disputeId: dispute.id });
+          continue;
+        }
+
+        // Log audit event
+        await this.logAuditEvent(dispute.id, 'auto_closed', null, 'system', {
+          reason: 'No activity for 7 days',
+        });
+
+        // Send notification
+        try {
+          await sendNotification(
+            dispute.initiator_id,
+            'dispute_resolved',
+            'Dispute Auto-Closed',
+            'Your dispute was automatically closed due to inactivity.',
+            {
+              disputeId: dispute.id,
+              bountyId: dispute.bounty_id,
+            }
+          );
+        } catch (notifError) {
+          logger.error('Error sending auto-close notification', { error: notifError });
+        }
+
+        closedCount++;
+      }
+
+      logger.error(`Auto-closed ${closedCount} stale disputes`, {});
+      return closedCount;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in autoCloseStaleDisputes', { error: { message: error.message } });
+      return 0;
+    }
+  },
+
+  /**
+   * Escalate unresolved disputes after 14 days
+   */
+  async escalateUnresolvedDisputes(): Promise<number> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const fourteenDaysAgo = new Date();
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+      // Find disputes that should be escalated
+      const { data: unresolvedDisputes, error: fetchError } = await supabase
+        .from('bounty_disputes')
+        .select('*')
+        .in('status', ['open', 'under_review'])
+        .eq('escalated', false)
+        .lte('created_at', fourteenDaysAgo.toISOString());
+
+      if (fetchError) {
+        logger.error('Error fetching unresolved disputes', { error: fetchError });
+        return 0;
+      }
+
+      if (!unresolvedDisputes || unresolvedDisputes.length === 0) {
+        return 0;
+      }
+
+      // Escalate each dispute
+      let escalatedCount = 0;
+      for (const dispute of unresolvedDisputes) {
+        const { error: updateError } = await supabase
+          .from('bounty_disputes')
+          .update({
+            escalated: true,
+            escalated_at: new Date().toISOString(),
+          })
+          .eq('id', dispute.id);
+
+        if (updateError) {
+          logger.error('Error escalating dispute', { error: updateError, disputeId: dispute.id });
+          continue;
+        }
+
+        // Log audit event
+        await this.logAuditEvent(dispute.id, 'escalated', null, 'system', {
+          reason: 'Unresolved for 14 days',
+        });
+
+        escalatedCount++;
+      }
+
+      logger.error(`Escalated ${escalatedCount} unresolved disputes`, {});
+      return escalatedCount;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in escalateUnresolvedDisputes', { error: { message: error.message } });
+      return 0;
+    }
+  },
+
+  /**
+   * Calculate suggested resolution based on evidence
+   */
+  async calculateSuggestedResolution(disputeId: string): Promise<{
+    suggestedOutcome: 'release' | 'refund' | 'split';
+    confidence: number;
+    reasoning: string;
+  }> {
+    try {
+      // Get dispute and evidence
+      const dispute = await this.getDisputeById(disputeId);
+      if (!dispute) {
+        throw new Error('Dispute not found');
+      }
+
+      const evidence = await this.getDisputeEvidence(disputeId);
+      const comments = await this.getDisputeComments(disputeId);
+
+      // Simple heuristic-based suggestion
+      // In a production system, this could use ML or more sophisticated logic
+      let hunterScore = 0;
+      let posterScore = 0;
+
+      // Count evidence submitted by each party
+      const bounty = await bountyService.getById(dispute.bountyId);
+      if (bounty) {
+        evidence.forEach((ev: any) => {
+          if (ev.uploaded_by === bounty.hunter_id) {
+            hunterScore += ev.type === 'image' ? 3 : ev.type === 'document' ? 2 : 1;
+          } else if (ev.uploaded_by === bounty.user_id) {
+            posterScore += ev.type === 'image' ? 3 : ev.type === 'document' ? 2 : 1;
+          }
+        });
+      }
+
+      // Determine outcome
+      let suggestedOutcome: 'release' | 'refund' | 'split' = 'split';
+      let confidence = 0.5;
+      let reasoning = '';
+
+      const totalScore = hunterScore + posterScore;
+      if (totalScore === 0) {
+        reasoning = 'Insufficient evidence from both parties. Recommend splitting the bounty.';
+        suggestedOutcome = 'split';
+        confidence = 0.3;
+      } else if (hunterScore > posterScore * 2) {
+        reasoning = 'Hunter provided significantly more evidence. Recommend releasing funds to hunter.';
+        suggestedOutcome = 'release';
+        confidence = Math.min(0.8, 0.5 + (hunterScore / (totalScore + 1)) * 0.3);
+      } else if (posterScore > hunterScore * 2) {
+        reasoning = 'Poster provided significantly more evidence. Recommend refunding to poster.';
+        suggestedOutcome = 'refund';
+        confidence = Math.min(0.8, 0.5 + (posterScore / (totalScore + 1)) * 0.3);
+      } else {
+        reasoning = 'Both parties provided comparable evidence. Recommend splitting the bounty.';
+        suggestedOutcome = 'split';
+        confidence = 0.6;
+      }
+
+      return {
+        suggestedOutcome,
+        confidence,
+        reasoning,
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in calculateSuggestedResolution', { 
+        disputeId, 
+        error: { message: error.message } 
+      });
+      return {
+        suggestedOutcome: 'split',
+        confidence: 0.5,
+        reasoning: 'Unable to calculate suggestion due to error.',
+      };
+    }
+  },
+
+  /**
+   * Get audit log for a dispute
+   */
+  async getAuditLog(disputeId: string): Promise<any[]> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_audit_log')
+        .select('*, actor:actor_id(username, avatar)')
+        .eq('dispute_id', disputeId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching audit log', { error, disputeId });
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getAuditLog', { disputeId, error: { message: error.message } });
+      return [];
+    }
+  },
+
+  /**
+   * Log an audit event
+   */
+  async logAuditEvent(
+    disputeId: string,
+    action: string,
+    actorId: string | null,
+    actorType: 'user' | 'admin' | 'system',
+    details?: Record<string, any>
+  ): Promise<void> {
+    try {
+      if (!isSupabaseConfigured) {
+        return;
+      }
+
+      await supabase.from('dispute_audit_log').insert({
+        dispute_id: disputeId,
+        action,
+        actor_id: actorId,
+        actor_type: actorType,
+        details,
+      });
+    } catch (err) {
+      // Don't throw errors from audit logging
+      logger.error('Error logging audit event', { error: err });
+    }
+  },
 };

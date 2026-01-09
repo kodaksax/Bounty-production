@@ -407,15 +407,72 @@ export interface BountyDispute {
   resolvedAt?: string;
   createdAt: string;
   updatedAt?: string;
+  // Automation fields
+  autoCloseAt?: string;
+  escalated?: boolean;
+  escalatedAt?: string;
+  lastActivityAt?: string;
 }
 
 // Dispute Evidence
 export interface DisputeEvidence {
   id: string;
+  disputeId?: string;
+  uploadedBy?: string;
   type: 'text' | 'image' | 'document' | 'link';
   content: string;
   description?: string;
+  mimeType?: string;
+  fileSize?: number;
   uploadedAt: string;
+}
+
+// Dispute Resolution Record
+export interface DisputeResolution {
+  id: string;
+  disputeId: string;
+  adminId: string;
+  outcome: 'release' | 'refund' | 'split' | 'other';
+  amountToHunter: number; // Amount in cents
+  amountToPoster: number; // Amount in cents
+  rationale: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+// Dispute Comment for mediation
+export interface DisputeComment {
+  id: string;
+  disputeId: string;
+  userId: string;
+  comment: string;
+  isInternal: boolean; // Internal admin notes vs public comments
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Dispute Appeal
+export interface DisputeAppeal {
+  id: string;
+  disputeId: string;
+  appellantId: string;
+  reason: string;
+  status: 'pending' | 'reviewing' | 'accepted' | 'rejected';
+  reviewedBy?: string;
+  reviewNotes?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+// Dispute Audit Log Entry
+export interface DisputeAuditLog {
+  id: string;
+  disputeId: string;
+  action: string;
+  actorId?: string;
+  actorType: 'user' | 'admin' | 'system';
+  details?: Record<string, any>;
+  createdAt: string;
 }
 
 // Attachment metadata for bounties
