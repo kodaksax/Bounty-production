@@ -1,8 +1,9 @@
 /**
  * k6 Load Test - Authentication Flow
  * 
- * Tests authentication endpoints under load.
- * Note: This test requires valid test user credentials.
+ * Tests public endpoints under authentication-like load patterns.
+ * Note: This tests public endpoints that would be used in auth flows.
+ * For testing actual authentication, implement token-based auth in a separate test.
  * 
  * Usage:
  *   k6 run -e TEST_EMAIL=test@example.com -e TEST_PASSWORD=password tests/load/auth-flow.js
@@ -66,7 +67,8 @@ export default function () {
 
 export function setup() {
   console.log('Starting authentication flow test');
-  console.log('Testing public endpoints under auth-like load patterns');
+  console.log('Note: Testing public endpoints with auth-like load patterns');
+  console.log('For actual auth testing, implement token-based authentication');
   
   const response = http.get(`${BASE_URL}/health`);
   if (response.status !== 200) {

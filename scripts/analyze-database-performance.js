@@ -10,10 +10,21 @@
  * 
  * Prerequisites:
  *   - PostgreSQL connection configured in DATABASE_URL
+ *   - pg module installed (included in devDependencies)
  *   - pg_stat_statements extension enabled (optional but recommended)
  */
 
 require('dotenv').config();
+
+// Check for required dependencies
+try {
+  require.resolve('pg');
+} catch (e) {
+  console.error('❌ Error: pg module not found.');
+  console.error('Install it with: npm install pg');
+  process.exit(1);
+}
+
 const { Client } = require('pg');
 
 const client = new Client({

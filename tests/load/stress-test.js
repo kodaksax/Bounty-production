@@ -40,6 +40,9 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
 export default function () {
   // Focus on core read operations
   let response = http.get(`${BASE_URL}/bounties?status=open&limit=20`);
+  
+  // During stress testing, we accept 503 Service Unavailable as a valid response
+  // This indicates the server is properly rate limiting or load shedding under extreme load
   const success = check(response, {
     'status 200 or 503': (r) => r.status === 200 || r.status === 503,
   });

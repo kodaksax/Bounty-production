@@ -119,7 +119,9 @@ ON conversations(bounty_id)
 WHERE bounty_id IS NOT NULL;
 
 -- Index for conversation participants (if stored as array)
--- Note: Adjust column name based on actual schema
+-- Note: This index is commented out because the participants column structure
+-- varies by implementation. Enable this index if participants are stored as an 
+-- array column by uncommenting the lines below:
 -- CREATE INDEX IF NOT EXISTS idx_conversations_participants 
 -- ON conversations USING GIN (participant_ids);
 

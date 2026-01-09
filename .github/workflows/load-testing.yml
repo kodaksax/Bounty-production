@@ -109,7 +109,7 @@ jobs:
         continue-on-error: true
       
       - name: Install dependencies for report generation
-        run: npm install --no-save pg
+        run: npm ci --legacy-peer-deps
       
       - name: Generate HTML reports
         run: |
