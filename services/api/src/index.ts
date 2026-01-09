@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
+import { walletCleanupCron } from './services/wallet-cleanup-cron';
 // Defer importing modules that may read environment variables until after
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
@@ -801,6 +802,14 @@ const start = async () => {
       console.warn('⚠️  Failed to start risk assessment cron:', cronErr);
     }
     
+    // Start wallet cleanup job
+    try {
+      walletCleanupCron.start();
+      console.log('🕐 Wallet cleanup cron started');
+    } catch (cronErr) {
+      console.warn('⚠️  Failed to start wallet cleanup cron:', cronErr);
+    }
+    
     // If Supabase mode is enabled, avoid pinging the Postgres pool (this
     // prevents ECONNRESET/ECONNREFUSED logs when legacy DB envs point at
     // a different DB type or closed port). Start the outbox worker and let
@@ -844,6 +853,11 @@ process.on('SIGINT', async () => {
   try {
     riskAssessmentCron.stop();
     console.log('🛑 Risk assessment cron stopped');
+  } catch {}
+  
+  try {
+    walletCleanupCron.stop();
+    console.log('🛑 Wallet cleanup cron stopped');
   } catch {}
   
   // Stop the outbox worker

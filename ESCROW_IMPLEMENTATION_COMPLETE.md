@@ -255,6 +255,40 @@ cd services/api && npx tsc --noEmit
 ✅ **Authorization Checks** - All endpoints verify user identity  
 ✅ **Risk Assessment** - Integration with risk management system  
 ✅ **Audit Trail** - Comprehensive logging of all operations  
+✅ **Orphaned Transaction Cleanup** - Automated cleanup service (NEW!)
+
+### Orphaned Transaction Cleanup
+
+The system now includes an automated cleanup service to handle rare edge cases:
+
+**What it does:**
+- Identifies wallet transactions with `bounty_id: null` older than 60 minutes
+- Automatically removes orphaned transactions that didn't complete
+- Runs hourly via cron job (configurable schedule)
+
+**When it's needed:**
+- Application crashes between wallet deduction and bounty creation
+- Network failures during bounty creation
+- Database update failures
+
+**Configuration:**
+```bash
+# Enable/disable (enabled by default)
+ENABLE_WALLET_CLEANUP_CRON=true
+
+# Custom schedule (default: every hour at :15)
+WALLET_CLEANUP_CRON="15 * * * *"
+```
+
+**Monitoring:**
+```typescript
+// Get cleanup statistics
+const stats = await walletTransactionCleanupService.getCleanupStats();
+console.log(`Orphaned transactions: ${stats.totalOrphaned}`);
+console.log(`Oldest orphan age: ${stats.oldestOrphanedAge}ms`);
+```
+
+This ensures the system remains clean and consistent even in failure scenarios.  
 
 ## Configuration
 
