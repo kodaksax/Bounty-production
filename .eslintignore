@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.expo/
+.expo-shared/
+coverage/
+
+# Platform specific
+android/
+ios/
+
+# Config files (optional, but often not linted)
+*.config.js
+*.config.cjs
+babel.config.js
+metro.config.js
+metro.config.cjs
+tailwind.config.js
+jest.config.js
+
+# Generated files
+*.d.ts
+
+# Test files (optional - remove if you want to lint tests)
+# __tests__/
+# *.test.ts
+# *.test.tsx
+
+# Misc
+.git/
+.vscode/
+.history/
