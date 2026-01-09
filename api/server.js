@@ -13,6 +13,7 @@ const SECRET_KEY = process.env.SECRET_KEY;
 const express = require('express');
 const session = require('express-session'); // ensure express-session
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
@@ -184,6 +185,29 @@ const handleError = (res, error, customMessage = 'Internal server error') => {
   });
 };
 
+// Rate limiting configuration for auth endpoints
+// Protects against brute force attacks on sign-in/sign-up
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 authentication requests per window
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many authentication attempts. Please try again in 15 minutes.',
+    code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  handler: (req, res) => {
+    console.warn(`[RateLimit] Auth rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Too many authentication attempts. Please try again in 15 minutes.',
+      code: 'RATE_LIMIT_EXCEEDED',
+      retryAfter: Math.ceil(req.rateLimit.resetTime / 1000)
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -199,7 +223,7 @@ app.get('/app/tabs/bounty-app', async(req, res) => {
 });
 
 // Sign Up and Supabase Registration
-app.post('/app/auth/sign-up-form', async(req, res) => {
+app.post('/app/auth/sign-up-form', authRateLimiter, async(req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({ error: 'Supabase admin not configured' });
   }
@@ -282,7 +306,7 @@ app.post('/app/auth/sign-up-form', async(req, res) => {
 });
 
 // Sign In and Verify Credentials
-app.post('/app/auth/sign-in-form', async(req, res) => {
+app.post('/app/auth/sign-in-form', authRateLimiter, async(req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({ error: 'Supabase admin not configured' });
   }
@@ -1181,7 +1205,7 @@ app.delete('/api/bounty-requests/:id', async (req, res) => {
 const VERBOSE = process.env.API_VERBOSE_ERRORS === '1';
 
 // Backend-driven registration (Option B)
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register', authRateLimiter, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({ error: 'Supabase admin not configured' });
   }
@@ -1279,7 +1303,7 @@ app.get('/auth/ping', async (req, res) => {
 });
 
 // Simple sign-in (mock implementation)
-app.post('/auth/sign-in', async (req, res) => {
+app.post('/auth/sign-in', authRateLimiter, async (req, res) => {
   let conn;
   try {
     const { email, password, identifier } = req.body;
@@ -1323,7 +1347,7 @@ app.post('/auth/sign-in', async (req, res) => {
 });
 
 // Identifier-based sign-up (mock without Supabase server-side; would delegate to Supabase or internal user table)
-app.post('/auth/identifier-sign-up', async (req, res) => {
+app.post('/auth/identifier-sign-up', authRateLimiter, async (req, res) => {
   let conn;
   try {
     const { identifier, password } = req.body;

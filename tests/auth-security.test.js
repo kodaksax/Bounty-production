@@ -1,5 +1,15 @@
 // tests/auth-security.test.js - Security tests for authentication flows
 // Run with: node tests/auth-security.test.js
+//
+// NOTE: This test file validates client-side auth validation logic.
+// For server-side rate limiting tests, see auth-rate-limiting.test.js
+//
+// Auth endpoints protected with rate limiting (5 requests per 15 minutes):
+//   - POST /app/auth/sign-up-form
+//   - POST /app/auth/sign-in-form
+//   - POST /auth/register
+//   - POST /auth/sign-in
+//   - POST /auth/identifier-sign-up
 
 const assert = require('assert');
 
