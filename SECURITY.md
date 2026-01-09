@@ -202,6 +202,32 @@ All password fields include show/hide toggle:
 
 ## Rate Limiting
 
+### Authentication Endpoint Rate Limiting ⭐ NEW
+**Comprehensive brute force protection on all auth endpoints.**
+
+All authentication endpoints are now protected with aggressive rate limiting:
+- **Limit**: 5 requests per 15 minutes per IP address
+- **Response**: HTTP 429 with retry information
+- **Headers**: Standard rate limit headers (RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset)
+
+**Protected Endpoints:**
+- `POST /app/auth/sign-up-form` (Legacy API)
+- `POST /app/auth/sign-in-form` (Legacy API)
+- `POST /auth/register` (Legacy & Consolidated API)
+- `POST /auth/sign-in` (Legacy & Consolidated API)
+- `POST /auth/sign-up` (Consolidated API)
+- `POST /auth/identifier-sign-up` (Legacy API)
+
+**Implementation Details:**
+- Legacy API: Uses `express-rate-limit` middleware
+- Consolidated API: Custom in-memory rate limiter with automatic cleanup
+- Per-IP tracking to prevent distributed attacks
+- Logging of rate limit violations for monitoring
+
+**Documentation:**
+- See [AUTH_RATE_LIMITING.md](./AUTH_RATE_LIMITING.md) for complete details
+- Test files: `tests/auth-rate-limiting*.test.js`
+
 ### Client-Side Rate Limiting (Sign-In)
 Prevents brute force attacks:
 ```typescript
@@ -214,16 +240,17 @@ if (newAttempts >= 5) {
 }
 ```
 
-### Backend Rate Limiting (`services/api/src/middleware/auth.ts`)
-In-memory rate limiting per token:
-- **Limit**: 60 requests per minute per token
+### Backend API Rate Limiting (`services/api/src/middleware/rate-limit.ts`)
+General API rate limiting per token:
+- **Limit**: 100 requests per minute per token
 - **Window**: 1 minute rolling window
 - **Response**: 429 Too Many Requests with retry message
 
 ```typescript
 // Rate limiting configuration
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute
+const MAX_TOKENS = 100; // Maximum requests per window
+const REFILL_RATE = 100; // Tokens to add per window
+const WINDOW_MS = 60 * 1000; // 1 minute window
 ```
 
 ### Recommendations for Production
