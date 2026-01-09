@@ -22,9 +22,8 @@ import {
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
 import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
-import { walletService } from '../services/wallet-service';
 import { db } from '../db/connection';
-import { walletTransactions, bounties as bountiesTable } from '../db/schema';
+import { walletTransactions } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { calculateUserBalance } from '../utils/wallet-utils';
 
@@ -491,7 +490,6 @@ export async function registerConsolidatedBountyRoutes(
               error: 'Insufficient wallet balance',
               required: body.amount,
               available: balanceCents / 100,
-              message: `You need $${body.amount.toFixed(2)} to post this bounty, but only have $${(balanceCents / 100).toFixed(2)} in your wallet. Please add funds to your wallet first.`
             });
           }
         }
