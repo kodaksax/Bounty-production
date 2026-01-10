@@ -106,7 +106,7 @@ const { initializeIdempotencyService } = require('./services/idempotency-service
 const { recordHttpRequest } = require('./monitoring/metrics');
 const { tracingMiddleware, tracing } = require('./monitoring/tracing');
 const { initializeOpenTelemetry } = require('./monitoring/opentelemetry');
-const { businessMetrics } = require('./monitoring/business-metrics');
+require('./monitoring/business-metrics');
 
 // Initialize OpenTelemetry for APM monitoring
 // This must happen early to instrument all subsequent module loads

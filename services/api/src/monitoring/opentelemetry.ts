@@ -4,7 +4,6 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { logger } from '../services/logger';
 
@@ -143,7 +142,7 @@ export function initializeOpenTelemetry(): NodeSDK | null {
  */
 export function createCustomSpan(name: string, attributes?: Record<string, string | number | boolean>): any {
   try {
-    const { trace, context } = require('@opentelemetry/api');
+    const { trace } = require('@opentelemetry/api');
     const tracer = trace.getTracer('bountyexpo-business');
     
     return tracer.startActiveSpan(name, (span: any) => {
