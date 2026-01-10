@@ -18,6 +18,7 @@
     "test:bounty-requests": "tsx src/test-consolidated-bounty-requests.ts",
     "test:stripe-connect": "tsx src/test-consolidated-stripe-connect.ts",
     "test:wallet": "tsx src/test-consolidated-wallet.ts",
+    "test:bank-accounts": "tsx src/test-bank-accounts.ts",
     "test:websocket": "tsx src/__tests__/websocket-integration.test.ts",
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "tsx src/db/migrate.ts",
