@@ -56,6 +56,10 @@ postgres-data/
 coverage/
 *.test.results.json
 .nyc_output/
+# k6 load test results
+tests/load/results/
+*.summary.json
+*.html
 
 # Logs
 *.log
