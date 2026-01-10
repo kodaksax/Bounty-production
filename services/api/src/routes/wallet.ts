@@ -332,6 +332,18 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'Invalid routing number' });
       }
 
+      // Validate routing number checksum (ABA algorithm)
+      const digits = routingNumber.split('').map(Number);
+      const checksum = (
+        3 * (digits[0] + digits[3] + digits[6]) +
+        7 * (digits[1] + digits[4] + digits[7]) +
+        (digits[2] + digits[5] + digits[8])
+      ) % 10;
+      
+      if (checksum !== 0) {
+        return reply.code(400).send({ error: 'Invalid routing number checksum' });
+      }
+
       if (accountNumber.length < 4 || accountNumber.length > 17) {
         return reply.code(400).send({ error: 'Invalid account number' });
       }
@@ -450,7 +462,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         id: account.id,
         last4: account.last4,
         bankName: account.bank_name,
-        accountType: account.account_holder_type === 'company' ? 'business' : 'individual',
+        accountType: account.object === 'bank_account' ? 'bank_account' : 'card', // Type of source
         verified: account.status === 'verified',
         defaultForCurrency: account.default_for_currency,
       }));

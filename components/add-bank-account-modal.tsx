@@ -169,7 +169,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
         
         // Handle Connect account requirement
         if (errorData.requiresOnboarding) {
-          throw new Error('Please complete Stripe Connect onboarding before adding a bank account. Go to Withdraw → Connect Bank Account to get started.')
+          throw new Error('Please complete Stripe Connect onboarding before adding a bank account.')
         }
         
         throw new Error(errorData.error || `Failed to add bank account (${response.status})`)

@@ -186,7 +186,18 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
 
     // Check if user has connected account and bank account for transfers
-    if (!hasBankAccount && !selectedMethod) {
+    if (hasConnectedAccount && !hasBankAccount && !selectedMethod) {
+      Alert.alert(
+        'Bank Account Required',
+        'To withdraw funds, you need to add a bank account to your Stripe Connect account.\n\nThis ensures fast and secure withdrawals.',
+        [
+          { text: 'OK' }
+        ]
+      );
+      return;
+    }
+    
+    if (!hasConnectedAccount && !selectedMethod) {
       Alert.alert(
         'Setup Required',
         'To withdraw funds, you need to:\n\n1. Complete Stripe Connect onboarding\n2. Add a bank account\n\nThis ensures fast and secure withdrawals.',
