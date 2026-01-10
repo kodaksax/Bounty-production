@@ -6,18 +6,16 @@
  * For testing actual authentication, implement token-based auth in a separate test.
  * 
  * Usage:
- *   k6 run -e TEST_EMAIL=test@example.com -e TEST_PASSWORD=password tests/load/auth-flow.js
+ *   k6 run tests/load/auth-flow.js
  */
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Rate, Trend } from 'k6/metrics';
+import { Rate } from 'k6/metrics';
 
 const errorRate = new Rate('errors');
-const authDuration = new Trend('auth_duration');
-const profileDuration = new Trend('profile_duration');
 
-export let options = {
+export const options = {
   stages: [
     { duration: '1m', target: 20 },   // Ramp up to 20 users
     { duration: '3m', target: 20 },   // Stay at 20 users
@@ -29,20 +27,14 @@ export let options = {
     http_req_duration: ['p(95)<800'],
     http_req_failed: ['rate<0.05'],
     errors: ['rate<0.05'],
-    auth_duration: ['p(95)<1000'],     // Auth can be slower
-    profile_duration: ['p(95)<300'],
   },
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
-const TEST_EMAIL = __ENV.TEST_EMAIL || 'test@example.com';
-const TEST_PASSWORD = __ENV.TEST_PASSWORD || 'testpassword123';
 
 export default function () {
   // Note: In a real scenario, you would use test credentials or mock authentication
-  // This is a simplified version that tests the /auth/me endpoint with existing tokens
-  
-  // Test fetching current user profile (simulates authenticated request)
+  // This is a simplified version that tests public endpoints with auth-like load patterns
   const headers = {
     'Content-Type': 'application/json',
   };

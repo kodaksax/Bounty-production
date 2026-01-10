@@ -17,7 +17,7 @@ const browsingUsers = new Counter('browsing_users');
 const searchingUsers = new Counter('searching_users');
 const detailViewers = new Counter('detail_viewers');
 
-export let options = {
+export const options = {
   stages: [
     { duration: '2m', target: 30 },
     { duration: '5m', target: 30 },

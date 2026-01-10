@@ -118,12 +118,11 @@ CREATE INDEX IF NOT EXISTS idx_conversations_bounty_id
 ON conversations(bounty_id) 
 WHERE bounty_id IS NOT NULL;
 
--- Index for conversation participants (if stored as array)
--- Note: This index is commented out because the participants column structure
--- varies by implementation. Enable this index if participants are stored as an 
--- array column by uncommenting the lines below:
--- CREATE INDEX IF NOT EXISTS idx_conversations_participants 
--- ON conversations USING GIN (participant_ids);
+-- Index for conversation participants
+-- Note: The participants column structure varies by implementation.
+-- If your conversations table stores participants in an array or other
+-- searchable structure, consider adding an appropriate index here that
+-- matches your actual schema.
 
 -- Index for updated_at sorting (recent conversations)
 CREATE INDEX IF NOT EXISTS idx_conversations_updated_at 

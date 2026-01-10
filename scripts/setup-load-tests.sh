@@ -129,9 +129,9 @@ echo "  - At least 100 bounties with various statuses"
 echo "  - Multiple user accounts"
 echo "  - Sample conversations and messages"
 echo ""
-read -p "Do you want to run database seeding? (y/N) " -n 1 -r
+read -r -p "Do you want to run database seeding? (y/N) " -n 1 answer
 echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $answer =~ ^[Yy]$ ]]; then
     echo "Running database seed..."
     cd services/api
     npm run db:seed || echo -e "${YELLOW}⚠️  Seeding failed or not configured${NC}"

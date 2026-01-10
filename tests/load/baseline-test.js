@@ -14,7 +14,7 @@ import { Rate } from 'k6/metrics';
 
 const errorRate = new Rate('errors');
 
-export let options = {
+export const options = {
   vus: 10,
   duration: '5m',
   thresholds: {

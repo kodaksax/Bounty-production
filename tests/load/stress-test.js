@@ -14,7 +14,7 @@ import { Rate } from 'k6/metrics';
 
 const errorRate = new Rate('errors');
 
-export let options = {
+export const options = {
   stages: [
     { duration: '2m', target: 100 },  // Ramp to 100
     { duration: '3m', target: 100 },  // Stay at 100

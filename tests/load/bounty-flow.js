@@ -21,7 +21,7 @@ const getBountyDuration = new Trend('get_bounty_duration');
 const searchBountiesDuration = new Trend('search_bounties_duration');
 
 // Test configuration
-export let options = {
+export const options = {
   stages: [
     { duration: '2m', target: 50 },   // Ramp up to 50 users
     { duration: '5m', target: 50 },   // Stay at 50 users

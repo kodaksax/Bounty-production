@@ -27,6 +27,13 @@ try {
 
 const { Client } = require('pg');
 
+// Validate DATABASE_URL is set
+if (!process.env.DATABASE_URL) {
+  console.error('❌ Error: DATABASE_URL environment variable is not set.');
+  console.error('Set it with: export DATABASE_URL="postgresql://user:password@host:port/database"');
+  process.exit(1);
+}
+
 const client = new Client({
   connectionString: process.env.DATABASE_URL,
 });

@@ -7,7 +7,6 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 
 // Check if result file is provided
 if (process.argv.length < 3) {
