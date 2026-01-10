@@ -232,15 +232,15 @@ describe('Payment Operations Idempotency', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty idempotency key', async () => {
+    it('should reject empty idempotency key', async () => {
       const emptyKey = '';
       
-      // Should handle gracefully
-      await storeIdempotencyKey(emptyKey);
-      const check = await checkIdempotencyKey(emptyKey);
-      expect(check).toBe(true);
+      // Empty idempotency keys should not be treated as valid keys.
+      // The service is expected to reject or otherwise fail on empty input.
+      await expect(storeIdempotencyKey(emptyKey)).rejects.toThrow();
       
-      await removeIdempotencyKey(emptyKey);
+      const check = await checkIdempotencyKey(emptyKey);
+      expect(check).toBe(false);
     });
 
     it('should handle very long idempotency keys', async () => {
