@@ -41,7 +41,7 @@ jest.mock('../../lib/services/bounty-service', () => ({
 // Mock cancellation service
 jest.mock('../../lib/services/cancellation-service', () => ({
   cancellationService: {
-    getById: jest.fn(),
+    getCancellationById: jest.fn(),
   },
 }));
 
@@ -73,6 +73,14 @@ describe('DisputeService', () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+
+      // Mock cancellationService.getCancellationById
+      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
+        id: 'cancel-123',
+        bountyId: 'bounty-123',
+        requesterId: 'hunter-123',
+      });
 
       mockFrom.mockReturnValue({
         insert: jest.fn().mockReturnValue({
@@ -110,6 +118,14 @@ describe('DisputeService', () => {
     });
 
     it('should handle errors gracefully', async () => {
+      // Mock cancellationService.getCancellationById
+      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
+        id: 'cancel-123',
+        bountyId: 'bounty-123',
+        requesterId: 'hunter-123',
+      });
+
       mockFrom.mockReturnValue({
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
