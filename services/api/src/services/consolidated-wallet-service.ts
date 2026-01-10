@@ -349,8 +349,9 @@ export async function createWithdrawal(
   const admin = getSupabaseAdmin();
   
   // Generate deterministic idempotency key from transaction details
-  // Note: Include amount and destination for uniqueness, but exclude timestamp for determinism
-  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${Math.round(amount * 100)}_${destination.slice(-4)}`;
+  // Note: Use fixed-point representation for amount to ensure consistency
+  const amountKey = amount.toFixed(2).replace('.', '');
+  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
   
   // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
