@@ -5,8 +5,6 @@
  * Run with: tsx src/test-bank-accounts.ts
  */
 
-import Stripe from 'stripe';
-
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 const TEST_USER_TOKEN = process.env.TEST_USER_TOKEN || '';
 

@@ -332,6 +332,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'Invalid routing number' });
       }
 
+      // Validate routing number contains only digits
+      if (!/^\d+$/.test(routingNumber)) {
+        return reply.code(400).send({ error: 'Invalid routing number' });
+      }
+
       // Validate routing number checksum (ABA algorithm)
       const digits = routingNumber.split('').map(Number);
       const checksum = (
@@ -345,6 +350,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       if (accountNumber.length < 4 || accountNumber.length > 17) {
+        return reply.code(400).send({ error: 'Invalid account number' });
+      }
+
+      // Validate account number contains only digits
+      if (!/^\d+$/.test(accountNumber)) {
         return reply.code(400).send({ error: 'Invalid account number' });
       }
 
@@ -407,8 +417,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       console.error('Error adding bank account:', error);
       
       let errorMessage = 'Failed to add bank account';
+      let statusCode = 500; // Default to server error
       
       if (error.type === 'StripeInvalidRequestError') {
+        // Validation errors from Stripe should be 400
+        statusCode = 400;
         if (error.code === 'routing_number_invalid') {
           errorMessage = 'Invalid routing number';
         } else if (error.code === 'account_number_invalid') {
@@ -420,7 +433,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         }
       }
       
-      return reply.code(400).send({ error: errorMessage });
+      return reply.code(statusCode).send({ error: errorMessage });
     }
   });
 

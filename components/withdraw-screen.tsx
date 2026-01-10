@@ -1,4 +1,3 @@
-
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -9,6 +8,15 @@ import { useStripe } from '../lib/stripe-context';
 import { useWallet } from '../lib/wallet-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
+
+interface BankAccount {
+  id: string;
+  last4: string;
+  bankName?: string;
+  accountType: string;
+  verified: boolean;
+  defaultForCurrency: boolean;
+}
 
 interface WithdrawScreenProps {
   onBack?: () => void;
@@ -22,7 +30,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
   const [connectedAccountId, setConnectedAccountId] = useState<string>("");
   const [hasBankAccount, setHasBankAccount] = useState(false);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isOnboarding, setIsOnboarding] = useState(false);
   
   // Use wallet context for balance - this ensures balance is always in sync
@@ -41,11 +49,20 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
   }, [paymentMethods, selectedMethod]);
 
-  // Check for existing Connect account and bank accounts on mount
+  // Check for existing Connect account and bank accounts when session is available/changes
   useEffect(() => {
+    if (!session?.access_token) {
+      return;
+    }
     verifyConnectOnboarding();
-    fetchBankAccounts();
-  }, []);
+  }, [session?.access_token]);
+
+  // Fetch bank accounts when Connect account is verified
+  useEffect(() => {
+    if (hasConnectedAccount && session?.access_token) {
+      fetchBankAccounts();
+    }
+  }, [hasConnectedAccount, session?.access_token]);
 
   const verifyConnectOnboarding = async () => {
     if (!session?.access_token) return;
@@ -72,7 +89,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   };
 
   const fetchBankAccounts = async () => {
-    if (!session?.access_token) return;
+    if (!session?.access_token || !hasConnectedAccount) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
@@ -338,12 +355,19 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.methodName}>
-                    Bank Account {bankAccounts[0]?.last4 ? `(****${bankAccounts[0].last4})` : ''}
+                    Primary bank account {bankAccounts[0]?.last4 ? `(****${bankAccounts[0].last4})` : ''}
                   </Text>
                   <Text style={styles.methodDetails}>
                     {bankAccounts[0]?.verified ? 'Verified • ' : 'Pending verification • '}
                     Fastest withdrawal method • 1-3 business days
                   </Text>
+                  {(bankAccounts?.length ?? 0) > 1 && (
+                    <Text style={styles.methodDetails}>
+                      {`+ ${(bankAccounts?.length ?? 0) - 1} additional linked bank ${
+                        ((bankAccounts?.length ?? 0) - 1) === 1 ? 'account' : 'accounts'
+                      } in Stripe. Payouts go to your default account.`}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.methodCheckCircle}>
                   <MaterialIcons name="check" size={16} color="#34d399" />
@@ -353,14 +377,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           ) : hasConnectedAccount && !hasBankAccount ? (
             <TouchableOpacity
               style={[styles.methodRow, styles.methodRowInactive]}
-              onPress={() => {
-                // TODO: Navigate to AddBankAccountModal
-                Alert.alert(
-                  'Add Bank Account',
-                  'To withdraw funds, you need to add a bank account to your Connect account.',
-                  [{ text: 'OK' }]
-                );
-              }}
+              onPress={handleConnectOnboarding}
             >
               <View style={styles.methodIconCircle}>
                 <MaterialIcons name="add" size={20} color="#fff" />
