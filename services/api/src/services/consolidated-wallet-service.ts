@@ -238,8 +238,8 @@ export async function createDeposit(
   
   const admin = getSupabaseAdmin();
   
-  // Use payment intent ID as idempotency key if not provided
-  const effectiveIdempotencyKey = idempotencyKey || `deposit_${paymentIntentId}`;
+  // Use payment intent ID and user ID as idempotency key if not provided
+  const effectiveIdempotencyKey = idempotencyKey || `deposit_${userId}_${paymentIntentId}`;
   
   // Check for duplicate transaction using payment intent ID
   const { data: existingTx } = await admin
@@ -256,25 +256,33 @@ export async function createDeposit(
       existingTransactionId: existingTx.id 
     }, '[WalletService] Duplicate deposit detected, returning existing transaction');
     
-    // Return existing transaction
-    const { data: transaction } = await admin
+    // Return existing transaction - fetch with error handling
+    const { data: transaction, error: fetchError } = await admin
       .from('wallet_transactions')
       .select('*')
       .eq('id', existingTx.id)
       .single();
     
-    return {
-      id: transaction.id,
-      user_id: transaction.user_id,
-      type: transaction.type,
-      amount: transaction.amount,
-      description: transaction.description,
-      status: transaction.status,
-      stripe_payment_intent_id: transaction.stripe_payment_intent_id,
-      metadata: transaction.metadata,
-      created_at: transaction.created_at,
-      updated_at: transaction.updated_at,
-    };
+    if (fetchError || !transaction) {
+      // If transaction was deleted between checks, log and continue to create new one
+      logger.warn({
+        existingTransactionId: existingTx.id,
+        error: fetchError
+      }, '[WalletService] Existing transaction not found, creating new one');
+    } else {
+      return {
+        id: transaction.id,
+        user_id: transaction.user_id,
+        type: transaction.type,
+        amount: transaction.amount,
+        description: transaction.description,
+        status: transaction.status,
+        stripe_payment_intent_id: transaction.stripe_payment_intent_id,
+        metadata: transaction.metadata,
+        created_at: transaction.created_at,
+        updated_at: transaction.updated_at,
+      };
+    }
   }
   
   // Create transaction record
@@ -340,8 +348,9 @@ export async function createWithdrawal(
   
   const admin = getSupabaseAdmin();
   
-  // Generate effective idempotency key
-  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${Date.now()}`;
+  // Generate deterministic idempotency key from transaction details
+  // Note: Include amount and destination for uniqueness, but exclude timestamp for determinism
+  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${Math.round(amount * 100)}_${destination.slice(-4)}`;
   
   // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
@@ -381,14 +390,9 @@ export async function createWithdrawal(
       },
     };
     
-    const requestOptions: Stripe.RequestOptions = {};
-    if (idempotencyKey) {
-      requestOptions.idempotencyKey = idempotencyKey;
-    }
-    
     const transfer = await stripe.transfers.create(
       transferParams,
-      requestOptions
+      idempotencyKey ? { idempotencyKey } : {}
     );
     
     // Update transaction with transfer ID and mark as completed

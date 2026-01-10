@@ -13,6 +13,19 @@ import {
   ValidationError,
 } from '../middleware/error-handler';
 
+/**
+ * Build Stripe request options with optional idempotency key
+ * @param idempotencyKey - Optional idempotency key for duplicate prevention
+ * @returns Stripe RequestOptions object
+ */
+function buildStripeRequestOptions(idempotencyKey?: string): Stripe.RequestOptions {
+  const options: Stripe.RequestOptions = {};
+  if (idempotencyKey) {
+    options.idempotencyKey = idempotencyKey;
+  }
+  return options;
+}
+
 // Initialize Stripe
 const stripe = new Stripe(config.stripe.secretKey, {
   // Align with repository-wide pinned Stripe API version
@@ -182,14 +195,9 @@ export async function createPaymentIntent(
       },
     };
     
-    const requestOptions: Stripe.RequestOptions = {};
-    if (idempotencyKey) {
-      requestOptions.idempotencyKey = idempotencyKey;
-    }
-    
     const paymentIntent = await stripe.paymentIntents.create(
       createOptions,
-      requestOptions
+      buildStripeRequestOptions(idempotencyKey)
     );
     
     const clientSecret = paymentIntent.client_secret;
@@ -254,15 +262,10 @@ export async function confirmPaymentIntent(
         confirmParams.payment_method = paymentMethodId;
       }
       
-      const requestOptions: Stripe.RequestOptions = {};
-      if (idempotencyKey) {
-        requestOptions.idempotencyKey = idempotencyKey;
-      }
-      
       confirmedIntent = await stripe.paymentIntents.confirm(
         paymentIntentId,
         confirmParams,
-        requestOptions
+        buildStripeRequestOptions(idempotencyKey)
       );
     }
     
@@ -428,14 +431,9 @@ export async function createSetupIntent(
       metadata: { user_id: userId },
     };
     
-    const requestOptions: Stripe.RequestOptions = {};
-    if (idempotencyKey) {
-      requestOptions.idempotencyKey = idempotencyKey;
-    }
-    
     const setupIntent = await stripe.setupIntents.create(
       setupIntentParams,
-      requestOptions
+      buildStripeRequestOptions(idempotencyKey)
     );
     
     if (!setupIntent.client_secret) {
@@ -492,15 +490,10 @@ export async function cancelPaymentIntent(
         cancellation_reason: cancellationReason,
       };
       
-      const requestOptions: Stripe.RequestOptions = {};
-      if (idempotencyKey) {
-        requestOptions.idempotencyKey = idempotencyKey;
-      }
-      
       await stripe.paymentIntents.cancel(
         paymentIntentId,
         cancelParams,
-        requestOptions
+        buildStripeRequestOptions(idempotencyKey)
       );
     } else {
       throw new ValidationError(
