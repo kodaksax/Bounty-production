@@ -121,8 +121,8 @@ export function SyncStatusBadge({ style }: { style?: any }) {
   const backgroundColor = failedCount > 0 ? '#dc2626' : '#f59e0b';
 
   return (
-    <View style={[styles.badge, { backgroundColor }, style]}>
-      <Text style={styles.badgeText}>{count}</Text>
+    <View style={[badgeStyles.badge, { backgroundColor }, style]}>
+      <Text style={badgeStyles.badgeText}>{count}</Text>
     </View>
   );
 }
@@ -143,5 +143,19 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
-// Merge badge styles
-Object.assign(styles, badgeStyles);
+// Export badge styles separately
+const badgeStyles = StyleSheet.create({
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+});

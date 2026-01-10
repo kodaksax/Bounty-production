@@ -79,16 +79,12 @@ describe('OfflineModeBanner', () => {
       checkConnection: mockCheckConnection,
     });
 
-    const { getByLabelText } = render(<OfflineModeBanner />);
+    const { getByRole } = render(<OfflineModeBanner />);
     
-    // Note: We're looking for the refresh icon button
-    const refreshButtons = await waitFor(() => {
-      const elements = document.querySelectorAll('[name="refresh"]');
-      return Array.from(elements);
-    });
-    
-    if (refreshButtons.length > 0) {
-      fireEvent.press(refreshButtons[0] as any);
+    // Find the refresh button by role
+    const refreshButton = getByRole('button');
+    if (refreshButton) {
+      fireEvent.press(refreshButton);
       expect(mockCheckConnection).toHaveBeenCalled();
     }
   });

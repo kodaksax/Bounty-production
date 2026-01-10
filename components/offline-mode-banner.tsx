@@ -165,13 +165,13 @@ export function CompactOfflineBanner({ style }: { style?: any }) {
   }
 
   return (
-    <View style={[styles.compactContainer, style]}>
+    <View style={[compactStyles.compactContainer, style]}>
       <MaterialIcons 
         name={!isOnline ? 'cloud-off' : 'sync'} 
         size={16} 
         color="#f59e0b" 
       />
-      <Text style={styles.compactText}>
+      <Text style={compactStyles.compactText}>
         {!isOnline 
           ? 'Offline' 
           : `${queuedItemsCount} syncing`
@@ -199,5 +199,21 @@ const compactStyles = StyleSheet.create({
   },
 });
 
-// Merge styles for compact banner
-Object.assign(styles, compactStyles);
+// Export compact styles separately
+const compactStyles = StyleSheet.create({
+  compactContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  compactText: {
+    color: '#92400e',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+});
