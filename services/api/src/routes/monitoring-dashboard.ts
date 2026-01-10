@@ -8,6 +8,17 @@ import { tracing } from '../monitoring/tracing';
 import { businessMetrics } from '../monitoring/business-metrics';
 import { logger } from '../services/logger';
 
+interface HistogramBucket {
+  le: number;
+  count: number;
+}
+
+interface Histogram {
+  buckets: HistogramBucket[];
+  sum: number;
+  count: number;
+}
+
 interface DashboardData {
   timestamp: string;
   service: string;
@@ -236,7 +247,7 @@ export async function registerMonitoringDashboardRoutes(fastify: FastifyInstance
  * Helper functions
  */
 
-function calculatePercentile(histogram: any, percentile: number): number {
+function calculatePercentile(histogram: Histogram | undefined, percentile: number): number {
   if (!histogram || histogram.count === 0) return 0;
   
   const targetCount = histogram.count * (percentile / 100);
@@ -252,7 +263,7 @@ function calculatePercentile(histogram: any, percentile: number): number {
   return Math.round(histogram.buckets[histogram.buckets.length - 1].le);
 }
 
-function calculateAverage(histogram: any): number {
+function calculateAverage(histogram: Histogram | undefined): number {
   if (!histogram || histogram.count === 0) return 0;
   return Math.round(histogram.sum / histogram.count);
 }
@@ -267,7 +278,7 @@ function calculateRPS(total: number, uptimeSeconds: number): number {
   return Math.round((total / uptimeSeconds) * 100) / 100;
 }
 
-function countSlowQueries(histogram: any, thresholdMs: number = 5000): number {
+function countSlowQueries(histogram: Histogram | undefined, thresholdMs: number = 5000): number {
   if (!histogram) return 0;
   
   let slowCount = 0;

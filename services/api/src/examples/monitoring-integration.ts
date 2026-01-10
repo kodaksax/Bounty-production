@@ -28,7 +28,11 @@ export async function createBountyWithMonitoring(data: {
     recordBusinessMetric('bounty.created', 1, { bountyId: bounty.id });
 
     logger.info({ bountyId: bounty.id }, 'Bounty created successfully');
-    span?.end?.();
+    
+    // End span on success
+    if (span && typeof span.end === 'function') {
+      span.end();
+    }
 
     return { success: true, bounty };
   } catch (error) {
@@ -38,7 +42,10 @@ export async function createBountyWithMonitoring(data: {
     if (span && typeof span.setStatus === 'function') {
       span.setStatus({ code: 2 });
     }
-    span?.end?.();
+    
+    if (span && typeof span.end === 'function') {
+      span.end();
+    }
 
     logger.error({ error, userId: data.userId }, 'Failed to create bounty');
     return { success: false, error };

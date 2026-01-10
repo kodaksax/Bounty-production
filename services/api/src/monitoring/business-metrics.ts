@@ -245,15 +245,23 @@ class BusinessMetricsService {
 
   /**
    * Get hourly metrics (for rate calculations)
+   * 
+   * NOTE: Current implementation returns cumulative counts, not true hourly rates.
+   * In production, this should be enhanced with time-windowed metrics using:
+   * - Redis with sliding windows
+   * - In-memory circular buffers with timestamps
+   * - External time-series database (Prometheus, InfluxDB)
+   * 
+   * For accurate hourly rates, track metrics with timestamps and calculate:
+   * rate = (current_count - count_1_hour_ago) / 3600
    */
   getHourlyRates(): {
     bountiesPerHour: number;
     paymentsPerHour: number;
     signupsPerHour: number;
   } {
-    // In production, this would track metrics over a time window
-    // For now, return cumulative counts
-    // TODO: Implement time-windowed metrics
+    // TODO: Implement time-windowed metrics for accurate hourly rates
+    // Current implementation returns cumulative counts as a placeholder
     
     return {
       bountiesPerHour: metrics.getCounter(METRICS.BOUNTIES_CREATED),

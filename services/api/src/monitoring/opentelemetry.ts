@@ -49,7 +49,14 @@ export function initializeOpenTelemetry(): NodeSDK | null {
       headers: {
         // Add authentication headers if needed
         ...(process.env.OTEL_EXPORTER_OTLP_HEADERS && 
-          JSON.parse(process.env.OTEL_EXPORTER_OTLP_HEADERS))
+          (() => {
+            try {
+              return JSON.parse(process.env.OTEL_EXPORTER_OTLP_HEADERS);
+            } catch (error) {
+              logger.warn({ error }, '[otel] Failed to parse OTEL_EXPORTER_OTLP_HEADERS, ignoring');
+              return {};
+            }
+          })())
       },
     });
 

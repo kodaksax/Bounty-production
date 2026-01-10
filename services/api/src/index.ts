@@ -229,9 +229,7 @@ const startServer = async () => {
   
   // Register monitoring dashboard routes (APM)
   await registerMonitoringDashboardRoutes(fastify);
-  
-  // Register monitoring dashboard routes (APM)
-  await registerMonitoringDashboardRoutes(fastify);
+
 
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
