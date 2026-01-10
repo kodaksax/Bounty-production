@@ -1,0 +1,76 @@
+/**
+ * k6 Load Test - Authentication Flow
+ * 
+ * Tests public endpoints under authentication-like load patterns.
+ * Note: This tests public endpoints that would be used in auth flows.
+ * For testing actual authentication, implement token-based auth in a separate test.
+ * 
+ * Usage:
+ *   k6 run tests/load/auth-flow.js
+ */
+
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate } from 'k6/metrics';
+
+const errorRate = new Rate('errors');
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 20 },   // Ramp up to 20 users
+    { duration: '3m', target: 20 },   // Stay at 20 users
+    { duration: '1m', target: 50 },   // Ramp up to 50 users
+    { duration: '3m', target: 50 },   // Stay at 50 users
+    { duration: '1m', target: 0 },    // Ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<800'],
+    http_req_failed: ['rate<0.05'],
+    errors: ['rate<0.05'],
+  },
+};
+
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
+
+export default function () {
+  // Note: In a real scenario, you would use test credentials or mock authentication
+  // This is a simplified version that tests public endpoints with auth-like load patterns
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  
+  // Test public endpoints that don't require auth
+  let response = http.get(`${BASE_URL}/bounties?status=open&limit=10`, { headers });
+  check(response, {
+    'bounties fetch successful': (r) => r.status === 200,
+  }) || errorRate.add(1);
+  
+  sleep(1);
+  
+  // Test health endpoint (should always be fast)
+  response = http.get(`${BASE_URL}/health`, { headers });
+  check(response, {
+    'health check successful': (r) => r.status === 200,
+    'health check < 100ms': (r) => r.timings.duration < 100,
+  }) || errorRate.add(1);
+  
+  sleep(2);
+}
+
+export function setup() {
+  console.log('Starting authentication flow test');
+  console.log('Note: Testing public endpoints with auth-like load patterns');
+  console.log('For actual auth testing, implement token-based authentication');
+  
+  const response = http.get(`${BASE_URL}/health`);
+  if (response.status !== 200) {
+    throw new Error('Server health check failed');
+  }
+  
+  return { startTime: Date.now() };
+}
+
+export function teardown(data) {
+  const duration = (Date.now() - data.startTime) / 1000;
+  console.log(`Auth flow test completed in ${duration.toFixed(2)} seconds`);
+}
