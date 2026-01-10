@@ -18,13 +18,8 @@ import {
  * @param idempotencyKey - Optional idempotency key for duplicate prevention
  * @returns Stripe RequestOptions object
  */
-function buildStripeRequestOptions(idempotencyKey?: string): Stripe.RequestOptions {
-  const options: Stripe.RequestOptions = {};
-  if (idempotencyKey) {
-    options.idempotencyKey = idempotencyKey;
-  }
-  return options;
-}
+const buildStripeRequestOptions = (idempotencyKey?: string): Stripe.RequestOptions =>
+  idempotencyKey ? { idempotencyKey } : {};
 
 // Initialize Stripe
 const stripe = new Stripe(config.stripe.secretKey, {
