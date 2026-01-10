@@ -1,7 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { BrandingLogo } from 'components/ui/branding-logo';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { API_BASE_URL } from '../lib/config/api';
 import { useWallet } from '../lib/wallet-context';
@@ -40,13 +39,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
   
   const balance = propBalance ?? walletBalance;
   
-  // Load Connect status and bank accounts on mount
-  useEffect(() => {
-    loadConnectStatus();
-    loadBankAccounts();
-  }, []);
-
-  const loadConnectStatus = async () => {
+  const loadConnectStatus = useCallback(async () => {
     if (!session?.access_token) return;
 
     try {
@@ -65,9 +58,9 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
     } catch (error) {
       console.error('Error loading Connect status:', error);
     }
-  };
+  }, [session?.access_token]);
 
-  const loadBankAccounts = async () => {
+  const loadBankAccounts = useCallback(async () => {
     if (!session?.access_token) return;
 
     setIsLoadingAccounts(true);
@@ -96,7 +89,13 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
     } finally {
       setIsLoadingAccounts(false);
     }
-  };
+  }, [session?.access_token]);
+  
+  // Load Connect status and bank accounts when session changes
+  useEffect(() => {
+    loadConnectStatus();
+    loadBankAccounts();
+  }, [loadConnectStatus, loadBankAccounts]);
 
   const handleConnectOnboarding = async () => {
     setIsOnboarding(true);
@@ -227,7 +226,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         throw new Error(errorData.error || 'Failed to initiate transfer');
       }
 
-      const { transferId, estimatedArrival } = await response.json();
+      const { transferId } = await response.json();
       
       // Refresh wallet balance
       await refresh();
@@ -314,7 +313,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={onBack} 
+          style={styles.backButton}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+        >
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Withdraw Funds</Text>
@@ -340,30 +344,40 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               placeholder="0.00"
               placeholderTextColor="rgba(255,255,255,0.3)"
               keyboardType="decimal-pad"
+              accessibilityLabel="Withdrawal amount"
+              accessibilityHint="Enter the amount you want to withdraw"
             />
           </View>
           <View style={styles.quickAmounts}>
             <TouchableOpacity
               style={styles.quickAmountButton}
               onPress={() => setWithdrawalAmount((balance * 0.25).toFixed(2))}
+              accessibilityLabel="Withdraw 25% of balance"
+              accessibilityRole="button"
             >
               <Text style={styles.quickAmountText}>25%</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickAmountButton}
               onPress={() => setWithdrawalAmount((balance * 0.5).toFixed(2))}
+              accessibilityLabel="Withdraw 50% of balance"
+              accessibilityRole="button"
             >
               <Text style={styles.quickAmountText}>50%</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickAmountButton}
               onPress={() => setWithdrawalAmount((balance * 0.75).toFixed(2))}
+              accessibilityLabel="Withdraw 75% of balance"
+              accessibilityRole="button"
             >
               <Text style={styles.quickAmountText}>75%</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickAmountButton}
               onPress={() => setWithdrawalAmount(balance.toFixed(2))}
+              accessibilityLabel="Withdraw maximum balance"
+              accessibilityRole="button"
             >
               <Text style={styles.quickAmountText}>Max</Text>
             </TouchableOpacity>
@@ -374,7 +388,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Bank Accounts</Text>
-            <TouchableOpacity onPress={handleAddBankAccount} style={styles.addButton}>
+            <TouchableOpacity 
+              onPress={handleAddBankAccount} 
+              style={styles.addButton}
+              accessibilityLabel="Add bank account"
+              accessibilityRole="button"
+            >
               <MaterialIcons name="add" size={18} color="#10b981" />
               <Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
@@ -386,7 +405,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
             <View style={styles.emptyState}>
               <MaterialIcons name="account-balance" size={48} color="rgba(255,255,255,0.3)" />
               <Text style={styles.emptyStateText}>No bank accounts added</Text>
-              <TouchableOpacity onPress={handleAddBankAccount} style={styles.emptyStateButton}>
+              <TouchableOpacity 
+                onPress={handleAddBankAccount} 
+                style={styles.emptyStateButton}
+                accessibilityLabel="Add your first bank account"
+                accessibilityRole="button"
+              >
                 <Text style={styles.emptyStateButtonText}>Add Bank Account</Text>
               </TouchableOpacity>
             </View>
@@ -399,6 +423,9 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
                   selectedBankAccount === account.id && styles.bankAccountCardSelected
                 ]}
                 onPress={() => setSelectedBankAccount(account.id)}
+                accessibilityLabel={`${account.bankName || 'Bank Account'} ending in ${account.last4}, ${account.accountType}, status ${account.status}${account.default ? ', default account' : ''}${selectedBankAccount === account.id ? ', selected' : ''}`}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selectedBankAccount === account.id }}
               >
                 <View style={styles.radioButton}>
                   {selectedBankAccount === account.id ? (
@@ -424,6 +451,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
                 <TouchableOpacity
                   onPress={() => handleRemoveBankAccount(account.id)}
                   style={styles.removeButton}
+                  accessibilityLabel={`Remove ${account.bankName || 'bank account'} ending in ${account.last4}`}
+                  accessibilityRole="button"
                 >
                   <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.6)" />
                 </TouchableOpacity>
@@ -445,6 +474,9 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
                 onPress={handleConnectOnboarding}
                 style={styles.warningButton}
                 disabled={isOnboarding}
+                accessibilityLabel="Complete Stripe Connect onboarding"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isOnboarding }}
               >
                 {isOnboarding ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -487,6 +519,11 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               !selectedBankAccount) &&
               styles.withdrawButtonDisabled
           ]}
+          accessibilityLabel={withdrawalAmount ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}` : 'Withdraw funds'}
+          accessibilityRole="button"
+          accessibilityState={{ 
+            disabled: isProcessing || !hasConnectedAccount || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || bankAccounts.length === 0 || !selectedBankAccount 
+          }}
         >
           {isProcessing ? (
             <>

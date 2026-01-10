@@ -94,7 +94,18 @@ describe('Bank Account Management', () => {
       expect(result.accountType).toBe('checking');
     });
 
-    it('should validate routing number format', async () => {
+    it('should handle invalid routing number from Stripe API', async () => {
+      // Mock Stripe to reject invalid routing number
+      const { default: Stripe } = require('stripe');
+      const stripeMock = Stripe as jest.MockedClass<typeof Stripe>;
+      const stripeInstance = stripeMock.mock.results[0].value;
+      
+      stripeInstance.tokens.create.mockRejectedValueOnce({
+        type: 'StripeInvalidRequestError',
+        code: 'invalid_routing_number',
+        message: 'Invalid routing number',
+      });
+
       await expect(
         consolidatedStripeConnectService.addBankAccount(
           mockUserId,

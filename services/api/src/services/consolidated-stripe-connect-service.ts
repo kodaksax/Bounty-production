@@ -607,26 +607,16 @@ export interface BankAccountResult {
 }
 
 /**
- * Add a bank account to a user's Stripe Connect account
- * Creates a bank account token and attaches it as an external account
+ * Helper function to get user's Connect account ID
  * 
  * @param userId - User ID
- * @param accountHolderName - Name on the bank account
- * @param routingNumber - Bank routing number
- * @param accountNumber - Bank account number
- * @param accountType - checking or savings
- * @returns Bank account details
+ * @returns Connect account ID
+ * @throws NotFoundError if user or Connect account not found
+ * @throws ExternalServiceError if Supabase query fails
  */
-export async function addBankAccount(
-  userId: string,
-  accountHolderName: string,
-  routingNumber: string,
-  accountNumber: string,
-  accountType: 'checking' | 'savings'
-): Promise<BankAccountResult> {
+async function getConnectAccountId(userId: string): Promise<string> {
   const admin = getSupabaseAdmin();
   
-  // Get user's Connect account ID
   const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('stripe_connect_account_id')
@@ -647,6 +637,30 @@ export async function addBankAccount(
   if (!accountId) {
     throw new NotFoundError('Stripe Connect account. Please complete onboarding first.');
   }
+  
+  return accountId;
+}
+
+/**
+ * Add a bank account to a user's Stripe Connect account
+ * Creates a bank account token and attaches it as an external account
+ * 
+ * @param userId - User ID
+ * @param accountHolderName - Name on the bank account
+ * @param routingNumber - Bank routing number
+ * @param accountNumber - Bank account number
+ * @param accountType - checking or savings
+ * @returns Bank account details
+ */
+export async function addBankAccount(
+  userId: string,
+  accountHolderName: string,
+  routingNumber: string,
+  accountNumber: string,
+  accountType: 'checking' | 'savings'
+): Promise<BankAccountResult> {
+  // Get user's Connect account ID
+  const accountId = await getConnectAccountId(userId);
   
   try {
     // Create bank account token
@@ -672,11 +686,6 @@ export async function addBankAccount(
     // Type assertion for bank account
     const bankAccount = externalAccount as Stripe.BankAccount;
     
-    logger.info({
-      userId,
-      accountId,
-      bankAccountId: bankAccount.id,
-      last4: bankAccount.last4,
     logger.info({
       userId,
       accountId,
@@ -708,29 +717,16 @@ export async function addBankAccount(
 export async function listBankAccounts(
   userId: string
 ): Promise<BankAccountResult[]> {
-  const admin = getSupabaseAdmin();
-  
-  // Get user's Connect account ID
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('stripe_connect_account_id')
-    .eq('id', userId)
-    .single();
-  
-  if (profileError) {
-    if (profileError.code === 'PGRST116') {
-      throw new NotFoundError('User', userId);
+  // Get user's Connect account ID - returns empty array if no account
+  let accountId: string;
+  try {
+    accountId = await getConnectAccountId(userId);
+  } catch (error) {
+    // If user doesn't have a Connect account yet, return empty array
+    if (error instanceof NotFoundError) {
+      return [];
     }
-    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
-      error: profileError.message,
-    });
-  }
-  
-  const accountId = profile?.stripe_connect_account_id;
-  
-  if (!accountId) {
-    // Return empty array if no Connect account yet
-    return [];
+    throw error;
   }
   
   try {
@@ -771,29 +767,8 @@ export async function removeBankAccount(
   userId: string,
   bankAccountId: string
 ): Promise<{ success: boolean }> {
-  const admin = getSupabaseAdmin();
-  
   // Get user's Connect account ID
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('stripe_connect_account_id')
-    .eq('id', userId)
-    .single();
-  
-  if (profileError) {
-    if (profileError.code === 'PGRST116') {
-      throw new NotFoundError('User', userId);
-    }
-    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
-      error: profileError.message,
-    });
-  }
-  
-  const accountId = profile?.stripe_connect_account_id;
-  
-  if (!accountId) {
-    throw new NotFoundError('Stripe Connect account');
-  }
+  const accountId = await getConnectAccountId(userId);
   
   try {
     await stripe.accounts.deleteExternalAccount(
@@ -824,29 +799,8 @@ export async function setDefaultBankAccount(
   userId: string,
   bankAccountId: string
 ): Promise<BankAccountResult> {
-  const admin = getSupabaseAdmin();
-  
   // Get user's Connect account ID
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('stripe_connect_account_id')
-    .eq('id', userId)
-    .single();
-  
-  if (profileError) {
-    if (profileError.code === 'PGRST116') {
-      throw new NotFoundError('User', userId);
-    }
-    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
-      error: profileError.message,
-    });
-  }
-  
-  const accountId = profile?.stripe_connect_account_id;
-  
-  if (!accountId) {
-    throw new NotFoundError('Stripe Connect account');
-  }
+  const accountId = await getConnectAccountId(userId);
   
   try {
     // Update bank account to set as default
