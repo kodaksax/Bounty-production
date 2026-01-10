@@ -677,12 +677,17 @@ export async function addBankAccount(
       accountId,
       bankAccountId: bankAccount.id,
       last4: bankAccount.last4,
+    logger.info({
+      userId,
+      accountId,
+      bankAccountId: bankAccount.id,
+      last4: bankAccount.last4,
     }, '[StripeConnect] Added bank account');
     
     return {
       id: bankAccount.id,
       accountHolderName,
-      last4: bankAccount.last4 || accountNumber.slice(-4),
+      last4: bankAccount.last4 || '****',  // Safe fallback - never expose raw account number
       bankName: bankAccount.bank_name || undefined,
       routingNumber: bankAccount.routing_number || undefined,
       accountType,
@@ -737,13 +742,15 @@ export async function listBankAccounts(
     
     return externalAccounts.data.map((account) => {
       const bankAccount = account as Stripe.BankAccount;
+      // Note: Stripe doesn't provide account type (checking/savings) on bank accounts
+      // We default to 'checking' but could enhance this by storing type when account is added
       return {
         id: bankAccount.id,
         accountHolderName: bankAccount.account_holder_name || '',
         last4: bankAccount.last4 || '',
         bankName: bankAccount.bank_name || undefined,
         routingNumber: bankAccount.routing_number || undefined,
-        accountType: (bankAccount.account_holder_type === 'company' ? 'checking' : 'checking') as 'checking' | 'savings',
+        accountType: 'checking' as 'checking' | 'savings',  // Default to checking - Stripe doesn't expose this
         status: bankAccount.status || 'new',
         default: bankAccount.default_for_currency || false,
       };
