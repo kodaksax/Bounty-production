@@ -18,11 +18,13 @@ const createPaymentIntentSchema = z.object({
   metadata: z.record(z.string()).optional(),
   description: z.string().optional(),
   bountyId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 const confirmPaymentIntentSchema = z.object({
   paymentIntentId: z.string(),
   paymentMethodId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 const attachPaymentMethodSchema = z.object({
@@ -31,6 +33,7 @@ const attachPaymentMethodSchema = z.object({
 
 const cancelPaymentIntentSchema = z.object({
   reason: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 /**
@@ -78,6 +81,7 @@ export async function registerConsolidatedPaymentRoutes(
           ...(body.bountyId && { bounty_id: body.bountyId }),
         },
         description: body.description,
+        idempotencyKey: body.idempotencyKey,
       });
       
       request.log.info(
@@ -110,7 +114,8 @@ export async function registerConsolidatedPaymentRoutes(
       const result = await PaymentService.confirmPaymentIntent(
         body.paymentIntentId,
         request.userId!,
-        body.paymentMethodId
+        body.paymentMethodId,
+        body.idempotencyKey
       );
       
       request.log.info(
@@ -247,7 +252,12 @@ export async function registerConsolidatedPaymentRoutes(
       const { id } = request.params as { id: string };
       const body = cancelPaymentIntentSchema.parse(request.body);
       
-      await PaymentService.cancelPaymentIntent(id, request.userId!, body.reason);
+      await PaymentService.cancelPaymentIntent(
+        id, 
+        request.userId!, 
+        body.reason,
+        body.idempotencyKey
+      );
       
       request.log.info({ paymentIntentId: id }, 'Payment intent cancelled');
       

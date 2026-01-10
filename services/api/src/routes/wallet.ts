@@ -300,6 +300,199 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * Add bank account to Stripe Connect account for payouts
+   * This creates an external account on the user's Connect account
+   */
+  fastify.post('/connect/bank-accounts', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { 
+        accountHolderName, 
+        routingNumber, 
+        accountNumber, 
+        accountType 
+      } = request.body as {
+        accountHolderName: string;
+        routingNumber: string;
+        accountNumber: string;
+        accountType: 'checking' | 'savings';
+      };
+
+      // Validate input
+      if (!accountHolderName || !routingNumber || !accountNumber || !accountType) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+
+      if (routingNumber.length !== 9) {
+        return reply.code(400).send({ error: 'Invalid routing number' });
+      }
+
+      // Validate routing number contains only digits
+      if (!/^\d+$/.test(routingNumber)) {
+        return reply.code(400).send({ error: 'Invalid routing number' });
+      }
+
+      // Validate routing number checksum (ABA algorithm)
+      const digits = routingNumber.split('').map(Number);
+      const checksum = (
+        3 * (digits[0] + digits[3] + digits[6]) +
+        7 * (digits[1] + digits[4] + digits[7]) +
+        (digits[2] + digits[5] + digits[8])
+      ) % 10;
+      
+      if (checksum !== 0) {
+        return reply.code(400).send({ error: 'Invalid routing number checksum' });
+      }
+
+      if (accountNumber.length < 4 || accountNumber.length > 17) {
+        return reply.code(400).send({ error: 'Invalid account number' });
+      }
+
+      // Validate account number contains only digits
+      if (!/^\d+$/.test(accountNumber)) {
+        return reply.code(400).send({ error: 'Invalid account number' });
+      }
+
+      if (accountType !== 'checking' && accountType !== 'savings') {
+        return reply.code(400).send({ error: 'Account type must be checking or savings' });
+      }
+
+      // Get user's Connect account
+      const status = await stripeConnectService.getConnectStatus(request.userId);
+      
+      if (!status.hasStripeAccount || !status.stripeAccountId) {
+        return reply.code(400).send({
+          error: 'Stripe Connect account required. Please complete onboarding first.',
+          requiresOnboarding: true,
+        });
+      }
+
+      if (!stripe) {
+        return reply.code(500).send({ error: 'Stripe not configured' });
+      }
+
+      // Create bank account token
+      const token = await stripe.tokens.create({
+        bank_account: {
+          country: 'US',
+          currency: 'usd',
+          account_holder_name: accountHolderName,
+          account_holder_type: 'individual',
+          routing_number: routingNumber,
+          account_number: accountNumber,
+        },
+      });
+
+      // Add external account to Connect account for payouts
+      const externalAccount = await stripe.accounts.createExternalAccount(
+        status.stripeAccountId,
+        {
+          external_account: token.id,
+          default_for_currency: true, // Set as default payout method
+        }
+      );
+
+      console.log(`✅ Added external bank account to Connect account ${status.stripeAccountId}`);
+
+      // Extract last4 for response
+      const last4 = 'last4' in externalAccount ? externalAccount.last4 : accountNumber.slice(-4);
+      const bankName = 'bank_name' in externalAccount ? externalAccount.bank_name : undefined;
+
+      return {
+        success: true,
+        bankAccount: {
+          id: externalAccount.id,
+          last4,
+          bankName,
+          accountType,
+          verified: 'status' in externalAccount ? externalAccount.status === 'verified' : false,
+        },
+      };
+    } catch (error: any) {
+      console.error('Error adding bank account:', error);
+      
+      let errorMessage = 'Failed to add bank account';
+      let statusCode = 500; // Default to server error
+      
+      if (error.type === 'StripeInvalidRequestError') {
+        // Validation errors from Stripe should be 400
+        statusCode = 400;
+        if (error.code === 'routing_number_invalid') {
+          errorMessage = 'Invalid routing number';
+        } else if (error.code === 'account_number_invalid') {
+          errorMessage = 'Invalid account number';
+        } else if (error.param?.includes('routing_number')) {
+          errorMessage = 'Invalid routing number';
+        } else if (error.param?.includes('account_number')) {
+          errorMessage = 'Invalid account number';
+        }
+      }
+      
+      return reply.code(statusCode).send({ error: errorMessage });
+    }
+  });
+
+  /**
+   * List bank accounts on Stripe Connect account
+   */
+  fastify.get('/connect/bank-accounts', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Get user's Connect account
+      const status = await stripeConnectService.getConnectStatus(request.userId);
+      
+      if (!status.hasStripeAccount || !status.stripeAccountId) {
+        return {
+          bankAccounts: [],
+          hasConnectAccount: false,
+        };
+      }
+
+      if (!stripe) {
+        return reply.code(500).send({ error: 'Stripe not configured' });
+      }
+
+      // List external accounts
+      const externalAccounts = await stripe.accounts.listExternalAccounts(
+        status.stripeAccountId,
+        {
+          object: 'bank_account',
+          limit: 10,
+        }
+      );
+
+      const bankAccounts = externalAccounts.data.map((account: any) => ({
+        id: account.id,
+        last4: account.last4,
+        bankName: account.bank_name,
+        accountType: account.object === 'bank_account' ? 'bank_account' : 'card', // Type of source
+        verified: account.status === 'verified',
+        defaultForCurrency: account.default_for_currency,
+      }));
+
+      return {
+        bankAccounts,
+        hasConnectAccount: true,
+      };
+    } catch (error: any) {
+      console.error('Error listing bank accounts:', error);
+      return reply.code(500).send({
+        error: 'Failed to list bank accounts'
+      });
+    }
+  });
+
+  /**
    * Verify Stripe Connect onboarding status for withdrawals
    */
   fastify.post('/connect/verify-onboarding', {

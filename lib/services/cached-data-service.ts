@@ -1,14 +1,26 @@
 /**
  * Cached Data Service
  * Provides offline-first data access with automatic cache management
+ * Enhanced to support bounties, messages, profiles, and other app data
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { logger } from './error-logger';
+import { logger } from '../utils/error-logger';
 
 const CACHE_PREFIX = 'cache_v1_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Cache keys for common data types
+export const CACHE_KEYS = {
+  BOUNTIES_LIST: 'bounties_list',
+  BOUNTY_DETAIL: (id: string | number) => `bounty_${id}`,
+  CONVERSATIONS_LIST: 'conversations_list',
+  CONVERSATION_MESSAGES: (id: string) => `conversation_${id}_messages`,
+  USER_PROFILE: (id: string) => `user_profile_${id}`,
+  MY_BOUNTIES: 'my_bounties',
+  MY_REQUESTS: 'my_requests',
+} as const;
 
 export interface CacheEntry<T> {
   data: T;
@@ -196,6 +208,52 @@ class CachedDataService {
       logger.info(`Cleared ${cacheKeys.length} cache entries`);
     } catch (error) {
       logger.error('Error clearing cache', { error });
+    }
+  }
+
+  /**
+   * Clear cache for specific patterns (e.g., all bounties)
+   */
+  async clearPattern(pattern: string): Promise<void> {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const matchingKeys = allKeys.filter(k => 
+        k.startsWith(CACHE_PREFIX) && k.includes(pattern)
+      );
+      
+      // Clear from memory cache
+      for (const key of this.memoryCache.keys()) {
+        if (key.includes(pattern)) {
+          this.memoryCache.delete(key);
+        }
+      }
+      
+      // Clear from storage
+      await AsyncStorage.multiRemove(matchingKeys);
+      
+      logger.info(`Cleared ${matchingKeys.length} cache entries matching pattern: ${pattern}`);
+    } catch (error) {
+      logger.error('Error clearing cache pattern', { pattern, error });
+    }
+  }
+
+  /**
+   * Preload critical data for offline use
+   */
+  async preloadData<T>(
+    items: Array<{ key: string; fetchFn: () => Promise<T>; ttl?: number }>
+  ): Promise<void> {
+    try {
+      const results = await Promise.allSettled(
+        items.map(({ key, fetchFn, ttl }) => 
+          this.fetchWithCache(key, fetchFn, { ttl })
+        )
+      );
+      
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      logger.info(`Preloaded ${successful}/${items.length} cache items`);
+    } catch (error) {
+      logger.error('Error preloading data', { error });
     }
   }
 
