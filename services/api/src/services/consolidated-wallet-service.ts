@@ -86,6 +86,28 @@ export interface WalletTransaction {
 }
 
 /**
+ * Helper function to transform database record to WalletTransaction
+ * Ensures type safety and reduces code duplication
+ */
+function toWalletTransaction(dbRecord: any): WalletTransaction {
+  return {
+    id: dbRecord.id,
+    user_id: dbRecord.user_id,
+    type: dbRecord.type,
+    amount: dbRecord.amount,
+    description: dbRecord.description,
+    status: dbRecord.status,
+    bounty_id: dbRecord.bounty_id,
+    stripe_payment_intent_id: dbRecord.stripe_payment_intent_id,
+    stripe_transfer_id: dbRecord.stripe_transfer_id,
+    stripe_connect_account_id: dbRecord.stripe_connect_account_id,
+    metadata: dbRecord.metadata,
+    created_at: dbRecord.created_at,
+    updated_at: dbRecord.updated_at,
+  };
+}
+
+/**
  * User balance result
  */
 export interface BalanceResult {
@@ -270,18 +292,7 @@ export async function createDeposit(
         error: fetchError
       }, '[WalletService] Existing transaction not found, creating new one');
     } else {
-      return {
-        id: transaction.id,
-        user_id: transaction.user_id,
-        type: transaction.type,
-        amount: transaction.amount,
-        description: transaction.description,
-        status: transaction.status,
-        stripe_payment_intent_id: transaction.stripe_payment_intent_id,
-        metadata: transaction.metadata,
-        created_at: transaction.created_at,
-        updated_at: transaction.updated_at,
-      };
+      return toWalletTransaction(transaction);
     }
   }
   
@@ -313,18 +324,7 @@ export async function createDeposit(
   // Update user balance atomically
   await updateBalance(userId, amount);
   
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    stripe_payment_intent_id: transaction.stripe_payment_intent_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -350,7 +350,7 @@ export async function createWithdrawal(
   
   // Generate deterministic idempotency key from transaction details
   // Note: Use fixed-point representation for amount to ensure consistency
-  const amountKey = amount.toFixed(2).replace('.', '');
+  const amountKey = amount.toFixed(2).replace(/\./g, '');
   const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
   
   // Create pending transaction (balance not yet deducted)
@@ -418,19 +418,12 @@ export async function createWithdrawal(
       }, '[WalletService] Failed to update transaction with transfer ID');
     }
     
-    return {
-      id: transaction.id,
-      user_id: transaction.user_id,
-      type: transaction.type,
-      amount: transaction.amount,
-      description: transaction.description,
+    return toWalletTransaction({
+      ...transaction,
       status: 'completed',
       stripe_transfer_id: transfer.id,
       stripe_connect_account_id: destination,
-      metadata: transaction.metadata,
-      created_at: transaction.created_at,
-      updated_at: transaction.updated_at,
-    };
+    });
   } catch (error) {
     const handledError = handleStripeError(error);
     
@@ -532,18 +525,7 @@ export async function createEscrow(
   // Deduct from poster's balance atomically (validates sufficient balance)
   await updateBalance(posterId, -amount);
   
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -621,18 +603,7 @@ export async function releaseEscrow(
   // Add to hunter's balance atomically
   await updateBalance(hunterId, amount);
   
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -713,18 +684,7 @@ export async function refundEscrow(
   // Add back to poster's balance atomically
   await updateBalance(posterId, amount);
   
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+  return toWalletTransaction(transaction);
 }
 
 /**
