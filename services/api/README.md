@@ -16,6 +16,7 @@ The BountyExpo API is a production-ready backend service that powers the BountyE
 - **📊 Auto-migrations** - Database schema migrations using Drizzle Kit
 - **🛡️ Security** - Rate limiting, input validation, and security headers
 - **📝 Comprehensive Logging** - Structured logging with request tracking
+- **📈 APM Monitoring** - OpenTelemetry integration for performance monitoring and tracing
 
 ## Quick Start
 
@@ -55,6 +56,22 @@ pnpm db:seed
 # Open Drizzle Studio (database GUI)
 pnpm db:studio
 ```
+
+## Monitoring & Observability
+
+This API includes comprehensive APM (Application Performance Monitoring) with OpenTelemetry. See [APM_MONITORING_GUIDE.md](./APM_MONITORING_GUIDE.md) for:
+
+- Request tracing and distributed tracing
+- Error tracking with Sentry integration
+- Database query performance monitoring
+- Business metrics (bounties, payments, users)
+- Real-time alerts and dashboards
+
+**Key Endpoints:**
+- `/monitoring/dashboard` - Comprehensive APM dashboard
+- `/health/detailed` - Detailed health check with subsystems
+- `/metrics` - Prometheus-compatible metrics
+- `/metrics/alerts` - Active alerts and alert history
 
 ## Architecture
 

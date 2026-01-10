@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
 import { walletCleanupCron } from './services/wallet-cleanup-cron';
+
+// Initialize OpenTelemetry FIRST - before any other modules
+// This must happen before importing instrumented modules
+// Note: OpenTelemetry initialization is deferred until after dotenv loads
 // Defer importing modules that may read environment variables until after
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
@@ -91,6 +95,7 @@ const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidat
 const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetricsRoutes } = require('./routes/metrics');
+const { registerMonitoringDashboardRoutes } = require('./routes/monitoring-dashboard');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -100,6 +105,17 @@ const { initializeIdempotencyService } = require('./services/idempotency-service
 // Import monitoring
 const { recordHttpRequest } = require('./monitoring/metrics');
 const { tracingMiddleware, tracing } = require('./monitoring/tracing');
+const { initializeOpenTelemetry } = require('./monitoring/opentelemetry');
+require('./monitoring/business-metrics');
+
+// Initialize OpenTelemetry for APM monitoring
+// This must happen early to instrument all subsequent module loads
+const otelSDK = initializeOpenTelemetry();
+if (otelSDK) {
+  logger.info('[startup] OpenTelemetry APM monitoring enabled');
+} else {
+  logger.info('[startup] OpenTelemetry APM monitoring disabled');
+}
 
 // Initialize analytics on startup
 backendAnalytics.initialize();
@@ -210,6 +226,10 @@ const startServer = async () => {
 
   // Register metrics routes (monitoring)
   await registerMetricsRoutes(fastify);
+  
+  // Register monitoring dashboard routes (APM)
+  await registerMonitoringDashboardRoutes(fastify);
+
 
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
