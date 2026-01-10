@@ -593,6 +593,288 @@ export async function getAccountStatus(
 }
 
 /**
+ * Bank account information result
+ */
+export interface BankAccountResult {
+  id: string;
+  accountHolderName: string;
+  last4: string;
+  bankName?: string;
+  routingNumber?: string;
+  accountType: 'checking' | 'savings';
+  status: string;
+  default: boolean;
+}
+
+/**
+ * Add a bank account to a user's Stripe Connect account
+ * Creates a bank account token and attaches it as an external account
+ * 
+ * @param userId - User ID
+ * @param accountHolderName - Name on the bank account
+ * @param routingNumber - Bank routing number
+ * @param accountNumber - Bank account number
+ * @param accountType - checking or savings
+ * @returns Bank account details
+ */
+export async function addBankAccount(
+  userId: string,
+  accountHolderName: string,
+  routingNumber: string,
+  accountNumber: string,
+  accountType: 'checking' | 'savings'
+): Promise<BankAccountResult> {
+  const admin = getSupabaseAdmin();
+  
+  // Get user's Connect account ID
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('stripe_connect_account_id')
+    .eq('id', userId)
+    .single();
+  
+  if (profileError) {
+    if (profileError.code === 'PGRST116') {
+      throw new NotFoundError('User', userId);
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
+      error: profileError.message,
+    });
+  }
+  
+  const accountId = profile?.stripe_connect_account_id;
+  
+  if (!accountId) {
+    throw new NotFoundError('Stripe Connect account. Please complete onboarding first.');
+  }
+  
+  try {
+    // Create bank account token
+    const token = await stripe.tokens.create({
+      bank_account: {
+        country: 'US',
+        currency: 'usd',
+        account_holder_name: accountHolderName,
+        account_holder_type: 'individual',
+        routing_number: routingNumber,
+        account_number: accountNumber,
+      },
+    });
+    
+    // Add bank account as external account on the Connect account
+    const externalAccount = await stripe.accounts.createExternalAccount(
+      accountId,
+      {
+        external_account: token.id,
+      }
+    );
+    
+    // Type assertion for bank account
+    const bankAccount = externalAccount as Stripe.BankAccount;
+    
+    logger.info({
+      userId,
+      accountId,
+      bankAccountId: bankAccount.id,
+      last4: bankAccount.last4,
+    }, '[StripeConnect] Added bank account');
+    
+    return {
+      id: bankAccount.id,
+      accountHolderName,
+      last4: bankAccount.last4 || accountNumber.slice(-4),
+      bankName: bankAccount.bank_name || undefined,
+      routingNumber: bankAccount.routing_number || undefined,
+      accountType,
+      status: bankAccount.status || 'new',
+      default: bankAccount.default_for_currency || false,
+    };
+  } catch (error) {
+    throw handleStripeError(error);
+  }
+}
+
+/**
+ * List all bank accounts for a user's Connect account
+ * 
+ * @param userId - User ID
+ * @returns Array of bank accounts
+ */
+export async function listBankAccounts(
+  userId: string
+): Promise<BankAccountResult[]> {
+  const admin = getSupabaseAdmin();
+  
+  // Get user's Connect account ID
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('stripe_connect_account_id')
+    .eq('id', userId)
+    .single();
+  
+  if (profileError) {
+    if (profileError.code === 'PGRST116') {
+      throw new NotFoundError('User', userId);
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
+      error: profileError.message,
+    });
+  }
+  
+  const accountId = profile?.stripe_connect_account_id;
+  
+  if (!accountId) {
+    // Return empty array if no Connect account yet
+    return [];
+  }
+  
+  try {
+    // List external accounts (bank accounts only)
+    const externalAccounts = await stripe.accounts.listExternalAccounts(
+      accountId,
+      { object: 'bank_account', limit: 100 }
+    );
+    
+    return externalAccounts.data.map((account) => {
+      const bankAccount = account as Stripe.BankAccount;
+      return {
+        id: bankAccount.id,
+        accountHolderName: bankAccount.account_holder_name || '',
+        last4: bankAccount.last4 || '',
+        bankName: bankAccount.bank_name || undefined,
+        routingNumber: bankAccount.routing_number || undefined,
+        accountType: (bankAccount.account_holder_type === 'company' ? 'checking' : 'checking') as 'checking' | 'savings',
+        status: bankAccount.status || 'new',
+        default: bankAccount.default_for_currency || false,
+      };
+    });
+  } catch (error) {
+    throw handleStripeError(error);
+  }
+}
+
+/**
+ * Remove a bank account from a user's Connect account
+ * 
+ * @param userId - User ID
+ * @param bankAccountId - Bank account ID to remove
+ * @returns Success status
+ */
+export async function removeBankAccount(
+  userId: string,
+  bankAccountId: string
+): Promise<{ success: boolean }> {
+  const admin = getSupabaseAdmin();
+  
+  // Get user's Connect account ID
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('stripe_connect_account_id')
+    .eq('id', userId)
+    .single();
+  
+  if (profileError) {
+    if (profileError.code === 'PGRST116') {
+      throw new NotFoundError('User', userId);
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
+      error: profileError.message,
+    });
+  }
+  
+  const accountId = profile?.stripe_connect_account_id;
+  
+  if (!accountId) {
+    throw new NotFoundError('Stripe Connect account');
+  }
+  
+  try {
+    await stripe.accounts.deleteExternalAccount(
+      accountId,
+      bankAccountId
+    );
+    
+    logger.info({
+      userId,
+      accountId,
+      bankAccountId,
+    }, '[StripeConnect] Removed bank account');
+    
+    return { success: true };
+  } catch (error) {
+    throw handleStripeError(error);
+  }
+}
+
+/**
+ * Set a bank account as the default for payouts
+ * 
+ * @param userId - User ID
+ * @param bankAccountId - Bank account ID to set as default
+ * @returns Updated bank account details
+ */
+export async function setDefaultBankAccount(
+  userId: string,
+  bankAccountId: string
+): Promise<BankAccountResult> {
+  const admin = getSupabaseAdmin();
+  
+  // Get user's Connect account ID
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('stripe_connect_account_id')
+    .eq('id', userId)
+    .single();
+  
+  if (profileError) {
+    if (profileError.code === 'PGRST116') {
+      throw new NotFoundError('User', userId);
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to fetch user profile', {
+      error: profileError.message,
+    });
+  }
+  
+  const accountId = profile?.stripe_connect_account_id;
+  
+  if (!accountId) {
+    throw new NotFoundError('Stripe Connect account');
+  }
+  
+  try {
+    // Update bank account to set as default
+    const externalAccount = await stripe.accounts.updateExternalAccount(
+      accountId,
+      bankAccountId,
+      {
+        default_for_currency: true,
+      }
+    );
+    
+    const bankAccount = externalAccount as Stripe.BankAccount;
+    
+    logger.info({
+      userId,
+      accountId,
+      bankAccountId,
+    }, '[StripeConnect] Set default bank account');
+    
+    return {
+      id: bankAccount.id,
+      accountHolderName: bankAccount.account_holder_name || '',
+      last4: bankAccount.last4 || '',
+      bankName: bankAccount.bank_name || undefined,
+      routingNumber: bankAccount.routing_number || undefined,
+      accountType: 'checking',
+      status: bankAccount.status || 'new',
+      default: true,
+    };
+  } catch (error) {
+    throw handleStripeError(error);
+  }
+}
+
+/**
  * Export service instance
  */
 export const consolidatedStripeConnectService = {
@@ -602,4 +884,8 @@ export const consolidatedStripeConnectService = {
   createTransfer,
   retryTransfer,
   getAccountStatus,
+  addBankAccount,
+  listBankAccounts,
+  removeBankAccount,
+  setDefaultBankAccount,
 };
