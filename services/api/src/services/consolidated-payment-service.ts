@@ -50,6 +50,7 @@ export interface CreatePaymentIntentOptions {
   metadata?: Record<string, string>;
   description?: string;
   paymentMethodTypes?: string[];
+  idempotencyKey?: string;
 }
 
 /**
@@ -146,6 +147,7 @@ export async function createPaymentIntent(
     metadata = {},
     description,
     paymentMethodTypes = ['card'],
+    idempotencyKey,
   } = options;
   
   // Validate amount
@@ -163,8 +165,8 @@ export async function createPaymentIntent(
     // Get or create Stripe customer
     const customerId = await getOrCreateStripeCustomer(userId);
     
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
+    // Create payment intent with optional idempotency key
+    const createOptions: Stripe.PaymentIntentCreateParams = {
       amount: amountCents,
       currency: currency.toLowerCase(),
       customer: customerId,
@@ -178,7 +180,17 @@ export async function createPaymentIntent(
         enabled: true,
         allow_redirects: 'never',
       },
-    });
+    };
+    
+    const requestOptions: Stripe.RequestOptions = {};
+    if (idempotencyKey) {
+      requestOptions.idempotencyKey = idempotencyKey;
+    }
+    
+    const paymentIntent = await stripe.paymentIntents.create(
+      createOptions,
+      requestOptions
+    );
     
     const clientSecret = paymentIntent.client_secret;
     if (!clientSecret) {
@@ -205,7 +217,8 @@ export async function createPaymentIntent(
 export async function confirmPaymentIntent(
   paymentIntentId: string,
   userId: string,
-  paymentMethodId?: string
+  paymentMethodId?: string,
+  idempotencyKey?: string
 ): Promise<{
   success: boolean;
   status: string;
@@ -241,9 +254,15 @@ export async function confirmPaymentIntent(
         confirmParams.payment_method = paymentMethodId;
       }
       
+      const requestOptions: Stripe.RequestOptions = {};
+      if (idempotencyKey) {
+        requestOptions.idempotencyKey = idempotencyKey;
+      }
+      
       confirmedIntent = await stripe.paymentIntents.confirm(
         paymentIntentId,
-        confirmParams
+        confirmParams,
+        requestOptions
       );
     }
     
@@ -391,7 +410,10 @@ export async function detachPaymentMethod(
 /**
  * Create setup intent for adding payment method without immediate charge
  */
-export async function createSetupIntent(userId: string): Promise<{
+export async function createSetupIntent(
+  userId: string,
+  idempotencyKey?: string
+): Promise<{
   clientSecret: string;
   setupIntentId: string;
 }> {
@@ -399,12 +421,22 @@ export async function createSetupIntent(userId: string): Promise<{
     // Get or create Stripe customer
     const customerId = await getOrCreateStripeCustomer(userId);
     
-    // Create setup intent
-    const setupIntent = await stripe.setupIntents.create({
+    // Create setup intent with optional idempotency key
+    const setupIntentParams: Stripe.SetupIntentCreateParams = {
       customer: customerId,
       payment_method_types: ['card'],
       metadata: { user_id: userId },
-    });
+    };
+    
+    const requestOptions: Stripe.RequestOptions = {};
+    if (idempotencyKey) {
+      requestOptions.idempotencyKey = idempotencyKey;
+    }
+    
+    const setupIntent = await stripe.setupIntents.create(
+      setupIntentParams,
+      requestOptions
+    );
     
     if (!setupIntent.client_secret) {
       throw new ExternalServiceError(
@@ -428,7 +460,8 @@ export async function createSetupIntent(userId: string): Promise<{
 export async function cancelPaymentIntent(
   paymentIntentId: string,
   userId: string,
-  reason?: string
+  reason?: string,
+  idempotencyKey?: string
 ): Promise<void> {
   try {
     // Retrieve payment intent to verify ownership
@@ -455,9 +488,20 @@ export async function cancelPaymentIntent(
         }
       }
       
-      await stripe.paymentIntents.cancel(paymentIntentId, {
+      const cancelParams: Stripe.PaymentIntentCancelParams = {
         cancellation_reason: cancellationReason,
-      });
+      };
+      
+      const requestOptions: Stripe.RequestOptions = {};
+      if (idempotencyKey) {
+        requestOptions.idempotencyKey = idempotencyKey;
+      }
+      
+      await stripe.paymentIntents.cancel(
+        paymentIntentId,
+        cancelParams,
+        requestOptions
+      );
     } else {
       throw new ValidationError(
         `Cannot cancel payment intent with status: ${paymentIntent.status}`

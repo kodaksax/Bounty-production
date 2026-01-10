@@ -223,18 +223,59 @@ export async function getTransactions(
  * @param userId - User ID
  * @param amount - Amount in USD
  * @param paymentIntentId - Stripe payment intent ID
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate processing
  * @returns Created transaction
  */
 export async function createDeposit(
   userId: string,
   amount: number,
-  paymentIntentId: string
+  paymentIntentId: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Deposit amount must be positive');
   }
   
   const admin = getSupabaseAdmin();
+  
+  // Use payment intent ID as idempotency key if not provided
+  const effectiveIdempotencyKey = idempotencyKey || `deposit_${paymentIntentId}`;
+  
+  // Check for duplicate transaction using payment intent ID
+  const { data: existingTx } = await admin
+    .from('wallet_transactions')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .eq('type', 'deposit')
+    .maybeSingle();
+  
+  if (existingTx) {
+    logger.warn({ 
+      paymentIntentId, 
+      userId,
+      existingTransactionId: existingTx.id 
+    }, '[WalletService] Duplicate deposit detected, returning existing transaction');
+    
+    // Return existing transaction
+    const { data: transaction } = await admin
+      .from('wallet_transactions')
+      .select('*')
+      .eq('id', existingTx.id)
+      .single();
+    
+    return {
+      id: transaction.id,
+      user_id: transaction.user_id,
+      type: transaction.type,
+      amount: transaction.amount,
+      description: transaction.description,
+      status: transaction.status,
+      stripe_payment_intent_id: transaction.stripe_payment_intent_id,
+      metadata: transaction.metadata,
+      created_at: transaction.created_at,
+      updated_at: transaction.updated_at,
+    };
+  }
   
   // Create transaction record
   const { data: transaction, error: txError } = await admin
@@ -249,6 +290,7 @@ export async function createDeposit(
       metadata: {
         payment_intent_id: paymentIntentId,
         created_via: 'webhook',
+        idempotency_key: effectiveIdempotencyKey,
       },
     })
     .select()
@@ -283,18 +325,23 @@ export async function createDeposit(
  * @param userId - User ID
  * @param amount - Amount in USD
  * @param destination - Stripe Connect account ID or bank account token
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate withdrawals
  * @returns Created transaction
  */
 export async function createWithdrawal(
   userId: string,
   amount: number,
-  destination: string
+  destination: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Withdrawal amount must be positive');
   }
   
   const admin = getSupabaseAdmin();
+  
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${Date.now()}`;
   
   // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
@@ -306,6 +353,9 @@ export async function createWithdrawal(
       description: `Withdrawal to account ending in ${destination.slice(-4)}`,
       status: 'pending',
       stripe_connect_account_id: destination,
+      metadata: {
+        idempotency_key: effectiveIdempotencyKey,
+      },
     })
     .select()
     .single();
@@ -320,8 +370,8 @@ export async function createWithdrawal(
     // Deduct from balance atomically (this validates sufficient balance)
     await updateBalance(userId, -amount);
     
-    // Initiate Stripe transfer
-    const transfer = await stripe.transfers.create({
+    // Initiate Stripe transfer with idempotency key
+    const transferParams: Stripe.TransferCreateParams = {
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
       destination,
@@ -329,7 +379,17 @@ export async function createWithdrawal(
         user_id: userId,
         transaction_id: transaction.id,
       },
-    });
+    };
+    
+    const requestOptions: Stripe.RequestOptions = {};
+    if (idempotencyKey) {
+      requestOptions.idempotencyKey = idempotencyKey;
+    }
+    
+    const transfer = await stripe.transfers.create(
+      transferParams,
+      requestOptions
+    );
     
     // Update transaction with transfer ID and mark as completed
     const { error: updateError } = await admin
@@ -408,18 +468,23 @@ export async function createWithdrawal(
  * @param bountyId - Bounty ID
  * @param posterId - Poster user ID
  * @param amount - Amount in USD
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate escrow
  * @returns Created transaction
  */
 export async function createEscrow(
   bountyId: string,
   posterId: string,
-  amount: number
+  amount: number,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Escrow amount must be positive');
   }
   
   const admin = getSupabaseAdmin();
+  
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `escrow_${bountyId}_${posterId}`;
   
   // Check for existing escrow transaction to prevent duplicates
   const { data: existingEscrow } = await admin
@@ -447,6 +512,7 @@ export async function createEscrow(
       metadata: {
         bounty_id: bountyId,
         escrowed_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
     })
     .select()
@@ -480,13 +546,18 @@ export async function createEscrow(
  * Called when bounty is completed
  * @param bountyId - Bounty ID
  * @param hunterId - Hunter user ID
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate releases
  * @returns Created release transaction
  */
 export async function releaseEscrow(
   bountyId: string,
-  hunterId: string
+  hunterId: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
+  
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `release_${bountyId}_${hunterId}`;
   
   // Check for existing release or refund to prevent double-release
   const { data: existingRelease } = await admin
@@ -530,6 +601,7 @@ export async function releaseEscrow(
         bounty_id: bountyId,
         escrow_transaction_id: escrowTx.id,
         released_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
     })
     .select()
@@ -564,14 +636,19 @@ export async function releaseEscrow(
  * @param bountyId - Bounty ID
  * @param posterId - Poster user ID
  * @param reason - Refund reason
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate refunds
  * @returns Created refund transaction
  */
 export async function refundEscrow(
   bountyId: string,
   posterId: string,
-  reason: string
+  reason: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
+  
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `refund_${bountyId}_${posterId}`;
   
   // Check for existing release or refund to prevent double-refund
   const { data: existingRelease } = await admin
@@ -616,6 +693,7 @@ export async function refundEscrow(
         escrow_transaction_id: escrowTx.id,
         reason,
         refunded_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
     })
     .select()
