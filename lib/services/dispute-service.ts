@@ -61,18 +61,7 @@ export const disputeService = {
         throw new Error('Cancellation not found');
       }
 
-      // Update cancellation status to disputed
-      const { error: updateError } = await supabase
-        .from('bounty_cancellations')
-        .update({ status: 'disputed' })
-        .eq('id', cancellationId);
-
-      if (updateError) {
-        logger.error('Error updating cancellation to disputed', { error: updateError });
-        throw updateError;
-      }
-
-      // Create the dispute record
+      // Prepare dispute data
       const disputeData = {
         cancellation_id: cancellationId,
         bounty_id: cancellation.bountyId,
@@ -82,15 +71,27 @@ export const disputeService = {
         status: 'open',
       };
 
+      // Create the dispute record first. If this fails, do not touch the cancellation.
       const { data, error } = await supabase
         .from('bounty_disputes')
         .insert(disputeData)
         .select('*')
         .single();
 
-      if (error) {
-        logger.error('Error creating dispute', { error, disputeData });
-        throw error;
+      if (error || !data) {
+        logger.error('Error creating dispute', { error, disputeData, data });
+        return null;
+      }
+
+      // Only update the cancellation status after dispute was created successfully.
+      const { error: updateError } = await supabase
+        .from('bounty_cancellations')
+        .update({ status: 'disputed' })
+        .eq('id', cancellationId);
+
+      if (updateError) {
+        // Log but do not fail the overall operation — dispute exists even if cancellation update failed.
+        logger.error('Error updating cancellation to disputed', { error: updateError, cancellationId });
       }
 
       // Transform to match BountyDispute interface
