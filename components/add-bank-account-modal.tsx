@@ -140,8 +140,8 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
         throw new Error('Not authenticated. Please sign in again.')
       }
 
-      // Create bank account token via backend
-      const response = await fetch(`${API_BASE_URL}/payments/bank-accounts`, {
+      // Create bank account on Connect account for payouts
+      const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -167,25 +167,23 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
           throw new Error('Payment service not configured. Please contact support.')
         }
         
+        // Handle Connect account requirement
+        if (errorData.requiresOnboarding) {
+          throw new Error('Please complete Stripe Connect onboarding before adding a bank account.')
+        }
+        
         throw new Error(errorData.error || `Failed to add bank account (${response.status})`)
       }
 
-      // Parse response to get tokenized data
+      // Parse response to get bank account data
       const responseData = await response.json()
 
-      // Call onSave callback with non-sensitive tokenized data only
-      if (onSave) {
-        onSave({
-          accountHolderName,
-          // Only pass non-sensitive fields - no raw account or routing numbers
-          accountNumber: '', // Empty string for interface compatibility
-          routingNumber: '', // Empty string for interface compatibility
-          accountType,
-        })
-      }
+      // Show success message with verification info
+      const verificationMessage = responseData.bankAccount?.verified 
+        ? 'Bank account added and verified!'
+        : 'Bank account added successfully! Verification may take 1-2 business days.'
       
-      // Show success and close modal
-      Alert.alert('Success', 'Bank account added successfully! Verification may take 1-2 business days.', [
+      Alert.alert('Success', verificationMessage, [
         { text: 'OK', onPress: onBack }
       ])
       
