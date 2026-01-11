@@ -142,20 +142,3 @@ const badgeStyles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
-// Export badge styles separately
-const badgeStyles = StyleSheet.create({
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});

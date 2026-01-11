@@ -198,22 +198,3 @@ const compactStyles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
-// Export compact styles separately
-const compactStyles = StyleSheet.create({
-  compactContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  compactText: {
-    color: '#92400e',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});
