@@ -737,7 +737,7 @@ export async function listBankAccounts(
       { object: 'bank_account', limit: 100 }
     );
     
-    return externalAccounts.data.map((account) => {
+    return externalAccounts.data.map((account: Stripe.BankAccount) => {
       const bankAccount = account as Stripe.BankAccount;
       // Note: Stripe doesn't provide account type (checking/savings) on bank accounts
       // We default to 'checking' but could enhance this by storing type when account is added

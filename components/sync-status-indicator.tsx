@@ -142,3 +142,5 @@ const badgeStyles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+// (Intentional) badge styles already defined above; no duplicate export.

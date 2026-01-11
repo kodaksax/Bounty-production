@@ -315,7 +315,7 @@ export async function listPaymentMethods(userId: string): Promise<PaymentMethodR
       type: 'card',
     });
     
-    return paymentMethods.data.map((pm) => ({
+    return paymentMethods.data.map((pm: Stripe.PaymentMethod) => ({
       id: pm.id,
       type: 'card',
       card: pm.card

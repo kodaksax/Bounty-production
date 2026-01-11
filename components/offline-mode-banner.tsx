@@ -198,3 +198,5 @@ const compactStyles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+// (Intentional) compact styles already defined above; no duplicate export.

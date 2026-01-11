@@ -471,14 +471,19 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         }
       );
 
-      const bankAccounts = externalAccounts.data.map((account: any) => ({
-        id: account.id,
-        last4: account.last4,
-        bankName: account.bank_name,
-        accountType: account.object === 'bank_account' ? 'bank_account' : 'card', // Type of source
-        verified: account.status === 'verified',
-        defaultForCurrency: account.default_for_currency,
-      }));
+      const bankAccounts = externalAccounts.data
+        .filter((a: unknown) => Boolean(a) && (a as any).object === 'bank_account')
+        .map((account: unknown) => {
+          const bank = account as Stripe.BankAccount;
+          return {
+            id: bank.id,
+            last4: bank.last4,
+            bankName: bank.bank_name,
+            accountType: 'bank_account',
+            verified: (bank as any).status === 'verified',
+            defaultForCurrency: bank.default_for_currency,
+          };
+        });
 
       return {
         bankAccounts,

@@ -415,10 +415,29 @@ export interface BountyDispute {
 }
 
 // Dispute Evidence
+// Dispute Evidence (persisted)
+// This type represents evidence records that exist in the database
+// and therefore *must* include the `disputeId` and `uploadedBy` fields.
 export interface DisputeEvidence {
   id: string;
   disputeId: string; // Required for database operations
   uploadedBy: string; // Required for database operations
+  type: 'text' | 'image' | 'document' | 'link';
+  content: string;
+  description?: string;
+  mimeType?: string;
+  fileSize?: number;
+  uploadedAt: string;
+}
+
+// Local (unsynced) dispute evidence
+// Use this type in client-side flows where evidence can be created
+// locally before being uploaded/synced to the backend. These fields
+// are optional to allow a draft/temporary state prior to persistence.
+export interface LocalDisputeEvidence {
+  id: string;
+  disputeId?: string; // Optional while unsynced
+  uploadedBy?: string; // Optional while unsynced
   type: 'text' | 'image' | 'document' | 'link';
   content: string;
   description?: string;

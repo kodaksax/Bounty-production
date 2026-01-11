@@ -260,7 +260,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       });
 
       return {
-        paymentMethods: paymentMethods.data.map(pm => ({
+        paymentMethods: paymentMethods.data.map((pm: Stripe.PaymentMethod) => ({
           id: pm.id,
           type: pm.type,
           card: {

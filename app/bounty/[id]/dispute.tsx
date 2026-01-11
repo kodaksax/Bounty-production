@@ -18,7 +18,7 @@ import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { DisputeSubmissionForm } from 'components/dispute-submission-form';
-import type { BountyDispute, DisputeEvidence, BountyCancellation } from 'lib/types';
+import type { BountyDispute, LocalDisputeEvidence, BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
@@ -68,7 +68,7 @@ export default function DisputeScreen() {
     }
   };
   
-  const handleCreateDispute = async (reason: string, evidence: DisputeEvidence[]) => {
+  const handleCreateDispute = async (reason: string, evidence: LocalDisputeEvidence[]) => {
     if (!userId || !cancellation) {
       throw new Error('Unable to create dispute');
     }
@@ -110,14 +110,23 @@ export default function DisputeScreen() {
     
     setSubmitting(true);
     try {
-      const newEvidence: DisputeEvidence = {
+      const newEvidence: LocalDisputeEvidence = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
         type: 'text',
         content: evidenceText,
         uploadedAt: new Date().toISOString(),
       };
-      
-      const success = await disputeService.addEvidence(dispute.id, newEvidence);
+
+      // Use uploadEvidence for user-submitted items so the server assigns
+      // persisted fields (`uploaded_by`, timestamps) and stores them in the
+      // `dispute_evidence` table.
+      const success = await disputeService.uploadEvidence(dispute.id, String(userId), {
+        type: newEvidence.type,
+        content: newEvidence.content,
+        description: newEvidence.description,
+        mimeType: (newEvidence as any).mimeType,
+        fileSize: (newEvidence as any).fileSize,
+      });
       
       if (success) {
         Alert.alert('Success', 'Evidence added successfully');
