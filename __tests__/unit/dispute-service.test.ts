@@ -61,14 +61,7 @@ describe('DisputeService', () => {
         bounty_id: 'bounty-123',
         initiator_id: 'user-123',
         reason: 'Work was completed but poster disputes quality',
-        evidence_json: JSON.stringify([
-          {
-            id: 'ev-1',
-            type: 'text',
-            content: 'I completed all requirements',
-            uploadedAt: new Date().toISOString(),
-          },
-        ]),
+        evidence_json: null, // Evidence is now uploaded separately
         status: 'open',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -114,7 +107,8 @@ describe('DisputeService', () => {
       expect(dispute).toBeDefined();
       expect(dispute?.id).toBe('dispute-123');
       expect(dispute?.status).toBe('open');
-      expect(dispute?.evidence).toHaveLength(1);
+      // Evidence is now uploaded separately via uploadEvidence, not stored during creation
+      expect(dispute?.evidence).toHaveLength(0);
     });
 
     it('should handle errors gracefully', async () => {
