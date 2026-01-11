@@ -169,10 +169,11 @@ export default function AdminDisputeDetailScreen() {
   //       return 'check-circle';
   //     case 'closed':
   //       return 'cancel';
-      default:
-        return 'help-outline';
-    }
-  };
+  //     default:
+  //       return 'help-outline';
+  //   }
+  // };
+
 
   if (loading) {
     return (
