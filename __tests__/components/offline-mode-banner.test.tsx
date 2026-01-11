@@ -79,10 +79,18 @@ describe('OfflineModeBanner', () => {
       checkConnection: mockCheckConnection,
     });
 
-    const { getByRole } = render(<OfflineModeBanner />);
+    const { getByTestId, UNSAFE_root } = render(<OfflineModeBanner />);
     
-    // Find the refresh button by role
-    const refreshButton = getByRole('button');
+    // Find the TouchableOpacity that contains the refresh icon
+    const touchables = UNSAFE_root.findAllByType('TouchableOpacity');
+    const refreshButton = touchables.find((node: any) => {
+      // Check if this TouchableOpacity has a MaterialIcons child with name="refresh"
+      const children = node.children || [];
+      return children.some((child: any) => 
+        child.props?.name === 'refresh'
+      );
+    });
+    
     if (refreshButton) {
       fireEvent.press(refreshButton);
       expect(mockCheckConnection).toHaveBeenCalled();

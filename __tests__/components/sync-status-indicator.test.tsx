@@ -27,9 +27,9 @@ describe('SyncStatusIndicator', () => {
       clearFailed: jest.fn(),
     });
 
-    const { container } = render(<SyncStatusIndicator />);
+    const { toJSON } = render(<SyncStatusIndicator />);
     
-    expect(container.children.length).toBe(0);
+    expect(toJSON()).toBeNull();
   });
 
   it('should show syncing state when online with pending items', () => {
@@ -114,9 +114,9 @@ describe('SyncStatusBadge', () => {
       clearFailed: jest.fn(),
     });
 
-    const { container } = render(<SyncStatusBadge />);
+    const { toJSON } = render(<SyncStatusBadge />);
     
-    expect(container.children.length).toBe(0);
+    expect(toJSON()).toBeNull();
   });
 
   it('should show failed count when there are failed items', () => {
