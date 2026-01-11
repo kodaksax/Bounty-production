@@ -11,16 +11,16 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import type { DisputeEvidence } from '../lib/types';
+import type { LocalDisputeEvidence } from '../lib/types';
 import { generateEvidenceId } from '../lib/utils/dispute-helpers';
 
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
-  onSubmit: (reason: string, evidence: DisputeEvidence[]) => Promise<void>;
+  onSubmit: (reason: string, evidence: LocalDisputeEvidence[]) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
   initialReason?: string;
-  initialEvidence?: DisputeEvidence[];
+  initialEvidence?: LocalDisputeEvidence[];
   showGuidance?: boolean;
 }
 
@@ -34,7 +34,7 @@ export function DisputeSubmissionForm({
   showGuidance = true,
 }: DisputeSubmissionFormProps) {
   const [reason, setReason] = useState(initialReason);
-  const [evidence, setEvidence] = useState<DisputeEvidence[]>(initialEvidence);
+  const [evidence, setEvidence] = useState<LocalDisputeEvidence[]>(initialEvidence);
   const [textEvidence, setTextEvidence] = useState('');
 
   const handleAddTextEvidence = () => {
@@ -43,7 +43,7 @@ export function DisputeSubmissionForm({
       return;
     }
 
-    const newEvidence: DisputeEvidence = {
+    const newEvidence: LocalDisputeEvidence = {
       id: generateEvidenceId(),
       type: 'text',
       content: textEvidence.trim(),
@@ -69,7 +69,7 @@ export function DisputeSubmissionForm({
       });
 
       if (!result.canceled && result.assets[0]) {
-        const newEvidence: DisputeEvidence = {
+        const newEvidence: LocalDisputeEvidence = {
           id: generateEvidenceId(),
           type: 'image',
           content: result.assets[0].uri,
@@ -93,7 +93,7 @@ export function DisputeSubmissionForm({
 
       if (result.canceled === false && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        const newEvidence: DisputeEvidence = {
+        const newEvidence: LocalDisputeEvidence = {
           id: generateEvidenceId(),
           type: 'document',
           content: asset.uri,

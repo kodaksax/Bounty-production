@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
-import type { BountyDispute, DisputeEvidence } from '../types';
+import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 
@@ -48,7 +48,7 @@ export const disputeService = {
     cancellationId: string,
     initiatorId: string,
     reason: string,
-    evidence?: DisputeEvidence[]
+    evidence?: LocalDisputeEvidence[]
   ): Promise<BountyDispute | null> {
     try {
       if (!isSupabaseConfigured) {
@@ -62,12 +62,17 @@ export const disputeService = {
       }
 
       // Prepare dispute data
+      // We do not persist client-side/unsynced evidence directly into the
+      // canonical `dispute_evidence` table. The client should call
+      // `uploadEvidence` per-item after the dispute is created. To avoid
+      // storing partial/unsynced objects as `DisputeEvidence` in the
+      // dispute row, we leave `evidence_json` null here.
       const disputeData = {
         cancellation_id: cancellationId,
         bounty_id: cancellation.bountyId,
         initiator_id: initiatorId,
         reason,
-        evidence_json: evidence ? JSON.stringify(evidence) : null,
+        evidence_json: null,
         status: 'open',
       };
 
@@ -101,7 +106,7 @@ export const disputeService = {
         bountyId: String(data.bounty_id),
         initiatorId: data.initiator_id,
         reason: data.reason,
-        evidence: data.evidence_json ? JSON.parse(data.evidence_json) : [],
+        evidence: [], // evidence should be uploaded via `uploadEvidence` and fetched separately
         status: data.status,
         resolution: data.resolution,
         resolvedBy: data.resolved_by,
@@ -1032,19 +1037,31 @@ export const disputeService = {
       let posterScore = 0;
 
       // Count evidence submitted by each party
+      const hasUserId = (bounty: unknown): bounty is { user_id: string } =>
+        typeof (bounty as any)?.user_id === 'string';
+      const hasPosterId = (bounty: unknown): bounty is { poster_id: string } =>
+        typeof (bounty as any)?.poster_id === 'string';
+
       const bounty = await bountyService.getById(dispute.bountyId);
+      // Resolve cancellation to identify the hunter who requested it
+      const cancellation = await cancellationService.getCancellationById(dispute.cancellationId);
+      const hunterId = cancellation?.requesterId;
+      const posterId =
+        hasUserId(bounty) ? bounty.user_id :
+        hasPosterId(bounty) ? bounty.poster_id :
+        undefined;
+
       if (bounty) {
         evidence.forEach((ev: any) => {
-          const scoreValue = ev.type === 'image' 
-            ? EVIDENCE_SCORE_IMAGE 
-            : ev.type === 'document' 
-            ? EVIDENCE_SCORE_DOCUMENT 
+          const scoreValue = ev.type === 'image'
+            ? EVIDENCE_SCORE_IMAGE
+            : ev.type === 'document'
+            ? EVIDENCE_SCORE_DOCUMENT
             : EVIDENCE_SCORE_TEXT;
-            
-          // Use poster_id and hunter_id as returned by bountyService.getById
-          if (ev.uploaded_by === bounty.hunter_id) {
+
+          if (hunterId && ev.uploaded_by === hunterId) {
             hunterScore += scoreValue;
-          } else if (ev.uploaded_by === bounty.poster_id) {
+          } else if (posterId && ev.uploaded_by === posterId) {
             posterScore += scoreValue;
           }
         });

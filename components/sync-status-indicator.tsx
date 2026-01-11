@@ -143,19 +143,4 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
-// Export badge styles separately
-const badgeStyles = StyleSheet.create({
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});
+// (Intentional) badge styles already defined above; no duplicate export.

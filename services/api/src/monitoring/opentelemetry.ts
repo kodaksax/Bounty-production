@@ -16,7 +16,7 @@ import { logger } from '../services/logger';
  * - Performance monitoring and bottleneck detection
  * - Error tracking and stack traces
  */
-export function initializeOpenTelemetry(): NodeSDK | null {
+export function initializeOpenTelemetry(): any | null {
   // Skip initialization if OTEL is disabled or endpoint is not configured
   const otelEnabled = process.env.OTEL_ENABLED !== 'false';
   const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTEL_ENDPOINT;

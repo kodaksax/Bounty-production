@@ -115,12 +115,13 @@ class StripeConnectService {
         url: accountLink.url,
         expiresAt: accountLink.expires_at,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating onboarding link:', error);
-      if (error instanceof Stripe.errors.StripeError) {
-        throw new Error(`Stripe error: ${error.message}`);
-      }
-      throw error;
+      const message =
+        typeof error === 'object' && error !== null && 'message' in error
+          ? (error as any).message
+          : String(error);
+      throw new Error(`Stripe error: ${message}`);
     }
   }
 
@@ -164,10 +165,10 @@ class StripeConnectService {
           (account.requirements?.currently_due?.length ?? 0) > 0,
         currentlyDue: account.requirements?.currently_due || [],
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error getting connect status:', error);
-      if (error instanceof Stripe.errors.StripeError) {
-        throw new Error(`Stripe error: ${error.message}`);
+      if ((error as any)?.message) {
+        throw new Error(`Stripe error: ${(error as any).message || String(error)}`);
       }
       throw error;
     }
@@ -246,10 +247,10 @@ class StripeConnectService {
         status: paymentIntent.status,
       };
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Error creating escrow PaymentIntent for bounty ${bountyId}:`, error);
-      if (error instanceof Stripe.errors.StripeError) {
-        throw new Error(`Stripe error: ${error.message}`);
+      if ((error as any)?.message) {
+        throw new Error(`Stripe error: ${(error as any).message || String(error)}`);
       }
       throw error;
     }
@@ -303,10 +304,9 @@ class StripeConnectService {
       console.error(`❌ Error refunding PaymentIntent ${paymentIntentId}:`, error);
       
       let errorMessage = 'Unknown error';
-      if (error instanceof Stripe.errors.StripeError) {
-        errorMessage = error.message;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
+      if ((error as any)?.message) {
+        errorMessage = (error as any).message;
+
       }
 
       return {

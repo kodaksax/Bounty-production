@@ -199,21 +199,4 @@ const compactStyles = StyleSheet.create({
   },
 });
 
-// Export compact styles separately
-const compactStyles = StyleSheet.create({
-  compactContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  compactText: {
-    color: '#92400e',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});
+// (Intentional) compact styles already defined above; no duplicate export.
