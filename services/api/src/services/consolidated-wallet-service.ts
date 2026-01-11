@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
 import { config } from '../config';
 import {
   ConflictError,

@@ -143,35 +143,37 @@ export default function AdminDisputeDetailScreen() {
     );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open':
-        return '#f59e0b';
-      case 'under_review':
-        return '#3b82f6';
-      case 'resolved':
-        return '#10b981';
-      case 'closed':
-        return '#6b7280';
-      default:
-        return '#6b7280';
-    }
-  };
+  // Helper functions for status display (commented out for future use)
+  // const getStatusColor = (status: string) => {
+  //   switch (status) {
+  //     case 'open':
+  //       return '#f59e0b';
+  //     case 'under_review':
+  //       return '#3b82f6';
+  //     case 'resolved':
+  //       return '#10b981';
+  //     case 'closed':
+  //       return '#6b7280';
+  //     default:
+  //       return '#6b7280';
+  //   }
+  // };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'open':
-        return 'error-outline';
-      case 'under_review':
-        return 'visibility';
-      case 'resolved':
-        return 'check-circle';
-      case 'closed':
-        return 'cancel';
-      default:
-        return 'help-outline';
-    }
-  };
+  // const getStatusIcon = (status: string) => {
+  //   switch (status) {
+  //     case 'open':
+  //       return 'error-outline';
+  //     case 'under_review':
+  //       return 'visibility';
+  //     case 'resolved':
+  //       return 'check-circle';
+  //     case 'closed':
+  //       return 'cancel';
+  //     default:
+  //       return 'help-outline';
+  //   }
+  // };
+
 
   if (loading) {
     return (

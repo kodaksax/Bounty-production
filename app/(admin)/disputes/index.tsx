@@ -18,7 +18,6 @@ import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute } from '../../../lib/types';
-import type { Bounty } from '../../../lib/services/database.types';
 import { ROUTES } from '../../../lib/routes';
 
 interface DisputeWithBounty extends BountyDispute {
