@@ -991,4 +991,189 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  /**
+   * Add a bank account to user's Stripe Connect account
+   */
+  fastify.post('/connect/bank-accounts', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { 
+        accountHolderName, 
+        routingNumber, 
+        accountNumber, 
+        accountType 
+      } = request.body as {
+        accountHolderName: string;
+        routingNumber: string;
+        accountNumber: string;
+        accountType: 'checking' | 'savings';
+      };
+
+      if (!accountHolderName || !routingNumber || !accountNumber || !accountType) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+
+      if (routingNumber.length !== 9) {
+        return reply.code(400).send({ error: 'Invalid routing number' });
+      }
+
+      if (accountNumber.length < 4 || accountNumber.length > 17) {
+        return reply.code(400).send({ error: 'Invalid account number' });
+      }
+
+      if (accountType !== 'checking' && accountType !== 'savings') {
+        return reply.code(400).send({ error: 'Account type must be checking or savings' });
+      }
+
+      // Use consolidated Stripe Connect service to add bank account
+      const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
+      
+      const bankAccount = await consolidatedStripeConnectService.addBankAccount(
+        request.userId,
+        accountHolderName,
+        routingNumber,
+        accountNumber,
+        accountType
+      );
+
+      return {
+        success: true,
+        bankAccount,
+      };
+    } catch (error) {
+      logErrorWithContext(request, error, {
+        operation: 'add_bank_account',
+        userId: request.userId,
+      });
+      
+      const message = error instanceof Error ? error.message : 'Failed to add bank account';
+      return reply.code(500).send({
+        error: message,
+        requestId: getRequestContext(request).requestId,
+      });
+    }
+  });
+
+  /**
+   * List all bank accounts for user's Stripe Connect account
+   */
+  fastify.get('/connect/bank-accounts', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Use consolidated Stripe Connect service to list bank accounts
+      const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
+      
+      const bankAccounts = await consolidatedStripeConnectService.listBankAccounts(
+        request.userId
+      );
+
+      return {
+        bankAccounts,
+      };
+    } catch (error) {
+      logErrorWithContext(request, error, {
+        operation: 'list_bank_accounts',
+        userId: request.userId,
+      });
+      
+      return reply.code(500).send({
+        error: 'Failed to list bank accounts',
+        requestId: getRequestContext(request).requestId,
+      });
+    }
+  });
+
+  /**
+   * Remove a bank account from user's Stripe Connect account
+   */
+  fastify.delete('/connect/bank-accounts/:bankAccountId', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { bankAccountId } = request.params as { bankAccountId: string };
+
+      if (!bankAccountId) {
+        return reply.code(400).send({ error: 'Bank account ID required' });
+      }
+
+      // Use consolidated Stripe Connect service to remove bank account
+      const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
+      
+      const result = await consolidatedStripeConnectService.removeBankAccount(
+        request.userId,
+        bankAccountId
+      );
+
+      return result;
+    } catch (error) {
+      logErrorWithContext(request, error, {
+        operation: 'remove_bank_account',
+        userId: request.userId,
+      });
+      
+      const message = error instanceof Error ? error.message : 'Failed to remove bank account';
+      return reply.code(500).send({
+        error: message,
+        requestId: getRequestContext(request).requestId,
+      });
+    }
+  });
+
+  /**
+   * Set a bank account as the default for payouts
+   */
+  fastify.post('/connect/bank-accounts/:bankAccountId/default', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { bankAccountId } = request.params as { bankAccountId: string };
+
+      if (!bankAccountId) {
+        return reply.code(400).send({ error: 'Bank account ID required' });
+      }
+
+      // Use consolidated Stripe Connect service to set default bank account
+      const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
+      
+      const bankAccount = await consolidatedStripeConnectService.setDefaultBankAccount(
+        request.userId,
+        bankAccountId
+      );
+
+      return {
+        success: true,
+        bankAccount,
+      };
+    } catch (error) {
+      logErrorWithContext(request, error, {
+        operation: 'set_default_bank_account',
+        userId: request.userId,
+      });
+      
+      const message = error instanceof Error ? error.message : 'Failed to set default bank account';
+      return reply.code(500).send({
+        error: message,
+        requestId: getRequestContext(request).requestId,
+      });
+    }
+  });
 }

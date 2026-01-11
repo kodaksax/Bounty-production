@@ -10,7 +10,7 @@ import { TransactionHistoryScreen } from "../../components/transaction-history-s
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
-import { WithdrawScreen } from "../../components/withdraw-screen";
+import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { stripeService } from '../../lib/services/stripe-service';
@@ -86,7 +86,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   };
 
   if (showWithdraw) {
-    return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
+    return <WithdrawWithBankScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
   }
   if (showAddMoney) {
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={handleAddMoney} />;
