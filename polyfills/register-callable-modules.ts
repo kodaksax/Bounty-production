@@ -71,9 +71,9 @@ function createHMRClientStub() {
     setup: () => {
       console.log('[HMRClient] Stub setup called - HMR may not be available');
     },
-    // Enables hot module replacement (no-op in stub)
+    // No-op stub: HMR enable is unavailable without the real module
     enable: () => {},
-    // Disables hot module replacement (no-op in stub)
+    // No-op stub: HMR disable is unavailable without the real module
     disable: () => {},
   };
 }
@@ -92,9 +92,9 @@ if (typeof __DEV__ !== 'undefined' && __DEV__) {
       }
       
       if (HMRClient) {
-        console.log('[Polyfill] HMRClient registered successfully');
+        console.log('[Polyfill] HMRClient registered successfully - Hot Module Replacement enabled');
       } else {
-        console.warn('[Polyfill] Could not require HMRClient, registered stub instead');
+        console.warn('[Polyfill] HMRClient module not found, using stub. Hot Module Replacement will not be available. You may need to manually reload the app to see code changes.');
       }
     }
   } catch (e) {
