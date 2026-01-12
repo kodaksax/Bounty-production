@@ -3,27 +3,9 @@
 // with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
 // ensures compatibility with the "main": "expo-router/entry" in package.json.
 
-// Dev-only: Ensure HMRClient JS module is imported and registered early to prevent
-// native crashes when the native runtime calls into HMRClient.setup() before the
-// module is registered. This must happen before any other imports.
-if (__DEV__) {
-  try {
-    // Ensure the HMRClient JS module is registered with the native runtime early
-    require('react-native/Libraries/Utilities/HMRClient');
-  } catch (e) {
-    // Fall back gracefully in case the module path is not available
-    // (e.g., in production, older RN, or non-standard runtimes)
-    // Log to console for easier debugging of dev-only issues.
-    // eslint-disable-next-line no-console
-    console.warn('[HMRClient] import failed:', e);
-  }
-}
-
-// Gesture Handler must be imported before any other code that registers views/handlers.
-// Importing it at the very top prevents runtime errors where gesture-handler or
-// reanimated gesture hooks are undefined.
 // Polyfills that need to run prior to any native / Expo runtime work live here.
 // Register callable-module shims early so native HMR hooks can find them.
+// This MUST be the very first import to ensure the bridge and registry are initialized.
 import './polyfills/register-callable-modules';
 
 // Gesture Handler must be imported before any other code that registers views/handlers.
