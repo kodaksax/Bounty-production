@@ -56,7 +56,7 @@ interface HMRClientInterface {
  */
 function loadHMRClient(): HMRClientInterface | null {
   const locations = [
-    '@expo/metro-runtime/build/HMRClient', // Expo SDK 54+
+    '@expo/metro-runtime/HMRClient', // Expo SDK 54+
     'react-native/Libraries/Utilities/HMRClient', // React Native standard
     'react-native/Libraries/Core/Devtools/HMRClient', // Older versions
   ];
@@ -64,8 +64,16 @@ function loadHMRClient(): HMRClientInterface | null {
   for (const location of locations) {
     try {
       return require(location);
-    } catch (e) {
-      // Continue to next location
+    } catch (e: any) {
+      // Only silently ignore expected "module not found" errors for this location.
+      const error = e as { code?: string; message?: string } | null;
+      const message = typeof error?.message === 'string' ? error!.message : '';
+      const isModuleNotFound =
+        error?.code === 'MODULE_NOT_FOUND' && (location ? message.includes(location) : true);
+
+      if (!isModuleNotFound && typeof console !== 'undefined' && typeof console.debug === 'function') {
+        console.debug(`[Polyfill] Failed to load HMRClient from "${location}":`, e);
+      }
     }
   }
 
@@ -77,9 +85,15 @@ function loadHMRClient(): HMRClientInterface | null {
  * This prevents crashes when native code calls HMRClient methods.
  */
 function createHMRClientStub(): HMRClientInterface {
+  let hasLoggedHMRStubSetup = false;
+
   return {
     setup: () => {
-      console.log('[HMRClient] Stub setup called - HMR may not be available');
+      if (hasLoggedHMRStubSetup) {
+        return;
+      }
+      hasLoggedHMRStubSetup = true;
+      console.warn('[HMRClient] Stub setup called - HMR may not be available');
     },
     enable: () => {
       // Stub implementation - real HMR module would enable hot reloading here
@@ -93,21 +107,18 @@ function createHMRClientStub(): HMRClientInterface {
 // Register HMRClient if in development mode to enable Hot Module Replacement
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
   try {
-    // Attempt to load and register HMRClient module
-    if (typeof globalObject.registerCallableModule === 'function') {
-      const HMRClient = loadHMRClient();
-      const moduleToRegister = HMRClient || createHMRClientStub();
-      
-      globalObject.registerCallableModule('HMRClient', moduleToRegister);
-      if (!globalObject.HMRClient) {
-        globalObject.HMRClient = moduleToRegister;
-      }
-      
-      if (HMRClient) {
-        console.log('[Polyfill] HMRClient registered successfully - Hot Module Replacement enabled');
-      } else {
-        console.warn('[Polyfill] HMRClient module not found, using stub. Hot Module Replacement will not be available. You may need to manually reload the app to see code changes.');
-      }
+    const HMRClient = loadHMRClient();
+    const moduleToRegister = HMRClient || createHMRClientStub();
+    
+    globalObject.registerCallableModule('HMRClient', moduleToRegister);
+    if (!globalObject.HMRClient) {
+      globalObject.HMRClient = moduleToRegister;
+    }
+    
+    if (HMRClient) {
+      console.log('[Polyfill] HMRClient registered successfully - Hot Module Replacement enabled');
+    } else {
+      console.warn('[Polyfill] HMRClient module not found, using stub. Hot Module Replacement will not be available. You may need to manually reload the app to see code changes.');
     }
   } catch (e) {
     console.warn('[Polyfill] HMRClient registration failed:', e);
