@@ -67,9 +67,9 @@ function loadHMRClient(): HMRClientInterface | null {
     } catch (e: any) {
       // Only silently ignore expected "module not found" errors for this location.
       const error = e as { code?: string; message?: string } | null;
-      const message = typeof error?.message === 'string' ? error!.message : '';
+      const message = typeof error?.message === 'string' ? error.message : '';
       const isModuleNotFound =
-        error?.code === 'MODULE_NOT_FOUND' && (location ? message.includes(location) : true);
+        error?.code === 'MODULE_NOT_FOUND' && message.includes(location);
 
       if (!isModuleNotFound && typeof console !== 'undefined' && typeof console.debug === 'function') {
         console.debug(`[Polyfill] Failed to load HMRClient from "${location}":`, e);
