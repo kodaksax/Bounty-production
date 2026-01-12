@@ -6,8 +6,16 @@
 // Gesture Handler must be imported before any other code that registers views/handlers.
 // Importing it at the very top prevents runtime errors where gesture-handler or
 // reanimated gesture hooks are undefined.
-import 'expo-router/entry';
+// Polyfills that need to run prior to any native / Expo runtime work live here.
+// Register callable-module shims early so native HMR hooks can find them.
+import './polyfills/register-callable-modules';
+
+// Gesture Handler must be imported before any other code that registers views/handlers.
+// Importing it at the very top prevents runtime errors where gesture-handler or
+// reanimated gesture hooks are undefined.
 import 'react-native-gesture-handler';
+
+import 'expo-router/entry';
 
 // Initialize Sentry and Analytics after the router entry ensures Metro runtime hooks are installed
 import { analyticsService } from './lib/services/analytics-service';

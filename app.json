@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BOUNTY",
-    "jsEngine": "hermes",
+    "jsEngine": "jsc",
     "slug": "BOUNTYExpo",
     "version": "1.0.0",
     "orientation": "portrait",
