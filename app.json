@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "BOUNTY",
+    "jsEngine": "hermes",
     "slug": "BOUNTYExpo",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,6 +11,7 @@
     
     "ios": {
       "supportsTablet": true,
+      "jsEngine": "jsc",
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
