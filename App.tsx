@@ -56,27 +56,8 @@ if (__DEV__) {
     console.warn('[DevDiag] failed to read globals', e);
   }
 
-  // Dev-only: ensure HMRClient callable exists so native dev clients don't crash
-  try {
-    const g: any = global as any;
-    if (!g.registerCallableModule && g.__fbBatchedBridge && typeof g.__fbBatchedBridge.registerCallableModule === 'function') {
-      g.registerCallableModule = g.__fbBatchedBridge.registerCallableModule.bind(g.__fbBatchedBridge);
-    }
-
-    if (typeof g.registerCallableModule === 'function') {
-      try {
-        const hmrClient = g.HMRClient || require('react-native/Libraries/Core/Devtools/HMRClient');
-        g.registerCallableModule('HMRClient', hmrClient);
-        if (!g.HMRClient) {
-          g.HMRClient = hmrClient;
-        }
-      } catch (e) {
-        // swallow - no HMR in release
-      }
-    }
-  } catch (e) {
-    // swallow - dev-only
-  }
+  // HMRClient registration is now handled in polyfills/register-callable-modules.ts
+  // No need to register it again here - the polyfill runs first and sets it up properly
 
   // Attach global error handlers to capture diagnostics before native crash
   try {
