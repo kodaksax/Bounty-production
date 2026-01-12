@@ -3,11 +3,9 @@
 // with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
 // ensures compatibility with the "main": "expo-router/entry" in package.json.
 
-// Gesture Handler must be imported before any other code that registers views/handlers.
-// Importing it at the very top prevents runtime errors where gesture-handler or
-// reanimated gesture hooks are undefined.
 // Polyfills that need to run prior to any native / Expo runtime work live here.
 // Register callable-module shims early so native HMR hooks can find them.
+// This MUST be the very first import to ensure the bridge and registry are initialized.
 import './polyfills/register-callable-modules';
 
 // Gesture Handler must be imported before any other code that registers views/handlers.

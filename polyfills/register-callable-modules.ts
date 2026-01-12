@@ -40,50 +40,15 @@ if (typeof globalObject.registerCallableModule !== 'function') {
   } as any;
 }
 
-// Try to proactively register the HMRClient callable module early in startup.
-try {
-  const g: any = globalObject as any;
-  if (typeof g.registerCallableModule === 'function') {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      try { console.log('[Polyfill] registerCallableModule is a function'); } catch (e) { /* ignore */ }
-    }
-    let hmrClient: any = g.HMRClient;
-    try {
-      // Avoid requiring a file that Metro may not have; instead, if there is no
-      // built-in HMRClient available at runtime, provide a lightweight stub
-      // implementation so native-side HMR calls do not crash.
-      if (!hmrClient) {
-        hmrClient = (globalObject as any).HMRClient || undefined;
-      }
-    } catch (e) {
-      hmrClient = undefined;
-    }
-
-    // If the real HMRClient isn't available, register a safe no-op stub so
-    // native callers (e.g., HMRClient.setup) can be invoked without throwing.
-    if (!hmrClient) {
-      hmrClient = {
-        setup: () => {},
-        enable: () => {},
-        disable: () => {},
-      };
-    }
-
-    if (hmrClient) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        try { console.log('[Polyfill] HMRClient resolved, attempting register'); } catch (e) { /* ignore */ }
-      }
-        try {
-          g.registerCallableModule && g.registerCallableModule('HMRClient', hmrClient);
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            try { console.log('[Polyfill] __callableModuleRegistry keys:', Object.keys(g.__callableModuleRegistry || {})); } catch (e) { /* ignore */ }
-          }
-          if (!g.HMRClient) g.HMRClient = hmrClient;
-        } catch (e) {
-          // ignore registration failures
-        }
-    }
+// HMRClient registration disabled to prevent crashes.
+// The native dev client may call HMRClient.setup(), but without the module registered,
+// it will fail gracefully. Hot Module Replacement will not be available, but the app
+// will run. To re-enable HMR, the HMRClient module needs to be properly loaded and
+// registered, but for now we're bypassing it entirely to allow the app to start.
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  try { 
+    console.log('[Polyfill] HMRClient registration skipped - HMR disabled to prevent crashes'); 
+  } catch (e) { 
+    /* ignore */ 
   }
-} catch (e) {
-  // ignore errors during bootstrap
 }
