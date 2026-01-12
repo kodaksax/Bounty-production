@@ -41,10 +41,20 @@ if (typeof globalObject.registerCallableModule !== 'function') {
 }
 
 /**
+ * HMRClient interface defining the methods that must be available
+ * for Hot Module Replacement to work correctly.
+ */
+interface HMRClientInterface {
+  setup: (config?: any) => void;
+  enable: () => void;
+  disable: () => void;
+}
+
+/**
  * Attempts to load HMRClient from known locations.
  * @returns HMRClient module or null if not found
  */
-function loadHMRClient(): any {
+function loadHMRClient(): HMRClientInterface | null {
   const locations = [
     '@expo/metro-runtime/build/HMRClient', // Expo SDK 54+
     'react-native/Libraries/Utilities/HMRClient', // React Native standard
@@ -66,15 +76,17 @@ function loadHMRClient(): any {
  * Creates a stub HMRClient implementation for when the real module isn't available.
  * This prevents crashes when native code calls HMRClient methods.
  */
-function createHMRClientStub() {
+function createHMRClientStub(): HMRClientInterface {
   return {
     setup: () => {
       console.log('[HMRClient] Stub setup called - HMR may not be available');
     },
-    // No-op stub: HMR enable is unavailable without the real module
-    enable: () => {},
-    // No-op stub: HMR disable is unavailable without the real module
-    disable: () => {},
+    enable: () => {
+      // Stub implementation - real HMR module would enable hot reloading here
+    },
+    disable: () => {
+      // Stub implementation - real HMR module would disable hot reloading here
+    },
   };
 }
 
