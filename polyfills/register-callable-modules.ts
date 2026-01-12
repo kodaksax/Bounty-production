@@ -40,15 +40,54 @@ if (typeof globalObject.registerCallableModule !== 'function') {
   } as any;
 }
 
-// HMRClient registration disabled to prevent crashes.
-// The native dev client may call HMRClient.setup(), but without the module registered,
-// it will fail gracefully. Hot Module Replacement will not be available, but the app
-// will run. To re-enable HMR, the HMRClient module needs to be properly loaded and
-// registered, but for now we're bypassing it entirely to allow the app to start.
+// Register HMRClient if in development mode to enable Hot Module Replacement
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
-  try { 
-    console.log('[Polyfill] HMRClient registration skipped - HMR disabled to prevent crashes'); 
-  } catch (e) { 
-    /* ignore */ 
+  try {
+    // Attempt to load and register HMRClient module
+    if (typeof globalObject.registerCallableModule === 'function') {
+      try {
+        // Try different possible locations for HMRClient
+        let HMRClient;
+        try {
+          // Expo SDK 54+ uses @expo/metro-runtime
+          HMRClient = require('@expo/metro-runtime/build/HMRClient');
+        } catch (e1) {
+          try {
+            // Fallback to React Native's HMRClient
+            HMRClient = require('react-native/Libraries/Utilities/HMRClient');
+          } catch (e2) {
+            try {
+              // Another possible location in older versions
+              HMRClient = require('react-native/Libraries/Core/Devtools/HMRClient');
+            } catch (e3) {
+              // If all fail, we'll use a stub
+              throw new Error('HMRClient not found in any known location');
+            }
+          }
+        }
+        
+        globalObject.registerCallableModule('HMRClient', HMRClient);
+        if (!globalObject.HMRClient) {
+          globalObject.HMRClient = HMRClient;
+        }
+        console.log('[Polyfill] HMRClient registered successfully');
+      } catch (requireError) {
+        // If HMRClient can't be required, provide a stub to prevent crashes
+        console.warn('[Polyfill] Could not require HMRClient, registering stub');
+        const HMRClientStub = {
+          setup: () => {
+            console.log('[HMRClient] Stub setup called - HMR may not be available');
+          },
+          enable: () => {},
+          disable: () => {},
+        };
+        globalObject.registerCallableModule('HMRClient', HMRClientStub);
+        if (!globalObject.HMRClient) {
+          globalObject.HMRClient = HMRClientStub;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Polyfill] HMRClient registration failed:', e);
   }
 }
