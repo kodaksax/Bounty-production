@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BOUNTY",
-    "jsEngine": "jsc",
+    "jsEngine": "hermes",
     "slug": "BOUNTYExpo",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     
     "ios": {
       "supportsTablet": true,
-      "jsEngine": "jsc",
+      "jsEngine": "hermes",
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -20,6 +20,7 @@
       }
     },
     "android": {
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/bounty-icon.png",
         "backgroundColor": "#ffffff"
