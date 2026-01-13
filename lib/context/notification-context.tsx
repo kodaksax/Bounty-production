@@ -1,6 +1,13 @@
-import * as Notifications from 'expo-notifications';
+// Lazily require expo-notifications to avoid native import at module evaluation time
+let Notifications: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Notifications = require('expo-notifications');
+} catch (_e) {
+  Notifications = null;
+}
 import { useRouter } from 'expo-router';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
 import { supabase } from '../supabase';
@@ -84,7 +91,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Handle notification tap navigation
-  const handleNotificationTap = useCallback(async (response: Notifications.NotificationResponse) => {
+  const handleNotificationTap = useCallback(async (response: any) => {
     const data = response.notification.request.content.data;
     
     // Navigate based on notification type and data
@@ -110,7 +117,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (initialNotificationHandled.current) return;
     
     try {
-      const response = await Notifications.getLastNotificationResponseAsync();
+      if (!Notifications) {
+        // try to require at runtime if not already loaded
+        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+      }
+      const response = Notifications ? await Notifications.getLastNotificationResponseAsync() : null;
       if (response) {
         initialNotificationHandled.current = true;
         // Small delay to ensure router is ready
@@ -131,10 +142,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // Check if app was opened from a notification
     checkInitialNotification();
 
+    // Ensure Notifications is available when setting up listeners
+    if (!Notifications) {
+      try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+    }
+
     // Setup listeners
     const listeners = notificationService.setupNotificationListeners(
       // On notification received (foreground)
-      (notification) => {
+      (notification: any) => {
         // Refresh notifications list
         fetchNotifications();
         refreshUnreadCount();

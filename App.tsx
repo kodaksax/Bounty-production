@@ -1,23 +1,11 @@
 // IMPORTANT: We delegate to expo-router's entrypoint so that navigation context is established.
-// Previously this file rendered a standalone component (Todo list) which broke useRouter() calls
-// with the error: "Couldn't find a navigation context". Keeping this as a thin pass-through
-// ensures compatibility with the "main": "expo-router/entry" in package.json.
-
-// Polyfills that need to run prior to any native / Expo runtime work live here.
-// Register callable-module shims early so native HMR hooks can find them.
-// This MUST be the very first import to ensure the bridge and registry are initialized.
-import './polyfills/register-callable-modules';
-
-// Gesture Handler must be imported before any other code that registers views/handlers.
-// Importing it at the very top prevents runtime errors where gesture-handler or
-// reanimated gesture hooks are undefined.
-import 'react-native-gesture-handler';
-
+// Keep this file minimal so Expo Go/dev clients can load without extra shims.
 import 'expo-router/entry';
+import 'react-native-gesture-handler';
 
 // Initialize Sentry and Analytics after the router entry ensures Metro runtime hooks are installed
 import { analyticsService } from './lib/services/analytics-service';
-import { initSentry, reportError } from './lib/services/sentry-service';
+import { initSentry } from './lib/services/sentry-service';
 
 const MIXPANEL_TOKEN = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN;
 if (MIXPANEL_TOKEN) {
@@ -37,46 +25,6 @@ try {
 // import './polyfills';
 // But do not export a React component – expo-router handles root mounting.
 
-if (__DEV__) {
-  // eslint-disable-next-line no-console
-  console.log('[AppEntry] expo-router entry imported (navigation context should be established)');
-
-  // DEV DIAGNOSTICS: print callable-module registration state so we can trace HMR issues
-  try {
-    const g: any = global as any;
-    const keys = Object.keys(g).slice(0, 200);
-    console.log('[DevDiag] global keys (sample):', keys.join(', '));
-    console.log('[DevDiag] registerCallableModule exists:', typeof g.registerCallableModule === 'function');
-    console.log('[DevDiag] __registerCallableModule exists:', typeof g.__registerCallableModule === 'function');
-    console.log('[DevDiag] __fbBatchedBridge exists:', !!g.__fbBatchedBridge);
-    if (g.__callableModuleRegistry) {
-      console.log('[DevDiag] __callableModuleRegistry keys:', Object.keys(g.__callableModuleRegistry));
-    }
-  } catch (e) {
-    console.warn('[DevDiag] failed to read globals', e);
-  }
-
-  // HMRClient registration is now handled in polyfills/register-callable-modules.ts
-  // No need to register it again here - the polyfill runs first and sets it up properly
-
-  // Attach global error handlers to capture diagnostics before native crash
-  try {
-    const g: any = global as any;
-    if (typeof g.ErrorUtils !== 'undefined' && typeof g.ErrorUtils.setGlobalHandler === 'function') {
-      const prev = g.ErrorUtils.getGlobalHandler && g.ErrorUtils.getGlobalHandler();
-      g.ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
-        try { console.error('[GlobalError] Caught', { error, isFatal }); reportError(error); } catch (e) { /* ignore */ }
-        if (typeof prev === 'function') { try { prev(error, isFatal); } catch (e) { /* ignore */ } }
-      });
-    }
-
-    if (typeof (global as any).process !== 'undefined' && typeof (global as any).process.on === 'function') {
-      (global as any).process.on('unhandledRejection', (reason: any) => {
-        try { console.error('[GlobalError] UnhandledRejection', reason); reportError(reason); } catch (e) { /* ignore */ }
-      });
-    }
-  } catch (e) { /* ignore */ }
-}
 // Note: Do NOT export a React component from this file. The `expo-router/entry` import above
 // establishes the navigation/root mounting. Root-level providers (Stripe, Theme, Auth, etc.)
 // are provided inside `app/_layout.tsx` so that `Slot` and navigation context are available.

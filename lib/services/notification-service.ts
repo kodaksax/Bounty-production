@@ -1,10 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { API_BASE_URL } from 'lib/config/api';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
+// Lazily require expo-notifications to avoid importing native modules at module init
+let Notifications: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Notifications = require('expo-notifications');
+} catch (_e) {
+  Notifications = null;
+}
 
 const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
@@ -61,15 +68,22 @@ async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<R
 
 
 // Configure how notifications should be handled when the app is in the foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Only configure if the native module is available in this runtime.
+try {
+  if (Notifications && typeof Notifications.setNotificationHandler === 'function') {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+} catch (_e) {
+  // ignore
+}
 
 export class NotificationService {
   private static instance: NotificationService;
@@ -100,7 +114,10 @@ export class NotificationService {
    */
   async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
     try {
-      const { status } = await Notifications.getPermissionsAsync();
+      if (!Notifications) {
+        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+      }
+      const { status } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       // Store the status for offline access
       await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
       return this.normalizePermissionStatus(status);
@@ -134,11 +151,14 @@ export class NotificationService {
    */
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      if (!Notifications) {
+        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+      }
+      const { status: existingStatus } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       let finalStatus = existingStatus;
 
       if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
+        const { status } = Notifications ? await Notifications.requestPermissionsAsync() : { status: 'undetermined' };
         finalStatus = status;
       }
 
@@ -150,7 +170,7 @@ export class NotificationService {
       }
 
       // Get the Expo push token
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      const token = Notifications ? (await Notifications.getExpoPushTokenAsync()).data : null;
       
       // Register token with backend
       await this.registerPushToken(token);
@@ -525,11 +545,11 @@ export class NotificationService {
    * Setup notification listeners
    */
   setupNotificationListeners(
-    onNotificationReceived?: (notification: Notifications.Notification) => void,
-    onNotificationTapped?: (response: Notifications.NotificationResponse) => void
+    onNotificationReceived?: (notification: any) => void,
+    onNotificationTapped?: (response: any) => void
   ) {
     // Listener for notifications received while app is in foreground
-    const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+    const receivedSubscription = Notifications.addNotificationReceivedListener((notification: any) => {
       if (onNotificationReceived) {
         onNotificationReceived(notification);
       }
@@ -538,7 +558,7 @@ export class NotificationService {
     });
 
     // Listener for when user taps on a notification
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       if (onNotificationTapped) {
         onNotificationTapped(response);
       }

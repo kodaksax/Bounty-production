@@ -1,7 +1,12 @@
 // lib/services/analytics-service.ts - Analytics tracking service with Mixpanel
-import { Mixpanel } from 'mixpanel-react-native';
-import * as Sentry from '@sentry/react-native';
+// Lazily require native modules to avoid top-level native imports that break
+// when running inside Expo Go (which may not include those native modules).
 import { Platform } from 'react-native';
+
+// When running inside Expo Go some native packages (Mixpanel/Sentry) may not be
+// present. Use a loose alias for Mixpanel to avoid TypeScript errors when the
+// package isn't available at compile/runtime in lightweight dev environments.
+type Mixpanel = any;
 
 // Track key user events according to requirements
 export type AnalyticsEvent = 
@@ -62,17 +67,32 @@ class AnalyticsService {
     }
 
     try {
-      // Initialize Mixpanel
+      // Initialize Mixpanel lazily to avoid requiring native module at import time
       if (mixpanelToken && mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
-        const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
-        this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
-      } else {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+          const { Mixpanel } = require('mixpanel-react-native');
+          const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
+          this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
+        } catch (e: any) {
+          // If mixpanel native package isn't installed or available in this runtime
+          // (e.g., Expo Go), just warn and continue — analytics remains optional.
+          // eslint-disable-next-line no-console
+          console.warn('[Analytics] mixpanel-react-native not available:', e && e.message ? e.message : e);
+          this.mixpanel = null;
+        }
       }
 
       this.initialized = true;
     } catch (error) {
       console.error('[Analytics] Failed to initialize:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -94,11 +114,23 @@ class AnalyticsService {
       }
 
       // Set user in Sentry
-      Sentry.setUser({ id: userId, ...properties });
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.setUser({ id: userId, ...properties });
+      } catch (_e) {
+        // ignore
+      }
 
     } catch (error) {
       console.error('[Analytics] Failed to identify user:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -121,17 +153,29 @@ class AnalyticsService {
         await this.mixpanel.track(event, enrichedProperties);
       }
 
-      // Add breadcrumb to Sentry for context
-      Sentry.addBreadcrumb({
-        category: 'analytics',
-        message: event,
-        level: 'info',
-        data: enrichedProperties,
-      });
+      // Add breadcrumb to Sentry for context (if available)
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.addBreadcrumb({
+          category: 'analytics',
+          message: event,
+          level: 'info',
+          data: enrichedProperties,
+        });
+      } catch (_e) {
+        // ignore when Sentry is not installed in this runtime
+      }
 
     } catch (error) {
       console.error('[Analytics] Failed to track event:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -145,12 +189,23 @@ class AnalyticsService {
         await this.mixpanel.getPeople().set(properties);
       }
 
-      // Update Sentry user context
-      Sentry.setUser({ id: this.userId || undefined, ...properties });
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.setUser({ id: this.userId || undefined, ...properties });
+      } catch (_e) {
+        // ignore
+      }
 
     } catch (error) {
       console.error('[Analytics] Failed to update user properties:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -166,7 +221,13 @@ class AnalyticsService {
       }
     } catch (error) {
       console.error('[Analytics] Failed to increment user property:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -186,16 +247,28 @@ class AnalyticsService {
         await this.mixpanel.track('screen_view', screenProperties);
       }
 
-      Sentry.addBreadcrumb({
-        category: 'navigation',
-        message: `Screen: ${screenName}`,
-        level: 'info',
-        data: screenProperties,
-      });
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.addBreadcrumb({
+          category: 'navigation',
+          message: `Screen: ${screenName}`,
+          level: 'info',
+          data: screenProperties,
+        });
+      } catch (_e) {
+        // ignore
+      }
 
     } catch (error) {
       console.error('[Analytics] Failed to track screen view:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -218,7 +291,13 @@ class AnalyticsService {
 
     } catch (error) {
       console.error('[Analytics] Failed to track timing:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 
@@ -233,11 +312,23 @@ class AnalyticsService {
         await this.mixpanel.reset();
       }
 
-      Sentry.setUser(null);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.setUser(null);
+      } catch (_e) {
+        // ignore
+      }
 
     } catch (error) {
       console.error('[Analytics] Failed to reset analytics:', error);
-      Sentry.captureException(error);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        Sentry.captureException(error);
+      } catch (_e) {
+        // ignore
+      }
     }
   }
 

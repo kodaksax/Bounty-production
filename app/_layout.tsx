@@ -1,4 +1,12 @@
-import * as Sentry from '@sentry/react-native';
+// Lazily require Sentry to avoid importing native module at module-evaluation time
+let Sentry: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Sentry = require('@sentry/react-native');
+} catch (_e) {
+  // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
+  Sentry = null;
+}
 import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -184,18 +192,24 @@ function RootLayout({ children }: { children: React.ReactNode }) {
                   <NotificationProvider>
                     <WebSocketProvider>
                       <ErrorBoundary
-                        onError={(error, errorInfo) => {
-                          // Add custom breadcrumb for additional context (do not capture exception again)
-                          Sentry.addBreadcrumb({
-                            category: 'root_layout',
-                            message: 'Error caught in root layout',
-                            level: 'error',
-                            data: {
-                              componentStack: errorInfo.componentStack,
-                            },
-                          });
-                        }}
-                      >
+                          onError={(error, errorInfo) => {
+                            // Add custom breadcrumb for additional context (do not capture exception again)
+                            try {
+                              if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+                                Sentry.addBreadcrumb({
+                                  category: 'root_layout',
+                                  message: 'Error caught in root layout',
+                                  level: 'error',
+                                  data: {
+                                    componentStack: errorInfo.componentStack,
+                                  },
+                                });
+                              }
+                            } catch (_e) {
+                              // ignore
+                            }
+                          }}
+                        >
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <View style={styles.inner}>
                             <Slot />
@@ -243,4 +257,13 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
 });
 
-export default Sentry.wrap(RootLayout);
+let WrappedRoot = RootLayout;
+try {
+  if (Sentry && typeof Sentry.wrap === 'function') {
+    WrappedRoot = Sentry.wrap(RootLayout);
+  }
+} catch (_e) {
+  // ignore; fall back to unwrapped root
+}
+
+export default WrappedRoot;
