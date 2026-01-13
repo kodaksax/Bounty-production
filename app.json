@@ -8,7 +8,7 @@
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
-    "entryPoint": "entry.js",
+    "entryPoint": "expo-router/entry.js",
     
     "ios": {
       "supportsTablet": true,

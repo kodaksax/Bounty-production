@@ -26,6 +26,15 @@ if (!globalObject.__callableModuleRegistry) {
   globalObject.__callableModuleRegistry = Object.create(null);
 }
 
+// Provide legacy alias used by some runtime checks
+if (typeof (globalObject as any).__registerCallableModule !== 'function' && typeof globalObject.registerCallableModule === 'function') {
+  try {
+    (globalObject as any).__registerCallableModule = globalObject.registerCallableModule;
+  } catch (_e) {
+    // ignore
+  }
+}
+
 // If no native registerCallableModule is available yet, provide a safe JS
 // fallback that writes into the callable module registry so native callers
 // can find callable modules (best-effort).
@@ -134,26 +143,78 @@ function createHMRClientStub(): HMRClientInterface {
 }
 
 // Register HMRClient if in development mode to enable Hot Module Replacement
+// Skip HMR registration when running inside the stock Expo Go app because
+// the native bridge in Expo Go does not expose callable-module registration
+// that HMR expects (this would produce the 'n = 0' error). Detect Expo Go
+// via `expo-constants.appOwnership === 'expo'` when available.
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  let isExpoGo = false;
+  try {
+    // Dynamically require to avoid adding a hard dependency at module init.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Constants = require('expo-constants');
+    if (Constants && Constants.appOwnership === 'expo') {
+      isExpoGo = true;
+    }
+  } catch (_e) {
+    // ignore - if expo-constants isn't available we can't assume Expo Go
+  }
+
+  if (isExpoGo) {
+    // In Expo Go, avoid attempting to register callable HMR modules that
+    // the native runtime will reject. Provide a lightweight stub so JS
+    // code that checks for HMRClient won't crash, but do not call
+    // registerCallableModule which only affects native registry.
+    try {
+      const stub = createHMRClientStub();
+      (globalObject as any).__callableModuleRegistry = (globalObject as any).__callableModuleRegistry || Object.create(null);
+      (globalObject as any).__callableModuleRegistry['HMRClient'] = stub;
+      if (!globalObject.HMRClient) globalObject.HMRClient = stub;
+      console.warn('[Polyfill] Running inside Expo Go — skipping native HMR registration');
+    } catch (_e) {
+      // ignore
+    }
+    // Skip the rest of the HMR registration flow
+  } else {
   try {
     const HMRClient = loadHMRClient();
     const moduleToRegister = HMRClient || createHMRClientStub();
+
+    // Ensure the JS-visible registry contains the module so native code that
+    // inspects the registry directly can find it.
+    try {
+      (globalObject as any).__callableModuleRegistry = (globalObject as any).__callableModuleRegistry || Object.create(null);
+      (globalObject as any).__callableModuleRegistry['HMRClient'] = moduleToRegister;
+    } catch (e) {
+      // ignore
+    }
 
     // registerCallableModule expects a factory function as the second argument.
     try {
       globalObject.registerCallableModule('HMRClient', () => moduleToRegister);
     } catch (e) {
-      // If registration fails for some reason, fallback to storing it on the global
-      // so JS code can still find it.
+      // If registration fails for some reason, log and continue — the registry
+      // has already been populated above which covers many native bridges.
       // eslint-disable-next-line no-console
-      console.debug('[Polyfill] registerCallableModule call failed, falling back to global assignment:', e && e.message ? e.message : e);
-      try {
-        (globalObject as any).__callableModuleRegistry = (globalObject as any).__callableModuleRegistry || Object.create(null);
-        (globalObject as any).__callableModuleRegistry['HMRClient'] = moduleToRegister;
-      } catch (_e) {
-        // ignore
-      }
+      console.debug('[Polyfill] registerCallableModule call failed:', (e as any)?.message ?? e);
     }
+
+    // Also expose alternate aliases that some RN bridges look for.
+    try {
+      if (typeof (globalObject as any).RN$registerCallableModule !== 'function') {
+        (globalObject as any).RN$registerCallableModule = (name: string, factory: any) => {
+          try {
+            const registry = (globalObject as any).__callableModuleRegistry = (globalObject as any).__callableModuleRegistry || Object.create(null);
+            registry[name] = typeof factory === 'function' ? factory() : factory;
+          } catch (_e) {
+            // ignore
+          }
+        };
+      }
+    } catch (_e) {
+      // ignore
+    }
+
     if (!globalObject.HMRClient) {
       globalObject.HMRClient = moduleToRegister;
     }
@@ -164,6 +225,7 @@ if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[Polyfill] HMRClient module not found, using stub. Hot Module Replacement will not be available. You may need to manually reload the app to see code changes.');
     }
   } catch (e) {
-    console.warn('[Polyfill] HMRClient registration failed:', e);
+    console.warn('[Polyfill] HMRClient registration failed:', (e as any)?.message ?? e);
+  }
   }
 }
