@@ -1,6 +1,7 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
 const path = require('path');
+const cssInterop = require.resolve('react-native-css-interop/package.json');
 
 const config = getDefaultConfig(__dirname);
 
@@ -45,4 +46,13 @@ config.resolver = {
   },
 };
 
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = withNativeWind(config, {
+  input: './global.css',
+  projectRoot,
+  inlineRem: false,
+  features: {
+    "nativewind/metro": {
+      transformerPath: require.resolve('react-native-css-interop/dist/metro/transformer'),
+    }
+  }
+});
