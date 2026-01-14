@@ -1,9 +1,5 @@
-// IMPORTANT: We delegate to expo-router's entrypoint so that navigation context is established.
-// Keep this file minimal so Expo Go/dev clients can load without extra shims.
-import 'expo-router/entry';
-import 'react-native-gesture-handler';
-
-// Initialize Sentry and Analytics after the router entry ensures Metro runtime hooks are installed
+// Initialize Sentry and Analytics
+// Note: expo-router/entry is imported in entry.js, not here, to avoid double registration
 import { analyticsService } from './lib/services/analytics-service';
 import { initSentry } from './lib/services/sentry-service';
 

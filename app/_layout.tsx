@@ -31,15 +31,13 @@ import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
-// Ensure Sentry is initialized as early as possible so that Sentry.wrap
-// (used at the bottom of this file) is called after initialization.
+// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { initializeSentry } from '../lib/services/sentry-init';
 
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-initializeSentry();
 
 if (__DEV__) {
   const originalWarn = console.warn;
@@ -58,7 +56,7 @@ export const metadata = {
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no",
   appleMobileWebAppCapable: "yes",
   appleStatusBarStyle: "black-translucent",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 // Simple luminance check to pick light/dark content for the status bar
@@ -106,12 +104,19 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    // Initialize Mixpanel and send an initial page view once at app start.
+    // Initialize Sentry, Mixpanel and send an initial page view once at app start.
     // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
     const start = Date.now();
 
     (async () => {
+      // Initialize Sentry first (deferred from module-level to avoid early native access)
+      try {
+        initializeSentry();
+      } catch (e) {
+        console.error('[Sentry] Initialization failed:', e);
+      }
+
       try {
         await initMixpanel();
         try {
@@ -126,7 +131,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
       try {
         await showNativeSplash();
-        await Asset.loadAsync([ require('../assets/images/icon.png') ]);
+        await Asset.loadAsync([require('../assets/images/icon.png')]);
       } catch (e) {
         console.error('[Splash] preparation error', e);
       } finally {
@@ -178,7 +183,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
-    
+
     return (
       <RootFrame bgColor={color}>
         {showBranded ? (
@@ -192,24 +197,24 @@ function RootLayout({ children }: { children: React.ReactNode }) {
                   <NotificationProvider>
                     <WebSocketProvider>
                       <ErrorBoundary
-                          onError={(error, errorInfo) => {
-                            // Add custom breadcrumb for additional context (do not capture exception again)
-                            try {
-                              if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-                                Sentry.addBreadcrumb({
-                                  category: 'root_layout',
-                                  message: 'Error caught in root layout',
-                                  level: 'error',
-                                  data: {
-                                    componentStack: errorInfo.componentStack,
-                                  },
-                                });
-                              }
-                            } catch (_e) {
-                              // ignore
+                        onError={(error, errorInfo) => {
+                          // Add custom breadcrumb for additional context (do not capture exception again)
+                          try {
+                            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+                              Sentry.addBreadcrumb({
+                                category: 'root_layout',
+                                message: 'Error caught in root layout',
+                                level: 'error',
+                                data: {
+                                  componentStack: errorInfo.componentStack,
+                                },
+                              });
                             }
-                          }}
-                        >
+                          } catch (_e) {
+                            // ignore
+                          }
+                        }}
+                      >
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <View style={styles.inner}>
                             <Slot />
