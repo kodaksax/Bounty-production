@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withNativeWind } = require('nativewind/metro');
 const path = require('path');
 
 const config = getDefaultConfig(__dirname);
@@ -29,14 +30,7 @@ config.transformer = {
 config.resolver = {
   ...config.resolver,
   sourceExts: Array.from(new Set([...(config.resolver?.sourceExts || []), 'cjs'])),
-  extraNodeModules: new Proxy({}, {
-    get: (target, name) => {
-      if (typeof name === 'string' && alias[name]) {
-        return alias[name];
-      }
-      return path.join(projectRoot, 'node_modules', name.toString());
-    },
-  }),
+  alias: alias,
   // Resolve web-specific implementations
   resolveRequest: (context, moduleName, platform) => {
     // For web platform, provide error-throwing stubs for native-only packages
@@ -51,4 +45,4 @@ config.resolver = {
   },
 };
 
-module.exports = config;
+module.exports = withNativeWind(config, { input: './global.css' });

@@ -163,24 +163,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }, [phase]);
 
   const showBranded = phase === 'brand' || (phase !== 'app' && !fontsLoaded);
-  // Runtime instrumentation: log presence of critical stubs once (development only)
-  if (__DEV__) {
-    try {
-      const slot = require('../stubs/radix-slot')
-      const sonner = require('../stubs/sonner')
-      const themes = require('../stubs/next-themes')
-      // Avoid verbose output; just confirm default/named exports shape.
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] radix-slot keys:', Object.keys(slot), 'default' in slot ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] sonner keys:', Object.keys(sonner), 'default' in sonner ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] next-themes keys:', Object.keys(themes), 'default' in themes ? 'hasDefault' : 'noDefault')
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[RuntimeCheck] instrumentation failed', e)
-    }
-  }
+
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
 
