@@ -56,7 +56,7 @@ export const metadata = {
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no",
   appleMobileWebAppCapable: "yes",
   appleStatusBarStyle: "black-translucent",
-  generator: 'v0.dev'
+  generator: 'v0.dev',
 }
 
 // Simple luminance check to pick light/dark content for the status bar
