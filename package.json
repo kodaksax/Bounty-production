@@ -1,6 +1,6 @@
 {
   "name": "bountyexpo",
-  "main": "entry.js",
+  "main": "index.js",
   "version": "1.0.0",
   "workspaces": [
     "packages/*",

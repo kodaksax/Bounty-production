@@ -1,12 +1,3 @@
-// Lazily require Sentry to avoid importing native module at module-evaluation time
-let Sentry: any = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-  Sentry = require('@sentry/react-native');
-} catch (_e) {
-  // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
-  Sentry = null;
-}
 import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -30,6 +21,16 @@ import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+
+// Lazily require Sentry to avoid importing native module at module-evaluation time
+let Sentry: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Sentry = require('@sentry/react-native');
+} catch (_e) {
+  // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
+  Sentry = null;
+}
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { initializeSentry } from '../lib/services/sentry-init';
