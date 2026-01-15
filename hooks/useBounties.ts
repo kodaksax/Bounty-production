@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bountyService } from '../lib/services/bounty-service';
+import { CACHE_KEYS } from '../lib/services/cached-data-service';
 import type { Bounty } from '../lib/services/database.types';
 import { logger } from '../lib/utils/error-logger';
+import { useCachedData } from './useCachedData';
 import { useWebSocketEvent } from './useWebSocket';
 
 /**
@@ -16,6 +18,7 @@ interface BountyStatusEvent {
 export interface BountiesState {
   bounties: Bounty[];
   loading: boolean;
+  isValidating?: boolean;
   error: string | null;
 }
 
@@ -34,7 +37,7 @@ export interface UseBountiesOptions {
 }
 
 /**
- * Hook to manage bounties with WebSocket real-time updates
+ * Hook to manage bounties with WebSocket real-time updates and SWR
  * 
  * Features:
  * - Real-time WebSocket updates for bounty status changes
@@ -44,9 +47,9 @@ export interface UseBountiesOptions {
  * 
  * @example
  * ```tsx
- * const { bounties, loading, error, updateBountyStatus, refreshBounties } = useBounties({
- *   status: 'open',
- *   optimisticUpdates: true
+  * const { bounties, loading, error, updateBountyStatus, refreshBounties } = useBounties({
+    *   status: 'open',
+    *   optimisticUpdates: true
  * });
  * 
  * // Update bounty status with optimistic UI
@@ -54,49 +57,57 @@ export interface UseBountiesOptions {
  * ```
  */
 export function useBounties(options: UseBountiesOptions = {}): BountiesState & BountiesActions {
-  const { 
-    status, 
-    userId, 
-    autoRefresh = true, 
-    optimisticUpdates = true 
+  const {
+    status,
+    userId,
+    autoRefresh = true,
+    optimisticUpdates = true
   } = options;
 
+  // SWR-based data fetching
+  const cacheKey = useMemo(() =>
+    userId ? `bounties_user_${userId}_${status || 'all'} ` : CACHE_KEYS.BOUNTIES_LIST + (status ? `_${status} ` : ''),
+    [userId, status]
+  );
+
+  const fetchFn = useCallback(() => bountyService.getAll({ status, userId }), [status, userId]);
+
+  const {
+    data: fetchedBounties,
+    isLoading: loading,
+    isValidating,
+    error: fetchError,
+    refetch,
+    setData: setCachedBounties
+  } = useCachedData<Bounty[]>(cacheKey, fetchFn);
+
   const [bounties, setBounties] = useState<Bounty[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync local state with cached data
+  useEffect(() => {
+    if (fetchedBounties) {
+      setBounties(fetchedBounties);
+    }
+  }, [fetchedBounties]);
+
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError.message);
+    } else {
+      setError(null); // Clear error if fetch was successful
+    }
+  }, [fetchError]);
 
   // Store for optimistic updates rollback
   const [optimisticUpdatesMap] = useState<Map<number, Bounty>>(new Map());
 
   /**
-   * Fetch bounties from the service
-   */
-  const fetchBounties = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const fetchedBounties = await bountyService.getAll({
-        status,
-        userId,
-      });
-
-      setBounties(fetchedBounties);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch bounties';
-      setError(errorMessage);
-      logger.error('Error fetching bounties in useBounties', { error: err });
-    } finally {
-      setLoading(false);
-    }
-  }, [status, userId]);
-
-  /**
    * Refresh bounties (public API)
    */
   const refreshBounties = useCallback(async () => {
-    await fetchBounties();
-  }, [fetchBounties]);
+    await refetch();
+  }, [refetch]);
 
   /**
    * Add a new bounty to the local state (for optimistic updates)
@@ -192,7 +203,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
       // Update the bounty in local state if it exists
       setBounties((prev) => {
         const bountyExists = prev.some((b) => String(b.id) === String(id));
-        
+
         if (bountyExists) {
           // Update existing bounty
           return prev.map((b) =>
@@ -212,14 +223,14 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
 
       // If we need to refresh for userId filter, do it outside of setState
       if (userId && autoRefresh) {
-        fetchBounties().catch((err) => {
+        refetch().catch((err) => {
           logger.error('Error refreshing bounties after WebSocket update', { error: err });
         });
       }
 
       logger.info('Bounty status updated via WebSocket', { id, status: newStatus });
     },
-    [status, userId, autoRefresh, fetchBounties]
+    [status, userId, autoRefresh, refetch]
   );
 
   // Subscribe to WebSocket events for real-time updates
@@ -228,14 +239,10 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
     useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
   }, [handleBountyStatusUpdate]);
 
-  // Initial fetch on mount or when dependencies change
-  useEffect(() => {
-    fetchBounties();
-  }, [fetchBounties]);
-
   return {
     bounties,
     loading,
+    isValidating,
     error,
     refreshBounties,
     updateBountyStatus,

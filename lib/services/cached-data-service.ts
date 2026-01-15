@@ -6,10 +6,12 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { EventEmitter } from 'events';
 import { logger } from '../utils/error-logger';
 
 const CACHE_PREFIX = 'cache_v1_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REVALIDATION_EVENT = 'revalidated';
 
 // Cache keys for common data types
 export const CACHE_KEYS = {
@@ -36,12 +38,26 @@ export interface CacheOptions {
 class CachedDataService {
   private isOnline = true;
   private memoryCache = new Map<string, CacheEntry<any>>();
+  private events = new EventEmitter();
 
   constructor() {
     // Listen for network state changes
     NetInfo.addEventListener(state => {
       this.isOnline = !!state.isConnected;
     });
+  }
+
+  /**
+   * Subscribe to revalidation events
+   */
+  onRevalidated(key: string, callback: (data: any) => void): () => void {
+    const handler = (eventKey: string, data: any) => {
+      if (eventKey === key) {
+        callback(data);
+      }
+    };
+    this.events.on(REVALIDATION_EVENT, handler);
+    return () => this.events.off(REVALIDATION_EVENT, handler);
   }
 
   /**
@@ -73,10 +89,10 @@ class CachedDataService {
       // Check AsyncStorage
       const cacheKey = this.getCacheKey(key);
       const stored = await AsyncStorage.getItem(cacheKey);
-      
+
       if (stored) {
         const entry: CacheEntry<T> = JSON.parse(stored);
-        
+
         if (!this.isExpired(entry)) {
           // Update memory cache
           this.memoryCache.set(key, entry);
@@ -119,7 +135,7 @@ class CachedDataService {
       // Update AsyncStorage
       const cacheKey = this.getCacheKey(key);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
-      
+
       logger.info(`Cache updated: ${key}`);
     } catch (error) {
       logger.error('Error writing to cache', { key, error });
@@ -155,9 +171,12 @@ class CachedDataService {
         if (cached !== null) {
           // Return cached data but fetch in background to update cache
           fetchFn()
-            .then(data => this.setCache(key, data, options))
+            .then(data => {
+              this.setCache(key, data, options);
+              this.events.emit(REVALIDATION_EVENT, key, data);
+            })
             .catch(err => logger.error('Background cache update failed', { key, error: err }));
-          
+
           logger.info(`Using cached data (stale-while-revalidate): ${key}`);
           return cached;
         }
@@ -174,7 +193,7 @@ class CachedDataService {
         logger.warning(`Fetch failed, using cached data: ${key}`, { error });
         return cached;
       }
-      
+
       throw error;
     }
   }
@@ -199,12 +218,12 @@ class CachedDataService {
   async clearAll(): Promise<void> {
     try {
       this.memoryCache.clear();
-      
+
       // Get all keys and remove cache entries
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(k => k.startsWith(CACHE_PREFIX));
       await AsyncStorage.multiRemove(cacheKeys);
-      
+
       logger.info(`Cleared ${cacheKeys.length} cache entries`);
     } catch (error) {
       logger.error('Error clearing cache', { error });
@@ -217,20 +236,20 @@ class CachedDataService {
   async clearPattern(pattern: string): Promise<void> {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const matchingKeys = allKeys.filter(k => 
+      const matchingKeys = allKeys.filter(k =>
         k.startsWith(CACHE_PREFIX) && k.includes(pattern)
       );
-      
+
       // Clear from memory cache
       for (const key of this.memoryCache.keys()) {
         if (key.includes(pattern)) {
           this.memoryCache.delete(key);
         }
       }
-      
+
       // Clear from storage
       await AsyncStorage.multiRemove(matchingKeys);
-      
+
       logger.info(`Cleared ${matchingKeys.length} cache entries matching pattern: ${pattern}`);
     } catch (error) {
       logger.error('Error clearing cache pattern', { pattern, error });
@@ -245,11 +264,11 @@ class CachedDataService {
   ): Promise<void> {
     try {
       const results = await Promise.allSettled(
-        items.map(({ key, fetchFn, ttl }) => 
+        items.map(({ key, fetchFn, ttl }) =>
           this.fetchWithCache(key, fetchFn, { ttl })
         )
       );
-      
+
       const successful = results.filter(r => r.status === 'fulfilled').length;
       logger.info(`Preloaded ${successful}/${items.length} cache items`);
     } catch (error) {
@@ -268,7 +287,7 @@ class CachedDataService {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(k => k.startsWith(CACHE_PREFIX));
-      
+
       return {
         memoryCacheSize: this.memoryCache.size,
         storageCacheSize: cacheKeys.length,
