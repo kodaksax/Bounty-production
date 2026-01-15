@@ -5,6 +5,11 @@ import { db } from '../db/connection';
 import { bounties, walletTransactions } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import {
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
+} from '../services/idempotency-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
 import { calculateUserBalance } from '../utils/wallet-utils';
@@ -12,7 +17,7 @@ import { calculateUserBalance } from '../utils/wallet-utils';
 export async function registerWalletRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';
   let stripe: Stripe | null = null;
-  
+
   if (stripeKey) {
     stripe = new Stripe(stripeKey, {
       apiVersion: '2025-08-27.basil',
@@ -159,55 +164,31 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/deposit', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     let amount: number | undefined;
     try {
+      const body = request.body as {
+        amount: number;
+        paymentIntentId?: string;
+        idempotencyKey?: string;
+      };
+      idempotencyKey = body.idempotencyKey;
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        // Lock immediately
+        await storeIdempotencyKey(idempotencyKey);
+      }
+
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const body = request.body as {
-        amount: number;
-        paymentIntentId?: string;
-      };
-      amount = body.amount;
-      const paymentIntentId = body.paymentIntentId;
-
-      if (!amount || amount <= 0) {
-        return reply.code(400).send({ error: 'Invalid amount' });
-      }
-
-      // If paymentIntentId provided, verify it with Stripe
-      if (paymentIntentId && stripe) {
-        try {
-          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-          if (paymentIntent.status !== 'succeeded') {
-            return reply.code(400).send({ error: 'Payment not completed' });
-          }
-          // Amount should match
-          if (paymentIntent.amount !== Math.round(amount * 100)) {
-            return reply.code(400).send({ error: 'Amount mismatch' });
-          }
-        } catch (stripeError) {
-          console.error('Stripe verification error:', stripeError);
-          return reply.code(400).send({ error: 'Invalid payment intent' });
-        }
-      }
-
-      // Create deposit transaction
-      const transaction = await walletService.createTransaction({
-        user_id: request.userId,
-        type: 'deposit',
-        amount: amount,
-      });
-
-      // Calculate new balance after deposit
-      const newBalanceCents = await calculateUserBalance(request.userId);
-
-      return {
-        success: true,
-        transaction,
-        newBalance: newBalanceCents / 100,
-      };
     } catch (error) {
       logErrorWithContext(request, error, {
         operation: 'create_deposit',
@@ -227,27 +208,36 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/withdraw', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
-      if (!request.userId) {
-        return reply.code(401).send({ error: 'Unauthorized' });
+      const body = request.body as { amount: number; idempotencyKey?: string };
+      const { amount } = body;
+      idempotencyKey = body.idempotencyKey;
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
       }
-
-      const { amount } = request.body as { amount: number };
 
       if (!amount || amount <= 0) {
         return reply.code(400).send({ error: 'Invalid amount' });
       }
 
       // Check if user has sufficient balance
-      const balanceCents = await calculateUserBalance(request.userId);
+      const balanceCents = await calculateUserBalance(request.userId as string);
       const amountCents = Math.round(amount * 100);
       if (balanceCents < amountCents) {
         return reply.code(400).send({ error: 'Insufficient balance' });
       }
 
       // Check if user has a connected Stripe account
-      const connectStatus = await stripeConnectService.getConnectStatus(request.userId);
-      
+      const connectStatus = await stripeConnectService.getConnectStatus(request.userId as string);
+
       if (!connectStatus.hasStripeAccount || !connectStatus.payoutsEnabled) {
         return reply.code(400).send({
           error: 'Stripe Connect account required for withdrawals. Please complete onboarding.',
@@ -257,7 +247,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Create withdrawal transaction
       const transaction = await walletService.createTransaction({
-        user_id: request.userId,
+        user_id: request.userId as string,
         type: 'withdrawal',
         amount: amount,
       });
@@ -293,6 +283,9 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       };
     } catch (error) {
       console.error('Error creating withdrawal:', error);
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
       return reply.code(500).send({
         error: 'Failed to create withdrawal'
       });
@@ -368,6 +361,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/connect/transfer', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     let amount: number | undefined;
     try {
       if (!request.userId) {
@@ -377,9 +371,23 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       const body = request.body as {
         amount: number;
         currency?: string;
+        idempotencyKey?: string;
       };
+
+      const { currency = 'usd' } = body;
       amount = body.amount;
-      const currency = body.currency || 'usd';
+      idempotencyKey = body.idempotencyKey;
+
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
 
       if (!amount || amount <= 0) {
         return reply.code(400).send({ error: 'Invalid amount' });
@@ -393,7 +401,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       // Check Connect account
-      const status = await stripeConnectService.getConnectStatus(request.userId);
+      const status = await stripeConnectService.getConnectStatus(request.userId as string);
       if (!status.hasStripeAccount || !status.payoutsEnabled) {
         return reply.code(400).send({
           error: 'Stripe Connect account not ready for payouts',
@@ -403,7 +411,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Create withdrawal transaction
       const transaction = await walletService.createTransaction({
-        user_id: request.userId,
+        user_id: request.userId as string,
         type: 'withdrawal',
         amount: amount,
       });
@@ -422,7 +430,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
               transaction_id: transaction.id,
               type: 'withdrawal',
             },
-          });
+          }, idempotencyKey ? { idempotencyKey } : {});
           transferId = transfer.id;
           console.log(`✅ Created Stripe transfer ${transfer.id} for $${amount}`);
         } catch (stripeError) {
@@ -452,6 +460,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         userId: request.userId,
         amount: amount,
       });
+
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
+
       return reply.code(500).send({
         error: 'Failed to process transfer',
         requestId: getRequestContext(request).requestId,
@@ -465,16 +478,31 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/escrow', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { bountyId, amount, title } = request.body as {
+      const body = request.body as {
         bountyId: string;
         amount: number;
         title?: string;
+        idempotencyKey?: string;
       };
+      const { bountyId, amount, title } = body;
+      idempotencyKey = body.idempotencyKey;
+
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
 
       if (!bountyId || !amount || amount <= 0) {
         return reply.code(400).send({ error: 'Invalid bountyId or amount' });
@@ -490,15 +518,18 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       // Create escrow transaction
       const escrowTransaction = await db.insert(walletTransactions).values({
         bounty_id: bountyId,
-        user_id: request.userId,
+        user_id: request.userId as string,
         type: 'escrow',
         amount_cents: amountCents,
         platform_fee_cents: 0,
       }).returning();
+      // Note: Database insert doesn't support idempotency key directly on insert,
+      // but the route check prevents duplicates. 
+      // We could pass it to a service method if we refactored this insert to use walletService.
 
       // Create Stripe PaymentIntent if configured
       let paymentIntentId = `pi_mock_${Date.now()}_${bountyId.slice(-8)}`;
-      
+
       if (stripe) {
         try {
           const paymentIntent = await stripe.paymentIntents.create({
@@ -513,14 +544,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
               title: title || '',
             },
             description: `Escrow for bounty: ${title || bountyId}`,
-          });
+          }, idempotencyKey ? { idempotencyKey } : {});
 
           paymentIntentId = paymentIntent.id;
-          
+
           // Update bounty with payment intent ID
           await db
             .update(bounties)
-            .set({ 
+            .set({
               payment_intent_id: paymentIntentId,
               updated_at: new Date(),
             })
@@ -545,6 +576,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       };
     } catch (error) {
       console.error('Error creating escrow:', error);
+
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
+
       return reply.code(500).send({
         error: 'Failed to create escrow'
       });
@@ -620,7 +656,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       // Record platform fee - use a well-known UUID for platform account
       // This should be a fixed UUID that doesn't conflict with user IDs
       const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
-      
+
       await db.insert(walletTransactions).values({
         bounty_id: bountyId,
         user_id: PLATFORM_ACCOUNT_ID,
@@ -632,7 +668,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       // Update bounty status
       await db
         .update(bounties)
-        .set({ 
+        .set({
           status: 'completed',
           updated_at: new Date(),
         })
@@ -640,7 +676,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Transfer to hunter's Stripe account if configured
       let transferId = `tr_mock_${Date.now()}_${bountyId.slice(-8)}`;
-      
+
       if (stripe) {
         try {
           // Get hunter's Stripe account ID
@@ -757,7 +793,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       // Update bounty status
       await db
         .update(bounties)
-        .set({ 
+        .set({
           status: 'cancelled',
           updated_at: new Date(),
         })
@@ -765,7 +801,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Process Stripe refund if payment intent exists
       let stripeRefundId = `re_mock_${Date.now()}`;
-      
+
       if (stripe && bounty.payment_intent_id) {
         try {
           const refund = await stripe.refunds.create({
@@ -811,11 +847,11 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { 
-        accountHolderName, 
-        routingNumber, 
-        accountNumber, 
-        accountType 
+      const {
+        accountHolderName,
+        routingNumber,
+        accountNumber,
+        accountType
       } = request.body as {
         accountHolderName: string;
         routingNumber: string;
@@ -841,7 +877,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Use consolidated Stripe Connect service to add bank account
       const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
-      
+
       const bankAccount = await consolidatedStripeConnectService.addBankAccount(
         request.userId,
         accountHolderName,
@@ -859,7 +895,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         operation: 'add_bank_account',
         userId: request.userId,
       });
-      
+
       const message = error instanceof Error ? error.message : 'Failed to add bank account';
       return reply.code(500).send({
         error: message,
@@ -881,7 +917,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Use consolidated Stripe Connect service to list bank accounts
       const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
-      
+
       const bankAccounts = await consolidatedStripeConnectService.listBankAccounts(
         request.userId
       );
@@ -894,7 +930,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         operation: 'list_bank_accounts',
         userId: request.userId,
       });
-      
+
       return reply.code(500).send({
         error: 'Failed to list bank accounts',
         requestId: getRequestContext(request).requestId,
@@ -921,7 +957,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Use consolidated Stripe Connect service to remove bank account
       const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
-      
+
       const result = await consolidatedStripeConnectService.removeBankAccount(
         request.userId,
         bankAccountId
@@ -933,7 +969,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         operation: 'remove_bank_account',
         userId: request.userId,
       });
-      
+
       const message = error instanceof Error ? error.message : 'Failed to remove bank account';
       return reply.code(500).send({
         error: message,
@@ -961,7 +997,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Use consolidated Stripe Connect service to set default bank account
       const { consolidatedStripeConnectService } = await import('../services/consolidated-stripe-connect-service');
-      
+
       const bankAccount = await consolidatedStripeConnectService.setDefaultBankAccount(
         request.userId,
         bankAccountId
@@ -976,7 +1012,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         operation: 'set_default_bank_account',
         userId: request.userId,
       });
-      
+
       const message = error instanceof Error ? error.message : 'Failed to set default bank account';
       return reply.code(500).send({
         error: message,

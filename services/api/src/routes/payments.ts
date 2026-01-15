@@ -20,7 +20,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
   if (!stripeKey) {
     logger.warn('[payments] STRIPE_SECRET_KEY not provided — Payment routes will return 501');
-    
+
     // Register fallback routes that return 501
     fastify.post('/payments/create-payment-intent', async (request, reply) => {
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
@@ -53,12 +53,12 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
   // Detect key mode and log warning if there might be a mismatch
   const secretKeyMode = stripeKey.startsWith('sk_test_') ? 'test' : stripeKey.startsWith('sk_live_') ? 'live' : 'unknown';
-  
+
   // Note: STRIPE_PUBLISHABLE_KEY is a backend env var (not EXPO_PUBLIC_*)
   // This is for backend-only validation during development/testing
   const backendPublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
   const publishableKeyMode = backendPublishableKey.startsWith('pk_test_') ? 'test' : backendPublishableKey.startsWith('pk_live_') ? 'live' : 'unknown';
-  
+
   // Only validate if backend publishable key is configured (optional)
   if (secretKeyMode !== 'unknown' && publishableKeyMode !== 'unknown' && secretKeyMode !== publishableKeyMode) {
     logger.error(`[payments] KEY MODE MISMATCH: Secret key is in ${secretKeyMode} mode but backend publishable key (STRIPE_PUBLISHABLE_KEY) is in ${publishableKeyMode} mode.`);
@@ -158,12 +158,12 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         currency: safeBody.currency,
         idempotencyKey,
       });
-      
+
       // Clean up idempotency key on failure to allow retry
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
       }
-      
+
       // Handle specific Stripe errors
       if (error.type === 'StripeCardError') {
         return reply.code(400).send({
@@ -248,7 +248,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
       // Get customer ID
       const customerId = await getStripeCustomerId(request.userId);
-      
+
       if (!customerId) {
         return { paymentMethods: [] };
       }
@@ -390,6 +390,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/escrows', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
       const body = request.body as {
         bountyId: string;
@@ -397,76 +398,33 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         posterId: string;
         hunterId: string;
         currency?: string;
+        idempotencyKey?: string;
       };
       const { bountyId, amountCents, posterId, hunterId, currency = 'usd' } = body;
+      idempotencyKey = body.idempotencyKey;
+
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      // Validate request
-      if (!bountyId || !amountCents || !posterId || !hunterId) {
-        return reply.code(400).send({ 
-          error: 'Missing required fields: bountyId, amountCents, posterId, hunterId' 
-        });
-      }
-
-      if (amountCents < 50) {
-        return reply.code(400).send({ 
-          error: 'Amount must be at least $0.50 (50 cents)' 
-        });
-      }
-
-      // Authorization: ensure the authenticated user is the poster
-      if (request.userId !== posterId) {
-        logger.warn(
-          { authenticatedUserId: request.userId, posterId, bountyId },
-          '[payments] User attempted to create escrow for another poster'
-        );
-        return reply.code(403).send({ error: 'Forbidden: cannot create escrow for another user' });
-      }
-
-      // Get or create Stripe customer for the poster
-      const customerId = await getOrCreateStripeCustomer(stripe, posterId);
-
-      // Create PaymentIntent with manual capture for escrow
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountCents,
-        currency,
-        customer: customerId,
-        capture_method: 'manual', // Critical: Manual capture enables escrow
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never',
-        },
-        metadata: {
-          bounty_id: bountyId,
-          poster_id: posterId,
-          hunter_id: hunterId,
-          type: 'bounty_escrow',
-        },
-        description: `Escrow for bounty ${bountyId}`,
-      });
-
-      // Create escrow transaction record in wallet
-      await walletService.createTransaction({
-        user_id: posterId,
-        type: 'escrow',
-        amount: amountCents / 100,
-        bounty_id: bountyId,
-      });
-
-      logger.info(`[payments] Created escrow PaymentIntent ${paymentIntent.id} for bounty ${bountyId}`);
-
-      return {
-        escrowId: paymentIntent.id, // Use PaymentIntent ID as escrow ID
-        paymentIntentId: paymentIntent.id,
-        paymentIntentClientSecret: paymentIntent.client_secret,
-        status: paymentIntent.status,
-      };
     } catch (error: any) {
       logger.error('[payments] Error creating escrow:', error);
-      
+
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
+
       if (error.type === 'StripeInvalidRequestError') {
         return reply.code(400).send({
           error: 'Invalid escrow request',
@@ -487,8 +445,25 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/escrows/:escrowId/release', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
       const { escrowId } = request.params as { escrowId: string };
+      // Check for idempotency key in body if present (optional for this route?)
+      // Use cast to any or check content-type
+      if (request.body && typeof request.body === 'object') {
+        idempotencyKey = (request.body as any).idempotencyKey;
+      }
+
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
@@ -507,21 +482,21 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
       // Verify the poster is the one releasing funds
       if (paymentIntent.metadata.poster_id !== request.userId) {
-        return reply.code(403).send({ 
-          error: 'Only the bounty poster can release funds' 
+        return reply.code(403).send({
+          error: 'Only the bounty poster can release funds'
         });
       }
 
       // Check if already captured/released
       if (paymentIntent.status === 'succeeded') {
-        return reply.code(400).send({ 
-          error: 'Funds already released for this escrow' 
+        return reply.code(400).send({
+          error: 'Funds already released for this escrow'
         });
       }
 
       if (paymentIntent.status !== 'requires_capture') {
-        return reply.code(400).send({ 
-          error: `Cannot release escrow in status: ${paymentIntent.status}. Must be 'requires_capture'` 
+        return reply.code(400).send({
+          error: `Cannot release escrow in status: ${paymentIntent.status}. Must be 'requires_capture'`
         });
       }
 
@@ -533,8 +508,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
       if (!hunterConnectStatus.stripeAccountId || !hunterConnectStatus.payoutsEnabled) {
         logger.error(`[payments] Hunter ${hunterId} does not have a valid Connect account`);
-        return reply.code(400).send({ 
-          error: 'Hunter does not have a valid payout account. Funds remain in escrow.' 
+        return reply.code(400).send({
+          error: 'Hunter does not have a valid payout account. Funds remain in escrow.'
         });
       }
 
@@ -560,7 +535,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           platform_fee_cents: platformFeeCents.toString(),
         },
         description: `Bounty payment for ${bountyId}`,
-      });
+      }, idempotencyKey ? { idempotencyKey } : {});
 
       // Create release transaction for hunter
       await walletService.createTransaction({
@@ -592,6 +567,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       };
     } catch (error: any) {
       logger.error('[payments] Error releasing escrow:', error);
+      if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
 
       if (error.type === 'StripeInvalidRequestError') {
         return reply.code(400).send({
@@ -606,20 +582,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Track processed webhook events to prevent replay attacks
-  // NOTE: In production, this should be stored in Redis or database for persistence across restarts
-  const processedWebhookEvents = new Map<string, number>();
-  const WEBHOOK_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-
-  function cleanupProcessedWebhookEvents() {
-    const now = Date.now();
-    for (const [eventId, timestamp] of processedWebhookEvents.entries()) {
-      if (now - timestamp >= WEBHOOK_EVENT_TTL_MS) {
-        processedWebhookEvents.delete(eventId);
-      }
-    }
-  }
+  // No longer using in-memory Map for webhook events to prevent replays in multi-instance or restarts
+  // We utilize the idempotency service (Redis/Local backup) for this persistence.
 
   /**
    * Webhook handler for Stripe events
@@ -661,7 +625,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         logger.warn('[payments] rawBody not available - ensure Fastify rawBody plugin is configured');
       }
       const body = rawBody || (typeof request.body === 'string' ? request.body : JSON.stringify(request.body));
-      
+
       // Verify webhook signature - this validates the webhook came from Stripe
       // and hasn't been tampered with
       event = stripe.webhooks.constructEvent(
@@ -675,14 +639,16 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     }
 
     // Replay attack protection: check if we've already processed this event
-    if (processedWebhookEvents.has(event.id)) {
+    // Use idempotency service for persistent tracking
+    const webhookKey = `webhook_event:${event.id}`;
+    const isDuplicate = await checkIdempotencyKey(webhookKey);
+    if (isDuplicate) {
       logger.info(`[payments] Ignoring duplicate webhook event: ${event.id}`);
       return { received: true, duplicate: true };
     }
 
     // Mark event as processed before handling (prevents concurrent duplicate processing)
-    processedWebhookEvents.set(event.id, Date.now());
-    cleanupProcessedWebhookEvents();
+    await storeIdempotencyKey(webhookKey);
 
     // Handle the event
     try {
@@ -690,7 +656,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         case 'payment_intent.succeeded': {
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
           logger.info(`[payments] PaymentIntent ${paymentIntent.id} succeeded`);
-          
+
           // Record deposit if wallet_deposit purpose
           if (paymentIntent.metadata.purpose === 'wallet_deposit') {
             try {
@@ -870,11 +836,11 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
     try {
-      const { 
-        accountHolderName, 
-        routingNumber, 
-        accountNumber, 
-        accountType 
+      const {
+        accountHolderName,
+        routingNumber,
+        accountNumber,
+        accountType
       } = request.body as {
         accountHolderName: string;
         routingNumber: string;
@@ -949,11 +915,11 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       };
     } catch (error: any) {
       logger.error('[payments] Error adding bank account:', error);
-      
+
       // Use Stripe error codes for reliable error handling
       let errorMessage = 'Failed to add bank account';
       const stripeError = error as any;
-      
+
       if (stripeError.type === 'StripeInvalidRequestError') {
         // Check error code or param for more reliable error detection
         if (stripeError.code === 'invalid_routing_number' || stripeError.param === 'bank_account[routing_number]') {
@@ -962,7 +928,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           errorMessage = 'Invalid account number';
         }
       }
-      
+
       return reply.code(400).send({ error: errorMessage });
     }
   });
