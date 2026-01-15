@@ -5,14 +5,14 @@
  */
 
 import dotenv from 'dotenv';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 
 // Load environment variables with fallback strategy
 function loadEnvironment() {
   // Try local .env first
   const local = dotenv.config();
-  
+
   // If critical vars missing, try root .env
   if (!process.env.STRIPE_SECRET_KEY && !process.env.DATABASE_URL) {
     const rootEnv = path.resolve(__dirname, '../../../../.env');
@@ -56,7 +56,7 @@ for (const k of dbEnvKeys) {
 function getRequired(name: string, fallbacks: string[] = []): string {
   // Try primary name first
   let value = process.env[name];
-  
+
   // Try fallbacks
   if (!value) {
     for (const fallback of fallbacks) {
@@ -67,11 +67,11 @@ function getRequired(name: string, fallbacks: string[] = []): string {
       }
     }
   }
-  
+
   if (!value) {
     throw new Error(`Missing required environment variable: ${name} (also tried: ${fallbacks.join(', ')})`);
   }
-  
+
   return value;
 }
 
@@ -80,14 +80,14 @@ function getRequired(name: string, fallbacks: string[] = []): string {
  */
 function getOptional(name: string, defaultValue: string, fallbacks: string[] = []): string {
   let value = process.env[name];
-  
+
   if (!value) {
     for (const fallback of fallbacks) {
       value = process.env[fallback];
       if (value) break;
     }
   }
-  
+
   return value || defaultValue;
 }
 
@@ -246,6 +246,15 @@ export const config = {
       schedule: getOptional('STALE_BOUNTY_CRON_SCHEDULE', '0 0 * * *'), // Daily at midnight
     },
   },
+
+  // Storage and File Upload Configuration
+  storage: {
+    maxFileSize: getNumber('UPLOAD_MAX_FILE_SIZE', 10 * 1024 * 1024), // 10MB default
+    allowedMimeTypes: getOptional(
+      'UPLOAD_ALLOWED_MIME_TYPES',
+      'image/jpeg,image/png,image/gif,application/pdf,video/mp4,video/quicktime,text/plain'
+    ).split(','),
+  },
 } as const;
 
 /**
@@ -272,7 +281,7 @@ export function validateConfig(): void {
   if (!config.stripe.secretKey) {
     errors.push('Stripe secret key missing');
   }
-  
+
   // Validate security configuration in production
   if (config.service.env === 'production') {
     if (config.security.usingDefaultSecretKey || config.security.secretKey === 'dev-fallback-secret') {
