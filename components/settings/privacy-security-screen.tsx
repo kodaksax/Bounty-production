@@ -1,10 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { BrandingLogo } from 'components/ui/branding-logo';
-import { getSecureJSON, setSecureJSON, SecureKeys } from '../../lib/utils/secure-storage';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
+import { deviceService, UserDevice } from '../../lib/services/device-service';
 import { supabase } from '../../lib/supabase';
+import { getSecureJSON, SecureKeys, setSecureJSON } from '../../lib/utils/secure-storage';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -14,7 +15,7 @@ interface PrivacyState {
   passwordCurrent: string;
   passwordNew: string;
   passwordConfirm: string;
-  sessions: { id: string; device: string; location: string; active: boolean }[];
+  sessions: UserDevice[];
   exporting: boolean;
 }
 
@@ -26,14 +27,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     passwordCurrent: '',
     passwordNew: '',
     passwordConfirm: '',
-    sessions: [
-      { id: 'device-1', device: 'iPhone 15', location: 'NY, USA', active: true },
-      { id: 'device-2', device: 'Chrome (Web)', location: 'CA, USA', active: true },
-    ],
+    sessions: [],
     exporting: false,
   });
   const [loading, setLoading] = useState(true);
-  
+
   // 2FA state managed via Supabase
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
@@ -46,17 +44,21 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         if (stored) {
           setState(s => ({ ...s, ...stored }));
         }
-        
+
         // Load 2FA status from Supabase
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (session?.user) {
           // Check email verification status
           setEmailVerified(Boolean(session.user.email_confirmed_at));
-          
+
           // Check if 2FA is enabled via Supabase MFA
           const { data: factors } = await supabase.auth.mfa.listFactors();
           setTwoFactorEnabled((factors?.totp?.length ?? 0) > 0);
+
+          // Load sessions
+          const devices = await deviceService.getDevices();
+          setState(s => ({ ...s, sessions: devices }));
         }
       } catch (e) {
         console.error('Failed to load privacy settings', e);
@@ -83,17 +85,17 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       Alert.alert('Mismatch', 'New password & confirmation differ.');
       return;
     }
-    
+
     // Validate strong password
     const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!strongPasswordPattern.test(state.passwordNew)) {
       Alert.alert(
-        'Weak Password', 
+        'Weak Password',
         'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&).'
       );
       return;
     }
-    
+
     try {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -101,48 +103,57 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         Alert.alert('Error', 'Unable to verify current user.');
         return;
       }
-      
+
       // Update password using Supabase
       const { error } = await supabase.auth.updateUser({
         password: state.passwordNew
       });
-      
+
       if (error) {
         Alert.alert('Error', error.message || 'Failed to update password.');
         return;
       }
-      
+
       Alert.alert('Success', 'Your password has been updated successfully.');
       persist({ passwordCurrent: '', passwordNew: '', passwordConfirm: '' });
-      
+
     } catch (err) {
       console.error('Password change error:', err);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     }
   };
 
-  const revokeSession = (id: string) => {
-    persist({ sessions: state.sessions.map(s => s.id === id ? { ...s, active: false } : s) });
+  const revokeSession = async (id: string) => {
+    const success = await deviceService.revokeDevice(id);
+    if (success) {
+      setState(s => ({
+        ...s,
+        sessions: s.sessions.map(d => d.id === id ? { ...d, is_active: false } : d)
+      }));
+      Alert.alert('Device Revoked', 'The session has been revoked successfully.');
+    } else {
+      Alert.alert('Error', 'Failed to revoke session. Please try again.');
+    }
   };
 
   const exportData = async () => {
     if (state.exporting) return;
-    
+
     try {
       persist({ exporting: true });
-      
+
       // Get current user ID
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError || !user) {
         Alert.alert('Error', 'Unable to verify user. Please sign in again.');
         persist({ exporting: false });
         return;
       }
-      
+
       // Export and share the data
       const result = await exportAndShareUserData(user.id);
-      
+
       if (result.success) {
         Alert.alert(
           'Data Export Complete',
@@ -298,13 +309,13 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           onPress: async () => {
             try {
               const { data: factors } = await supabase.auth.mfa.listFactors();
-              
+
               if (factors && factors.totp && factors.totp.length > 0) {
                 const factorId = factors.totp[0].id;
                 const { error } = await supabase.auth.mfa.unenroll({ factorId });
-                
+
                 if (error) throw error;
-                
+
                 setTwoFactorEnabled(false);
                 Alert.alert('Success', '2FA has been disabled');
               }
@@ -337,7 +348,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           <Text className="text-xs text-emerald-200 mb-1">Current Password</Text>
           <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">New Password</Text>
-            <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+          <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
           <Text className="text-xs text-emerald-200 mb-1">Confirm New Password</Text>
           <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
           <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-emerald-700">
@@ -364,8 +375,8 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
             {isEnabling2FA ? (
               <ActivityIndicator size="small" color="#10b981" />
             ) : (
-              <Switch 
-                value={twoFactorEnabled} 
+              <Switch
+                value={twoFactorEnabled}
                 onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
                 disabled={isEnabling2FA}
               />
@@ -386,10 +397,13 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           {state.sessions.map(s => (
             <View key={s.id} className="flex-row items-center justify-between py-2 border-b border-emerald-700/40 last:border-b-0">
               <View className="flex-1 mr-3">
-                <Text className="text-white text-xs font-medium">{s.device}</Text>
-                <Text className="text-emerald-300 text-[10px]">{s.location}</Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-white text-xs font-medium">{s.device_name}</Text>
+                  {s.is_current && <View className="bg-emerald-500/20 px-1.5 py-0.5 rounded"><Text className="text-emerald-400 text-[10px]">Current</Text></View>}
+                </View>
+                <Text className="text-emerald-300 text-[10px]">{s.device_type} • {new Date(s.last_active).toLocaleDateString()}</Text>
               </View>
-              {s.active ? (
+              {s.is_active ? (
                 <TouchableOpacity onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-emerald-700">
                   <Text className="text-white text-[10px] font-medium">Revoke</Text>
                 </TouchableOpacity>
@@ -402,12 +416,12 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
         {/* Data Export - GDPR Compliance */}
         <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader 
-            icon="file-download" 
-            title="Data Export (GDPR)" 
-            subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more." 
+          <SectionHeader
+            icon="file-download"
+            title="Data Export (GDPR)"
+            subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more."
           />
-          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}> 
+          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}>
             <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
           </TouchableOpacity>
         </View>

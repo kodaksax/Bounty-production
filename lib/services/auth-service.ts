@@ -3,9 +3,11 @@
  * Handles email verification, password reset, and other auth-related operations
  */
 
-import { supabase } from '../supabase'
-import { validateNewPassword, isValidEmail } from '../utils/password-validation'
-import { generateCorrelationId } from '../utils/auth-errors'
+import { supabase } from '../supabase';
+import { generateCorrelationId } from '../utils/auth-errors';
+import { isValidEmail, validateNewPassword } from '../utils/password-validation';
+import { deviceService } from './device-service';
+
 
 // Analytics service interface for type safety
 interface AnalyticsService {
@@ -48,10 +50,10 @@ export interface AuthResult {
  */
 export async function resendVerification(email: string): Promise<AuthResult> {
   const correlationId = generateCorrelationId('resend_verification');
-  
+
   try {
     console.log('[auth-service] Resending verification email', { email: email.trim().toLowerCase(), correlationId });
-    
+
     // Supabase provides a built-in resend method
     const { error } = await supabase.auth.resend({
       type: 'signup',
@@ -60,7 +62,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
 
     if (error) {
       console.error('[auth-service] Failed to resend verification:', error, { correlationId })
-      
+
       // Track failed attempt (no need to check for null with no-op stub)
       try {
         await analyticsService.trackEvent('auth_resend_verification_failed', {
@@ -69,7 +71,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
           correlation_id: correlationId,
         });
       } catch (e) { /* Swallow analytics errors */ }
-      
+
       return {
         success: false,
         message: error.message || 'Failed to resend verification email',
@@ -79,7 +81,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
     }
 
     console.log('[auth-service] Verification email sent successfully', { correlationId });
-    
+
     // Track successful send
     try {
       await analyticsService.trackEvent('auth_resend_verification_success', {
@@ -95,7 +97,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
     }
   } catch (error: any) {
     console.error('[auth-service] Unexpected error resending verification:', error, { correlationId })
-    
+
     // Track unexpected error
     try {
       await analyticsService.trackEvent('auth_resend_verification_error', {
@@ -104,7 +106,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
         correlation_id: correlationId,
       });
     } catch (e) { /* Swallow analytics errors */ }
-    
+
     return {
       success: false,
       message: 'An unexpected error occurred. Please try again later.',
@@ -147,14 +149,14 @@ export async function checkEmailVerified(): Promise<boolean> {
  * @returns Promise with result of the operation
  */
 export async function requestPasswordReset(
-  email: string, 
+  email: string,
   redirectTo?: string
 ): Promise<AuthResult> {
   const correlationId = generateCorrelationId('password_reset');
-  
+
   try {
     console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId });
-    
+
     // Validate email format using pre-compiled regex
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
@@ -167,8 +169,8 @@ export async function requestPasswordReset(
     }
 
     // Use environment variable for redirect URL, with fallback
-    const resetRedirectUrl = redirectTo || 
-      process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL || 
+    const resetRedirectUrl = redirectTo ||
+      process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL ||
       'bountyexpo://auth/update-password'
 
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
@@ -177,7 +179,7 @@ export async function requestPasswordReset(
 
     if (error) {
       console.error('[auth-service] Password reset request error:', error, { correlationId })
-      
+
       // Track failed attempt
       try {
         await analyticsService.trackEvent('auth_password_reset_failed', {
@@ -186,7 +188,7 @@ export async function requestPasswordReset(
           correlation_id: correlationId,
         });
       } catch (e) { /* Swallow analytics errors */ }
-      
+
       // Handle rate limiting specifically
       if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
         return {
@@ -203,7 +205,7 @@ export async function requestPasswordReset(
     }
 
     console.log('[auth-service] Password reset request processed', { correlationId });
-    
+
     // Track successful request (even if email doesn't exist, for security)
     try {
       await analyticsService.trackEvent('auth_password_reset_requested', {
@@ -220,7 +222,7 @@ export async function requestPasswordReset(
     }
   } catch (error: any) {
     console.error('[auth-service] Unexpected error in password reset request:', error, { correlationId })
-    
+
     // Track unexpected error
     try {
       await analyticsService.trackEvent('auth_password_reset_error', {
@@ -229,7 +231,7 @@ export async function requestPasswordReset(
         correlation_id: correlationId,
       });
     } catch (e) { /* Swallow analytics errors */ }
-    
+
     return {
       success: false,
       message: 'An unexpected error occurred. Please try again later.',
@@ -327,7 +329,7 @@ export async function updatePassword(newPassword: string): Promise<AuthResult> {
  * @returns Promise with result of the verification
  */
 export async function verifyResetToken(
-  token: string, 
+  token: string,
   type: 'recovery' | 'signup' | 'invite' | 'email' = 'recovery'
 ): Promise<AuthResult> {
   try {
@@ -405,21 +407,33 @@ export async function isInRecoveryMode(): Promise<boolean> {
     // Supabase sets aal to 'aal1' or has specific metadata during recovery
     // We check if there's a session but no confirmed email (recovery state)
     if (!session) return false
-    
+
     // Check if the session was created via recovery
     // The amr (Authentication Methods Reference) is available on the user object at runtime
     // but may not be typed in all Supabase versions
     const user = session.user as any
     const amr = user?.amr
     if (amr && Array.isArray(amr)) {
-      return amr.some((method: { method: string }) => 
+      return amr.some((method: { method: string }) =>
         method.method === 'recovery' || method.method === 'otp'
       )
     }
-    
+
     return false
   } catch (error) {
     console.error('[auth-service] Error checking recovery mode:', error)
     return false
+  }
+}
+
+/**
+ * Hook to register the current device when a session is established
+ * Can be called from auth provider or main layout
+ */
+export async function registerDeviceSession(): Promise<void> {
+  try {
+    await deviceService.registerCurrentDevice();
+  } catch (error) {
+    console.error('[auth-service] Failed to register device session:', error);
   }
 }
