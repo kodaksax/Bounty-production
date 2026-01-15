@@ -65,7 +65,8 @@ const baseBountySchema = z.object({
     .min(50, 'Description must be at least 50 characters')
     .max(5000, 'Description must be at most 5000 characters'),
   amount: z.number()
-    .min(0, 'Amount must be non-negative'),
+    .min(0, 'Amount must be non-negative')
+    .max(10000, 'Amount cannot exceed $10,000.00'),
   isForHonor: z.boolean()
     .optional()
     .default(false),
@@ -87,8 +88,12 @@ const createBountySchema = baseBountySchema.refine(data => {
   if (data.isForHonor && data.amount > 0) {
     return false;
   }
+  // Paid bounties must be at least $1
+  if (!data.isForHonor && data.amount < 1) {
+    return false;
+  }
   return true;
-}, { message: 'Honor bounties must have amount set to 0', path: ['amount'] });
+}, { message: 'Paid bounties must be at least $1.00, Honor bounties must be $0', path: ['amount'] });
 
 // Schema for updating a bounty (partial)
 const updateBountySchema = baseBountySchema.partial();

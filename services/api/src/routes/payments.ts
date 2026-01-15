@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
+import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import {
@@ -10,6 +11,13 @@ import {
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
+
+const createPaymentIntentSchema = z.object({
+  amountCents: z.number().int().min(100, 'Amount must be at least $1.00 (100 cents)'),
+  currency: z.string().toLowerCase().optional().default('usd'),
+  metadata: z.record(z.string()).optional(),
+  idempotencyKey: z.string().optional(),
+});
 
 // Platform account ID for fee collection
 // In production, this should be stored in environment variables
@@ -86,28 +94,14 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/create-payment-intent', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
-    const safeBody = request.body as {
-      amountCents: number;
-      currency?: string;
-      metadata?: Record<string, string>;
-      idempotencyKey?: string;
-    };
     let idempotencyKey: string | undefined;
     try {
-      const { amountCents, currency = 'usd', metadata = {} } = safeBody;
-      idempotencyKey = safeBody.idempotencyKey;
+      const body = createPaymentIntentSchema.parse(request.body);
+      const { amountCents, currency = 'usd', metadata = {} } = body;
+      idempotencyKey = body.idempotencyKey;
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
-      }
-
-      // Validate amount
-
-      // Validate amount
-      if (!amountCents || amountCents < 50) {
-        return reply.code(400).send({
-          error: 'Amount must be at least $0.50 (50 cents)'
-        });
       }
 
       // Check for duplicate submission using idempotency service
@@ -154,8 +148,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       // Log error with full context
       logErrorWithContext(request, error, {
         operation: 'create_payment_intent',
-        amountCents: safeBody.amountCents,
-        currency: safeBody.currency,
         idempotencyKey,
       });
 

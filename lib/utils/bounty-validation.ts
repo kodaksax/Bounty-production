@@ -15,6 +15,7 @@
  */
 export function validateBalance(amount: number, balance: number, isForHonor: boolean): boolean {
   if (isForHonor) return true;
+  // Use a small epsilon for float comparison if needed, but balance is likely numbers
   return amount <= balance;
 }
 
@@ -38,14 +39,26 @@ export function getInsufficientBalanceMessage(amount: number, balance: number): 
  */
 export function validateAmount(amount: number, isForHonor: boolean): string | null {
   if (isForHonor) {
-    // Honor bounties should still reject negative amounts
     if (amount < 0) {
       return 'Amount must be at least $0';
     }
-    return null; // Honor bounties accept 0 or positive values
+    if (amount > 0) {
+      return 'Honor bounties must have a $0 amount';
+    }
+    return null;
   }
-  if (!amount || amount < 1) {
-    return 'Amount must be at least $1';
+
+  if (amount === undefined || amount === null || isNaN(amount)) {
+    return 'Please enter a valid amount';
   }
+
+  if (amount < 1) {
+    return 'The minimum bounty amount is $1.00';
+  }
+
+  if (amount > 10000) {
+    return 'The maximum bounty amount is $10,000.00';
+  }
+
   return null;
 }

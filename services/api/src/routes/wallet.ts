@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
+import { z } from 'zod';
 import { db } from '../db/connection';
 import { bounties, walletTransactions } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
@@ -13,6 +14,33 @@ import {
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
 import { calculateUserBalance } from '../utils/wallet-utils';
+
+/**
+ * Validation schemas for wallet operations
+ */
+const depositSchema = z.object({
+  amount: z.number().positive('Amount must be positive'),
+  paymentIntentId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+const withdrawSchema = z.object({
+  amount: z.number().min(1, 'Minimum withdrawal is $1.00'),
+  idempotencyKey: z.string().optional(),
+});
+
+const transferSchema = z.object({
+  amount: z.number().min(1, 'Minimum transfer is $1.00'),
+  currency: z.string().toLowerCase().optional().default('usd'),
+  idempotencyKey: z.string().optional(),
+});
+
+const escrowSchema = z.object({
+  bountyId: z.string().uuid('Invalid bounty ID'),
+  amount: z.number().min(1, 'Minimum escrow is $1.00'),
+  title: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+});
 
 export async function registerWalletRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';
@@ -167,11 +195,8 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
     let idempotencyKey: string | undefined;
     let amount: number | undefined;
     try {
-      const body = request.body as {
-        amount: number;
-        paymentIntentId?: string;
-        idempotencyKey?: string;
-      };
+      const body = depositSchema.parse(request.body);
+      amount = body.amount;
       idempotencyKey = body.idempotencyKey;
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
@@ -210,9 +235,10 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
     try {
-      const body = request.body as { amount: number; idempotencyKey?: string };
+      const body = withdrawSchema.parse(request.body);
       const { amount } = body;
       idempotencyKey = body.idempotencyKey;
+
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
         if (isDuplicate) {
@@ -224,8 +250,8 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      if (!amount || amount <= 0) {
-        return reply.code(400).send({ error: 'Invalid amount' });
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
       }
 
       // Check if user has sufficient balance
@@ -368,11 +394,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const body = request.body as {
-        amount: number;
-        currency?: string;
-        idempotencyKey?: string;
-      };
+      const body = transferSchema.parse(request.body);
 
       const { currency = 'usd' } = body;
       amount = body.amount;
@@ -387,10 +409,6 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           });
         }
         await storeIdempotencyKey(idempotencyKey);
-      }
-
-      if (!amount || amount <= 0) {
-        return reply.code(400).send({ error: 'Invalid amount' });
       }
 
       // Check balance
@@ -484,12 +502,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const body = request.body as {
-        bountyId: string;
-        amount: number;
-        title?: string;
-        idempotencyKey?: string;
-      };
+      const body = escrowSchema.parse(request.body);
       const { bountyId, amount, title } = body;
       idempotencyKey = body.idempotencyKey;
 
@@ -502,10 +515,6 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           });
         }
         await storeIdempotencyKey(idempotencyKey);
-      }
-
-      if (!bountyId || !amount || amount <= 0) {
-        return reply.code(400).send({ error: 'Invalid bountyId or amount' });
       }
 
       // Check user has sufficient balance
