@@ -12,6 +12,9 @@ import {
   storeIdempotencyKey
 } from '../services/idempotency-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
+import { consolidatedWalletService } from '../services/consolidated-wallet-service';
+import { walletService } from '../services/wallet-service';
+import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Validation schemas for wallet operations
@@ -62,7 +65,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { balance, currency } = await ConsolidatedWalletService.getBalance(request.userId);
+      const { balance, currency } = await consolidatedWalletService.getBalance(request.userId);
 
       return {
         balance,
@@ -102,7 +105,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
       const offset = (pageNum - 1) * limitNum;
 
-      const result = await ConsolidatedWalletService.getTransactions(request.userId, {
+      const result = await consolidatedWalletService.getTransactions(request.userId, {
         type: type as any,
         limit: limitNum,
         offset: offset,
@@ -173,7 +176,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      const transaction = await ConsolidatedWalletService.createDeposit(
+      const transaction = await consolidatedWalletService.createDeposit(
         request.userId,
         amount,
         paymentIntentId || `man_${Date.now()}`,
@@ -242,14 +245,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'No withdrawal destination provided' });
       }
 
-      const transaction = await ConsolidatedWalletService.createWithdrawal(
+      const transaction = await consolidatedWalletService.createWithdrawal(
         request.userId,
         amount,
         stripeAccountId,
         idempotencyKey
       );
 
-      const { balance } = await ConsolidatedWalletService.getBalance(request.userId);
+      const { balance } = await consolidatedWalletService.getBalance(request.userId);
 
       return {
         success: true,
@@ -473,14 +476,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      const transaction = await ConsolidatedWalletService.createEscrow(
+      const transaction = await consolidatedWalletService.createEscrow(
         bountyId,
         request.userId,
         amount,
         idempotencyKey
       );
 
-      const { balance } = await ConsolidatedWalletService.getBalance(request.userId);
+      const { balance } = await consolidatedWalletService.getBalance(request.userId);
 
       return {
         success: true,
@@ -552,7 +555,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(403).send({ error: 'Unauthorized to release funds' });
       }
 
-      const transaction = await ConsolidatedWalletService.releaseEscrow(
+      const transaction = await consolidatedWalletService.releaseEscrow(
         bountyId,
         hunterId,
         idempotencyKey
@@ -627,7 +630,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(403).send({ error: 'Unauthorized to refund funds' });
       }
 
-      const transaction = await ConsolidatedWalletService.refundEscrow(
+      const transaction = await consolidatedWalletService.refundEscrow(
         bountyId,
         request.userId,
         reason || 'Bounty cancelled',
