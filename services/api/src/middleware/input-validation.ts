@@ -7,6 +7,7 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z, ZodError, ZodSchema } from 'zod';
+import { config } from '../config';
 
 /**
  * Sanitization utilities (server-side versions)
@@ -93,16 +94,17 @@ export function sanitizeURL(url: string): string {
  * Zod schemas for common data types
  */
 
-// Common amount validation (in cents)
+// @deprecated Use amountDollarsSchema instead. This schema is for backward compatibility only.
+// The codebase has migrated from cents-based to dollar-based amounts.
 export const amountCentsSchema = z.number()
   .int('Amount must be an integer (in cents)')
   .min(0, 'Amount cannot be negative')
-  .max(1000000, 'Amount cannot exceed $10,000.00 (1,000,000 cents)');
+  .max(config.bounty.maxAmount * 100, `Amount cannot exceed $${config.bounty.maxAmount.toLocaleString()} (${(config.bounty.maxAmount * 100).toLocaleString()} cents)`);
 
 // Common amount validation (in dollars)
 export const amountDollarsSchema = z.number()
-  .min(0, 'Amount cannot be negative')
-  .max(10000, 'Amount cannot exceed $10,000.00');
+  .min(config.bounty.minAmount, 'Amount cannot be negative')
+  .max(config.bounty.maxAmount, `Amount cannot exceed $${config.bounty.maxAmount.toLocaleString()}`);
 
 // Bounty validation schema
 export const bountySchema = z.object({

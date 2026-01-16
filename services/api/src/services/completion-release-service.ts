@@ -9,7 +9,14 @@ import { outboxService } from './outbox-service';
 export interface CompletionReleaseRequest {
   bountyId: string;
   hunterId: string;
-  paymentIntentId?: string; // Optional in new flow
+  /**
+   * Optional Stripe PaymentIntent ID.
+   * @deprecated This field is optional to support both legacy and new payment flows.
+   * Legacy flow: PaymentIntent ID is required for validation.
+   * New flow: PaymentIntent ID may be retrieved from the bounty record itself.
+   * Callers should provide this when available for additional validation.
+   */
+  paymentIntentId?: string;
   platformFeePercentage?: number; // Service now has a default
   idempotencyKey?: string;
 }

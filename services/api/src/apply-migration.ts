@@ -27,14 +27,11 @@ async function applyMigration() {
     console.log(`Reading migration from ${migrationPath}...`);
 
     const sql = fs.readFileSync(migrationPath, 'utf8');
-    const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
     const client = await pool.connect();
     try {
-        for (const statement of statements) {
-            console.log(`Executing statement: ${statement.substring(0, 50)}...`);
-            await client.query(statement);
-        }
+        console.log(`Executing migration script (first 200 chars): ${sql.substring(0, 200)}...`);
+        await client.query(sql);
         console.log('✅ Migration applied successfully');
     } catch (error) {
         console.error('❌ Failed to apply migration:', error);

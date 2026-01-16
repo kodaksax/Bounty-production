@@ -255,6 +255,12 @@ export const config = {
       'image/jpeg,image/png,image/gif,application/pdf,video/mp4,video/quicktime,text/plain'
     ).split(','),
   },
+
+  // Bounty Configuration
+  bounty: {
+    maxAmount: getNumber('BOUNTY_MAX_AMOUNT', 10000), // $10,000 default
+    minAmount: getNumber('BOUNTY_MIN_AMOUNT', 0),
+  },
 } as const;
 
 /**

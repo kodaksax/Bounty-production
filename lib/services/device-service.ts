@@ -1,4 +1,5 @@
 import * as Device from 'expo-device';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 
@@ -14,42 +15,61 @@ export interface UserDevice {
     is_active: boolean;
 }
 
-const DEVICE_ID_KEY = 'bounty_device_id';
+const DEVICE_RECORD_ID_KEY = 'bounty_device_record_id';
+
+/**
+ * Get stored device record ID from SecureStore
+ * This is the UUID of the device record in the database
+ */
+async function getStoredDeviceRecordId(): Promise<string | null> {
+    try {
+        return await SecureStore.getItemAsync(DEVICE_RECORD_ID_KEY);
+    } catch (error) {
+        console.error('[DeviceService] Error retrieving device record ID:', error);
+        return null;
+    }
+}
+
+/**
+ * Store device record ID in SecureStore
+ */
+async function storeDeviceRecordId(deviceId: string): Promise<void> {
+    try {
+        await SecureStore.setItemAsync(DEVICE_RECORD_ID_KEY, deviceId);
+    } catch (error) {
+        console.error('[DeviceService] Error storing device record ID:', error);
+    }
+}
 
 export const deviceService = {
     /**
      * Register the current device or update its last active timestamp
+     * Uses SecureStore to persistently identify this specific device across sessions
      */
     async registerCurrentDevice(): Promise<void> {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // Get unique device ID (or generate one and store it if needed)
-            // For simplicity, we'll try to use a persistent ID from expo-application or fall back to a generated one stored in SecureStore if strictly needed.
-            // But for this implementation, we will rely on finding a device by its properties or creating a new one for each session if we lack a strict unique hardware ID that persists safely.
-            // To strictly verify "this device", we would typically store a UUID in SecureStore.
-            // Let's assume we create a new session record for each login, or update 'is_current' if we can identify it.
-
             const deviceName = Device.modelName || `Unknown ${Platform.OS} Device`;
             const deviceType = getDeviceType();
 
-            // Simple implementation: Insert a new record on login, or update if we stored an ID locally.
-            // For now, let's just insert/update based on a loose heuristic or just insert a new "active" session.
-            // Pruning old sessions might be needed later.
+            // Try to get the stored device record ID for this device
+            const storedDeviceRecordId = await getStoredDeviceRecordId();
+            let existingDevice = null;
 
-            // Let's try to fetch if we have a device for this user with this name (simple heuristic)
-            // A robust implementation would store a generated 'local_device_id' in SecureStore.
-
-            const { data: existingDevice } = await supabase
-                .from('user_devices')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('device_name', deviceName)
-                .eq('is_active', true)
-                .order('last_active', { ascending: false })
-                .limit(1)
-                .single();
+            if (storedDeviceRecordId) {
+                // Try to find the device record using the stored ID
+                const { data } = await supabase
+                    .from('user_devices')
+                    .select('*')
+                    .eq('id', storedDeviceRecordId)
+                    .eq('user_id', user.id)
+                    .eq('is_active', true)
+                    .single();
+                
+                existingDevice = data;
+            }
 
             if (existingDevice) {
                 // Update last active
@@ -61,8 +81,8 @@ export const deviceService = {
                     })
                     .eq('id', existingDevice.id);
             } else {
-                // Create new
-                await supabase
+                // Create new device record
+                const { data: newDevice, error: insertError } = await supabase
                     .from('user_devices')
                     .insert({
                         user_id: user.id,
@@ -70,7 +90,14 @@ export const deviceService = {
                         device_type: deviceType,
                         is_active: true,
                         last_active: new Date().toISOString()
-                    });
+                    })
+                    .select()
+                    .single();
+
+                if (!insertError && newDevice) {
+                    // Store the new device record ID in SecureStore for future lookups
+                    await storeDeviceRecordId(newDevice.id);
+                }
             }
         } catch (error) {
             console.error('[DeviceService] Error registering device:', error);
@@ -154,7 +181,6 @@ export const deviceService = {
 };
 
 function getDeviceType(): string {
-    const width = typeof window !== 'undefined' ? window.innerWidth : 0;
     if (Platform.OS === 'web') return 'Web Browser';
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
         // Very rough check, relying on Device module is better if available

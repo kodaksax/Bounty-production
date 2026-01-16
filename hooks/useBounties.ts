@@ -77,8 +77,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
     isLoading: loading,
     isValidating,
     error: fetchError,
-    refetch,
-    setData: setCachedBounties
+    refetch
   } = useCachedData<Bounty[]>(cacheKey, fetchFn);
 
   const [bounties, setBounties] = useState<Bounty[]>([]);

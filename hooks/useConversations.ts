@@ -38,8 +38,7 @@ export function useConversations(): UseConversationsResult {
     isLoading: loading,
     isValidating,
     error: fetchError,
-    refetch,
-    setData: setCachedConversations
+    refetch
   } = useCachedData<Conversation[]>(cacheKey, fetchFn, { enabled: hasValidUser });
 
   const [conversations, setConversations] = useState<Conversation[]>([]);

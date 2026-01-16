@@ -23,7 +23,7 @@ async function login() {
                 password: 'TestPassword123!'
             })
         });
-        const regData = await regRes.json() as any;
+        await regRes.json();
 
         // Sign in again
         const retryRes = await fetch(`${API_BASE_URL}/auth/sign-in`, {

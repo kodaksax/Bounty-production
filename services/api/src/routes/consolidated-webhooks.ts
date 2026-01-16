@@ -8,6 +8,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import Stripe from 'stripe';
 import { config } from '../config';
 import {
   ExternalServiceError,

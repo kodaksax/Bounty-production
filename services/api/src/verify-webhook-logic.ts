@@ -13,14 +13,6 @@ const mockLogger = {
 async function testRetryLogic() {
     console.log('=== Mock Verification: Webhook Retry Logic ===\n');
 
-    const mockEvent = {
-        id: 'evt_test_retry',
-        type: 'payment_intent.succeeded',
-        data: { object: { id: 'pi_test' } }
-    } as Stripe.Event;
-
-    let callCount = 0;
-
     // We need to mock processWebhookEvent which is called by processWebhookWithRetries
     // Since they are in the same file, we can't easily mock one from the other without dependency injection
     // or moving it to a separate file.
