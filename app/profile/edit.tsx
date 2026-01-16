@@ -1,36 +1,37 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
-import { useAuthProfile } from "hooks/useAuthProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuthContext } from "../../hooks/use-auth-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
+import { useAuthContext } from "../../hooks/use-auth-context";
+import { useBackHandler } from "../../hooks/useBackHandler";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
-  
+
   // IMPORTANT: Always get the current user ID from session to prevent data leaks
   // Do NOT use a static or cached userId - it must be derived from the active session
   const currentUserId = session?.user?.id || getCurrentUserId();
-  
+
   // Use normalized profile for display and both services for update operations
   const { profile, loading, error } = useNormalizedProfile(currentUserId);
   const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
@@ -49,7 +50,7 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
-  
+
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -105,6 +106,22 @@ export default function EditProfileScreen() {
     return formChanged || avatarChanged || bannerChanged;
   }, [formData, initialData, avatarUrl, bannerUrl, profile]);
 
+  // Handle hardware back button on Android
+  useBackHandler(() => {
+    if (isDirty) {
+      Alert.alert(
+        "Discard changes?",
+        "You have unsaved changes. Are you sure you want to discard them?",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          { text: "Discard", style: "destructive", onPress: () => router.back() },
+        ]
+      );
+      return true; // Consume the event
+    }
+    return false; // Let default behavior happen
+  }, true);
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -126,9 +143,9 @@ export default function EditProfileScreen() {
       if (avatarUrl) {
         authUpdateData.avatar_url = avatarUrl;
       }
-      
+
       const authUpdated = await updateAuthProfile(authUpdateData);
-      
+
       if (!authUpdated) {
         throw new Error("Failed to update profile");
       }
@@ -175,14 +192,14 @@ export default function EditProfileScreen() {
   const maxBioLength = 160;
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       {/* Pinned Header: Twitter-style Cancel/Save */}
       <View style={styles.pinnedHeader}>
-        <TouchableOpacity 
-          onPress={() => router.back()} 
+        <TouchableOpacity
+          onPress={() => router.back()}
           style={styles.headerButton}
           accessibilityLabel="Cancel editing"
           accessibilityRole="button"
@@ -223,7 +240,7 @@ export default function EditProfileScreen() {
       >
         {/* Banner + Avatar Overlap (Twitter-style) */}
         <View style={styles.bannerSection}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.bannerPlaceholder}
             onPress={() => bannerUpload.pickAttachment()}
             disabled={bannerUpload.isUploading || bannerUpload.isPicking}
@@ -231,8 +248,8 @@ export default function EditProfileScreen() {
             accessibilityRole="button"
           >
             {bannerUrl ? (
-              <Image 
-                source={{ uri: bannerUrl }} 
+              <Image
+                source={{ uri: bannerUrl }}
                 style={{ width: '100%', height: '100%' }}
                 resizeMode="cover"
               />
@@ -251,7 +268,7 @@ export default function EditProfileScreen() {
             )}
           </TouchableOpacity>
           <View style={styles.avatarOverlap}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.avatar}
               onPress={() => avatarUpload.pickAttachment()}
               disabled={avatarUpload.isUploading || avatarUpload.isPicking}
@@ -259,8 +276,8 @@ export default function EditProfileScreen() {
               accessibilityRole="button"
             >
               {avatarUrl ? (
-                <Image 
-                  source={{ uri: avatarUrl }} 
+                <Image
+                  source={{ uri: avatarUrl }}
                   style={{ width: '100%', height: '100%', borderRadius: 50 }}
                   resizeMode="cover"
                 />
@@ -272,7 +289,7 @@ export default function EditProfileScreen() {
                 </Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.avatarChangeButton}
               onPress={() => avatarUpload.pickAttachment()}
               disabled={avatarUpload.isUploading || avatarUpload.isPicking}
@@ -292,7 +309,7 @@ export default function EditProfileScreen() {
         {/* Form Fields with clear sections */}
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
-          
+
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Name</Text>
             <TextInput
@@ -343,7 +360,7 @@ export default function EditProfileScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Location & Links</Text>
-          
+
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Location</Text>
             <TextInput
@@ -375,7 +392,7 @@ export default function EditProfileScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Skills & Expertise</Text>
-          
+
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Skillsets</Text>
             <TextInput

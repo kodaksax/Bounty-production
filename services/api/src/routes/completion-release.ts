@@ -1,7 +1,6 @@
-import { Router, Request, Response } from 'express';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
-import { completionReleaseService } from '../services/completion-release-service';
-import { CompletionReleaseRequest } from '../services/completion-release-service';
+import { Request, Response, Router } from 'express';
+import { CompletionReleaseRequest, completionReleaseService } from '../services/completion-release-service';
+import { checkIdempotencyKey, removeIdempotencyKey, storeIdempotencyKey } from '../services/idempotency-service';
 
 export const completionReleaseRouter = Router();
 
@@ -10,8 +9,21 @@ export const completionReleaseRouter = Router();
  * Process completion release for a bounty
  */
 completionReleaseRouter.post('/', async (req: Request, res: Response) => {
+  let idempotencyKey: string | undefined;
   try {
-    const request: CompletionReleaseRequest = req.body;
+    const request: CompletionReleaseRequest & { idempotencyKey?: string } = req.body;
+    idempotencyKey = request.idempotencyKey;
+
+    if (idempotencyKey) {
+      const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+      if (isDuplicate) {
+        return res.status(409).json({
+          error: 'Duplicate request detected',
+          code: 'duplicate_transaction'
+        });
+      }
+      await storeIdempotencyKey(idempotencyKey);
+    }
 
     // Validate required fields
     if (!request.bountyId || !request.hunterId || !request.paymentIntentId) {
@@ -39,6 +51,11 @@ completionReleaseRouter.post('/', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Error in completion release endpoint:', error);
+
+    if (idempotencyKey) {
+      await removeIdempotencyKey(idempotencyKey);
+    }
+
     return res.status(500).json({
       error: 'Internal server error',
       success: false,
@@ -52,10 +69,10 @@ completionReleaseRouter.post('/', async (req: Request, res: Response) => {
  */
 completionReleaseRouter.get('/:bountyId/status', async (req: Request, res: Response) => {
   try {
-    const { bountyId } = req.params;
+    const { bountyId } = req.params as { bountyId: string };
 
     const isReleased = await completionReleaseService.isAlreadyReleased(bountyId);
-    const releaseTransaction = isReleased 
+    const releaseTransaction = isReleased
       ? await completionReleaseService.getReleaseTransaction(bountyId)
       : null;
 
@@ -91,14 +108,14 @@ completionReleaseRouter.post('/webhook', async (req: Request, res: Response) => 
     // 4. Trigger completion release
 
     const event = req.body;
-    
+
     if (event.type === 'payment_intent.succeeded') {
       const paymentIntent = event.data.object;
       const { bounty_id, hunter_id } = paymentIntent.metadata || {};
 
       if (bounty_id && hunter_id) {
         console.log(`🎯 PaymentIntent succeeded for bounty ${bounty_id}, triggering completion release`);
-        
+
         const result = await completionReleaseService.processCompletionRelease({
           bountyId: bounty_id,
           hunterId: hunter_id,

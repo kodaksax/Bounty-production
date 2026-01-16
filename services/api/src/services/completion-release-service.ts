@@ -1,21 +1,22 @@
+import { and, eq } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { db } from '../db/connection';
 import { bounties, users, walletTransactions } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
-import { outboxService } from './outbox-service';
-import { walletService } from './wallet-service';
+import * as ConsolidatedWalletService from './consolidated-wallet-service';
 import { emailService } from './email-service';
+import { outboxService } from './outbox-service';
 
 export interface CompletionReleaseRequest {
   bountyId: string;
   hunterId: string;
-  paymentIntentId: string;
-  platformFeePercentage?: number; // Default 5%
+  paymentIntentId?: string; // Optional in new flow
+  platformFeePercentage?: number; // Service now has a default
+  idempotencyKey?: string;
 }
 
 export interface CompletionReleaseResponse {
   success: boolean;
-  transferId?: string;
+  transactionId?: string;
   releaseAmount: number;
   platformFee: number;
   error?: string;
@@ -118,72 +119,33 @@ export class CompletionReleaseService {
         hunterStripeAccountId: hunter.stripe_account_id,
       });
 
-      // Create Stripe Transfer or handle manual capture
-      let transferId: string;
-      
-      if (this.isConfigured && this.stripe) {
-        // Create real Stripe Transfer
-        const transfer = await this.stripe.transfers.create({
-          amount: releaseAmountCents,
-          currency: 'usd',
-          destination: hunter.stripe_account_id,
-          metadata: {
-            bounty_id: request.bountyId,
-            hunter_id: request.hunterId,
-            payment_intent_id: request.paymentIntentId,
-            platform_fee_cents: platformFeeCents.toString(),
-          },
-        });
+      // Use consolidated wallet service for the release
+      // This handles: balance updates, transaction creation, platform fees, and Stripe transfers
+      const releaseTransaction = await ConsolidatedWalletService.releaseEscrow(
+        request.bountyId,
+        request.hunterId,
+        request.idempotencyKey
+      );
 
-        transferId = transfer.id;
-        console.log(`✅ Created Stripe Transfer ${transferId} for ${releaseAmountCents} cents to ${hunter.stripe_account_id}`);
-      } else {
-        // Mock transfer for development/testing
-        transferId = `tr_mock_${Date.now()}_${request.bountyId.slice(-8)}`;
-        console.log(`🧪 Mock transfer ${transferId} for ${releaseAmountCents} cents to hunter ${request.hunterId}`);
-      }
-
-      // Record ledger entries in a transaction
-      await db.transaction(async (tx) => {
-        // Record release transaction
-        const releaseTransaction = await tx.insert(walletTransactions).values({
-          bounty_id: request.bountyId,
-          user_id: request.hunterId,
-          type: 'release',
-          amount_cents: releaseAmountCents,
-          stripe_transfer_id: transferId,
-          platform_fee_cents: platformFeeCents,
-        }).returning();
-
-        // Record platform fee transaction
-        await tx.insert(walletTransactions).values({
-          bounty_id: request.bountyId,
-          user_id: 'platform', // Special user ID for platform
-          type: 'platform_fee',
-          amount_cents: platformFeeCents,
-          stripe_transfer_id: transferId,
-          platform_fee_cents: 0, // Platform fee doesn't have its own fee
-        });
-
-        console.log(`📊 Recorded ledger entries for bounty ${request.bountyId}: release=${releaseTransaction[0].id}, platform_fee recorded`);
-      });
+      const releaseAmount = releaseTransaction.amount;
+      const platformFee = releaseTransaction.metadata?.platform_fee || 0;
 
       // Update bounty status
       await db
         .update(bounties)
-        .set({ 
+        .set({
           status: 'completed',
           updated_at: new Date(),
         })
         .where(eq(bounties.id, request.bountyId));
 
-      // Send email receipts to both parties
+      // Convert cents to dollars if needed for emails (service already uses dollars)
       await emailService.sendReleaseConfirmation(
         request.bountyId,
         bounty.creator_id,
         request.hunterId,
-        releaseAmountCents,
-        platformFeeCents
+        releaseAmount * 100,
+        platformFee * 100
       );
 
       // Publish realtime event for bounty status change
@@ -194,14 +156,14 @@ export class CompletionReleaseService {
 
       return {
         success: true,
-        transferId,
-        releaseAmount: releaseAmountCents / 100, // Convert back to dollars
-        platformFee: platformFeeCents / 100, // Convert back to dollars
+        transactionId: releaseTransaction.id,
+        releaseAmount: releaseAmount,
+        platformFee: platformFee,
       };
 
     } catch (error) {
       console.error(`❌ Error processing completion release for bounty ${request.bountyId}:`, error);
-      
+
       // Create outbox event for retry
       await outboxService.createEvent({
         type: 'COMPLETION_RELEASE',
@@ -237,7 +199,7 @@ export class CompletionReleaseService {
       };
 
       const result = await this.processCompletionRelease(request);
-      
+
       if (result.success) {
         console.log(`✅ Successfully processed completion release from outbox for bounty ${request.bountyId}`);
         return true;

@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import type { Conversation } from '../lib/types';
-import { messageService } from '../lib/services/message-service';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CACHE_KEYS } from '../lib/services/cached-data-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
+import type { Conversation } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
+import { logger } from '../lib/utils/error-logger';
+import { useCachedData } from './useCachedData';
 
 interface UseConversationsResult {
   conversations: Conversation[];
   loading: boolean;
+  isValidating: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
@@ -15,40 +18,56 @@ interface UseConversationsResult {
 }
 
 export function useConversations(): UseConversationsResult {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const currentUserId = getCurrentUserId();
-  
-  // Check if we have a valid authenticated user (not the fallback ID)
-  const hasValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
 
-  const fetchConversations = async () => {
-    // Guard: don't fetch if no valid user
-    if (!hasValidUser) {
-      setConversations([]);
-      setLoading(false);
-      return;
+  // Check if we have a valid authenticated user (not the fallback ID)
+  const hasValidUser = !!(currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001');
+
+  const cacheKey = useMemo(() =>
+    hasValidUser ? CACHE_KEYS.CONVERSATIONS_LIST : 'conversations_guest',
+    [hasValidUser]
+  );
+
+  const fetchFn = useCallback(async () => {
+    if (!hasValidUser) return [];
+    return supabaseMessaging.fetchConversations(currentUserId);
+  }, [currentUserId, hasValidUser]);
+
+  const {
+    data: fetchedConversations,
+    isLoading: loading,
+    isValidating,
+    error: fetchError,
+    refetch,
+    setData: setCachedConversations
+  } = useCachedData<Conversation[]>(cacheKey, fetchFn, { enabled: hasValidUser });
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sync state with cached data
+  useEffect(() => {
+    if (fetchedConversations) {
+      setConversations(fetchedConversations);
     }
-    
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await supabaseMessaging.fetchConversations(currentUserId);
-      setConversations(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load conversations');
-    } finally {
-      setLoading(false);
+  }, [fetchedConversations]);
+
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError.message);
     }
-  };
+  }, [fetchError]);
+
+  const fetchConversations = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   const markAsRead = async (conversationId: string) => {
     // Optimistic update
-    setConversations(prev => 
-      prev.map(conv => 
-        conv.id === conversationId 
-          ? { ...conv, unread: 0 } 
+    setConversations(prev =>
+      prev.map(conv =>
+        conv.id === conversationId
+          ? { ...conv, unread: 0 }
           : conv
       )
     );
@@ -80,7 +99,7 @@ export function useConversations(): UseConversationsResult {
 
   useEffect(() => {
     let subscription: RealtimeChannel | null = null;
-    
+
     // Check if we have a valid authenticated user (not the fallback ID)
     const isValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
 
@@ -88,19 +107,15 @@ export function useConversations(): UseConversationsResult {
       // Only initialize if we have a valid user
       if (!isValidUser) {
         setConversations([]); // Clear conversations when no user
-        setLoading(false);
         return;
       }
-      
-      // Initial fetch
-      await fetchConversations();
 
       // Subscribe to Realtime updates
       subscription = supabaseMessaging.subscribeToConversations(
         currentUserId,
         () => {
-          // Refetch conversations on any update
-          fetchConversations();
+          // Refetch conversations on any update (SWR will update UI)
+          refetch().catch(err => logger.error('Error refetching conversations on notification', { error: err }));
         }
       );
     };
@@ -113,11 +128,12 @@ export function useConversations(): UseConversationsResult {
         supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
       }
     };
-  }, [currentUserId]); // Only depend on currentUserId to avoid re-subscriptions
+  }, [currentUserId, refetch]); // Only depend on currentUserId and refetch
 
   return {
     conversations,
     loading,
+    isValidating,
     error,
     refresh,
     markAsRead,

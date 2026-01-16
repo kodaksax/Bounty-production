@@ -40,6 +40,8 @@ if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
 
+import { registerDeviceSession } from '../lib/services/auth-service';
+
 if (__DEV__) {
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -231,6 +233,14 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 const SessionMonitorGate = () => {
   const { isLoggedIn } = useAuthContext();
   useSessionMonitor({ enabled: !!isLoggedIn });
+
+  // Register device when logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      registerDeviceSession();
+    }
+  }, [isLoggedIn]);
+
   return null;
 };
 

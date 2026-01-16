@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 // Replace Radix dialog primitives with RN-friendly wrappers
 import { cva } from "class-variance-authority"
+import { useBackHandler } from "hooks/useBackHandler"
 import * as React from "react"
 import { Text, TouchableOpacity, View } from "react-native"
 
@@ -57,18 +58,29 @@ interface SheetContentProps {
   style?: any
 }
 
-const SheetContent = React.forwardRef<View, SheetContentProps>(({ side = "right", className, children, open, onOpenChange, style, ...props }, ref) => (
-  <SheetPortal>
-    {open ? <SheetOverlay /> : null}
-    <View ref={ref} style={[{ backgroundColor: '#fff', padding: 16 }, style as any]} {...(props as any)}>
-      {children}
-      <SheetClose onPress={() => onOpenChange?.(false)} style={{ position: 'absolute', right: 16, top: 16 }}>
-        <MaterialIcons name="close" size={24} color="#000000" />
-        <Text style={{ position: 'absolute', left: -9999 }}>Close</Text>
-      </SheetClose>
-    </View>
-  </SheetPortal>
-))
+const SheetContent = React.forwardRef<View, SheetContentProps>(({ side = "right", className, children, open, onOpenChange, style, ...props }, ref) => {
+  // Handle hardware back button logic for sheets
+  useBackHandler(() => {
+    if (open) {
+      onOpenChange?.(false);
+      return true; // Consume the event
+    }
+    return false; // Let default behavior happen
+  }, !!open);
+
+  return (
+    <SheetPortal>
+      {open ? <SheetOverlay /> : null}
+      <View ref={ref} style={[{ backgroundColor: '#fff', padding: 16 }, style as any]} {...(props as any)}>
+        {children}
+        <SheetClose onPress={() => onOpenChange?.(false)} style={{ position: 'absolute', right: 16, top: 16 }}>
+          <MaterialIcons name="close" size={24} color="#000000" />
+          <Text style={{ position: 'absolute', left: -9999 }}>Close</Text>
+        </SheetClose>
+      </View>
+    </SheetPortal>
+  );
+})
 SheetContent.displayName = "SheetContent"
 
 const SheetHeader = ({ className, ...props }: any) => (
@@ -92,7 +104,7 @@ const SheetDescription = React.forwardRef<Text, any>(({ children, ...props }, re
 SheetDescription.displayName = "SheetDescription"
 
 export {
-    Sheet, SheetClose,
-    SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetOverlay, SheetPortal, SheetTitle, SheetTrigger
+  Sheet, SheetClose,
+  SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetOverlay, SheetPortal, SheetTitle, SheetTrigger
 }
 

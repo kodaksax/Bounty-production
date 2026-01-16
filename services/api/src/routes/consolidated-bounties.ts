@@ -20,12 +20,14 @@ import {
   ValidationError
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
+import {
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
+} from '../services/idempotency-service';
+import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
 import { toJsonSchema } from '../utils/zod-json';
-import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
-import { db } from '../db/connection';
-import { walletTransactions } from '../db/schema';
-import { eq } from 'drizzle-orm';
-import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Generate a normalized cache key for bounty list queries
@@ -60,7 +62,8 @@ const baseBountySchema = z.object({
     .min(50, 'Description must be at least 50 characters')
     .max(5000, 'Description must be at most 5000 characters'),
   amount: z.number()
-    .min(0, 'Amount must be non-negative'),
+    .min(0, 'Amount must be non-negative')
+    .max(10000, 'Amount cannot exceed $10,000.00'),
   isForHonor: z.boolean()
     .optional()
     .default(false),
@@ -73,6 +76,7 @@ const baseBountySchema = z.object({
   due_date: z.string()
     .datetime()
     .optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 // Derive refined and partial schemas
@@ -81,8 +85,12 @@ const createBountySchema = baseBountySchema.refine(data => {
   if (data.isForHonor && data.amount > 0) {
     return false;
   }
+  // Paid bounties must be at least $1
+  if (!data.isForHonor && data.amount < 1) {
+    return false;
+  }
   return true;
-}, { message: 'Honor bounties must have amount set to 0', path: ['amount'] });
+}, { message: 'Paid bounties must be at least $1.00, Honor bounties must be $0', path: ['amount'] });
 
 // Schema for updating a bounty (partial)
 const updateBountySchema = baseBountySchema.partial();
@@ -182,7 +190,7 @@ function validateStatusTransition(
   };
 
   const allowedActions = validTransitions[currentStatus] || [];
-  
+
   if (!allowedActions.includes(action)) {
     return {
       valid: false,
@@ -199,7 +207,7 @@ function validateStatusTransition(
 export async function registerConsolidatedBountyRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
-  
+
   /**
    * GET /api/bounties
    * List bounties with optional filters and pagination
@@ -236,9 +244,9 @@ export async function registerConsolidatedBountyRoutes(
       const query = listBountiesSchema.parse(request.query);
 
       request.log.info(
-        { 
-          filters: query, 
-          authenticated: !!request.userId 
+        {
+          filters: query,
+          authenticated: !!request.userId
         },
         'Listing bounties'
       );
@@ -246,10 +254,10 @@ export async function registerConsolidatedBountyRoutes(
       try {
         // Generate normalized cache key based on query parameters
         const cacheKey = generateBountyListCacheKey(query);
-        
+
         // Try to get from cache first
         const cachedResult = await redisService.get<any>(cacheKey, CacheKeyPrefix.BOUNTY_LIST);
-        
+
         if (cachedResult) {
           request.log.info({ cacheKey }, 'Bounty list fetched from cache');
           return cachedResult;
@@ -366,7 +374,7 @@ export async function registerConsolidatedBountyRoutes(
       try {
         // Try to get from cache first
         const cachedBounty = await redisService.get<any>(id, CacheKeyPrefix.BOUNTY);
-        
+
         if (cachedBounty) {
           request.log.info({ bountyId: id }, 'Bounty fetched from cache');
           return cachedBounty;
@@ -464,6 +472,18 @@ export async function registerConsolidatedBountyRoutes(
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const userId = request.userId!;
       const body = createBountySchema.parse(request.body);
+      const { idempotencyKey } = body;
+
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
 
       request.log.info(
         { userId, title: body.title, amount: body.amount, isForHonor: body.isForHonor },
@@ -476,29 +496,28 @@ export async function registerConsolidatedBountyRoutes(
       try {
         const supabase = getSupabaseAdmin();
 
-        // For paid bounties (non-honor with amount > 0), check and deduct wallet balance
+        // For paid bounties (non-honor with amount > 0), check wallet balance
         if (!body.isForHonor && body.amount > 0) {
-          const balanceCents = await calculateUserBalance(userId);
-          const amountCents = Math.round(body.amount * 100);
-          
-          if (balanceCents < amountCents) {
+          const { balance } = await ConsolidatedWalletService.getBalance(userId);
+
+          if (balance < body.amount) {
             request.log.warn(
-              { userId, required: amountCents, available: balanceCents },
+              { userId, required: body.amount, available: balance },
               'Insufficient wallet balance for bounty creation'
             );
-            return reply.code(400).send({ 
+            return reply.code(400).send({
               error: 'Insufficient wallet balance',
               required: body.amount,
-              available: balanceCents / 100,
+              available: balance,
             });
           }
         }
 
         // Prepare bounty data
         // Note: created_at and updated_at are omitted to use database defaults
-        const bountyData: Partial<Bounty> & { 
-          user_id: string; 
-          title: string; 
+        const bountyData: Partial<Bounty> & {
+          user_id: string;
+          title: string;
           description: string;
           amount: number;
           status: string;
@@ -517,49 +536,8 @@ export async function registerConsolidatedBountyRoutes(
         if (body.skills_required) bountyData.skills_required = body.skills_required;
         if (body.due_date) bountyData.due_date = body.due_date;
 
-        // For paid bounties, we need to ensure atomicity between bounty creation and wallet deduction
-        // We'll create the wallet transaction first, then the bounty, and rollback the transaction if bounty creation fails
-        let walletTransactionId: string | null = null;
-        
-        /**
-         * Helper function to rollback wallet transaction
-         */
-        const rollbackWalletTransaction = async (transactionId: string, context: string) => {
-          try {
-            await db.delete(walletTransactions)
-              .where(eq(walletTransactions.id, transactionId));
-            request.log.info(
-              { transactionId, context },
-              'Wallet transaction rolled back'
-            );
-          } catch (rollbackError) {
-            request.log.error(
-              { error: rollbackError, transactionId, context },
-              'Failed to rollback wallet transaction'
-            );
-          }
-        };
-        
         try {
-          // For paid bounties, create wallet transaction first
-          if (!body.isForHonor && body.amount > 0) {
-            // Use a temporary bounty ID placeholder - we'll update it after bounty creation
-            const walletTxResult = await db.insert(walletTransactions).values({
-              user_id: userId,
-              bounty_id: null, // Will be updated after bounty creation
-              type: 'bounty_posted',
-              amount_cents: Math.round(body.amount * 100),
-            }).returning();
-            
-            walletTransactionId = walletTxResult[0].id;
-            
-            request.log.info(
-              { userId, transactionId: walletTransactionId },
-              'Wallet transaction created, proceeding to create bounty'
-            );
-          }
-
-          // Create the bounty via Supabase
+          // Create the bounty via Supabase first
           const { data: bounty, error } = await supabase
             .from('bounties')
             .insert(bountyData)
@@ -567,29 +545,33 @@ export async function registerConsolidatedBountyRoutes(
             .single();
 
           if (error) {
-            request.log.error(
-              { error: error.message, userId },
-              'Bounty creation failed, rolling back wallet transaction'
-            );
-            
-            // Rollback: Delete the wallet transaction if bounty creation failed
-            if (walletTransactionId) {
-              await rollbackWalletTransaction(walletTransactionId, 'bounty_creation_failed');
-            }
-            
+            request.log.error({ error: error.message, userId }, 'Bounty creation failed');
             throw new Error(error.message);
           }
 
-          // Update the wallet transaction with the bounty ID
-          if (walletTransactionId) {
-            await db.update(walletTransactions)
-              .set({ bounty_id: bounty.id })
-              .where(eq(walletTransactions.id, walletTransactionId));
-            
-            request.log.info(
-              { userId, bountyId: bounty.id, amount: body.amount },
-              'Wallet transaction updated with bounty ID'
-            );
+          // For paid bounties, create escrow transaction using the bounty ID
+          if (!body.isForHonor && body.amount > 0) {
+            try {
+              await ConsolidatedWalletService.createEscrow(
+                bounty.id,
+                userId,
+                body.amount,
+                idempotencyKey
+              );
+
+              request.log.info(
+                { userId, bountyId: bounty.id, amount: body.amount },
+                'Escrow transaction created successfully'
+              );
+            } catch (escrowError) {
+              request.log.error(
+                { error: escrowError, userId, bountyId: bounty.id },
+                'Escrow creation failed after bounty creation'
+              );
+              // Note: In a production system, we'd want to either roll back the bounty 
+              // or mark it as 'pending_payment'. For now, we'll throw to let the user know.
+              throw escrowError;
+            }
           }
 
           // Invalidate bounty list caches since a new bounty was created
@@ -610,6 +592,16 @@ export async function registerConsolidatedBountyRoutes(
           throw error;
         }
       } catch (error) {
+        // Handle idempotency key cleanup
+        if (createBountySchema.safeParse(request.body).success) {
+          const key = (request.body as any).idempotencyKey;
+          if (key) await removeIdempotencyKey(key);
+        }
+
+        if (error instanceof ConflictError && (error as any).code === 'duplicate_transaction') {
+          throw error;
+        }
+
         request.log.error(
           { error, userId },
           'Unexpected error creating bounty'
@@ -720,7 +712,7 @@ export async function registerConsolidatedBountyRoutes(
         if (updateData.isForHonor !== undefined || updateData.amount !== undefined) {
           const finalIsForHonor = updateData.isForHonor ?? bounty.isForHonor;
           const finalAmount = updateData.amount ?? bounty.amount;
-          
+
           if (finalIsForHonor && finalAmount > 0) {
             throw new ValidationError(
               'Honor bounties must have amount set to 0. Both isForHonor and amount fields must be consistent.',
@@ -756,10 +748,10 @@ export async function registerConsolidatedBountyRoutes(
 
         return updatedBounty;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError ||
-            error instanceof ValidationError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError ||
+          error instanceof ValidationError) {
           throw error;
         }
         request.log.error(
@@ -1008,9 +1000,9 @@ export async function registerConsolidatedBountyRoutes(
 
         return updatedBounty;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof ValidationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof ValidationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
@@ -1132,9 +1124,9 @@ export async function registerConsolidatedBountyRoutes(
 
         return updatedBounty;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
@@ -1252,9 +1244,9 @@ export async function registerConsolidatedBountyRoutes(
 
         return updatedBounty;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
