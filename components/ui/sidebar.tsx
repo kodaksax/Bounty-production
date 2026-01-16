@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from "components/ui/tooltip"
 import { useIsMobile } from "hooks/use-mobile"
+import { useBackHandler } from "hooks/useBackHandler"
 import { cn } from "lib/utils"
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state"
@@ -88,11 +89,11 @@ const SidebarProvider = React.forwardRef<
           _setOpen(openState)
         }
 
-  // In React Native, document.cookie is not available. Persist sidebar state with AsyncStorage if needed.
-  // Example (uncomment and install @react-native-async-storage/async-storage if you want persistence):
-  // import AsyncStorage from '@react-native-async-storage/async-storage';
-  // AsyncStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState));
-  // For now, this is a no-op in React Native/Expo.
+        // In React Native, document.cookie is not available. Persist sidebar state with AsyncStorage if needed.
+        // Example (uncomment and install @react-native-async-storage/async-storage if you want persistence):
+        // import AsyncStorage from '@react-native-async-storage/async-storage';
+        // AsyncStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState));
+        // For now, this is a no-op in React Native/Expo.
       },
       [setOpenProp, open]
     )
@@ -104,8 +105,14 @@ const SidebarProvider = React.forwardRef<
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
 
-  // Keyboard shortcuts are not supported in React Native/Expo Go.
-  // If you want to handle hardware back button on Android, use BackHandler from 'react-native'.
+    // Handle hardware back button logic for mobile sidebar
+    useBackHandler(() => {
+      if (isMobile && openMobile) {
+        setOpenMobile(false);
+        return true; // Consume the event
+      }
+      return false; // Let default behavior happen
+    }, isMobile && openMobile);
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
@@ -204,7 +211,7 @@ const Sidebar = React.forwardRef<React.ElementRef<typeof View>, SidebarComponent
       <View
         ref={ref}
         className="group peer hidden md:block text-sidebar-foreground"
-            {...({ 'data-state': state, 'data-collapsible': state === "collapsed" ? collapsible : "", 'data-variant': variant, 'data-side': side } as any)}
+        {...({ 'data-state': state, 'data-collapsible': state === "collapsed" ? collapsible : "", 'data-variant': variant, 'data-side': side } as any)}
       >
         {/* This is what handles the sidebar gap on desktop */}
         <View
@@ -250,21 +257,21 @@ const SidebarTrigger = React.forwardRef<
 >(({ className, ...props }: React.ComponentProps<typeof Button>, ref) => {
   const { toggleSidebar } = useSidebar()
 
-    return (
-      <TouchableOpacity
-        ref={ref}
-        {...({ 'data-sidebar': 'trigger' } as any)}
-        className={cn("h-7 w-7", className)}
-        onPress={(event) => {
-          ;(props as any).onClick?.(event)
-          toggleSidebar()
-        }}
-        {...(props as any)}
-      >
-        <MaterialIcons name="menu" size={20} color="#fff" />
-        <Text className="sr-only">Toggle Sidebar</Text>
-      </TouchableOpacity>
-    )
+  return (
+    <TouchableOpacity
+      ref={ref}
+      {...({ 'data-sidebar': 'trigger' } as any)}
+      className={cn("h-7 w-7", className)}
+      onPress={(event) => {
+        ; (props as any).onClick?.(event)
+        toggleSidebar()
+      }}
+      {...(props as any)}
+    >
+      <MaterialIcons name="menu" size={20} color="#fff" />
+      <Text className="sr-only">Toggle Sidebar</Text>
+    </TouchableOpacity>
+  )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
 
@@ -320,7 +327,7 @@ const SidebarInput = React.forwardRef<
   return (
     <TextInput
       ref={ref}
-        {...({ 'data-sidebar': 'input' } as any)}
+      {...({ 'data-sidebar': 'input' } as any)}
       className={cn(
         "h-8 w-full bg-background shadow-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
         className
@@ -489,7 +496,7 @@ const SidebarMenuAction = React.forwardRef<React.ElementRef<typeof TouchableOpac
           "peer-data-[size=lg]/menu-button:top-2.5",
           "group-data-[collapsible=icon]:hidden",
           showOnHover &&
-            "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
+          "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
           className
         )}
         {...props}

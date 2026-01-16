@@ -6,16 +6,17 @@ import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
 import { StepReview } from 'app/screens/CreateBounty/StepReview';
 import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
 import { bountyService } from 'app/services/bountyService';
-import React, { useEffect, useState } from 'react';
+import { ErrorBanner } from 'components/error-banner';
+import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
+import { useEmailVerification } from 'hooks/use-email-verification';
+import { useBackHandler } from 'hooks/useBackHandler';
+import { useFormSubmission } from 'hooks/useFormSubmission';
+import { getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
+import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { useWallet } from 'lib/wallet-context';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ErrorBanner } from 'components/error-banner';
-import { getUserFriendlyError } from 'lib/utils/error-messages';
-import { useFormSubmission } from 'hooks/useFormSubmission';
-import { useWallet } from 'lib/wallet-context';
-import { validateBalance, getInsufficientBalanceMessage } from 'lib/utils/bounty-validation';
-import { useEmailVerification } from 'hooks/use-email-verification';
-import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -38,7 +39,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const insets = useSafeAreaInsets();
   const { balance, logTransaction, withdraw } = useWallet();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
-  
+
   // Use form submission hook with debouncing
   const { submit, isSubmitting, error: submitError, reset } = useFormSubmission(
     async () => {
@@ -52,7 +53,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
         throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
-      
+
       // Create the bounty first (before deducting funds to prevent loss on failure)
       const result = await bountyService.createBounty(draft);
 
@@ -68,7 +69,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           bounty_id: result.id.toString(),
           status: 'completed'
         });
-        
+
         if (!withdrawSuccess) {
           // Attempt to roll back: delete the bounty since funds could not be escrowed
           try {
@@ -80,7 +81,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           }
           throw new Error('Failed to deduct funds from wallet. Your bounty was not posted.');
         }
-        
+
         // No need to log a separate bounty_posted transaction; withdraw() already logs the transaction.
       }
 
@@ -94,7 +95,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       // Show success message
       Alert.alert(
         isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📤',
-        isOnline 
+        isOnline
           ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
           : 'You\'re offline. Your bounty will be posted automatically when you reconnect.',
         [
@@ -159,6 +160,19 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       ]
     );
   };
+
+  // Handle hardware back button logic
+  useBackHandler(() => {
+    // If not at the first step, go back one step
+    if (currentStep > 1) {
+      handleBack();
+      return true; // Consume the event
+    }
+
+    // If at the first step, show the cancel/discard alert
+    handleCancel();
+    return true; // Consume the event
+  }, true);
 
   // Notify consumer on initial mount and whenever currentStep changes.
   useEffect(() => {
