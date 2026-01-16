@@ -24,6 +24,7 @@ export const users = pgTable('profiles', {
   stripe_account_id: text('stripe_connect_account_id'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp (if present)
+  balance: text('balance').default('0.00').notNull(), // Numeric in DB, using text for precision or number if scaled
 });
 
 // Bounties table as specified in requirements
@@ -33,7 +34,7 @@ export const bounties = pgTable('bounties', {
   hunter_id: uuid('hunter_id').references(() => users.id), // Who accepted/is working on the bounty
   title: text('title').notNull(),
   description: text('description').notNull(),
-  amount_cents: integer('amount_cents').notNull().default(0),
+  amount: text('amount').notNull().default('0.00'),
   is_for_honor: boolean('is_for_honor').default(false).notNull(),
   status: text('status').notNull().default('open'),
   payment_intent_id: text('payment_intent_id'), // Store Stripe PaymentIntent ID for escrow
@@ -50,7 +51,7 @@ export const walletTransactions = pgTable('wallet_transactions', {
   bounty_id: uuid('bounty_id').references(() => bounties.id),
   user_id: uuid('user_id').references(() => users.id).notNull(),
   type: text('type').notNull(), // escrow, release, refund, etc.
-  amount_cents: integer('amount_cents').notNull(),
+  amount: text('amount').notNull(),
   stripe_transfer_id: text('stripe_transfer_id'), // Store Stripe Transfer ID for release transactions
   platform_fee_cents: integer('platform_fee_cents').default(0), // Platform fee for the transaction
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

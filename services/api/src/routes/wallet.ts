@@ -1,9 +1,9 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { bounties, walletTransactions } from '../db/schema';
+import { bounties } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import {
@@ -12,8 +12,6 @@ import {
   storeIdempotencyKey
 } from '../services/idempotency-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
-import { walletService } from '../services/wallet-service';
-import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Validation schemas for wallet operations
@@ -26,6 +24,7 @@ const depositSchema = z.object({
 
 const withdrawSchema = z.object({
   amount: z.number().min(1, 'Minimum withdrawal is $1.00'),
+  destination: z.string().optional(), // Now optional if service has a default logic, but usually needed
   idempotencyKey: z.string().optional(),
 });
 
@@ -63,12 +62,12 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const balanceCents = await calculateUserBalance(request.userId);
+      const { balance, currency } = await ConsolidatedWalletService.getBalance(request.userId);
 
       return {
-        balance: balanceCents / 100, // Convert cents to dollars
-        balanceCents: balanceCents,
-        currency: 'USD',
+        balance,
+        balanceCents: Math.round(balance * 100),
+        currency,
       };
     } catch (error) {
       logErrorWithContext(request, error, {
@@ -103,75 +102,34 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
       const offset = (pageNum - 1) * limitNum;
 
-      // Build query based on type filter
-      let query = db
-        .select({
-          id: walletTransactions.id,
-          bounty_id: walletTransactions.bounty_id,
-          user_id: walletTransactions.user_id,
-          type: walletTransactions.type,
-          amount_cents: walletTransactions.amount_cents,
-          stripe_transfer_id: walletTransactions.stripe_transfer_id,
-          platform_fee_cents: walletTransactions.platform_fee_cents,
-          created_at: walletTransactions.created_at,
-        })
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId))
-        .orderBy(desc(walletTransactions.created_at))
-        .limit(limitNum)
-        .offset(offset);
-
-      const transactions = await query;
-
-      // Get bounty titles for transactions that have bounty_id
-      const bountyIds = transactions
-        .filter(t => t.bounty_id)
-        .map(t => t.bounty_id!);
-
-      let bountyTitles: Record<string, string> = {};
-      if (bountyIds.length > 0) {
-        // Fetch all bounty titles for the transactions
-        const uniqueBountyIds = [...new Set(bountyIds)];
-        for (const bid of uniqueBountyIds) {
-          const bountyData = await db
-            .select({ id: bounties.id, title: bounties.title })
-            .from(bounties)
-            .where(eq(bounties.id, bid));
-
-          bountyData.forEach(b => {
-            bountyTitles[b.id] = b.title;
-          });
-        }
-      }
+      const result = await ConsolidatedWalletService.getTransactions(request.userId, {
+        type: type as any,
+        limit: limitNum,
+        offset: offset,
+      });
 
       // Transform to client format
-      const transformedTransactions = transactions.map(t => ({
+      const transformedTransactions = result.transactions.map(t => ({
         id: t.id,
         type: t.type,
-        amount: t.amount_cents / 100, // Convert cents to dollars
+        amount: t.amount,
         date: t.created_at,
         details: {
-          title: t.bounty_id ? bountyTitles[t.bounty_id] : undefined,
+          title: t.description, // Consolidated service uses description field
           bounty_id: t.bounty_id,
-          status: 'completed',
+          status: t.status,
           stripe_transfer_id: t.stripe_transfer_id,
-          platform_fee: t.platform_fee_cents ? t.platform_fee_cents / 100 : undefined,
+          metadata: t.metadata,
         },
       }));
 
-      // Get total count for pagination
-      const [{ count }] = await db
-        .select({ count: sql`COUNT(*)`.as('count') })
-        .from(walletTransactions)
-        .where(eq(walletTransactions.user_id, request.userId));
-
-      const totalCount = Number(count);
-      const hasMore = offset + transformedTransactions.length < totalCount;
+      const hasMore = offset + transformedTransactions.length < result.total;
 
       return {
         transactions: transformedTransactions,
         page: pageNum,
         limit: limitNum,
+        total: result.total,
         hasMore,
       };
     } catch (error) {
@@ -180,7 +138,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         userId: request.userId,
       });
       return reply.code(500).send({
-        error: 'Failed to fetch wallet balance',
+        error: 'Failed to fetch wallet transactions',
         requestId: getRequestContext(request).requestId,
       });
     }
@@ -188,16 +146,22 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
   /**
    * Create a deposit transaction (add money to wallet)
+   * Note: Real deposits are handled via consolidated-webhooks.ts when Stripe confirms payment.
+   * This endpoint can be used for manual deposits or internal tracking.
    */
   fastify.post('/wallet/deposit', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
-    let amount: number | undefined;
     try {
       const body = depositSchema.parse(request.body);
-      amount = body.amount;
+      const { amount, paymentIntentId } = body;
       idempotencyKey = body.idempotencyKey;
+
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
         if (isDuplicate) {
@@ -206,19 +170,27 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
             code: 'duplicate_transaction'
           });
         }
-        // Lock immediately
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      if (!request.userId) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
+      const transaction = await ConsolidatedWalletService.createDeposit(
+        request.userId,
+        amount,
+        paymentIntentId || `man_${Date.now()}`,
+        idempotencyKey
+      );
 
+      return {
+        success: true,
+        transaction,
+      };
     } catch (error) {
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
       logErrorWithContext(request, error, {
         operation: 'create_deposit',
         userId: request.userId,
-        amount: amount,
       });
       return reply.code(500).send({
         error: 'Failed to create deposit',
@@ -236,8 +208,12 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
     let idempotencyKey: string | undefined;
     try {
       const body = withdrawSchema.parse(request.body);
-      const { amount } = body;
+      const { amount, destination } = body;
       idempotencyKey = body.idempotencyKey;
+
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
 
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
@@ -250,70 +226,50 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      if (!request.userId) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
-
-      // Check if user has sufficient balance
-      const balanceCents = await calculateUserBalance(request.userId as string);
-      const amountCents = Math.round(amount * 100);
-      if (balanceCents < amountCents) {
-        return reply.code(400).send({ error: 'Insufficient balance' });
-      }
-
-      // Check if user has a connected Stripe account
-      const connectStatus = await stripeConnectService.getConnectStatus(request.userId as string);
-
+      // Check Connect account status
+      const connectStatus = await stripeConnectService.getConnectStatus(request.userId);
       if (!connectStatus.hasStripeAccount || !connectStatus.payoutsEnabled) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
         return reply.code(400).send({
           error: 'Stripe Connect account required for withdrawals. Please complete onboarding.',
           requiresOnboarding: true,
         });
       }
 
-      // Create withdrawal transaction
-      const transaction = await walletService.createTransaction({
-        user_id: request.userId as string,
-        type: 'withdrawal',
-        amount: amount,
-      });
-
-      // Process actual Stripe transfer if configured
-      if (stripe && connectStatus.stripeAccountId) {
-        try {
-          const transfer = await stripe.transfers.create({
-            amount: amountCents,
-            currency: 'usd',
-            destination: connectStatus.stripeAccountId,
-            metadata: {
-              user_id: request.userId,
-              transaction_id: transaction.id,
-              type: 'withdrawal',
-            },
-          });
-
-          console.log(`✅ Created Stripe transfer ${transfer.id} for withdrawal`);
-        } catch (stripeError) {
-          console.error('Stripe transfer error:', stripeError);
-          // Transaction is already recorded, log the error but don't fail
-        }
+      const stripeAccountId = destination || connectStatus.stripeAccountId;
+      if (!stripeAccountId) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
+        return reply.code(400).send({ error: 'No withdrawal destination provided' });
       }
 
-      const newBalance = (balanceCents - amountCents) / 100;
+      const transaction = await ConsolidatedWalletService.createWithdrawal(
+        request.userId,
+        amount,
+        stripeAccountId,
+        idempotencyKey
+      );
+
+      const { balance } = await ConsolidatedWalletService.getBalance(request.userId);
 
       return {
         success: true,
         transaction,
-        newBalance,
+        newBalance: balance,
         estimatedArrival: '1-2 business days',
       };
-    } catch (error) {
-      console.error('Error creating withdrawal:', error);
+    } catch (error: any) {
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
       }
-      return reply.code(500).send({
-        error: 'Failed to create withdrawal'
+      logErrorWithContext(request, error, {
+        operation: 'create_withdrawal',
+        userId: request.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      return reply.code(statusCode).send({
+        error: error.message || 'Failed to create withdrawal',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
@@ -503,7 +459,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       }
 
       const body = escrowSchema.parse(request.body);
-      const { bountyId, amount, title } = body;
+      const { bountyId, amount } = body;
       idempotencyKey = body.idempotencyKey;
 
       if (idempotencyKey) {
@@ -517,81 +473,35 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      // Check user has sufficient balance
-      const balanceCents = await calculateUserBalance(request.userId);
-      const amountCents = Math.round(amount * 100);
-      if (balanceCents < amountCents) {
-        return reply.code(400).send({ error: 'Insufficient balance' });
-      }
+      const transaction = await ConsolidatedWalletService.createEscrow(
+        bountyId,
+        request.userId,
+        amount,
+        idempotencyKey
+      );
 
-      // Create escrow transaction
-      const escrowTransaction = await db.insert(walletTransactions).values({
-        bounty_id: bountyId,
-        user_id: request.userId as string,
-        type: 'escrow',
-        amount_cents: amountCents,
-        platform_fee_cents: 0,
-      }).returning();
-      // Note: Database insert doesn't support idempotency key directly on insert,
-      // but the route check prevents duplicates. 
-      // We could pass it to a service method if we refactored this insert to use walletService.
-
-      // Create Stripe PaymentIntent if configured
-      let paymentIntentId = `pi_mock_${Date.now()}_${bountyId.slice(-8)}`;
-
-      if (stripe) {
-        try {
-          const paymentIntent = await stripe.paymentIntents.create({
-            amount: amountCents,
-            currency: 'usd',
-            capture_method: 'automatic',
-            payment_method_types: ['card'],
-            metadata: {
-              bounty_id: bountyId,
-              user_id: request.userId,
-              type: 'escrow',
-              title: title || '',
-            },
-            description: `Escrow for bounty: ${title || bountyId}`,
-          }, idempotencyKey ? { idempotencyKey } : {});
-
-          paymentIntentId = paymentIntent.id;
-
-          // Update bounty with payment intent ID
-          await db
-            .update(bounties)
-            .set({
-              payment_intent_id: paymentIntentId,
-              updated_at: new Date(),
-            })
-            .where(eq(bounties.id, bountyId));
-
-          console.log(`✅ Created Stripe PaymentIntent ${paymentIntentId} for bounty ${bountyId}`);
-        } catch (stripeError) {
-          console.error('Stripe PaymentIntent error:', stripeError);
-          // Continue with mock for development
-        }
-      }
-
-      const newBalance = (balanceCents - amountCents) / 100;
+      const { balance } = await ConsolidatedWalletService.getBalance(request.userId);
 
       return {
         success: true,
-        transactionId: escrowTransaction[0].id,
-        paymentIntentId,
+        transactionId: transaction.id,
         amount,
-        newBalance,
+        newBalance: balance,
         message: `$${amount.toFixed(2)} held in escrow for bounty.`,
       };
-    } catch (error) {
-      console.error('Error creating escrow:', error);
-
+    } catch (error: any) {
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
       }
+      logErrorWithContext(request, error, {
+        operation: 'create_escrow',
+        userId: request.userId,
+      });
 
-      return reply.code(500).send({
-        error: 'Failed to create escrow'
+      const statusCode = error.statusCode || 500;
+      return reply.code(statusCode).send({
+        error: error.message || 'Failed to create escrow',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
@@ -602,133 +512,71 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/release', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { bountyId, hunterId } = request.body as {
+      const { bountyId, hunterId, idempotencyKey: key } = request.body as {
         bountyId: string;
         hunterId: string;
+        idempotencyKey?: string;
       };
+      idempotencyKey = key;
 
       if (!bountyId || !hunterId) {
         return reply.code(400).send({ error: 'Missing bountyId or hunterId' });
       }
 
-      // Get bounty to verify ownership and get details
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
+
+      // Verify user is the bounty creator (Business logic verification)
       const bountyRecords = await db
         .select()
         .from(bounties)
         .where(eq(bounties.id, bountyId))
         .limit(1);
 
-      if (!bountyRecords.length) {
-        return reply.code(404).send({ error: 'Bounty not found' });
+      if (!bountyRecords.length || bountyRecords[0].creator_id !== request.userId) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
+        return reply.code(403).send({ error: 'Unauthorized to release funds' });
       }
 
-      const bounty = bountyRecords[0];
-
-      // Verify user is the bounty creator
-      if (bounty.creator_id !== request.userId) {
-        return reply.code(403).send({ error: 'Only the bounty creator can release funds' });
-      }
-
-      // Check for existing release to prevent double processing
-      const existingRelease = await db
-        .select()
-        .from(walletTransactions)
-        .where(and(
-          eq(walletTransactions.bounty_id, bountyId),
-          eq(walletTransactions.type, 'release')
-        ))
-        .limit(1);
-
-      if (existingRelease.length > 0) {
-        return reply.code(400).send({ error: 'Funds already released for this bounty' });
-      }
-
-      // Calculate amounts with platform fee (5%)
-      const platformFeePercentage = 5;
-      const platformFeeCents = Math.round((bounty.amount_cents * platformFeePercentage) / 100);
-      const releaseAmountCents = bounty.amount_cents - platformFeeCents;
-
-      // Create release transaction for hunter
-      const releaseTransaction = await db.insert(walletTransactions).values({
-        bounty_id: bountyId,
-        user_id: hunterId,
-        type: 'release',
-        amount_cents: releaseAmountCents,
-        platform_fee_cents: platformFeeCents,
-      }).returning();
-
-      // Record platform fee - use a well-known UUID for platform account
-      // This should be a fixed UUID that doesn't conflict with user IDs
-      const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
-
-      await db.insert(walletTransactions).values({
-        bounty_id: bountyId,
-        user_id: PLATFORM_ACCOUNT_ID,
-        type: 'platform_fee',
-        amount_cents: platformFeeCents,
-        platform_fee_cents: 0,
-      });
-
-      // Update bounty status
-      await db
-        .update(bounties)
-        .set({
-          status: 'completed',
-          updated_at: new Date(),
-        })
-        .where(eq(bounties.id, bountyId));
-
-      // Transfer to hunter's Stripe account if configured
-      let transferId = `tr_mock_${Date.now()}_${bountyId.slice(-8)}`;
-
-      if (stripe) {
-        try {
-          // Get hunter's Stripe account ID
-          const { users } = await import('../db/schema');
-          const hunterRecords = await db
-            .select()
-            .from(users)
-            .where(eq(users.id, hunterId))
-            .limit(1);
-
-          if (hunterRecords.length > 0 && hunterRecords[0].stripe_account_id) {
-            const transfer = await stripe.transfers.create({
-              amount: releaseAmountCents,
-              currency: 'usd',
-              destination: hunterRecords[0].stripe_account_id,
-              metadata: {
-                bounty_id: bountyId,
-                hunter_id: hunterId,
-                platform_fee_cents: platformFeeCents.toString(),
-              },
-            });
-
-            transferId = transfer.id;
-            console.log(`✅ Created Stripe Transfer ${transferId} for $${releaseAmountCents / 100}`);
-          }
-        } catch (stripeError) {
-          console.error('Stripe transfer error:', stripeError);
-          // Continue without Stripe transfer for development
-        }
-      }
+      const transaction = await ConsolidatedWalletService.releaseEscrow(
+        bountyId,
+        hunterId,
+        idempotencyKey
+      );
 
       return {
         success: true,
-        transactionId: releaseTransaction[0].id,
-        transferId,
-        releaseAmount: releaseAmountCents / 100,
-        platformFee: platformFeeCents / 100,
-        message: `$${(releaseAmountCents / 100).toFixed(2)} released to hunter.`,
+        transactionId: transaction.id,
+        releaseAmount: transaction.amount,
+        message: `$${transaction.amount.toFixed(2)} released to hunter.`,
       };
-    } catch (error) {
-      console.error('Error releasing funds:', error);
-      return reply.code(500).send({
-        error: 'Failed to release funds'
+    } catch (error: any) {
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
+      logErrorWithContext(request, error, {
+        operation: 'release_escrow',
+        userId: request.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      return reply.code(statusCode).send({
+        error: error.message || 'Failed to release funds',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });
@@ -739,108 +587,72 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   fastify.post('/wallet/refund', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    let idempotencyKey: string | undefined;
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { bountyId, reason } = request.body as {
+      const { bountyId, reason, idempotencyKey: key } = request.body as {
         bountyId: string;
         reason?: string;
+        idempotencyKey?: string;
       };
+      idempotencyKey = key;
 
       if (!bountyId) {
         return reply.code(400).send({ error: 'Missing bountyId' });
       }
 
-      // Get bounty details
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
+      }
+
+      // Verify user is the bounty creator
       const bountyRecords = await db
         .select()
         .from(bounties)
         .where(eq(bounties.id, bountyId))
         .limit(1);
 
-      if (!bountyRecords.length) {
-        return reply.code(404).send({ error: 'Bounty not found' });
+      if (!bountyRecords.length || bountyRecords[0].creator_id !== request.userId) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
+        return reply.code(403).send({ error: 'Unauthorized to refund funds' });
       }
 
-      const bounty = bountyRecords[0];
-
-      // Verify user is the bounty creator
-      if (bounty.creator_id !== request.userId) {
-        return reply.code(403).send({ error: 'Only the bounty creator can cancel and refund' });
-      }
-
-      // Check bounty status
-      if (bounty.status === 'completed') {
-        return reply.code(400).send({ error: 'Cannot refund a completed bounty' });
-      }
-
-      // Check for existing refund
-      const existingRefund = await db
-        .select()
-        .from(walletTransactions)
-        .where(and(
-          eq(walletTransactions.bounty_id, bountyId),
-          eq(walletTransactions.type, 'refund')
-        ))
-        .limit(1);
-
-      if (existingRefund.length > 0) {
-        return reply.code(400).send({ error: 'Bounty has already been refunded' });
-      }
-
-      // Create refund transaction (full refund)
-      const refundTransaction = await db.insert(walletTransactions).values({
-        bounty_id: bountyId,
-        user_id: request.userId,
-        type: 'refund',
-        amount_cents: bounty.amount_cents,
-        platform_fee_cents: 0,
-      }).returning();
-
-      // Update bounty status
-      await db
-        .update(bounties)
-        .set({
-          status: 'cancelled',
-          updated_at: new Date(),
-        })
-        .where(eq(bounties.id, bountyId));
-
-      // Process Stripe refund if payment intent exists
-      let stripeRefundId = `re_mock_${Date.now()}`;
-
-      if (stripe && bounty.payment_intent_id) {
-        try {
-          const refund = await stripe.refunds.create({
-            payment_intent: bounty.payment_intent_id,
-            reason: 'requested_by_customer',
-            metadata: {
-              bounty_id: bountyId,
-              type: 'bounty_cancellation',
-            },
-          });
-
-          stripeRefundId = refund.id;
-          console.log(`✅ Created Stripe refund ${stripeRefundId} for bounty ${bountyId}`);
-        } catch (stripeError) {
-          console.error('Stripe refund error:', stripeError);
-          // Continue without Stripe refund for development
-        }
-      }
+      const transaction = await ConsolidatedWalletService.refundEscrow(
+        bountyId,
+        request.userId,
+        reason || 'Bounty cancelled',
+        idempotencyKey
+      );
 
       return {
         success: true,
-        transactionId: refundTransaction[0].id,
-        refundId: stripeRefundId,
-        amount: bounty.amount_cents / 100,
-        message: `$${(bounty.amount_cents / 100).toFixed(2)} refunded to your wallet.`,
+        transactionId: transaction.id,
+        amount: transaction.amount,
+        message: `Refund of $${transaction.amount.toFixed(2)} processed.`,
       };
-    } catch (error) {
-      console.error('Error processing refund:', error);
-      return reply.code(500).send({
-        error: 'Failed to process refund'
+    } catch (error: any) {
+      if (idempotencyKey) {
+        await removeIdempotencyKey(idempotencyKey);
+      }
+      logErrorWithContext(request, error, {
+        operation: 'refund_escrow',
+        userId: request.userId,
+      });
+
+      const statusCode = error.statusCode || 500;
+      return reply.code(statusCode).send({
+        error: error.message || 'Failed to refund funds',
+        requestId: getRequestContext(request).requestId,
       });
     }
   });

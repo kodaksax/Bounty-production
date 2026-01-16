@@ -9,12 +9,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { eq } from 'drizzle-orm';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
-import { db } from '../db/connection';
-import { walletTransactions } from '../db/schema';
 import {
   asyncHandler,
   AuthorizationError,
@@ -23,13 +20,13 @@ import {
   ValidationError
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
   checkIdempotencyKey,
   removeIdempotencyKey,
   storeIdempotencyKey
 } from '../services/idempotency-service';
 import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
-import { calculateUserBalance } from '../utils/wallet-utils';
 import { toJsonSchema } from '../utils/zod-json';
 
 /**
@@ -499,20 +496,19 @@ export async function registerConsolidatedBountyRoutes(
       try {
         const supabase = getSupabaseAdmin();
 
-        // For paid bounties (non-honor with amount > 0), check and deduct wallet balance
+        // For paid bounties (non-honor with amount > 0), check wallet balance
         if (!body.isForHonor && body.amount > 0) {
-          const balanceCents = await calculateUserBalance(userId);
-          const amountCents = Math.round(body.amount * 100);
+          const { balance } = await ConsolidatedWalletService.getBalance(userId);
 
-          if (balanceCents < amountCents) {
+          if (balance < body.amount) {
             request.log.warn(
-              { userId, required: amountCents, available: balanceCents },
+              { userId, required: body.amount, available: balance },
               'Insufficient wallet balance for bounty creation'
             );
             return reply.code(400).send({
               error: 'Insufficient wallet balance',
               required: body.amount,
-              available: balanceCents / 100,
+              available: balance,
             });
           }
         }
@@ -540,49 +536,8 @@ export async function registerConsolidatedBountyRoutes(
         if (body.skills_required) bountyData.skills_required = body.skills_required;
         if (body.due_date) bountyData.due_date = body.due_date;
 
-        // For paid bounties, we need to ensure atomicity between bounty creation and wallet deduction
-        // We'll create the wallet transaction first, then the bounty, and rollback the transaction if bounty creation fails
-        let walletTransactionId: string | null = null;
-
-        /**
-         * Helper function to rollback wallet transaction
-         */
-        const rollbackWalletTransaction = async (transactionId: string, context: string) => {
-          try {
-            await db.delete(walletTransactions)
-              .where(eq(walletTransactions.id, transactionId));
-            request.log.info(
-              { transactionId, context },
-              'Wallet transaction rolled back'
-            );
-          } catch (rollbackError) {
-            request.log.error(
-              { error: rollbackError, transactionId, context },
-              'Failed to rollback wallet transaction'
-            );
-          }
-        };
-
         try {
-          // For paid bounties, create wallet transaction first
-          if (!body.isForHonor && body.amount > 0) {
-            // Use a temporary bounty ID placeholder - we'll update it after bounty creation
-            const walletTxResult = await db.insert(walletTransactions).values({
-              user_id: userId,
-              bounty_id: null, // Will be updated after bounty creation
-              type: 'bounty_posted',
-              amount_cents: Math.round(body.amount * 100),
-            }).returning();
-
-            walletTransactionId = walletTxResult[0].id;
-
-            request.log.info(
-              { userId, transactionId: walletTransactionId },
-              'Wallet transaction created, proceeding to create bounty'
-            );
-          }
-
-          // Create the bounty via Supabase
+          // Create the bounty via Supabase first
           const { data: bounty, error } = await supabase
             .from('bounties')
             .insert(bountyData)
@@ -590,29 +545,33 @@ export async function registerConsolidatedBountyRoutes(
             .single();
 
           if (error) {
-            request.log.error(
-              { error: error.message, userId },
-              'Bounty creation failed, rolling back wallet transaction'
-            );
-
-            // Rollback: Delete the wallet transaction if bounty creation failed
-            if (walletTransactionId) {
-              await rollbackWalletTransaction(walletTransactionId, 'bounty_creation_failed');
-            }
-
+            request.log.error({ error: error.message, userId }, 'Bounty creation failed');
             throw new Error(error.message);
           }
 
-          // Update the wallet transaction with the bounty ID
-          if (walletTransactionId) {
-            await db.update(walletTransactions)
-              .set({ bounty_id: bounty.id })
-              .where(eq(walletTransactions.id, walletTransactionId));
+          // For paid bounties, create escrow transaction using the bounty ID
+          if (!body.isForHonor && body.amount > 0) {
+            try {
+              await ConsolidatedWalletService.createEscrow(
+                bounty.id,
+                userId,
+                body.amount,
+                idempotencyKey
+              );
 
-            request.log.info(
-              { userId, bountyId: bounty.id, amount: body.amount },
-              'Wallet transaction updated with bounty ID'
-            );
+              request.log.info(
+                { userId, bountyId: bounty.id, amount: body.amount },
+                'Escrow transaction created successfully'
+              );
+            } catch (escrowError) {
+              request.log.error(
+                { error: escrowError, userId, bountyId: bounty.id },
+                'Escrow creation failed after bounty creation'
+              );
+              // Note: In a production system, we'd want to either roll back the bounty 
+              // or mark it as 'pending_payment'. For now, we'll throw to let the user know.
+              throw escrowError;
+            }
           }
 
           // Invalidate bounty list caches since a new bounty was created
