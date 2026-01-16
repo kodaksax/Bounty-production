@@ -6,12 +6,15 @@ import { db } from '../db/connection';
 import { bounties } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-  checkIdempotencyKey,
-  removeIdempotencyKey,
-  storeIdempotencyKey
+    checkIdempotencyKey,
+    removeIdempotencyKey,
+    storeIdempotencyKey
 } from '../services/idempotency-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
+import { walletService } from '../services/wallet-service';
+import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Validation schemas for wallet operations
@@ -109,7 +112,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       });
 
       // Transform to client format
-      const transformedTransactions = result.transactions.map(t => ({
+      const transformedTransactions = result.transactions.map((t: any) => ({
         id: t.id,
         type: t.type,
         amount: t.amount,

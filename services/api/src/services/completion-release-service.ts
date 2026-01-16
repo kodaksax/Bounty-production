@@ -17,6 +17,7 @@ export interface CompletionReleaseRequest {
 export interface CompletionReleaseResponse {
   success: boolean;
   transactionId?: string;
+  transferId?: string;
   releaseAmount: number;
   platformFee: number;
   error?: string;
@@ -157,6 +158,7 @@ export class CompletionReleaseService {
       return {
         success: true,
         transactionId: releaseTransaction.id,
+        transferId: releaseTransaction.stripe_transfer_id || releaseTransaction.id,
         releaseAmount: releaseAmount,
         platformFee: platformFee,
       };

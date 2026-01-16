@@ -13,18 +13,18 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
 import {
-  asyncHandler,
-  AuthorizationError,
-  ConflictError,
-  NotFoundError,
-  ValidationError
+    asyncHandler,
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-  checkIdempotencyKey,
-  removeIdempotencyKey,
-  storeIdempotencyKey
+    checkIdempotencyKey,
+    removeIdempotencyKey,
+    storeIdempotencyKey
 } from '../services/idempotency-service';
 import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
 import { toJsonSchema } from '../utils/zod-json';
@@ -535,6 +535,23 @@ export async function registerConsolidatedBountyRoutes(
         if (body.category) bountyData.category = body.category;
         if (body.skills_required) bountyData.skills_required = body.skills_required;
         if (body.due_date) bountyData.due_date = body.due_date;
+
+        // Track any temporary wallet transaction created before bounty creation
+        let walletTransactionId: string | undefined;
+
+        // Best-effort rollback helper in case bounty creation fails after a wallet transaction
+        const rollbackWalletTransaction = async (transactionId: string, context: string) => {
+          try {
+            if ((ConsolidatedWalletService as any)?.rollbackWalletTransaction) {
+              await (ConsolidatedWalletService as any).rollbackWalletTransaction(transactionId, context);
+              request.log.info({ transactionId, context }, 'Wallet transaction rolled back via service');
+            } else {
+              request.log.info({ transactionId, context }, 'Wallet transaction rollback placeholder - no service available');
+            }
+          } catch (err) {
+            request.log.error({ error: err, transactionId, context }, 'Failed to rollback wallet transaction');
+          }
+        };
 
         try {
           // Create the bounty via Supabase first
