@@ -14,8 +14,6 @@ export interface UserDevice {
     is_active: boolean;
 }
 
-const DEVICE_ID_KEY = 'bounty_device_id';
-
 export const deviceService = {
     /**
      * Register the current device or update its last active timestamp
@@ -154,7 +152,6 @@ export const deviceService = {
 };
 
 function getDeviceType(): string {
-    const width = typeof window !== 'undefined' ? window.innerWidth : 0;
     if (Platform.OS === 'web') return 'Web Browser';
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
         // Very rough check, relying on Device module is better if available

@@ -11,6 +11,7 @@ import {
   removeIdempotencyKey,
   storeIdempotencyKey
 } from '../services/idempotency-service';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 
 /**

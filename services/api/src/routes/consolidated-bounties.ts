@@ -63,7 +63,7 @@ const baseBountySchema = z.object({
     .max(5000, 'Description must be at most 5000 characters'),
   amount: z.number()
     .min(0, 'Amount must be non-negative')
-    .max(10000, 'Amount cannot exceed $10,000.00'),
+    .max(config.bounty.maxAmount, `Amount cannot exceed $${config.bounty.maxAmount.toLocaleString()}`),
   isForHonor: z.boolean()
     .optional()
     .default(false),

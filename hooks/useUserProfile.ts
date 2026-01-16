@@ -47,8 +47,7 @@ export function useUserProfile(): UseUserProfileResult {
     isLoading: loading,
     isValidating,
     error: fetchError,
-    refetch,
-    setData: setCachedData
+    refetch
   } = useCachedData<{ profile: ProfileData | null; completeness: ProfileCompleteness | null }>(
     cacheKey,
     fetchFn,
