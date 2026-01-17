@@ -28,7 +28,7 @@ export function getApiBase(): string {
     const manifest: any = Constants?.manifest || (Constants?.expoConfig || null)
     const debuggerHost = manifest?.debuggerHost || (Constants?.debuggerHost ?? null)
     const ip = getIpFromDebuggerHost(debuggerHost)
-    if (ip) return `http://${ip}:${DEFAULT_DEV_PORT}`
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') return `http://${ip}:${DEFAULT_DEV_PORT}`
   } catch (e) {
     // ignore and continue to fallbacks
   }
