@@ -96,7 +96,7 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
 };
 
 function RootLayout({ children }: { children: React.ReactNode }) {
-  const [appIsReady, setAppIsReady] = useState(false);
+  const [_appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
@@ -116,20 +116,20 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       // Initialize Sentry first (deferred from module-level to avoid early native access)
       try {
         initializeSentry();
-      } catch (e) {
-        console.error('[Sentry] Initialization failed:', e);
+      } catch (_e) {
+        console.error('[Sentry] Initialization failed:', _e);
       }
 
       try {
         await initMixpanel();
         try {
           track('Page View', { screen: 'root' });
-        } catch (e) {
+        } catch (_e) {
           // ignore analytics failures
         }
-      } catch (e) {
+      } catch (_e) {
         // eslint-disable-next-line no-console
-        console.error('[Mixpanel] init failed', e);
+        console.error('[Mixpanel] init failed', _e);
       }
 
       try {

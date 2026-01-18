@@ -24,7 +24,7 @@ export function getApiBaseUrl(fallbackPort = 3001): string {
       const fallback = getApiBaseFallback()
       if (fallback) return fallback
     }
-  } catch (e) {
+  } catch (_e) {
     // ignore and fall back to resolved value
   }
 

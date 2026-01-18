@@ -35,7 +35,7 @@ export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   
   const { profile, loading, error } = useNormalizedProfile(userId);
@@ -177,7 +177,7 @@ export default function UserProfileScreen() {
     setIsCreatingChat(true);
     try {
       // Create or get existing conversation
-      const conversation = await messageService.getOrCreateConversation(
+      const _conversation = await messageService.getOrCreateConversation(
         [userId],
         profile?.username || 'User',
         undefined // no bounty context

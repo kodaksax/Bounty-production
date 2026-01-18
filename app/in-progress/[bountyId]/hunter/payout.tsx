@@ -38,9 +38,9 @@ export default function HunterPayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance, deposit } = useWallet();
+  const { balance: _balance, deposit: _deposit } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [request, setRequest] = useState<BountyRequest | null>(null);

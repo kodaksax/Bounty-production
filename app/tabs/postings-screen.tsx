@@ -82,7 +82,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
 })
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
-  const { session, isEmailVerified } = useAuthContext()
+  const { session: _session, isEmailVerified } = useAuthContext()
   const currentUserId = getCurrentUserId()
   const router = useRouter()
   
@@ -130,7 +130,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
   // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
-  const STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
+  const _STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -138,7 +138,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
   // Animation refs
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
-  const prevLowBalance = useRef(false)
+  const _prevLowBalance = useRef(false)
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
@@ -156,7 +156,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
   // Prevent duplicate/measured re-entries while we're measuring
   const measuringRef = useRef(false)
-  const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
+  const [highlightedKey, _setHighlightedKey] = useState<string | null>(null)
 
   // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
   const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
@@ -175,7 +175,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     pendingScrollRef.current = { list, key }
   }
 
-  const measurePendingAndScroll = () => {
+  const _measurePendingAndScroll = () => {
     const pending = pendingScrollRef.current
     if (!pending) return
     const { list, key } = pending
@@ -220,12 +220,12 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               const desiredOffset = Math.max(0, Math.min(offsetTop, offsetEnsureBottom))
 
               // Brief highlight so user sees the expanded region
-              setHighlightedKey(key)
-              setTimeout(() => setHighlightedKey(null), 900)
+              _setHighlightedKey(key)
+              setTimeout(() => _setHighlightedKey(null), 900)
 
               try {
                 listRef.scrollToOffset({ offset: desiredOffset, animated: true })
-              } catch (err) {
+              } catch (_err) {
                 try { listRef.scrollToIndex({ index: 0, animated: true }) } catch {}
               }
 
@@ -374,7 +374,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   // The component now fetches data when it loads or after a new bounty is posted.
 
   // Accept a simple object shape coming from RN TextInput onChangeText handlers
-  const handleInputChange = (e: { target: { name: string; value: string } }) => {
+  const _handleInputChange = (e: { target: { name: string; value: string } }) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -645,7 +645,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
             // Diagnostic: fetch server bounty and log its current state
             try {
-              const serverBounty = await bountyService.getById(bountyId)
+              const _serverBounty = await bountyService.getById(bountyId)
               Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}.`)
             } catch (srvErr) {
               console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
@@ -703,7 +703,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
 
-            try { await navigationIntent.setPendingConversationId(String(convId)) } catch (e) {}
+            try { await navigationIntent.setPendingConversationId(String(convId)) } catch (_e) {}
             logClientInfo('Supabase RPC conversation created', { convId, bountyId })
           }
         } catch (rpcErr: any) {
@@ -738,7 +738,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
           }
 
-          try { await navigationIntent.setPendingConversationId(localConv.id) } catch (e) { /* best-effort */ }
+          try { await navigationIntent.setPendingConversationId(localConv.id) } catch (_e) { /* best-effort */ }
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
           try {

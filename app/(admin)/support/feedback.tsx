@@ -66,7 +66,7 @@ export default function AdminFeedbackScreen() {
     );
   };
 
-  const selectedType = feedbackTypes.find(t => t.id === type);
+  const _selectedType = feedbackTypes.find(t => t.id === type);
 
   return (
     <View style={styles.container}>

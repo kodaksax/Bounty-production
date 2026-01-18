@@ -54,13 +54,13 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
-  const { session } = useAuthContext()
+  const { session: _session } = useAuthContext()
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
+  const _currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { balance } = useWallet()
+  const { balance: _balance } = useWallet()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -91,7 +91,7 @@ export function MessengerScreen({
         await markAsRead(convId)
       } else {
         // local conv id (conv-...), use local message service
-        try { await messageService.markAsRead(convId) } catch (e) { /* best-effort */ }
+        try { await messageService.markAsRead(convId) } catch (_e) { /* best-effort */ }
       }
     } catch (e) {
       try { _logClientError('markConversationReadSafe failed', { err: String(e), convId }) } catch {}
@@ -122,7 +122,7 @@ export function MessengerScreen({
         for (let i = 0; i < maxAttempts && mounted; i++) {
           try {
             conv = await messageService.getConversation(pending)
-          } catch (err) {
+          } catch (_err) {
             conv = null
           }
           if (conv) break
@@ -176,7 +176,7 @@ export function MessengerScreen({
           onPress: async () => {
             try {
               await deleteConversation(conversation.id)
-            } catch (err) {
+            } catch (_err) {
               Alert.alert('Error', 'Failed to delete conversation')
             }
           },

@@ -35,7 +35,7 @@ class ErrorLogger {
           }
         })
       }
-    } catch (e) {
+    } catch (_e) {
       // NetInfo isn't available in this runtime; continue without online/offline tracking
       console.error('[ErrorLogger] NetInfo not available, skipping network listener')
       this.isOnline = true

@@ -37,7 +37,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const [currentStep, setCurrentStep] = useState(1);
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft();
   const insets = useSafeAreaInsets();
-  const { balance, logTransaction, withdraw } = useWallet();
+  const { balance: _balance, logTransaction: _logTransaction, withdraw } = useWallet();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
 
   // Use form submission hook with debouncing

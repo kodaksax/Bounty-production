@@ -24,9 +24,9 @@ export default function PayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance, logTransaction, releaseFunds } = useWallet();
+  const { balance: _balance, logTransaction: _logTransaction, releaseFunds } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);

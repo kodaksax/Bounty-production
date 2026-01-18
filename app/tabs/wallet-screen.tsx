@@ -29,7 +29,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const { balance, transactions, refreshFromApi } = useWallet();
-  const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
+  const { paymentMethods, isLoading: stripeLoading } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
 

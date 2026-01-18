@@ -143,7 +143,7 @@ export default function AdminReportsScreen() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('pending');
-  const [priorityFilter, setPriorityFilter] = useState<FilterPriority>('all');
+  const [_priorityFilter, setPriorityFilter] = useState<FilterPriority>('all');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
 
   // Stats for the header

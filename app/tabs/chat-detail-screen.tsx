@@ -26,7 +26,7 @@ interface ChatDetailScreenProps {
 }
 
 // Format message time
-function formatMessageTime(createdAt: string): string {
+function _formatMessageTime(createdAt: string): string {
   const date = new Date(createdAt);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -48,9 +48,8 @@ export function ChatDetailScreen({
     pinMessage,
     unpinMessage,
     copyMessage,
-    reportMessage,
   } = useMessages(conversation.id)
-  const { balance } = useWallet()
+  const { balance: _balance } = useWallet()
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)

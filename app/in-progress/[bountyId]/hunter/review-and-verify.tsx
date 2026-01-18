@@ -43,7 +43,7 @@ export default function HunterReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -53,7 +53,7 @@ export default function HunterReviewAndVerifyScreen() {
   const [currentStage] = useState<HunterStage>('review_verify');
   const [messageText, setMessageText] = useState('');
   const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [_isSendingMessage, setIsSendingMessage] = useState(false);
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
@@ -61,9 +61,9 @@ export default function HunterReviewAndVerifyScreen() {
 
   // Attachment upload hook
   const {
-    isUploading,
-    isPicking,
-    progress,
+    _isUploading: isUploading,
+    _isPicking: isPicking,
+    _progress: progress,
     pickAttachment,
     error: uploadError,
     clearError,

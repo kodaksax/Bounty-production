@@ -11,7 +11,7 @@ import {
   type PasswordStrengthResult 
 } from 'lib/utils/password-validation'
 import React, { useEffect, useState } from 'react'
-import { Image, ActivityIndicator, 
+import { ActivityIndicator, 
   KeyboardAvoidingView, 
   Platform, 
   ScrollView, 
@@ -69,7 +69,7 @@ export function UpdatePasswordScreen() {
         if (!result.success) {
           setError(result.message)
         }
-      } catch (e) {
+      } catch (_e) {
         setError('Failed to verify reset link. Please request a new one.')
         setTokenValid(false)
       } finally {

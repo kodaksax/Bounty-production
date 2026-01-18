@@ -6,7 +6,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 
-interface SettingItem {
+interface _SettingItem {
   id: string;
   label: string;
   description: string;

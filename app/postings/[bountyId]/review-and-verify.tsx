@@ -41,7 +41,7 @@ export default function ReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -103,7 +103,7 @@ export default function ReviewAndVerifyScreen() {
       const attachmentsJson = (bounty as any)?.attachments_json
       if (attachmentsJson) {
         let parsed: any[] = []
-        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        try { parsed = JSON.parse(attachmentsJson) } catch (_e) { parsed = [] }
         const items: ProofItem[] = parsed.map((a: any) => ({
           id: a.id || String(Date.now()),
           type: (a.mimeType || a.name || '').includes('image') ? 'image' : (a.type === 'image' ? 'image' : 'file'),

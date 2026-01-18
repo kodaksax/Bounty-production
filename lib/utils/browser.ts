@@ -13,7 +13,7 @@ export async function openUrlInBrowser(url: string): Promise<{ success: boolean;
       const WebBrowser = await import('expo-web-browser');
       const res = await WebBrowser.openBrowserAsync(url);
       return { success: res.type !== 'cancel' };
-    } catch (_expoErr) {
+    } catch {
       // Not available or failed import: fall back to Linking
       const supported = await Linking.canOpenURL(url);
       if (supported) {
