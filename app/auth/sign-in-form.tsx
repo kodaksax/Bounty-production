@@ -38,8 +38,6 @@ export function SignInForm() {
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const [rememberMe, setRememberMe] = useState(false)
-  const [_socialAuthLoading, setSocialAuthLoading] = useState(false)
-  const [_socialAuthError, setSocialAuthError] = useState<any>(null)
 
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
@@ -157,8 +155,8 @@ export function SignInForm() {
               $email: data.session.user.email,
               $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
             })
-            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email, correlation_id: correlationId }); } catch (_e) { }
-          } catch (_e) {
+            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email, correlation_id: correlationId }); } catch { }
+          } catch {
             // swallow analytics errors
           }
 
@@ -206,7 +204,7 @@ export function SignInForm() {
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
-          } catch (_profileCheckError: any) {
+          } catch {
             // On error, proceed to app and let AuthProvider handle it
             // This prevents blocking the user from signing in due to profile check issues
             console.log('[sign-in] Profile check error, proceeding to app. AuthProvider will sync.', { correlationId })
@@ -355,7 +353,7 @@ export function SignInForm() {
               // User has completed onboarding, go to app
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
             }
-          } catch (_profileError: any) {
+          } catch {
             console.log('[google] Profile check failed, proceeding to app. AuthProvider will sync.')
             // On error, proceed to app - AuthProvider will handle profile sync
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
@@ -543,7 +541,7 @@ export function SignInForm() {
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                             }
-                          } catch (_profileError: any) {
+                          } catch {
                             console.log('[apple] Profile check failed, proceeding to app. AuthProvider will sync.')
                             // On error, proceed to app - AuthProvider will handle profile sync
                             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })

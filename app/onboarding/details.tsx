@@ -127,7 +127,7 @@ export default function DetailsScreen() {
         progress: 0,
       } as any);
       setAvatarUri(uploaded.remoteUri || asset.uri);
-    } catch (e) {
+    } catch {
       setAvatarUri(asset.uri);
     } finally {
       setUploading(false);

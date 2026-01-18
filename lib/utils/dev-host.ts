@@ -7,7 +7,7 @@ try {
   // so require dynamically and fall back gracefully.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   Constants = require('expo-constants')
-} catch (e) {
+} catch {
   Constants = null
 }
 
@@ -29,7 +29,7 @@ export function getApiBase(): string {
     const debuggerHost = manifest?.debuggerHost || (Constants?.debuggerHost ?? null)
     const ip = getIpFromDebuggerHost(debuggerHost)
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') return `http://${ip}:${DEFAULT_DEV_PORT}`
-  } catch (e) {
+  } catch {
     // ignore and continue to fallbacks
   }
 
@@ -42,7 +42,7 @@ export function getApiBase(): string {
     if (RN && RN.Platform && RN.Platform.OS === 'android') {
       return `http://10.0.2.2:${DEFAULT_DEV_PORT}`
     }
-  } catch (e) {
+  } catch {
     // ignore - fall back to localhost
   }
 

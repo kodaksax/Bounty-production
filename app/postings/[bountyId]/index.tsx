@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -40,7 +39,6 @@ export default function BountyDashboard() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   const { pushColor, popColor } = useBackgroundColor();
 

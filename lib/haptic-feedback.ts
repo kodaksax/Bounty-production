@@ -109,7 +109,7 @@ export function useHapticFeedback() {
   const triggerHaptic = (type: HapticType) => {
     try {
       hapticFeedback[type]();
-    } catch (_error) {
+    } catch {
       // Silently fail if haptics aren't supported
     }
   };

@@ -13,7 +13,6 @@ import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "r
 import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
-import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 import { messageService } from '../../lib/services/message-service'
@@ -21,7 +20,6 @@ import { logClientError as _logClientError } from '../../lib/services/monitoring
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
-import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
 
 // Helper to format conversation time
@@ -54,13 +52,10 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
-  const { session: _session } = useAuthContext()
   const router = useRouter()
-  const _currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { balance: _balance } = useWallet()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -91,7 +86,7 @@ export function MessengerScreen({
         await markAsRead(convId)
       } else {
         // local conv id (conv-...), use local message service
-        try { await messageService.markAsRead(convId) } catch (_e) { /* best-effort */ }
+        try { await messageService.markAsRead(convId) } catch { /* best-effort */ }
       }
     } catch (e) {
       try { _logClientError('markConversationReadSafe failed', { err: String(e), convId }) } catch {}
@@ -122,7 +117,7 @@ export function MessengerScreen({
         for (let i = 0; i < maxAttempts && mounted; i++) {
           try {
             conv = await messageService.getConversation(pending)
-          } catch (_err) {
+          } catch {
             conv = null
           }
           if (conv) break
@@ -176,7 +171,7 @@ export function MessengerScreen({
           onPress: async () => {
             try {
               await deleteConversation(conversation.id)
-            } catch (_err) {
+            } catch {
               Alert.alert('Error', 'Failed to delete conversation')
             }
           },

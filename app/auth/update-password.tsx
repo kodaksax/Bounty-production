@@ -69,7 +69,7 @@ export function UpdatePasswordScreen() {
         if (!result.success) {
           setError(result.message)
         }
-      } catch (_e) {
+      } catch {
         setError('Failed to verify reset link. Please request a new one.')
         setTokenValid(false)
       } finally {

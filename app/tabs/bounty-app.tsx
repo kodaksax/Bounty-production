@@ -57,7 +57,6 @@ function BountyAppInner() {
   const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  const { balance: _balance } = useWallet()
   // Track bounty IDs the user has applied to (pending, accepted, or rejected)
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // Track whether user applications have been loaded (prevents flash of unfiltered content)
@@ -80,9 +79,6 @@ function BountyAppInner() {
   // Location hook for calculating real distances
   const { location: userLocation, permission } = useLocation()
   const [distanceFilter, setDistanceFilter] = useState<number | null>(null) // Max distance in miles, null = no filter
-  
-  // Use normalized profile for display in the UI where needed
-  const { profile: _normalizedProfile } = useNormalizedProfile()
 
   // Collapsing header config (using standardized constants)
   const HEADER_EXPANDED = HEADER_LAYOUT.expandedHeight
@@ -95,11 +91,6 @@ function BountyAppInner() {
   const extraContentOpacity = scrollY.interpolate({
     inputRange: [0, 40, 80],
     outputRange: [1, 0.4, 0],
-    extrapolate: 'clamp'
-  })
-  const _titleScale = scrollY.interpolate({
-    inputRange: [0, 80],
-    outputRange: [1, 0.85],
     extrapolate: 'clamp'
   })
   // list layout (single column)
@@ -572,7 +563,7 @@ function BountyAppInner() {
                             })
                             return
                           }
-                        } catch (_err) {
+                        } catch {
                           // fallthrough to open without positioning
                         }
                         setDistanceDropdownOpen((s) => !s)

@@ -66,8 +66,6 @@ export default function AdminFeedbackScreen() {
     );
   };
 
-  const _selectedType = feedbackTypes.find(t => t.id === type);
-
   return (
     <View style={styles.container}>
       <AdminHeader title="Send Feedback" onBack={() => router.back()} />

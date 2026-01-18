@@ -32,7 +32,7 @@ let Sentry: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   Sentry = require('@sentry/react-native');
-} catch (_e) {
+} catch {
   // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
   Sentry = null;
 }
@@ -96,7 +96,6 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
 };
 
 function RootLayout({ children }: { children: React.ReactNode }) {
-  const [_appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
@@ -124,7 +123,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         await initMixpanel();
         try {
           track('Page View', { screen: 'root' });
-        } catch (_e) {
+        } catch {
           // ignore analytics failures
         }
       } catch (_e) {
@@ -196,7 +195,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
                                 },
                               });
                             }
-                          } catch (_e) {
+                          } catch {
                             // ignore
                           }
                         }}
@@ -261,7 +260,7 @@ try {
   if (Sentry && typeof Sentry.wrap === 'function') {
     WrappedRoot = Sentry.wrap(RootLayout);
   }
-} catch (_e) {
+} catch {
   // ignore; fall back to unwrapped root
 }
 

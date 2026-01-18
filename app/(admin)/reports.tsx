@@ -24,7 +24,6 @@ import { supabase } from '../../lib/supabase';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
 
 type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
-type FilterPriority = 'all' | 'critical' | 'high' | 'medium' | 'low';
 type SortOption = 'newest' | 'oldest' | 'priority';
 
 /**
@@ -143,7 +142,6 @@ export default function AdminReportsScreen() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('pending');
-  const [_priorityFilter, setPriorityFilter] = useState<FilterPriority>('all');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
 
   // Stats for the header

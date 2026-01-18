@@ -158,7 +158,7 @@ export function sanitizeJSON(input: string): string {
     // Parse and re-stringify to ensure valid JSON
     const parsed = JSON.parse(input);
     return JSON.stringify(parsed);
-  } catch (_error) {
+  } catch {
     return '';
   }
 }

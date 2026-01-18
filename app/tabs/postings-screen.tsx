@@ -82,7 +82,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
 })
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
-  const { session: _session, isEmailVerified } = useAuthContext()
+  const { isEmailVerified } = useAuthContext()
   const currentUserId = getCurrentUserId()
   const router = useRouter()
   
@@ -129,8 +129,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
-  // Total reserved space at the bottom so ScrollView can scroll content above sticky bar
-  const _STICKY_TOTAL_HEIGHT = BOTTOM_NAV_OFFSET + (BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA) + Math.max(insets.bottom, 12) + 16
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -138,7 +136,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
   // Animation refs
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
-  const _prevLowBalance = useRef(false)
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
@@ -154,9 +151,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const itemRefs = useRef<Record<string, any>>({})
   // Pending scroll request (set when expanding an item, cleared after measuring)
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
-  // Prevent duplicate/measured re-entries while we're measuring
-  const measuringRef = useRef(false)
-  const [highlightedKey, _setHighlightedKey] = useState<string | null>(null)
 
   // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
   const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
@@ -173,71 +167,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     if (!willExpand) return
     // Mark pending scroll — we'll measure and scroll when the expanded content calls back
     pendingScrollRef.current = { list, key }
-  }
-
-  const _measurePendingAndScroll = () => {
-    const pending = pendingScrollRef.current
-    if (!pending) return
-    const { list, key } = pending
-
-    // If another measurement is already in-flight, skip — the in-flight measurement will clear the pending ref
-    if (measuringRef.current) return
-    measuringRef.current = true
-
-    InteractionManager.runAfterInteractions(() => {
-      // Clear pending early to avoid duplicate attempts
-      pendingScrollRef.current = null
-
-      try {
-        const listRef = list === 'inProgress' ? inProgressListRef.current : myPostingsListRef.current
-        const itemNode = itemRefs.current[key]
-        // If the item was collapsed since the request, bail out
-        if (!listRef || !itemNode || !expandedMap[key]) {
-          measuringRef.current = false
-          return
-        }
-
-        const listHandle = findNodeHandle(listRef)
-        const itemHandle = findNodeHandle(itemNode)
-        if (!listHandle || !itemHandle) {
-          measuringRef.current = false
-          return
-        }
-
-        // Measure item position relative to list, then measure list viewport size to ensure full visibility
-        UIManager.measureLayout(
-          itemHandle,
-          listHandle,
-          () => { measuringRef.current = false },
-          (x: number, y: number, width: number, height: number) => {
-            UIManager.measure(listHandle, (_lx: number, _ly: number, _listWidth: number, listHeight: number, _px: number, _py: number) => {
-              const TOP_PADDING = Math.max(72, headerHeight + insets.top + 12)
-              const bottomReserved = Math.max(insets.bottom, 12) + BOTTOM_NAV_OFFSET
-              const available = Math.max(120, listHeight - TOP_PADDING - bottomReserved)
-
-              const offsetTop = Math.max(0, y - TOP_PADDING)
-              const offsetEnsureBottom = Math.max(0, y + height - available)
-              const desiredOffset = Math.max(0, Math.min(offsetTop, offsetEnsureBottom))
-
-              // Brief highlight so user sees the expanded region
-              _setHighlightedKey(key)
-              setTimeout(() => _setHighlightedKey(null), 900)
-
-              try {
-                listRef.scrollToOffset({ offset: desiredOffset, animated: true })
-              } catch (_err) {
-                try { listRef.scrollToIndex({ index: 0, animated: true }) } catch {}
-              }
-
-              measuringRef.current = false
-            })
-          }
-        )
-      } catch (err) {
-        measuringRef.current = false
-        console.error("Error during measure/scroll operation in measurePendingAndScroll:", err)
-      }
-    })
   }
   
   // Deadline now simple text entry; dedicated screen removed
@@ -372,15 +301,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   // To re-implement real-time updates, you would need to use a technology
   // like WebSockets or Server-Sent Events (SSE) with your Hostinger backend.
   // The component now fetches data when it loads or after a new bounty is posted.
-
-  // Accept a simple object shape coming from RN TextInput onChangeText handlers
-  const _handleInputChange = (e: { target: { name: string; value: string } }) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
 
   const handleAddBountyAmount = (amount: number, isForHonor: boolean) => {
     setFormData((prev) => ({
@@ -645,7 +565,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
             // Diagnostic: fetch server bounty and log its current state
             try {
-              const _serverBounty = await bountyService.getById(bountyId)
+              await bountyService.getById(bountyId)
               Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}.`)
             } catch (srvErr) {
               console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
@@ -703,7 +623,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
 
-            try { await navigationIntent.setPendingConversationId(String(convId)) } catch (_e) {}
+            try { await navigationIntent.setPendingConversationId(String(convId)) } catch {}
             logClientInfo('Supabase RPC conversation created', { convId, bountyId })
           }
         } catch (rpcErr: any) {
@@ -738,7 +658,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
           }
 
-          try { await navigationIntent.setPendingConversationId(localConv.id) } catch (_e) { /* best-effort */ }
+          try { await navigationIntent.setPendingConversationId(localConv.id) } catch { /* best-effort */ }
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
           try {

@@ -35,7 +35,7 @@ class ErrorLogger {
           }
         })
       }
-    } catch (_e) {
+    } catch {
       // NetInfo isn't available in this runtime; continue without online/offline tracking
       console.error('[ErrorLogger] NetInfo not available, skipping network listener')
       this.isOnline = true
@@ -44,7 +44,7 @@ class ErrorLogger {
     // Try to load offline queue from AsyncStorage (if available)
     try {
       this.loadOfflineQueue()
-    } catch (e) {
+    } catch {
       console.error('[ErrorLogger] AsyncStorage not available, skipping offline queue load')
     }
   }

@@ -43,7 +43,7 @@ function isURL(input: string, opts?: { protocols?: string[]; require_protocol?: 
       return opts.protocols.includes(u.protocol.replace(':', ''));
     }
     return true;
-  } catch (_e) {
+  } catch {
     // If require_protocol is false, allow schemeless URLs like example.com
     if (!opts?.require_protocol) {
       // Basic host-like pattern

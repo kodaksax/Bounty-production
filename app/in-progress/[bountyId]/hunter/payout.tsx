@@ -12,11 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
-import { useWallet } from '../../../../lib/wallet-context';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
@@ -38,9 +36,7 @@ export default function HunterPayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance: _balance, deposit: _deposit } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [request, setRequest] = useState<BountyRequest | null>(null);
@@ -197,19 +193,6 @@ export default function HunterPayoutScreen() {
         },
       ]
     );
-  };
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
   };
 
   if (isLoading) {

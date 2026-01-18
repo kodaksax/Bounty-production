@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessAnimation, ConfettiAnimation } from '../../../components/ui/success-animation';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
@@ -24,9 +23,8 @@ export default function PayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session: _session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance: _balance, logTransaction: _logTransaction, releaseFunds } = useWallet();
+  const { releaseFunds } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);

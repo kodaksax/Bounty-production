@@ -118,7 +118,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // On-focus refresh to ensure latest avatar and fields are shown when returning
   useFocusEffect(
     React.useCallback(() => {
-      let _isActive = true;
+      let isActive = true;
       const run = async () => {
         try {
           await Promise.all([refreshAuthProfile(), refreshUserProfile()]);
@@ -127,7 +127,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         }
       };
       run();
-      return () => { _isActive = false };
+      return () => { isActive = false };
     }, [refreshAuthProfile, refreshUserProfile])
   );
 

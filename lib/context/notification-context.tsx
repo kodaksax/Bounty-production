@@ -9,7 +9,7 @@ let Notifications: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   Notifications = require('expo-notifications');
-} catch (_e) {
+} catch {
   Notifications = null;
 }
 
@@ -54,7 +54,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       const count = await notificationService.getUnreadCount();
       setUnreadCount(count);
-    } catch (error) {
+    } catch {
       // Silent failure - getUnreadCount already handles logging appropriately
       // Don't spam console with additional error messages
     }
@@ -119,7 +119,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       if (!Notifications) {
         // try to require at runtime if not already loaded
-        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
       }
       const response = Notifications ? await Notifications.getLastNotificationResponseAsync() : null;
       if (response) {
@@ -144,7 +144,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // Ensure Notifications is available when setting up listeners
     if (!Notifications) {
-      try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+      try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
     }
 
     // Setup listeners
@@ -170,7 +170,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -204,7 +204,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    return () => { mounted = false }
+    return () => { isMounted = false }
   }, [fetchNotifications, refreshUnreadCount]);
 
   // Poll for new notifications every 30 seconds when app is active

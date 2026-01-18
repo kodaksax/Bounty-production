@@ -24,7 +24,7 @@ export async function readAsBase64(uri: string): Promise<string> {
       const enc = (File.EncodingType && File.EncodingType.Base64) || 'base64'
       return await File.readAsStringAsync(uri, { encoding: enc })
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -35,7 +35,7 @@ export async function readAsBase64(uri: string): Promise<string> {
     if (Legacy && typeof Legacy.readAsStringAsync === 'function') {
       return await Legacy.readAsStringAsync(uri, { encoding: 'base64' })
     }
-  } catch (_e) {
+  } catch {
     // ignore
   }
 
@@ -54,7 +54,7 @@ export async function copyTo(dest: string, from: string): Promise<void> {
       await File.copyAsync({ from, to: dest })
       return
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -65,7 +65,7 @@ export async function copyTo(dest: string, from: string): Promise<void> {
       await Legacy.copyAsync({ from, to: dest })
       return
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -83,7 +83,7 @@ export async function getFileInfo(uri: string): Promise<Info> {
     if (File && typeof File.getInfoAsync === 'function') {
       return await File.getInfoAsync(uri)
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -93,7 +93,7 @@ export async function getFileInfo(uri: string): Promise<Info> {
     if (Legacy && typeof Legacy.getInfoAsync === 'function') {
       return await Legacy.getInfoAsync(uri)
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -114,7 +114,7 @@ export async function writeBase64ToFile(dest: string, base64: string): Promise<s
       await File.writeAsStringAsync(dest, base64, { encoding: (File.EncodingType && File.EncodingType.Base64) || 'base64' })
       return dest
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
@@ -125,7 +125,7 @@ export async function writeBase64ToFile(dest: string, base64: string): Promise<s
       await Legacy.writeAsStringAsync(dest, base64, { encoding: 'base64' })
       return dest
     }
-  } catch (_e) {
+  } catch {
     // fallthrough
   }
 
