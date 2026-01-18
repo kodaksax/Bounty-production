@@ -121,7 +121,7 @@
     "invariant": "^2.2.4",
     "logrocket": "^11.0.0",
     "lucide-react-native": "^0.544.0",
-    "mixpanel-browser": "^2.72.0",
+
     "mixpanel-react-native": "github:mixpanel/mixpanel-react-native",
     "mysql2": "^3.15.1",
     "nativewind": "^4.2.1",

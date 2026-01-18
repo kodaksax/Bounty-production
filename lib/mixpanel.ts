@@ -14,22 +14,9 @@ export async function initMixpanel() {
   _initialized = true; // mark attempted to avoid repeated noisy logs
 
   try {
-    const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
-
-    if (isWeb) {
-      // web/browser environment: prefer `mixpanel-browser` when available
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      const webModule = await import('mixpanel-browser');
-      const webPkg: any = (webModule as any).default ?? webModule;
-      if (typeof webPkg.init === 'function') {
-        webPkg.init(MIXPANEL_TOKEN);
-      }
-      _mixpanel = webPkg;
-      return;
-    }
-
-    // runtime import for native package; use the installed 'mixpanel-react-native'
+    // runtime import for native package; use the installed '@mixpanel/react-native'
+    // This app targets mobile (iOS/Android) only, so we intentionally avoid
+    // any web-only dependencies like `mixpanel-browser`.
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const nativeModule = await import('mixpanel-react-native');
@@ -50,7 +37,7 @@ export async function initMixpanel() {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[mixpanel] native init failed or not installed', e);
-    console.error('[mixpanel] To fix: install `@mixpanel/react-native` for native apps and rebuild, or `mixpanel-browser` for web.');
+    console.error('[mixpanel] To fix: install `@mixpanel/react-native` for native apps and rebuild.');
     _mixpanel = null;
   }
 }
