@@ -1,4 +1,10 @@
 // Lazily require expo-notifications to avoid native import at module evaluation time
+import { useRouter } from 'expo-router';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { navigationIntent } from '../services/navigation-intent';
+import { notificationService } from '../services/notification-service';
+import { supabase } from '../supabase';
+import type { Notification } from '../types';
 let Notifications: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
@@ -6,12 +12,6 @@ try {
 } catch (_e) {
   Notifications = null;
 }
-import { useRouter } from 'expo-router';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { navigationIntent } from '../services/navigation-intent';
-import { notificationService } from '../services/notification-service';
-import { supabase } from '../supabase';
-import type { Notification } from '../types';
 
 // Delay before navigating to ensure router is ready (milliseconds)
 const ROUTER_READY_DELAY_MS = 100;

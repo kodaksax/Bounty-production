@@ -22,6 +22,11 @@ import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
+// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
+import { initializeSentry } from '../lib/services/sentry-init';
+
+import { registerDeviceSession } from '../lib/services/auth-service';
+
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
 try {
@@ -32,15 +37,10 @@ try {
   Sentry = null;
 }
 
-// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
-import { initializeSentry } from '../lib/services/sentry-init';
-
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-
-import { registerDeviceSession } from '../lib/services/auth-service';
 
 if (__DEV__) {
   const originalWarn = console.warn;

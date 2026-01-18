@@ -117,6 +117,35 @@ jest.mock('react-native', () => {
   };
 });
 
+// Mock expo-device
+jest.mock('expo-device', () => ({
+  isDevice: true,
+  brand: 'Apple',
+  manufacturer: 'Apple',
+  modelName: 'iPhone',
+  modelId: 'iPhone12,1',
+  designName: 'iPhone 11',
+  productName: 'iPhone11,8',
+  deviceYearClass: 2019,
+  totalMemory: 4294967296,
+  supportedCpuArchitectures: ['arm64'],
+  osName: 'iOS',
+  osVersion: '14.0',
+  osBuildId: '18A373',
+  osInternalBuildId: '18A373',
+  osBuildFingerprint: null,
+  platformApiLevel: null,
+  deviceName: 'Test iPhone',
+  getDeviceTypeAsync: jest.fn().mockResolvedValue(1),
+  DeviceType: {
+    UNKNOWN: 0,
+    PHONE: 1,
+    TABLET: 2,
+    DESKTOP: 3,
+    TV: 4,
+  },
+}));
+
 // Mock expo-haptics
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
