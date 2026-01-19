@@ -170,7 +170,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
   useEffect(() => {
-    let isMounted = true;
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();

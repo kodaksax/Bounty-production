@@ -14,7 +14,7 @@ import { CURRENT_USER_ID, getCurrentUserId } from "lib/utils/data-utils"
 import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, findNodeHandle, FlatList, InteractionManager, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, UIManager, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
