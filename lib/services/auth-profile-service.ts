@@ -40,7 +40,7 @@ export class AuthProfileService {
   private static instance: AuthProfileService;
   private currentSession: Session | null = null;
   private currentProfile: AuthProfile | null = null;
-  private listeners: Array<(profile: AuthProfile | null) => void> = [];
+  private listeners: ((profile: AuthProfile | null) => void)[] = [];
   private externalProfileCache = new Map<string, CachedProfile>();
 
   private constructor() {}

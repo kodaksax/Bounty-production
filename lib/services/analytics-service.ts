@@ -74,13 +74,13 @@ class AnalyticsService {
           const { Mixpanel } = require('mixpanel-react-native');
           const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
           this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
-        } catch (e: any) {
-          // If mixpanel native package isn't installed or available in this runtime
-          // (e.g., Expo Go), just warn and continue — analytics remains optional.
-          // eslint-disable-next-line no-console
-          console.warn('[Analytics] mixpanel-react-native not available:', e && e.message ? e.message : e);
-          this.mixpanel = null;
-        }
+        } catch {
+            // If mixpanel native package isn't installed or available in this runtime
+            // (e.g., Expo Go), just warn and continue — analytics remains optional.
+            // eslint-disable-next-line no-console
+            console.warn('[Analytics] mixpanel-react-native not available');
+            this.mixpanel = null;
+          }
       }
 
       this.initialized = true;
@@ -90,7 +90,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -118,7 +118,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.setUser({ id: userId, ...properties });
-      } catch (_e) {
+      } catch {
         // ignore
       }
 
@@ -128,7 +128,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -163,7 +163,7 @@ class AnalyticsService {
           level: 'info',
           data: enrichedProperties,
         });
-      } catch (_e) {
+      } catch {
         // ignore when Sentry is not installed in this runtime
       }
 
@@ -173,7 +173,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -193,7 +193,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.setUser({ id: this.userId || undefined, ...properties });
-      } catch (_e) {
+      } catch {
         // ignore
       }
 
@@ -203,7 +203,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -225,7 +225,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -256,7 +256,7 @@ class AnalyticsService {
           level: 'info',
           data: screenProperties,
         });
-      } catch (_e) {
+      } catch {
         // ignore
       }
 
@@ -266,7 +266,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -295,7 +295,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.captureException(error);
-      } catch (_e) {
+      } catch {
         // ignore
       }
     }
@@ -316,7 +316,7 @@ class AnalyticsService {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
         const Sentry = require('@sentry/react-native');
         Sentry.setUser(null);
-      } catch (_e) {
+      } catch {
         // ignore
       }
 

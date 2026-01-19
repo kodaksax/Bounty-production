@@ -2,6 +2,8 @@ import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { logger } from 'lib/utils/error-logger';
 
+import { API_BASE_URL } from 'lib/config/api';
+
 export interface CompletionSubmission {
   id?: string;
   bounty_id: string;
@@ -33,8 +35,6 @@ export interface Rating {
   comment?: string;
   created_at?: string;
 }
-
-import { API_BASE_URL } from 'lib/config/api';
 
 export const completionService = {
   /**

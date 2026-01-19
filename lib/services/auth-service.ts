@@ -70,7 +70,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
           error: error.message,
           correlation_id: correlationId,
         });
-      } catch (e) { /* Swallow analytics errors */ }
+      } catch { /* Swallow analytics errors */ }
 
       return {
         success: false,
@@ -88,7 +88,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
         email: email.trim().toLowerCase(),
         correlation_id: correlationId,
       });
-    } catch (e) { /* Swallow analytics errors */ }
+    } catch { /* Swallow analytics errors */ }
 
     return {
       success: true,
@@ -105,7 +105,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
         error: error?.message,
         correlation_id: correlationId,
       });
-    } catch (e) { /* Swallow analytics errors */ }
+    } catch { /* Swallow analytics errors */ }
 
     return {
       success: false,
@@ -187,7 +187,7 @@ export async function requestPasswordReset(
           error: error.message,
           correlation_id: correlationId,
         });
-      } catch (e) { /* Swallow analytics errors */ }
+      } catch { /* Swallow analytics errors */ }
 
       // Handle rate limiting specifically
       if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
@@ -212,7 +212,7 @@ export async function requestPasswordReset(
         email: normalizedEmail,
         correlation_id: correlationId,
       });
-    } catch (e) { /* Swallow analytics errors */ }
+    } catch { /* Swallow analytics errors */ }
 
     // Always return success to prevent email enumeration attacks
     return {
@@ -230,7 +230,7 @@ export async function requestPasswordReset(
         error: error?.message,
         correlation_id: correlationId,
       });
-    } catch (e) { /* Swallow analytics errors */ }
+    } catch { /* Swallow analytics errors */ }
 
     return {
       success: false,

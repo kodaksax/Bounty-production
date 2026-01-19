@@ -4,7 +4,6 @@
  * Follows Apple Human Interface Guidelines for data presentation
  */
 
-import { supabase } from '../supabase';
 import type { AuditLogEntry, AuditLogFilters } from '../types-admin';
 
 // Mock data for development - simulates various system events

@@ -1,5 +1,18 @@
 
 // Stripe API types
+import { API_BASE_URL } from '../config/api';
+import { analyticsService } from './analytics-service';
+import {
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
+} from './payment-error-handler';
+import { performanceService } from './performance-service';
+
 export interface StripePaymentMethod {
   id: string;
   type: 'card' | string;
@@ -95,19 +108,6 @@ export interface StripeConnectVerificationResponse {
   detailsSubmitted: boolean;
   capabilities?: Record<string, string>;
 }
-
-import { API_BASE_URL } from '../config/api';
-import { analyticsService } from './analytics-service';
-import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
-} from './payment-error-handler';
-import { performanceService } from './performance-service';
 
 class StripeService {
   private publishableKey: string = '';

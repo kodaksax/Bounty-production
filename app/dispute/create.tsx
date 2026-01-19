@@ -168,7 +168,7 @@ export default function CreateDisputeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Reason for Dispute *</Text>
           <Text style={styles.sectionHint}>
-            Explain why you're disputing this cancellation and what you believe the fair outcome
+            Explain why you are disputing this cancellation and what you believe the fair outcome
             should be.
           </Text>
           <TextInput

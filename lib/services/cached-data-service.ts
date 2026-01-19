@@ -275,7 +275,7 @@ class CachedDataService {
    * Preload critical data for offline use
    */
   async preloadData<T>(
-    items: Array<{ key: string; fetchFn: () => Promise<T>; ttl?: number }>
+    items: { key: string; fetchFn: () => Promise<T>; ttl?: number }[]
   ): Promise<void> {
     try {
       const results = await Promise.allSettled(

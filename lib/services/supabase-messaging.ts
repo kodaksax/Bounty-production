@@ -272,7 +272,7 @@ export async function sendMessage(
 ): Promise<Message> {
   try {
     // First, try the canonical column name 'text'
-    let attemptFields: Array<Record<string, any>> = [
+    let attemptFields: Record<string, any>[] = [
       { conversation_id: conversationId, sender_id: senderId, text },
       // fallback alternatives in case DB schema uses a different column name
       { conversation_id: conversationId, sender_id: senderId, body: text },

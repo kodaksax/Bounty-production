@@ -9,7 +9,7 @@ let Notifications: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   Notifications = require('expo-notifications');
-} catch (_e) {
+} catch {
   Notifications = null;
 }
 
@@ -115,7 +115,7 @@ export class NotificationService {
   async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
     try {
       if (!Notifications) {
-        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
       }
       const { status } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       // Store the status for offline access
@@ -152,7 +152,7 @@ export class NotificationService {
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
       if (!Notifications) {
-        try { Notifications = require('expo-notifications'); } catch (_e) { /* ignore */ }
+        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
       }
       const { status: existingStatus } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       let finalStatus = existingStatus;
@@ -281,7 +281,7 @@ export class NotificationService {
       // As a last resort, cache and retry later so the user isn't blocked
       try {
         const pendingStr = await AsyncStorage.getItem('notifications:pending_tokens')
-        const pending = pendingStr ? JSON.parse(pendingStr) as Array<{token:string, deviceId?:string}> : []
+        const pending = pendingStr ? JSON.parse(pendingStr) as {token:string, deviceId?:string}[] : []
         pending.push({ token, deviceId })
         await AsyncStorage.setItem('notifications:pending_tokens', JSON.stringify(pending))
         if (__DEV__) {
@@ -595,7 +595,7 @@ export class NotificationService {
     try {
       const str = await AsyncStorage.getItem('notifications:pending_tokens')
       if (!str) return
-      const pending = JSON.parse(str) as Array<{token:string, deviceId?:string}>
+      const pending = JSON.parse(str) as {token:string, deviceId?:string}[]
       await AsyncStorage.removeItem('notifications:pending_tokens')
       for (const p of pending) {
         try { await this.registerPushToken(p.token, p.deviceId) } catch {}

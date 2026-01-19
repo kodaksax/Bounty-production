@@ -17,7 +17,7 @@ export function initializeSentry() {
     if (hub && hub.getClient && hub.getClient()) {
       return;
     }
-  } catch (e) {
+  } catch {
     // ignore guard failures
   }
   // Only initialize if DSN is provided and not in development
@@ -28,7 +28,7 @@ export function initializeSentry() {
   try {
     const ReactNativeTracingIntegration = (Sentry as { ReactNativeTracing?: new (options: {
       routingInstrumentation?: unknown;
-      tracingOrigins?: Array<string | RegExp>;
+      tracingOrigins?: (string | RegExp)[];
     }) => Integration }).ReactNativeTracing;
 
     const integrations: Integration[] | undefined = ReactNativeTracingIntegration
