@@ -6,14 +6,6 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 
-interface SettingItem {
-  id: string;
-  label: string;
-  description: string;
-  type: 'switch' | 'select';
-  value: boolean | string;
-}
-
 export default function AdminGeneralSettingsScreen() {
   const router = useRouter();
   const [settings, setSettings] = useState({

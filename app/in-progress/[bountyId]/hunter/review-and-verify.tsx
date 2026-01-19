@@ -43,7 +43,6 @@ export default function HunterReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -52,8 +51,6 @@ export default function HunterReviewAndVerifyScreen() {
   const [error, setError] = useState<string | null>(null);
   const [currentStage] = useState<HunterStage>('review_verify');
   const [messageText, setMessageText] = useState('');
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
@@ -61,12 +58,7 @@ export default function HunterReviewAndVerifyScreen() {
 
   // Attachment upload hook
   const {
-    isUploading,
-    isPicking,
-    progress,
     pickAttachment,
-    error: uploadError,
-    clearError,
   } = useAttachmentUpload({
     bucket: 'bounty-attachments',
     folder: 'proofs',
@@ -172,7 +164,7 @@ export default function HunterReviewAndVerifyScreen() {
       const attachmentsJson = (bounty as any)?.attachments_json
       if (attachmentsJson) {
         let parsed: any[] = []
-        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        try { parsed = JSON.parse(attachmentsJson) } catch { parsed = [] }
         const items: ProofItem[] = parsed.map((a: any) => ({
           id: a.id || String(Date.now()),
           type: a.mimeType?.startsWith('image/') ? 'image' : 'file',
@@ -191,27 +183,6 @@ export default function HunterReviewAndVerifyScreen() {
     } catch (err) {
       console.error('Error loading proof items:', err);
       setProofItems([])
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !conversation) {
-      if (!conversation) {
-        Alert.alert('No Conversation', 'No active conversation found for this bounty.');
-      }
-      return;
-    }
-
-    try {
-      setIsSendingMessage(true);
-      await messageService.sendMessage(conversation.id, messageText.trim());
-      setMessageText('');
-      Alert.alert('Success', 'Message sent successfully!');
-    } catch (err) {
-      console.error('Error sending message:', err);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
-    } finally {
-      setIsSendingMessage(false);
     }
   };
 
@@ -343,19 +314,6 @@ export default function HunterReviewAndVerifyScreen() {
       </TouchableOpacity>
     </View>
   );
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
 
   if (isLoading) {
     return (

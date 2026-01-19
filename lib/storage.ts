@@ -8,7 +8,7 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const mod = require('@react-native-async-storage/async-storage')
   AsyncStorage = mod?.default || mod
-} catch (_) {
+} catch {
   AsyncStorage = null
 }
 
@@ -20,7 +20,7 @@ export const storage = {
       if (hasAsync) return await AsyncStorage.getItem(key)
       // SecureStore only supports strings; use same API shape
       return await SecureStore.getItemAsync(key)
-    } catch (e) {
+    } catch {
       return null
     }
   },
@@ -28,7 +28,7 @@ export const storage = {
     try {
       if (hasAsync) return await AsyncStorage.setItem(key, value)
       await SecureStore.setItemAsync(key, value)
-    } catch (e) {
+    } catch {
       // noop
     }
   },
@@ -36,7 +36,7 @@ export const storage = {
     try {
       if (hasAsync) return await AsyncStorage.removeItem(key)
       await SecureStore.deleteItemAsync(key)
-    } catch (e) {
+    } catch {
       // noop
     }
   },

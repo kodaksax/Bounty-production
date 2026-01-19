@@ -13,7 +13,6 @@ const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 export default function OnboardingIndex() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkOnboardingStatus();

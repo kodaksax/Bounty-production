@@ -370,13 +370,13 @@ export async function verifySignature(
  * Encrypt sensitive local storage data
  * Use this wrapper for encrypting data before storing in AsyncStorage
  */
-export interface EncryptedStorage<T> {
+export interface EncryptedStorage {
   value: string; // encrypted
   timestamp: number;
   integrity: string; // signature
 }
 
-export async function encryptForStorage<T>(
+export async function encryptForStorage(
   data: T,
   key: string
 ): Promise<EncryptedStorage<T>> {

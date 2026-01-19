@@ -65,9 +65,45 @@ jest.mock('../../lib/utils/error-logger', () => ({
   },
 }));
 
+// Mock cached data service to prevent cross-test contamination
+const mockCache = new Map();
+const mockRevalidationListeners = new Map();
+jest.mock('../../lib/services/cached-data-service', () => ({
+  cachedDataService: {
+    fetchWithCache: jest.fn(async (key: string, fetchFn: Function, options?: any) => {
+      // Use mock cache that can be cleared between tests
+      // If forceRefresh is true, always call fetchFn
+      if (options?.forceRefresh || !mockCache.has(key)) {
+        const result = await fetchFn();
+        mockCache.set(key, result);
+      }
+      return mockCache.get(key);
+    }),
+    getOnlineStatus: jest.fn(() => true),
+    clearCache: jest.fn(() => mockCache.clear()),
+    onRevalidated: jest.fn((key: string, callback: Function) => {
+      if (!mockRevalidationListeners.has(key)) {
+        mockRevalidationListeners.set(key, []);
+      }
+      mockRevalidationListeners.get(key).push(callback);
+      return () => {
+        const listeners = mockRevalidationListeners.get(key) || [];
+        const index = listeners.indexOf(callback);
+        if (index > -1) {
+          listeners.splice(index, 1);
+        }
+      };
+    }),
+  },
+  CACHE_KEYS: {
+    BOUNTIES_LIST: 'bounties_list',
+  },
+}));
+
 describe('WebSocket Bounty Updates', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCache.clear(); // Clear cache between tests
   });
 
   afterEach(() => {

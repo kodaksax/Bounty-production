@@ -22,25 +22,25 @@ import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
+// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
+import { initializeSentry } from '../lib/services/sentry-init';
+
+import { registerDeviceSession } from '../lib/services/auth-service';
+
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   Sentry = require('@sentry/react-native');
-} catch (_e) {
+} catch {
   // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
   Sentry = null;
 }
-
-// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
-import { initializeSentry } from '../lib/services/sentry-init';
 
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-
-import { registerDeviceSession } from '../lib/services/auth-service';
 
 if (__DEV__) {
   const originalWarn = console.warn;
@@ -96,7 +96,6 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
 };
 
 function RootLayout({ children }: { children: React.ReactNode }) {
-  const [appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
@@ -116,20 +115,20 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       // Initialize Sentry first (deferred from module-level to avoid early native access)
       try {
         initializeSentry();
-      } catch (e) {
-        console.error('[Sentry] Initialization failed:', e);
+      } catch (_e) {
+        console.error('[Sentry] Initialization failed:', _e);
       }
 
       try {
         await initMixpanel();
         try {
           track('Page View', { screen: 'root' });
-        } catch (e) {
+        } catch {
           // ignore analytics failures
         }
-      } catch (e) {
+      } catch (_e) {
         // eslint-disable-next-line no-console
-        console.error('[Mixpanel] init failed', e);
+        console.error('[Mixpanel] init failed', _e);
       }
 
       try {
@@ -196,7 +195,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
                                 },
                               });
                             }
-                          } catch (_e) {
+                          } catch {
                             // ignore
                           }
                         }}
@@ -261,7 +260,7 @@ try {
   if (Sentry && typeof Sentry.wrap === 'function') {
     WrappedRoot = Sentry.wrap(RootLayout);
   }
-} catch (_e) {
+} catch {
   // ignore; fall back to unwrapped root
 }
 

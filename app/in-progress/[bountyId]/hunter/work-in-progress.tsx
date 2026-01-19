@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
@@ -41,7 +40,6 @@ export default function HunterWorkInProgressScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);

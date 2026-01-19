@@ -35,7 +35,7 @@ export default function SimpleBountySearchScreen() {
         if (!cancelled) {
           setInitial(list.map(mapBounty))
         }
-      } catch (e) {
+      } catch {
         // swallow; initial list optional
       }
     })()

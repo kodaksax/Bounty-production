@@ -25,7 +25,6 @@ import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
-import { useAuthContext } from "../../hooks/use-auth-context";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { bountyService } from "../../lib/services/bounty-service";
@@ -35,7 +34,6 @@ export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   
   const { profile, loading, error } = useNormalizedProfile(userId);
@@ -177,7 +175,7 @@ export default function UserProfileScreen() {
     setIsCreatingChat(true);
     try {
       // Create or get existing conversation
-      const conversation = await messageService.getOrCreateConversation(
+      await messageService.getOrCreateConversation(
         [userId],
         profile?.username || 'User',
         undefined // no bounty context

@@ -62,7 +62,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         listRef.current?.scrollToOffset({ offset: 0, animated: false })
       }, 50)
       return () => clearTimeout(t)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [])

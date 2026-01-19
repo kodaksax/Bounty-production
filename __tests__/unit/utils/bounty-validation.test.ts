@@ -74,12 +74,12 @@ describe('Bounty Validation Utils', () => {
 
     it('should return error for paid bounty with zero amount', () => {
       const result = validateAmount(0, false);
-      expect(result).toBe('Amount must be at least $1');
+      expect(result).toBe('The minimum bounty amount is $1.00');
     });
 
     it('should return error for paid bounty with amount less than 1', () => {
       const result = validateAmount(0.5, false);
-      expect(result).toBe('Amount must be at least $1');
+      expect(result).toBe('The minimum bounty amount is $1.00');
     });
 
     it('should accept amount of exactly 1 dollar', () => {
@@ -94,7 +94,7 @@ describe('Bounty Validation Utils', () => {
 
     it('should handle negative amounts for paid bounties', () => {
       const result = validateAmount(-10, false);
-      expect(result).toBe('Amount must be at least $1');
+      expect(result).toBe('The minimum bounty amount is $1.00');
     });
 
     it('should return error for negative amounts for honor bounties', () => {

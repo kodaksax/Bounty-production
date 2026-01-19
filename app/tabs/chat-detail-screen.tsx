@@ -17,18 +17,11 @@ import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
 import { getCurrentUserId } from "../../lib/utils/data-utils"
-import { useWallet } from '../../lib/wallet-context'
 
 interface ChatDetailScreenProps {
   conversation: Conversation
   onBack?: () => void
   onNavigate?: (screen?: string) => void
-}
-
-// Format message time
-function formatMessageTime(createdAt: string): string {
-  const date = new Date(createdAt);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ChatDetailScreen({
@@ -48,9 +41,7 @@ export function ChatDetailScreen({
     pinMessage,
     unpinMessage,
     copyMessage,
-    reportMessage,
   } = useMessages(conversation.id)
-  const { balance } = useWallet()
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)

@@ -13,7 +13,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
-import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
 export default function BountyDetailRouter() {

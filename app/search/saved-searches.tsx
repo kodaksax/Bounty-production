@@ -67,7 +67,7 @@ export default function SavedSearchesScreen() {
       setNewSearchQuery('');
       setShowNewSearchModal(false);
       await loadSavedSearches();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save search');
     }
   };

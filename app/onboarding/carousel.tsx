@@ -7,8 +7,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
-import { Image, Animated,
+import React, { useRef } from 'react';
+import { Animated,
   Dimensions,
   FlatList,
   StyleSheet,

@@ -16,7 +16,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { ROUTES } from '../../../lib/routes';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
@@ -41,7 +40,6 @@ export default function ReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -103,7 +101,7 @@ export default function ReviewAndVerifyScreen() {
       const attachmentsJson = (bounty as any)?.attachments_json
       if (attachmentsJson) {
         let parsed: any[] = []
-        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        try { parsed = JSON.parse(attachmentsJson) } catch { parsed = [] }
         const items: ProofItem[] = parsed.map((a: any) => ({
           id: a.id || String(Date.now()),
           type: (a.mimeType || a.name || '').includes('image') ? 'image' : (a.type === 'image' ? 'image' : 'file'),

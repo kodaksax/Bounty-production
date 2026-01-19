@@ -17,7 +17,7 @@ import { useAuthContext } from 'hooks/use-auth-context';
 import { useWallet } from 'lib/wallet-context';
 import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
 export default function CancellationResponseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

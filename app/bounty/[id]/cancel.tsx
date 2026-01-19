@@ -15,7 +15,7 @@ import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import type { Bounty } from 'lib/services/database.types';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+import { SUPPORT_EMAIL, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
 export default function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -59,7 +59,7 @@ export const identify = (id: string, props?: Record<string, any>) => {
       if (people && typeof people.set === 'function' && props) {
         people.set(props);
       }
-    } catch (e) {
+    } catch {
       // ignore people-set failures
     }
   } catch (e) {
