@@ -138,7 +138,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         console.error('[Splash] preparation error', e);
       } finally {
         if (!cancelled) {
-          setAppIsReady(true);
           setPhase('brand'); // immediately move to branded React splash
           // Ensure native splash is hidden now that branded phase is active
           hideNativeSplashSafely();

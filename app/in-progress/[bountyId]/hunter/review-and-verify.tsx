@@ -52,6 +52,7 @@ export default function HunterReviewAndVerifyScreen() {
   const [currentStage] = useState<HunterStage>('review_verify');
   const [messageText, setMessageText] = useState('');
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
   const [startTime] = useState(Date.now());
@@ -436,6 +437,40 @@ export default function HunterReviewAndVerifyScreen() {
             maxLength={1000}
             textAlignVertical="top"
           />
+          {/* Conversation quick action: use loaded conversation if present */}
+          <View style={{ marginTop: 12 }}>
+            {conversation ? (
+              <TouchableOpacity
+                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                onPress={() => {
+                  // Navigate to conversation view (route param used if available)
+                  try {
+                    (router as any).push(`/messages/${conversation.id}`);
+                  } catch (e) {
+                    console.warn('Unable to open conversation route', e);
+                  }
+                }}
+              >
+                <MaterialIcons name="chat" size={18} color="#fff" />
+                <Text style={styles.addProofText}>Open Conversation</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                onPress={() => {
+                  // No conversation found yet — navigate to create/new messages with bounty context
+                  try {
+                    if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
+                  } catch (e) {
+                    console.warn('Unable to open new message route', e);
+                  }
+                }}
+              >
+                <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
+                <Text style={styles.addProofText}>Message Poster</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Proof of Completion */}

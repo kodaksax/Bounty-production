@@ -24,7 +24,10 @@ export default function PayoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
-  const { releaseFunds } = useWallet();
+  const { releaseFunds, logTransaction, balance } = useWallet();
+
+  // guard against undefined wallet values to avoid runtime crashes
+  const displayBalance = typeof balance === 'number' && Number.isFinite(balance) ? balance : 0;
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,15 +163,19 @@ export default function PayoutScreen() {
 
               // For honor bounties or manual completion
               if (bounty.is_for_honor) {
-                await logTransaction({
-                  type: 'bounty_completed',
-                  amount: 0,
-                  details: {
-                    title: bounty.title,
-                    status: 'completed_for_honor',
-                    bounty_id: bounty.id,
-                  },
-                });
+                if (typeof logTransaction === 'function') {
+                  await logTransaction({
+                    type: 'bounty_completed',
+                    amount: 0,
+                    details: {
+                      title: bounty.title,
+                      status: 'completed_for_honor',
+                      bounty_id: bounty.id,
+                    },
+                  });
+                } else {
+                  console.warn('logTransaction not available from wallet context');
+                }
               }
 
               // Show success animation

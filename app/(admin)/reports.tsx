@@ -142,6 +142,7 @@ export default function AdminReportsScreen() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('pending');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high' | 'critical'>('all');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
 
   // Stats for the header
@@ -542,26 +543,43 @@ export default function AdminReportsScreen() {
           </TouchableOpacity>
         )}
       </View>
-      <TouchableOpacity
-        style={styles.sortButton}
-        onPress={() => {
-          if (Platform.OS !== 'web') {
-            Haptics.selectionAsync();
-          }
-          // Cycle through sort options
-          const options: SortOption[] = ['priority', 'newest', 'oldest'];
-          const currentIndex = options.indexOf(sortBy);
-          setSortBy(options[(currentIndex + 1) % options.length]);
-        }}
-        accessibilityLabel={`Sort by ${sortBy}`}
-      >
-        <MaterialIcons name="sort" size={20} color="#a7f3d0" />
-        <Text style={styles.sortButtonText}>
-          {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={styles.sortButton}
+          onPress={() => {
+            if (Platform.OS !== 'web') {
+              Haptics.selectionAsync();
+            }
+            // Cycle through sort options
+            const options: SortOption[] = ['priority', 'newest', 'oldest'];
+            const currentIndex = options.indexOf(sortBy);
+            setSortBy(options[(currentIndex + 1) % options.length]);
+          }}
+          accessibilityLabel={`Sort by ${sortBy}`}
+        >
+          <MaterialIcons name="sort" size={20} color="#a7f3d0" />
+          <Text style={styles.sortButtonText}>
+            {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.sortButton, styles.priorityButton]}
+          onPress={() => {
+            if (Platform.OS !== 'web') Haptics.selectionAsync();
+            const options: Array<typeof priorityFilter> = ['all', 'critical', 'high', 'medium', 'low'];
+            const currentIndex = options.indexOf(priorityFilter as any);
+            setPriorityFilter(options[(currentIndex + 1) % options.length]);
+          }}
+          accessibilityLabel={`Filter by priority ${priorityFilter}`}
+        >
+          <MaterialIcons name="filter-list" size={20} color="#a7f3d0" />
+          <Text style={styles.sortButtonText}>{priorityFilter === 'all' ? 'All' : priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
+
 
   // Report card component
   const renderReportCard = ({ item: report }: { item: EnhancedReport }) => {
@@ -900,6 +918,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 10,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  priorityButton: {
+    marginLeft: 8,
   },
   sortButtonText: {
     fontSize: 13,

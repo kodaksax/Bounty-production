@@ -38,6 +38,8 @@ export function SignInForm() {
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const [rememberMe, setRememberMe] = useState(false)
+  const [socialAuthLoading, setSocialAuthLoading] = useState(false)
+  const [socialAuthError, setSocialAuthError] = useState<string | null>(null)
 
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
@@ -398,6 +400,13 @@ export function SignInForm() {
                 );
               })()}
 
+              {socialAuthError && (
+                <ErrorBanner
+                  error={getUserFriendlyError(socialAuthError)}
+                  onDismiss={() => setSocialAuthError(null)}
+                />
+              )}
+
               <View>
                 <Text className="text-sm text-white/80 mb-1">Email</Text>
                 <TextInput
@@ -487,6 +496,7 @@ export function SignInForm() {
                     cornerRadius={8}
                     style={{ width: '100%', height: 44 }}
                     onPress={async () => {
+                      setSocialAuthLoading(true)
                       try {
                         console.log('[apple] Starting Apple sign-in')
                         const credential = await AppleAuthentication.signInAsync({
@@ -553,20 +563,31 @@ export function SignInForm() {
                           setSocialAuthError(errorMsg)
                           console.error('[apple] Error:', e)
                         }
+                      } finally {
+                        setSocialAuthLoading(false)
                       }
                     }}
                   />
+                  {socialAuthLoading && (
+                    <View style={{ position: 'absolute', right: 16, top: 6 }}>
+                      <ActivityIndicator color="#fff" />
+                    </View>
+                  )}
                 </View>
               )}
 
               <TouchableOpacity
-                disabled={!isGoogleConfigured || isSubmitting || !request}
+                disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
                 onPress={() => promptAsync()}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
               >
-                <Text className="text-black font-medium">
-                  {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-                </Text>
+                {socialAuthLoading ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text className="text-black font-medium">
+                    {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>

@@ -33,11 +33,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const isMountedRef = useRef(true);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const fetchedNotifications = await notificationService.fetchNotifications();
+      if (!isMountedRef.current) return;
       setNotifications(fetchedNotifications);
       
       // Update unread count
@@ -46,14 +48,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   }, []);
 
   const refreshUnreadCount = useCallback(async () => {
     try {
       const count = await notificationService.getUnreadCount();
-      setUnreadCount(count);
+      if (isMountedRef.current) setUnreadCount(count);
     } catch {
       // Silent failure - getUnreadCount already handles logging appropriately
       // Don't spam console with additional error messages
@@ -65,6 +67,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       await notificationService.markAsRead(notificationIds);
       
       // Update local state
+      if (!isMountedRef.current) return;
       setNotifications(prev =>
         prev.map(notif =>
           notificationIds.includes(notif.id) ? { ...notif, read: true } : notif
@@ -82,6 +85,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       await notificationService.markAllAsRead();
       
+      if (!isMountedRef.current) return;
       // Update local state
       setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
       setUnreadCount(0);
@@ -126,7 +130,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         initialNotificationHandled.current = true;
         // Small delay to ensure router is ready
         setTimeout(() => {
-          handleNotificationTap(response);
+          if (isMountedRef.current) {
+            handleNotificationTap(response);
+          }
         }, ROUTER_READY_DELAY_MS);
       }
     } catch (error) {
@@ -170,6 +176,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
   useEffect(() => {
+    let cleanupFn: (() => void) | undefined;
+
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -187,7 +195,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             })
             .subscribe();
 
-          return () => { try { (supabase as any).removeChannel(channel) } catch {} }
+          cleanupFn = () => { try { (supabase as any).removeChannel(channel) } catch {} };
+          return;
         }
 
         // Fallback: classic .from().on() subscription
@@ -196,15 +205,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
         }).subscribe();
 
-        return () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} }
+        cleanupFn = () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} };
+        return;
       } catch (e) {
         // Non-fatal: we'll still poll every 30s as a fallback
         console.error('Failed to setup realtime notifications subscription', e);
       }
     })();
 
-    return () => { isMounted = false }
+    return () => { try { cleanupFn && cleanupFn(); } catch {} }
   }, [fetchNotifications, refreshUnreadCount]);
+
+  // Track mounted state to prevent setState after unmount
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   // Poll for new notifications every 30 seconds when app is active
   useEffect(() => {

@@ -33,8 +33,6 @@ export default function OnboardingIndex() {
       console.error('Error checking onboarding status:', error);
       // On error, default to showing carousel
       router.replace('/onboarding/carousel');
-    } finally {
-      setLoading(false);
     }
   };
 

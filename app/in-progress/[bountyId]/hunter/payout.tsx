@@ -16,6 +16,7 @@ import { bountyRequestService } from '../../../../lib/services/bounty-request-se
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { useWallet } from '../../../../lib/wallet-context';
 
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
@@ -37,7 +38,7 @@ export default function HunterPayoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
-
+  const { balance } = useWallet();
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [request, setRequest] = useState<BountyRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);

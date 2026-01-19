@@ -125,6 +125,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           console.error('[ProfileScreen] focus refresh failed:', e);
         }
       };
+      let isActive = true;
       run();
       return () => { isActive = false };
     }, [refreshAuthProfile, refreshUserProfile])
