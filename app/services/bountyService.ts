@@ -123,12 +123,22 @@ export const bountyService = {
    */
   async checkConnectivity(): Promise<boolean> {
     try {
-      // Simple ping to check if network is available
-      await fetch('https://www.google.com', {
-        method: 'HEAD',
-        mode: 'no-cors',
-      });
-      return true;
+      // Simple ping to check if network is available.
+      // Use Google's generate_204 endpoint which returns 204 when reachable.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      try {
+        const res = await fetch('https://www.google.com/generate_204', {
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        // Consider connectivity valid only for successful HTTP responses.
+        return !!(res && res.ok);
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch (error) {
       return false;
     }

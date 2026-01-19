@@ -74,11 +74,11 @@ class AnalyticsService {
           const { Mixpanel } = require('mixpanel-react-native');
           const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
           this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
-        } catch {
+        } catch (e: any) {
             // If mixpanel native package isn't installed or available in this runtime
             // (e.g., Expo Go), just warn and continue — analytics remains optional.
             // eslint-disable-next-line no-console
-            console.warn('[Analytics] mixpanel-react-native not available');
+            console.warn('[Analytics] mixpanel-react-native not available:', e?.message || e);
             this.mixpanel = null;
           }
       }

@@ -567,8 +567,9 @@ export default function AdminReportsScreen() {
           style={[styles.sortButton, styles.priorityButton]}
           onPress={() => {
             if (Platform.OS !== 'web') Haptics.selectionAsync();
-            const options: typeof priorityFilter[] = ['all', 'critical', 'high', 'medium', 'low'];
-            const currentIndex = options.indexOf(priorityFilter as any);
+            const options = ['all', 'critical', 'high', 'medium', 'low'] as const;
+            type PriorityFilterOption = (typeof options)[number];
+            const currentIndex = options.indexOf(priorityFilter as PriorityFilterOption);
             setPriorityFilter(options[(currentIndex + 1) % options.length]);
           }}
           accessibilityLabel={`Filter by priority ${priorityFilter}`}
