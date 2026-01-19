@@ -12,6 +12,7 @@ import { logger } from '../utils/error-logger';
 const CACHE_PREFIX = 'cache_v1_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const REVALIDATION_EVENT = 'revalidated';
+const REVALIDATION_ERROR_EVENT = 'revalidation_error';
 
 // Cache keys for common data types
 export const CACHE_KEYS = {
@@ -58,6 +59,16 @@ class CachedDataService {
     };
     this.events.on(REVALIDATION_EVENT, handler);
     return () => this.events.off(REVALIDATION_EVENT, handler);
+  }
+
+  onRevalidationError(key: string, callback: (error: Error) => void): () => void {
+    const handler = (eventKey: string, error: Error) => {
+      if (eventKey === key) {
+        callback(error);
+      }
+    };
+    this.events.on(REVALIDATION_ERROR_EVENT, handler);
+    return () => this.events.off(REVALIDATION_ERROR_EVENT, handler);
   }
 
   /**
@@ -175,7 +186,11 @@ class CachedDataService {
               this.setCache(key, data, options);
               this.events.emit(REVALIDATION_EVENT, key, data);
             })
-            .catch(err => logger.error('Background cache update failed', { key, error: err }));
+            .catch(err => {
+              logger.error('Background cache update failed', { key, error: err });
+              // emit a revalidation error so consumers can surface errors
+              this.events.emit(REVALIDATION_ERROR_EVENT, key, err);
+            });
 
           logger.info(`Using cached data (stale-while-revalidate): ${key}`);
           return cached;

@@ -69,7 +69,19 @@ export function useCachedData<T>(
       setIsValidating(false);
     });
 
-    return unsubscribe;
+    // Also listen for background revalidation errors so we can surface them
+    const unsubscribeError = cachedDataService.onRevalidationError
+      ? cachedDataService.onRevalidationError(key, (err: any) => {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setIsValidating(false);
+        })
+      : () => {};
+
+
+    return () => {
+      unsubscribe();
+      unsubscribeError();
+    };
   }, [key, enabled]);
 
   // Check online status periodically
