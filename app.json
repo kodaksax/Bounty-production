@@ -11,12 +11,31 @@
     
     "ios": {
       "supportsTablet": true,
-      "jsEngine": "hermes",
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
+      "buildNumber": "1",
+      "jsEngine": "hermes",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture, attach images to posts,and add portfolio media.",
-        "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed."
+        "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture, attach images to posts, and manage your portfolio media.",
+        "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed.",
+        "NSCameraUsageDescription": "BOUNTY needs camera access to take photos for your profile or posts.",
+        "NSLocationWhenInUseUsageDescription": "BOUNTY uses your location to show nearby bounties and help you find local opportunities.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BOUNTY uses your location in the background to keep nearby bounties and time-sensitive matches accurate even when the app is not active.",
+        "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
+        "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends.",
+        "UIBackgroundModes": [
+          "location"
+        ]
+      },
+      "associatedDomains": [
+        "applinks:bountyfinder.app",
+        "applinks:*.bountyfinder.app"
+      ],
+      "config": {
+        "googleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}"
+      },
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
       }
     },
     "android": {
