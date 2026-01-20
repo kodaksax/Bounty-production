@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "buildNumber": "auto"
       }
     },
     "preview": {
@@ -16,6 +17,7 @@
       "channel": "beta",
       "ios": {
         "simulator": false,
+        "buildNumber": "auto",
         "resourceClass": "m1-medium"
       },
       "env": {
@@ -31,6 +33,7 @@
       "channel": "production",
       "ios": {
         "simulator": false,
+        "buildNumber": "auto",
         "resourceClass": "m1-medium"
       },
       "env": {
