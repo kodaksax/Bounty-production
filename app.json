@@ -8,7 +8,6 @@
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
-    
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
@@ -24,6 +23,7 @@
         "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
         "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends.",
         "UIBackgroundModes": [
+          "location",
           "location"
         ]
       },
@@ -35,7 +35,13 @@
         "googleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}"
       },
       "entitlements": {
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default",
+          "Default"
+        ],
+        "com.apple.developer.in-app-payments": [
+          "merchant.com.bountyexpo-workspace"
+        ]
       }
     },
     "android": {
@@ -75,14 +81,13 @@
         {
           "icon": "./assets/images/bounty-icon.png",
           "color": "#10b981"
-          
         }
       ],
       "expo-secure-store",
       "expo-web-browser",
-      
       "expo-video",
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
@@ -94,6 +99,12 @@
       "eas": {
         "projectId": "b5485f88-0b1f-4622-bbed-b1ae142dcb46"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b5485f88-0b1f-4622-bbed-b1ae142dcb46"
     }
   }
 }

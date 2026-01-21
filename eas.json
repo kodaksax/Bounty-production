@@ -16,7 +16,7 @@
       "channel": "beta",
       "ios": {
         "simulator": false,
-        "resourceClass": "m1-medium"
+        "resourceClass": "m-medium"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
