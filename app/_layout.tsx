@@ -24,6 +24,8 @@ import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
+// Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
+import { initGlobalErrorHandlers } from '../lib/error-handling';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
@@ -124,6 +126,15 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // Register global JS error handlers as early as possible so we capture
+    // uncaught JS exceptions and unhandled promise rejections that may
+    // trigger native ErrorRecovery flows.
+    try {
+      initGlobalErrorHandlers();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[ErrorHandling] failed to init global handlers', e);
+    }
     // Initialize Sentry, Mixpanel and send an initial page view once at app start.
     // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
