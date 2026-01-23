@@ -1,0 +1,27 @@
+diff --git a/node_modules/expo-updates/ios/EXUpdates/Procedures/StartupProcedure.swift b/node_modules/expo-updates/ios/EXUpdates/Procedures/StartupProcedure.swift
+index 0f81115..b9b55d8 100644
+--- a/node_modules/expo-updates/ios/EXUpdates/Procedures/StartupProcedure.swift
++++ b/node_modules/expo-updates/ios/EXUpdates/Procedures/StartupProcedure.swift
+@@ -1,5 +1,7 @@
+ //  Copyright © 2019 650 Industries. All rights reserved.
+ 
++import React
++
+ internal protocol StartupProcedureDelegate: AnyObject {
+   func startupProcedureDidLaunch(_ startupProcedure: StartupProcedure)
+   func startupProcedure(_ startupProcedure: StartupProcedure, errorRecoveryDidRequestRelaunchWithCompletion completion: @escaping (Error?, Bool) -> Void)
+@@ -341,6 +343,13 @@ final class StartupProcedure: StateMachineProcedure, AppLoaderTaskDelegate, AppL
+   }
+ 
+   func throwException(_ exception: NSException) {
+-    exception.raise()
++    // Prefer React Native's fatal exception handler if available to avoid
++    // raising an Objective-C exception on a background worker thread,
++    // which will abort the process via objc_exception_throw.
++    if let fatalExceptionHandler = RCTGetFatalExceptionHandler() {
++      fatalExceptionHandler(exception)
++    } else {
++      exception.raise()
++    }
+   }
+ }
