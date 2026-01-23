@@ -9,8 +9,8 @@
   "scripts": {
     "start": "expo start --dev-client",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "eslint \"app/**/*.{js,jsx,ts,tsx}\" \"lib/**/*.{js,jsx,ts,tsx}\" --ignore-pattern \"**/dist/**\" --ignore-pattern \"**/node_modules/**\"",
     "lint:a11y": "eslint app/**/*.{tsx,jsx} components/**/*.{tsx,jsx}",
@@ -80,6 +80,7 @@
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
+    "eas": "^0.1.0",
     "events": "^3.3.0",
     "expo": "~54.0.32",
     "expo-apple-authentication": "~8.0.8",

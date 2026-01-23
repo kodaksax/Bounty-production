@@ -80,3 +80,4 @@ app-example
 
 .env.local
 google-service-account.json
+.env
