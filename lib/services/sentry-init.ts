@@ -1,5 +1,4 @@
 // lib/services/sentry-init.ts - Sentry initialization for error tracking
-import * as Sentry from '@sentry/react-native';
 import type { Integration } from '@sentry/types';
 import Constants from 'expo-constants';
 
@@ -11,6 +10,17 @@ const ENVIRONMENT = process.env.NODE_ENV || 'development';
  * Initialize Sentry for error tracking
  */
 export function initializeSentry() {
+  // Lazy-require Sentry to avoid importing native module at module-evaluation time
+  // (prevents crashes in Expo Go or non-native runtimes).
+  let Sentry: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    Sentry = require('@sentry/react-native');
+  } catch {
+    // Sentry not available in this runtime
+    return;
+  }
+
   try {
     // Avoid double-initialization: if a Sentry client already exists, skip init.
     const hub = (Sentry as any).getCurrentHub && (Sentry as any).getCurrentHub();
@@ -98,7 +108,15 @@ export function initializeSentry() {
 }
 
 /**
- * Wrap the root component with Sentry
- * Usage: export default Sentry.wrap(App);
+ * Safe getter for the Sentry SDK. Returns `null` if the package isn't available.
  */
-export { Sentry };
+export function getSentrySafe() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    return require('@sentry/react-native');
+  } catch {
+    return null;
+  }
+}
+
+export { getSentrySafe as getSentry };

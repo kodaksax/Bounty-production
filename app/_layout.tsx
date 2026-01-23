@@ -23,7 +23,7 @@ import { WebSocketProvider } from '../providers/websocket-provider';
 import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
-import { initializeSentry } from '../lib/services/sentry-init';
+import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
@@ -35,6 +35,24 @@ try {
 } catch {
   // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
   Sentry = null;
+}
+
+// Attempt to initialize Sentry at module evaluation time using the safe initializer.
+// This will lazy-require the native module and no-op in runtimes where Sentry
+// isn't available. Initializing before the root component mounts allows Sentry
+// to correctly track app-start spans and avoids timestamp warnings.
+try {
+  initializeSentry();
+  // If initializeSentry succeeded and Sentry wasn't already required above,
+  // attempt to get the SDK via the safe getter so we can wrap the root below.
+  if (!Sentry) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    Sentry = getSentryFromInit();
+  }
+} catch (e) {
+  // ignore initialization failures here; useEffect also logs issues
+  // eslint-disable-next-line no-console
+  console.error('[Sentry] module-level init failed:', e);
 }
 
 // Load test utilities in development
@@ -112,12 +130,8 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     const start = Date.now();
 
     (async () => {
-      // Initialize Sentry first (deferred from module-level to avoid early native access)
-      try {
-        initializeSentry();
-      } catch (_e) {
-        console.error('[Sentry] Initialization failed:', _e);
-      }
+      // Sentry already initialized at module-eval when possible. Continue
+      // with other async startup tasks (Mixpanel, splash, assets).
 
       try {
         await initMixpanel();
@@ -259,8 +273,10 @@ try {
   if (Sentry && typeof Sentry.wrap === 'function') {
     WrappedRoot = Sentry.wrap(RootLayout);
   }
-} catch {
+} catch (e) {
   // ignore; fall back to unwrapped root
+  // eslint-disable-next-line no-console
+  console.error('[Sentry] wrap failed at module-eval:', e);
 }
 
 export default WrappedRoot;

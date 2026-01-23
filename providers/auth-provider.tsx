@@ -1,10 +1,10 @@
-import * as Sentry from '@sentry/react-native'
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
 import { supabase } from 'lib/supabase'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { analyticsService } from '../lib/services/analytics-service'
 import { authProfileService } from '../lib/services/auth-profile-service'
+import { getSentry } from '../lib/services/sentry-init'
 
 type AuthData = {
   session: Session | null | undefined
@@ -318,10 +318,17 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         await analyticsService.trackEvent('user_logged_in', {
           method: session.user.app_metadata?.provider || 'email',
         })
-        Sentry.setUser({
-          id: session.user.id,
-          email: session.user.email,
-        })
+        try {
+          const Sentry = getSentry?.();
+          if (Sentry && typeof Sentry.setUser === 'function') {
+            Sentry.setUser({
+              id: session.user.id,
+              email: session.user.email,
+            });
+          }
+        } catch (e) {
+          /* ignore */
+        }
       } else if (_event === 'SIGNED_OUT') {
         // OPTIMIZATION: Run analytics cleanup in background (non-blocking)
         // User is already signed out, analytics tracking shouldn't delay the experience
@@ -333,7 +340,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           console.error('[AuthProvider] Analytics cleanup failed (non-critical)', e);
         });
         // Sentry user clear is synchronous and fast
-        Sentry.setUser(null);
+        try {
+          const Sentry = getSentry?.();
+          if (Sentry && typeof Sentry.setUser === 'function') {
+            Sentry.setUser(null);
+          }
+        } catch (e) {
+          /* ignore */
+        }
       } else if (_event === 'USER_UPDATED' && verified && session?.user) {
         await analyticsService.trackEvent('email_verified', {
           userId: session.user.id,

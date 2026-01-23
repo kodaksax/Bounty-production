@@ -1,6 +1,6 @@
 // lib/services/performance-service.ts - Performance monitoring with Expo and Sentry
-import * as Sentry from '@sentry/react-native';
 import { analyticsService } from './analytics-service';
+import { getSentry } from './sentry-init';
 
 export type PerformanceMetric = 
   | 'api_call'
@@ -34,12 +34,11 @@ class PerformanceService {
     try {
       const startTime = Date.now();
 
-      // Start Sentry transaction for distributed tracing
-      const sentryStartTransaction = (Sentry as { startTransaction?: (context: {
-        name: string;
-        op?: string;
-        data?: Record<string, unknown>;
-      }) => SentryTransaction | undefined }).startTransaction;
+      // Start Sentry transaction for distributed tracing (if Sentry available)
+      const Sentry = getSentry?.();
+      const sentryStartTransaction = Sentry && typeof Sentry.startTransaction === 'function'
+        ? (Sentry.startTransaction as (context: { name: string; op?: string; data?: Record<string, unknown> }) => SentryTransaction | undefined)
+        : undefined;
 
       const transaction = sentryStartTransaction?.({
         name: `${metric}:${name}`,

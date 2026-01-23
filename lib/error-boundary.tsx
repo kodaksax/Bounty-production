@@ -4,12 +4,12 @@
  * Sends error logs to Sentry for monitoring
  */
 
-import React, { Component, ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Sentry from '@sentry/react-native';
+import React, { Component, ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { COLORS, SIZING, SPACING, TYPOGRAPHY } from './constants/accessibility';
+import { getSentry } from './services/sentry-init';
 import { getUserFriendlyError, type UserFriendlyError } from './utils/error-messages';
-import { COLORS, SPACING, TYPOGRAPHY, SIZING } from './constants/accessibility';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -53,19 +53,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       console.error('[ErrorBoundary] Error info:', errorInfo);
     }
 
-    // Send to Sentry for monitoring
+    // Send to Sentry for monitoring (if available)
     try {
-      Sentry.captureException(error, {
-        contexts: {
-          react: {
-            componentStack: errorInfo.componentStack,
+      const Sentry = getSentry?.();
+      if (Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(error, {
+          contexts: {
+            react: {
+              componentStack: errorInfo.componentStack,
+            },
           },
-        },
-        level: 'error',
-        tags: {
-          error_boundary: 'global',
-        },
-      });
+          level: 'error',
+          tags: {
+            error_boundary: 'global',
+          },
+        });
+      }
     } catch (sentryError) {
       console.error('[ErrorBoundary] Failed to send to Sentry:', sentryError);
     }
