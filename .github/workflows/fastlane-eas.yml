@@ -1,0 +1,65 @@
+name: Fastlane EAS Build & Submit
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g eas-cli
+      - name: Write Play service account
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "${PLAY_SERVICE_ACCOUNT_JSON}" ]; then echo "No PLAY_SERVICE_ACCOUNT_JSON secret set"; exit 1; fi
+          echo "${PLAY_SERVICE_ACCOUNT_JSON}" > /tmp/play-service-account.json
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - name: Install fastlane
+        run: |
+          gem install bundler
+          bundle install || true
+      - name: Run fastlane (android)
+        run: bundle exec fastlane build_and_submit_android
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g eas-cli
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - name: Install fastlane
+        run: |
+          gem install bundler
+          bundle install || true
+      - name: Run fastlane (ios)
+        run: bundle exec fastlane build_and_submit_ios
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
