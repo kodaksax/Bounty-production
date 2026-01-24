@@ -54,7 +54,8 @@
     "type-check": "npm run type-check --workspaces",
     "audit:deps": "npx depcheck || true",
     "bundle:visualize": "react-native-bundle-visualizer",
-    "bundle:size-check": "node ./scripts/check-bundle-size.js"
+    "bundle:size-check": "node ./scripts/check-bundle-size.js",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -184,6 +185,7 @@
     "jest-environment-node": "^30.2.0",
     "metro-config": "^0.83.3",
     "nock": "^14.0.10",
+    "patch-package": "^8.0.1",
     "pg": "^8.11.3",
     "prettier": "^3.1.0",
     "react-native-bundle-visualizer": "^3.1.3",
