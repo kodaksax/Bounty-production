@@ -72,7 +72,7 @@ export function initializeSentry() {
       // Debug mode in development
       debug: ENVIRONMENT === 'development',
       // Before send hook to sanitize data
-      beforeSend(event, hint) {
+      beforeSend(event: any, hint: any) {
         // Don't send events in development unless explicitly enabled
         if (ENVIRONMENT === 'development' && !process.env.EXPO_PUBLIC_SENTRY_DEBUG) {
           return null;
@@ -80,7 +80,7 @@ export function initializeSentry() {
 
         // Remove sensitive data from breadcrumbs
         if (event.breadcrumbs) {
-          event.breadcrumbs = event.breadcrumbs.map((breadcrumb) => {
+          event.breadcrumbs = event.breadcrumbs.map((breadcrumb: any) => {
             // Remove Authorization headers
             if (breadcrumb.data?.headers) {
               const { Authorization, ...otherHeaders } = breadcrumb.data.headers;
