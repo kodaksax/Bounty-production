@@ -140,6 +140,14 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
+      - name: Upload tmp_bundle artifacts (bundle debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmp_bundle-artifacts
+          path: tmp_bundle/**
+          retention-days: 7
+
       - name: Validate Expo export build
         run: npx expo export --output-dir dist --platform web --max-workers 2
         env:
