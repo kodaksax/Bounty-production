@@ -1,58 +1,58 @@
-const { getDefaultConfig } = require('expo/metro-config');
-const { withNativeWind } = require('nativewind/metro');
+/** Metro config — platform-aware, minimal and safe. */
 const path = require('path');
-const cssInterop = require.resolve('react-native-css-interop/package.json');
-
-const config = getDefaultConfig(__dirname);
-
 const projectRoot = __dirname;
-const alias = {
-  app: path.resolve(projectRoot, 'app'),
+
+const aliasExtraNodeModules = {
   components: path.resolve(projectRoot, 'components'),
-  hooks: path.resolve(projectRoot, 'hooks'),
   lib: path.resolve(projectRoot, 'lib'),
-  providers: path.resolve(projectRoot, 'providers'),
-  events: require.resolve('events'),
+  hooks: path.resolve(projectRoot, 'hooks'),
+  services: path.resolve(projectRoot, 'services'),
+  app: path.resolve(projectRoot, 'app'),
+  assets: path.resolve(projectRoot, 'assets'),
   '@': path.resolve(projectRoot, 'components'),
 };
 
-config.transformer = {
-  ...config.transformer,
-  minifierConfig: {
-    keep_classnames: true,
-    keep_fnames: true,
-    mangle: {
-      keep_classnames: true,
-      keep_fnames: true,
-    },
-  },
-};
-
-config.resolver = {
-  ...config.resolver,
-  sourceExts: Array.from(new Set([...(config.resolver?.sourceExts || []), 'cjs'])),
-  alias: alias,
-  // Resolve web-specific implementations
-  resolveRequest: (context, moduleName, platform) => {
-    // For web platform, provide error-throwing stubs for native-only packages
-    if (platform === 'web' && moduleName === '@stripe/stripe-react-native') {
-      return {
-        filePath: path.resolve(__dirname, 'lib/services/stripe-mock.web.js'),
-        type: 'sourceFile',
-      };
-    }
-    // Use default resolver for everything else
-    return context.resolveRequest(context, moduleName, platform);
-  },
-};
-
-module.exports = withNativeWind(config, {
-  input: './global.css',
-  projectRoot,
-  inlineRem: false,
-  features: {
-    "nativewind/metro": {
-      transformerPath: require.resolve('react-native-css-interop/dist/metro/transformer'),
-    }
+function makeTransformerConfig(baseTransformer = {}) {
+  const transformer = Object.assign({}, baseTransformer);
+  try {
+    transformer.minifierPath = require.resolve('metro-minify-terser');
+    transformer.minifierConfig = { ecma: 2020, keep_classnames: false, keep_fnames: false, module: true };
+  } catch (e) {
+    console.debug('[metro.config] metro-minify-terser not available:', e && e.message ? e.message : e);
   }
-});
+  return transformer;
+}
+
+if (process.platform === 'win32') {
+  module.exports = {
+    resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] },
+    watchFolders: [path.resolve(projectRoot)],
+    transformer: makeTransformerConfig(),
+  };
+} else {
+  try {
+    const { getDefaultConfig } = require('@react-native/metro-config');
+    const defaultConfig = getDefaultConfig(projectRoot);
+
+    let finalConfig = Object.assign({}, defaultConfig, {
+      resolver: Object.assign({}, defaultConfig.resolver || {}, {
+        extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
+        sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
+      }),
+      watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
+      transformer: makeTransformerConfig(defaultConfig.transformer || {}),
+    });
+
+    try {
+      const { withNativeWind } = require('nativewind/metro');
+      if (typeof withNativeWind === 'function') finalConfig = withNativeWind(finalConfig);
+    } catch (e) {
+      console.debug('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
+    }
+
+    module.exports = finalConfig;
+  } catch (err) {
+    console.warn('[metro.config] Failed to load @react-native/metro-config; using fallback config.', err && err.message ? err.message : err);
+    module.exports = { resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] }, watchFolders: [path.resolve(projectRoot)], transformer: makeTransformerConfig() };
+  }
+}

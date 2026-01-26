@@ -8,9 +8,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { config } from '../config';
 import {
-  ExternalServiceError,
-  handleStripeError,
-  ValidationError,
+    ExternalServiceError,
+    handleStripeError,
+    ValidationError,
 } from '../middleware/error-handler';
 
 /**
@@ -24,7 +24,7 @@ const buildStripeRequestOptions = (idempotencyKey?: string): Stripe.RequestOptio
 // Initialize Stripe
 const stripe = new Stripe(config.stripe.secretKey, {
   // Align with repository-wide pinned Stripe API version
-  apiVersion: '2025-08-27.basil',
+  apiVersion: '2025-12-15.clover',
   typescript: true,
 });
 

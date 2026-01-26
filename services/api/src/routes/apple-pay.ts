@@ -1,5 +1,4 @@
 import { FastifyInstance } from 'fastify';
-import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 
@@ -21,7 +20,7 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
   }
 
   const stripe = new Stripe(stripeKey, {
-    apiVersion: '2025-08-27.basil',
+    apiVersion: '2025-12-15.clover',
   });
 
   // Proceed to register real routes below

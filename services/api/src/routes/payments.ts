@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import {
-  checkIdempotencyKey,
-  removeIdempotencyKey,
-  storeIdempotencyKey
+    checkIdempotencyKey,
+    removeIdempotencyKey,
+    storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
@@ -84,7 +84,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   }
 
   const stripe = new Stripe(stripeKey, {
-    apiVersion: '2025-08-27.basil',
+    apiVersion: '2025-12-15.clover',
   });
 
   /**
