@@ -85,6 +85,24 @@ try {
       const repoBundle = path.join(process.cwd(), 'tmp_bundle', 'ios.bundle');
       fs.copyFileSync(bundleOutput, repoBundle);
     }
+    // Run the debug sourcemap script to produce inspection logs for CI/debugging
+    try {
+      const debugResult = spawnSync('node scripts/debug-sourcemap.js', {
+        shell: true,
+        env: { ...(process.env || {}) },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const repoTmp = path.join(process.cwd(), 'tmp_bundle');
+      try {
+        fs.writeFileSync(path.join(repoTmp, 'debug-sourcemap.stdout.log'), debugResult.stdout || '');
+        fs.writeFileSync(path.join(repoTmp, 'debug-sourcemap.stderr.log'), debugResult.stderr || '');
+      } catch (writeErr) {
+        console.debug('check-bundle-size: failed to write debug-sourcemap logs:', writeErr);
+      }
+    } catch (dbgErr) {
+      console.debug('check-bundle-size: running debug-sourcemap failed:', dbgErr && dbgErr.message ? dbgErr.message : dbgErr);
+    }
   } catch (copyErr) {
     console.warn('Failed to copy bundle or sourcemap into tmp_bundle directory for inspection:', copyErr);
   }

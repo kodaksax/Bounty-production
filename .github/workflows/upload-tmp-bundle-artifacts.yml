@@ -1,0 +1,32 @@
+name: Upload tmp_bundle artifacts
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+
+jobs:
+  bundle-and-upload:
+    name: Generate bundle and upload tmp_bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run bundle size check (generate tmp_bundle)
+        run: node scripts/check-bundle-size.js
+
+      - name: Upload tmp_bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmp_bundle-artifacts
+          path: tmp_bundle/**
+          if-no-files-found: warn

@@ -24,15 +24,47 @@ const { SourceMapConsumer } = require('source-map');
 
   let found = false;
   await SourceMapConsumer.with(map, null, consumer => {
+    // Ensure column spans are computed so `lastGeneratedColumn` reflects mapping extents
+    try {
+      consumer.computeColumnSpans();
+    } catch (e) {
+      // Some source-map versions may not support this; ignore if absent.
+    }
     let count = 0;
     consumer.eachMapping(m => {
       count++;
       // Non-finite generated columns/lines (NaN, Infinity, etc.) indicate that Metro
-      // produced a malformed sourcemap entry. In check-bundle-size.js we filter these
-      // mappings out before analyzing bundle size, so this debug script mirrors that
-      // logic to help us detect and investigate broken mappings at their source.
-      if (!isFinite(m.generatedColumn) || !isFinite(m.generatedLine)) {
-        console.error('Found non-finite mapping:', m);
+      // produced a malformed sourcemap entry. source-map's computeColumnSpans may
+      // set `lastGeneratedColumn` to Infinity for mappings that span to EOF; this
+      // can trip consumers that don't handle Infinity. Detect both the primary
+      // generatedColumn and the lastGeneratedColumn here so we can report and
+      // investigate problematic entries.
+      const badGenerated = !Number.isFinite(m.generatedColumn) || !Number.isFinite(m.generatedLine);
+      const badLast = m.lastGeneratedColumn !== null && !Number.isFinite(m.lastGeneratedColumn);
+      if (badGenerated || badLast) {
+        console.error('Found problematic mapping (line:', m.generatedLine, 'genCol:', m.generatedColumn, 'lastGenCol:', m.lastGeneratedColumn, 'source:', m.source, ')');
+        console.error(m);
+        // Also print the affected generated source line for context when available
+        try {
+          const codeLines = require('fs').readFileSync('./tmp_bundle/ios.bundle', 'utf8').split(/\r?\n/);
+          const genLine = codeLines[m.generatedLine - 1] || '<no line available>';
+          if (Number.isFinite(m.generatedColumn)) {
+            console.error(
+              'Generated line content (snippet):',
+              genLine.slice(
+                Math.max(0, m.generatedColumn - 40),
+                m.generatedColumn + 40
+              )
+            );
+          } else {
+            console.error(
+              'Generated line content (snippet) unavailable: non-finite generatedColumn',
+              m.generatedColumn
+            );
+          }
+        } catch (e) {
+          // ignore
+        }
         found = true;
       }
     });
