@@ -55,8 +55,7 @@
     "type-check": "npm run type-check --workspaces",
     "audit:deps": "npx depcheck || true",
     "bundle:visualize": "react-native-bundle-visualizer",
-    "bundle:size-check": "node ./scripts/check-bundle-size.js",
-    "postinstall": "patch-package"
+    "bundle:size-check": "node ./scripts/check-bundle-size.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -177,6 +176,7 @@
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",
+    "babel-plugin-module-resolver": "^5.0.0",
     "drizzle-kit": "^0.31.8",
     "esbuild": "^0.27.2",
     "eslint": "^8.54.0",
