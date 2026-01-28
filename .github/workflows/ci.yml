@@ -132,6 +132,10 @@ jobs:
       - name: Build packages
         run: npm run build
       
+      # The bundler can emit sourcemap mappings with non-finite spans
+      # (e.g. "generated column Infinity") which break the visualizer JSON
+      # parser. `scripts/check-bundle-size.js` runs a sanitizer that removes
+      # those mappings and ensures `tmp_bundle/result.json` is produced.
       - name: Check bundle size budget
         if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
         run: npm run bundle:size-check

@@ -6,7 +6,7 @@ const path = require('path');
 
 // Runs the bundle visualizer and enforces the configured size budget.
 const pkg = require('../package.json');
-const sanitize = (value) => (value ? value.replace(/[\W]/g, '') : '');
+const sanitize = (value) => (value ? value.replace(/[^a-zA-Z0-9_]/g, '') : '');
 const appName = sanitize(pkg.name) || 'UnknownApp';
 const baseDir = path.join(os.tmpdir(), 'react-native-bundle-visualizer', appName);
 const bundleOutput = path.join(baseDir, 'ios.bundle');
@@ -26,176 +26,153 @@ const cliArgs = [
   'expo-router/entry.js',
   '--bundle-output',
   bundleOutput,
-  // Generate a sourcemap so the visualizer can produce mapping-aware JSON,
-  // which we later parse to filter out known non-fatal source-map mapping errors.
   '--sourcemap-output',
   sourcemapOutput,
-  // Use minification so CI bundle size checks reflect the production bundle
   '--minify',
   'true',
   '--format',
   'json'
 ];
 
-const result = spawnSync('npx', cliArgs, {
-  shell: true,
-  env: {
-    ...process.env,
-    CI: process.env.CI || 'true'
-  },
-  encoding: 'utf8',
-  // capture output so we can parse JSON and filter non-fatal mapping errors
-  stdio: ['ignore', 'pipe', 'pipe']
-});
-
-if (result.status !== 0) {
-  console.error(result.stderr || result.stdout);
-  process.exit(result.status || 1);
-}
-
-// react-native-bundle-visualizer with `--format json` prints JSON to stdout.
-// Parse the JSON output and handle non-fatal source-map mapping errors.
-let parsed = null;
-try {
-  const out = result.stdout.toString();
-  const firstBrace = out.indexOf('{');
-  const jsonText = firstBrace >= 0 ? out.slice(firstBrace) : out;
-  parsed = JSON.parse(jsonText);
-} catch (err) {
-  // If we couldn't parse JSON, save raw output for debugging and continue
+// Helper to persist the visualizer result into repo-local tmp for CI inspection.
+// Persist the visualizer result and full logs to `tmp_bundle/`.
+// Writes full `visualizer-stdout.log` and `visualizer-stderr.log` (if present)
+// and stores a compact `result.json` that references those files and
+// includes short previews for quick inspection.
+function persistRepoResult(resultObj, stdout, stderr) {
   try {
-    fs.writeFileSync(path.join(bundleDir, 'visualizer-stdout.log'), result.stdout || '');
-    fs.writeFileSync(path.join(bundleDir, 'visualizer-stderr.log'), result.stderr || '');
-    // Also write copies into repo-local tmp folder for easier access from CI/workspace
     const repoTmp = path.join(process.cwd(), 'tmp_bundle');
     fs.mkdirSync(repoTmp, { recursive: true });
-    fs.writeFileSync(path.join(repoTmp, 'visualizer-stdout.log'), result.stdout || '');
-    fs.writeFileSync(path.join(repoTmp, 'visualizer-stderr.log'), result.stderr || '');
-  } catch (writeErr) {
-    console.debug('check-bundle-size: failed to write visualizer logs to temp dir:', writeErr);
+
+    if (stdout) {
+      try { fs.writeFileSync(path.join(repoTmp, 'visualizer-stdout.log'), stdout, 'utf8'); } catch (e) { /* fallthrough */ }
+    }
+
+    if (stderr) {
+      try { fs.writeFileSync(path.join(repoTmp, 'visualizer-stderr.log'), stderr, 'utf8'); } catch (e) { /* fallthrough */ }
+    }
+
+    const preview = (str, len = 1024) => (str ? String(str).slice(0, len) : '');
+
+    const toWrite = Object.assign({}, resultObj || {});
+    toWrite.__logs = {
+      stdoutFile: stdout ? 'visualizer-stdout.log' : null,
+      stderrFile: stderr ? 'visualizer-stderr.log' : null,
+      stdoutPreview: preview(stdout, 1024),
+      stderrPreview: preview(stderr, 1024)
+    };
+
+    fs.writeFileSync(path.join(repoTmp, 'result.json'), JSON.stringify(toWrite, null, 2), 'utf8');
+  } catch (err) {
+    console.debug('check-bundle-size: failed to write result.json to tmp_bundle:', err);
   }
-  console.warn('Could not parse bundle visualizer output as JSON; saved raw output to tmp bundle dir.');
-  // If the visualizer wrote a sourcemap to the temp dir, copy it into the repo tmp folder for inspection
+}
+
+// Validate the shape of the object returned by runBundleVisualizer.
+function validateVisualizerResult(res) {
+  if (!res || typeof res !== 'object') return false;
+  // Expected to contain at least one of these keys produced by the visualizer.
+  if (Array.isArray(res.bundles) || Array.isArray(res.errors)) return true;
+  if (res.sourcemap && typeof res.sourcemap === 'object') return true;
+  // Some versions may return other shapes; be conservative and require at least
+  // one of the above. If this fails, callers should fall back to the CLI.
+  return false;
+}
+
+// Attempt programmatic invocation first for more reliable JSON output.
+async function runProgrammatic() {
   try {
-    if (fs.existsSync(sourcemapOutput)) {
-      const repoSourcemap = path.join(process.cwd(), 'tmp_bundle', 'ios.bundle.map');
-      fs.copyFileSync(sourcemapOutput, repoSourcemap);
-    }
-    if (fs.existsSync(bundleOutput)) {
-      const repoBundle = path.join(process.cwd(), 'tmp_bundle', 'ios.bundle');
-      fs.copyFileSync(bundleOutput, repoBundle);
-    }
-    // Run the debug sourcemap script to produce inspection logs for CI/debugging
-    try {
-      const debugResult = spawnSync('node scripts/debug-sourcemap.js', {
-        shell: true,
-        env: { ...(process.env || {}) },
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const repoTmp = path.join(process.cwd(), 'tmp_bundle');
-      try {
-        fs.writeFileSync(path.join(repoTmp, 'debug-sourcemap.stdout.log'), debugResult.stdout || '');
-        fs.writeFileSync(path.join(repoTmp, 'debug-sourcemap.stderr.log'), debugResult.stderr || '');
-      } catch (writeErr) {
-        console.debug('check-bundle-size: failed to write debug-sourcemap logs:', writeErr);
-      }
-    } catch (dbgErr) {
-      console.debug('check-bundle-size: running debug-sourcemap failed:', dbgErr && dbgErr.message ? dbgErr.message : dbgErr);
-    }
-  } catch (copyErr) {
-    console.warn('Failed to copy bundle or sourcemap into tmp_bundle directory for inspection:', copyErr);
-  }
-  if (!fs.existsSync(bundleOutput)) {
-    console.error('Bundle output was not generated by react-native-bundle-visualizer.');
-    process.exit(1);
+    const { runBundleVisualizer } = require('react-native-bundle-visualizer');
+    const result = await runBundleVisualizer({
+      platform: 'ios',
+      expo: true,
+      entryFile: 'expo-router/entry.js',
+      bundleOutput,
+      sourcemapOutput,
+      minify: true,
+      format: 'json'
+    });
+    // Persist programmatic result (no CLI stdout/stderr available).
+    persistRepoResult(result, null, null);
+    return { ok: true, stdout: JSON.stringify(result) };
+  } catch (err) {
+    return { ok: false, error: err };
   }
 }
 
-if (parsed) {
-  // Track non-fatal sourcemap mapping errors that we filter out so we can log them as warnings.
-  const ignoredInvalidMappingErrors = [];
-  const ignoredInfinityErrors = [];
-  // We intentionally treat certain sourcemap mapping errors as non-fatal for bundle size checks:
-  //
-  // - InvalidMappingColumn:
-  //     Emitted by the underlying source-map tooling when it encounters a mapping whose
-  //     "generated" column index is out of range or otherwise malformed. This indicates that
-  //     the sourcemap for a given segment is partially corrupted or imprecise, but it does not
-  //     necessarily mean the produced bundle is invalid. Many sourcemap consumers will still be
-  //     able to use the mappings that are intact; rejecting bundles for this error would be
-  //     disruptive to CI workflows.
-  //
-  // - "generated column Infinity":
-  //     Some sourcemap tooling emits this message without a stable error code. We detect and
-  //     downgrade these by string-matching the message.
-  //
-  // For bundle-size enforcement we care about whether the bundle was produced and analyzed,
-  // not about perfect sourcemap fidelity. We therefore filter these errors out of the "fatal"
-  // set, but still capture and log them as warnings so that sourcemap quality issues remain
-  // visible to maintainers and can be investigated separately.
+(async () => {
+  let runResult = await runProgrammatic();
+  let stdout = '';
+  let stderr = '';
 
-  // Filter out InvalidMappingColumn and related non-fatal sourcemap errors.
-  const shouldTreatErrorAsNonFatal = (error) => {
-    if (!error || !error.code) {
-      // Errors without a recognizable code are treated as fatal.
-      return false;
+  if (!runResult.ok) {
+    // Fallback to invoking via npx CLI if the programmatic API isn't available or fails.
+    const result = spawnSync('npx', cliArgs, {
+      shell: true,
+      env: {
+        ...process.env,
+        CI: process.env.CI || 'true'
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    if (result.status !== 0) {
+      console.error(result.stderr || result.stdout);
+      process.exit(result.status || 1);
     }
-    if (error.code === 'InvalidMappingColumn') {
-      ignoredInvalidMappingErrors.push(error);
-      return true;
+
+    stdout = result.stdout || '';
+    stderr = result.stderr || '';
+  } else {
+    stdout = runResult.stdout || '';
+  }
+
+  // Run the sourcemap sanitizer so CI/workflows operate on a cleaned map.
+  // Treat sanitizer failures as fatal to avoid passing bundle checks
+  // when sourcemaps are corrupted. This logs a clear warning and exits
+  // with the sanitizer's exit code so CI fails fast for investigation.
+  try {
+    const sanResult = spawnSync('node', ['scripts/sanitize-sourcemap.js'], {
+      shell: true,
+      encoding: 'utf8'
+    });
+
+    if (sanResult.error || sanResult.status !== 0) {
+      console.warn('Sourcemap sanitization failed; bundle analysis may be incomplete');
+      if (sanResult.stdout) console.warn(sanResult.stdout);
+      if (sanResult.stderr) console.warn(sanResult.stderr);
+      process.exit(sanResult.status || 1);
     }
-    if (typeof error.message === 'string' && error.message.includes('generated column Infinity')) {
-      ignoredInfinityErrors.push(error);
-      return true;
-    }
-    return false;
+  } catch (sanErr) {
+    console.warn('Sourcemap sanitization failed; bundle analysis may be incomplete', sanErr);
+    process.exit(1);
+  }
+  // At this point we have `stdout`/`stderr` (from programmatic or CLI).
+  // Try to parse the visualizer JSON output if available and validate it.
+  let parsed = null;
+  let parseError = null;
+  try {
+    if (stdout) parsed = JSON.parse(stdout);
+  } catch (e) {
+    parseError = e;
+  }
+
+  if (parsed && validateVisualizerResult(parsed)) {
+    persistRepoResult(parsed, stdout, stderr);
+    return { ok: true, stdout: JSON.stringify(parsed) };
+  }
+
+  // If parsing failed or result shape is unexpected, persist full logs
+  // and write a fallback result.json explaining the issue.
+  const fallback = {
+    success: false,
+    reason: parseError ? 'parse_failed' : 'invalid_result_shape',
+    message: parseError ? String(parseError.message || parseError) : 'Visualizer returned unexpected shape',
+    timestamp: new Date().toISOString()
   };
-  const fatalErrors = (parsed.errors || []).filter(e => !shouldTreatErrorAsNonFatal(e));
-
-  if (ignoredInvalidMappingErrors.length > 0 || ignoredInfinityErrors.length > 0) {
-    console.warn(
-      'Non-fatal sourcemap errors were ignored during bundle size checking. ' +
-        'These indicate issues with the generated sourcemaps and should be investigated.\n' +
-        'Ignored InvalidMappingColumn errors:',
-      JSON.stringify(ignoredInvalidMappingErrors, null, 2),
-      '\nIgnored "generated column Infinity" errors:',
-      JSON.stringify(ignoredInfinityErrors, null, 2)
-    );
-  }
-
-  if (fatalErrors.length > 0) {
-    console.error('Bundle visualizer reported fatal errors:', JSON.stringify(fatalErrors, null, 2));
-    process.exit(1);
-  }
-
-  // If a sourcemap file was generated, write it to disk (some tools expect it)
-  if (parsed.sourcemap) {
-    try {
-      fs.writeFileSync(sourcemapOutput, JSON.stringify(parsed.sourcemap));
-    } catch (err) {
-      console.debug('check-bundle-size: failed to write parsed sourcemap to disk:', err);
-    }
-  }
-
-  if (!fs.existsSync(bundleOutput)) {
-    console.error('Bundle output was not generated by react-native-bundle-visualizer.');
-    process.exit(1);
-  }
-}
-
-const { size } = fs.statSync(bundleOutput);
-const sizeInMb = size / (1024 * 1024);
-
-if (size > sizeBudgetBytes) {
-  console.error(`Bundle size ${sizeInMb.toFixed(2)} MB exceeds the 10 MB budget.`);
-  process.exit(1);
-}
-
-console.log(`Bundle size ${sizeInMb.toFixed(2)} MB is within the 10 MB budget.`);
-
-try {
-  fs.rmSync(baseDir, { recursive: true, force: true });
-} catch (error) {
-  console.debug('check-bundle-size: failed to remove temp bundle dir:', error);
-}
+  persistRepoResult(fallback, stdout, stderr);
+  // Exit non-zero so CI notices the problem instead of silently passing.
+  console.error('Could not obtain valid visualizer JSON output. See tmp_bundle/ for logs.');
+  process.exit(2);
+})();

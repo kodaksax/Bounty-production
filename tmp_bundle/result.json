@@ -1,0 +1,12 @@
+{
+  "success": false,
+  "reason": "parse_failed",
+  "message": "Unexpected token 'G', \"Generating\"... is not valid JSON",
+  "timestamp": "2026-01-28T20:44:40.527Z",
+  "__logs": {
+    "stdoutFile": "visualizer-stdout.log",
+    "stderrFile": null,
+    "stdoutPreview": "Generating bundle...\n\n                        ▒▒▓▓▓▓▒▒\n                     ▒▓▓▓▒▒░░▒▒▓▓▓▒\n                  ▒▓▓▓▓░░░▒▒▒▒░░░▓▓▓▓▒\n                 ▓▓▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▓▓\n                 ▓▓░░░░░▒▓▓▓▓▓▓▒░░░░░▓▓\n                 ▓▓░░▓▓▒░░░▒▒░░░▒▓▒░░▓▓\n                 ▓▓░░▓▓▓▓▓▒▒▒▒▓▓▓▓▒░░▓▓\n                 ▓▓░░▓▓▓▓▓▓▓▓▓▓▓▓▓▒░░▓▓\n                 ▓▓▒░░▒▒▓▓▓▓▓▓▓▓▒░░░▒▓▓\n                  ▒▓▓▓▒░░░▒▓▓▒░░░▒▓▓▓▒\n                     ▒▓▓▓▒░░░░▒▓▓▓▒\n                        ▒▒▓▓▓▓▒▒\n\n\n                Welcome to Metro v0.83.3\n              Fast - Scalable - Integrated\n\n\nLOG:Writing bundle output to: C:\\Users\\Kodak\\AppData\\Local\\Temp\\react-native-bundle-visualizer\\bountyexpo\\ios.bundle\nLOG:Writing sourcemap output to: C:\\Users\\Kodak\\AppData\\Local\\Temp\\react-native-bundle-visualizer\\bountyexpo\\ios.bundle.map\nLOG:Done writing bundle output\nLOG:Done writing sourcemap output\nBundle is 0 MB in size (unchanged since last run)\n=== error === {\n  bundles: [],\n  errors: [\n    {\n      bundleName: 'C:\\\\Users\\\\Kodak\\\\AppData\\\\Local\\\\",
+    "stderrPreview": ""
+  }
+}
