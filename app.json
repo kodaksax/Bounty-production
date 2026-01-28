@@ -3,7 +3,7 @@
     "name": "BOUNTY",
     "jsEngine": "hermes",
     "slug": "BOUNTYExpo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
@@ -51,6 +51,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "versionCode": 11,
       "package": "app.bountyfinder.BOUNTYExpo"
     },
     "web": {
