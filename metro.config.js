@@ -31,7 +31,7 @@ if (process.platform === 'win32') {
   };
 } else {
   try {
-    const { getDefaultConfig } = require('@react-native/metro-config');
+    const { getDefaultConfig } = require('@expo/metro-config');
     const defaultConfig = getDefaultConfig(projectRoot);
 
     let finalConfig = Object.assign({}, defaultConfig, {
@@ -51,8 +51,8 @@ if (process.platform === 'win32') {
     }
 
     module.exports = finalConfig;
-  } catch (err) {
-    console.warn('[metro.config] Failed to load @react-native/metro-config; using fallback config.', err && err.message ? err.message : err);
+    } catch (err) {
+    console.warn('[metro.config] Failed to load @expo/metro-config; using fallback config.', err && err.message ? err.message : err);
     module.exports = { resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] }, watchFolders: [path.resolve(projectRoot)], transformer: makeTransformerConfig() };
   }
 }
