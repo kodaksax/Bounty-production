@@ -51,7 +51,6 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "versionCode": 11,
       "package": "app.bountyfinder.BOUNTYExpo"
     },
     "web": {
