@@ -1,4 +1,4 @@
-/** Metro config — platform-aware, minimal and safe. */
+/** Metro config — extend expo/metro-config and merge project aliases. */
 const path = require('path');
 const projectRoot = __dirname;
 
@@ -23,36 +23,29 @@ function makeTransformerConfig(baseTransformer = {}) {
   return transformer;
 }
 
-if (process.platform === 'win32') {
-  module.exports = {
-    resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] },
-    watchFolders: [path.resolve(projectRoot)],
-    transformer: makeTransformerConfig(),
-  };
-} else {
+// Always extend expo/metro-config so tooling (expo-doctor, EAS) recognizes it.
+try {
+  const { getDefaultConfig } = require('expo/metro-config');
+  const defaultConfig = getDefaultConfig(projectRoot);
+
+  let finalConfig = Object.assign({}, defaultConfig, {
+    resolver: Object.assign({}, defaultConfig.resolver || {}, {
+      extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
+      sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
+    }),
+    watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
+    transformer: makeTransformerConfig(defaultConfig.transformer || {}),
+  });
+
   try {
-    const { getDefaultConfig } = require('@expo/metro-config');
-    const defaultConfig = getDefaultConfig(projectRoot);
-
-    let finalConfig = Object.assign({}, defaultConfig, {
-      resolver: Object.assign({}, defaultConfig.resolver || {}, {
-        extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
-        sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
-      }),
-      watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
-      transformer: makeTransformerConfig(defaultConfig.transformer || {}),
-    });
-
-    try {
-      const { withNativeWind } = require('nativewind/metro');
-      if (typeof withNativeWind === 'function') finalConfig = withNativeWind(finalConfig);
-    } catch (e) {
-      console.debug('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
-    }
-
-    module.exports = finalConfig;
-    } catch (err) {
-    console.warn('[metro.config] Failed to load @expo/metro-config; using fallback config.', err && err.message ? err.message : err);
-    module.exports = { resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] }, watchFolders: [path.resolve(projectRoot)], transformer: makeTransformerConfig() };
+    const { withNativeWind } = require('nativewind/metro');
+    if (typeof withNativeWind === 'function') finalConfig = withNativeWind(finalConfig);
+  } catch (e) {
+    console.debug('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
   }
+
+  module.exports = finalConfig;
+} catch (err) {
+  console.warn('[metro.config] Failed to load expo/metro-config; using fallback config.', err && err.message ? err.message : err);
+  module.exports = { resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] }, watchFolders: [path.resolve(projectRoot)], transformer: makeTransformerConfig() };
 }
