@@ -19,6 +19,7 @@
         "simulator": false,
         "resourceClass": "m-medium"
       },
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
         "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
@@ -28,6 +29,7 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "distribution": "store",
       "channel": "production",
       "ios": {
