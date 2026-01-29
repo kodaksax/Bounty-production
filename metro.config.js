@@ -40,8 +40,17 @@ try {
   try {
     const { withNativeWind } = require('nativewind/metro');
     if (typeof withNativeWind === 'function') finalConfig = withNativeWind(finalConfig);
+    console.warn('[metro.config] nativewind/metro applied to Metro config');
+    try {
+      const t = finalConfig.transformer || {};
+      console.warn('[metro.config] transformer keys:', Object.keys(t));
+      console.warn('[metro.config] has babelTransformerPath:', !!t.babelTransformerPath);
+      console.warn('[metro.config] has getTransformOptions:', typeof finalConfig.transformer?.getTransformOptions === 'function');
+    } catch (e) {
+      console.warn('[metro.config] transformer inspect failed:', e && e.message ? e.message : e);
+    }
   } catch (e) {
-    console.debug('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
+    console.warn('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
   }
 
   module.exports = finalConfig;

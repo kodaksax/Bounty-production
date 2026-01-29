@@ -1,14 +1,15 @@
 module.exports = function (api) {
   api.cache(true);
   return {
+    // Ensure nativewind's JSX/runtime transform is available early
     presets: [
-      ["babel-preset-expo", { jsxImportSource: "nativewind" }],
       "nativewind/babel",
+      ["babel-preset-expo", {jsxImportSource: "nativewind" }],
     ],
     plugins: [
       // Allow root-based imports like "components/..." and "lib/..."
       [
-        "module-resolver",
+        "babel-plugin-module-resolver",
         {
           root: ["./"],
           alias: {

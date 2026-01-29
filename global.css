@@ -1,3 +1,201 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	:root {
+		--background: 0 0% 100%;
+		--foreground: 222.2 84% 4.9%;
+		--card: 0 0% 100%;
+		--card-foreground: 222.2 47.4% 11.2%;
+		--popover: 0 0% 100%;
+		--popover-foreground: 222.2 47.4% 11.2%;
+		--primary: 142 76% 36%;
+		--primary-foreground: 210 40% 98%;
+		--secondary: 210 40% 96.1%;
+		--secondary-foreground: 222.2 47.4% 11.2%;
+		--muted: 210 40% 96.1%;
+		--muted-foreground: 215.4 16.3% 46.9%;
+		--accent: 210 40% 96.1%;
+		--accent-foreground: 222.2 47.4% 11.2%;
+		--destructive: 0 84.2% 60.2%;
+		--destructive-foreground: 210 40% 98%;
+		--border: 214.3 31.8% 91.4%;
+		--input: 214.3 31.8% 91.4%;
+		--ring: 142 76% 36%;
+		--radius: 0.5rem;
+
+		/* iPhone-specific variables */
+		--iphone-header-height: 60px;
+		--iphone-bottom-nav-height: 83px;
+		--iphone-content-padding: 16px;
+
+		/* Animation variables */
+		--card-animation-duration: 0.5s;
+		--card-animation-easing: cubic-bezier(0.32, 0.72, 0, 1);
+	}
+
+	.dark {
+		--background: 222.2 84% 4.9%;
+		--foreground: 210 40% 98%;
+		--card: 222.2 84% 4.9%;
+		--card-foreground: 210 40% 98%;
+		--popover: 222.2 84% 4.9%;
+		--popover-foreground: 210 40% 98%;
+		--primary: 142 76% 36%;
+		--primary-foreground: 222.2 47.4% 11.2%;
+		--secondary: 217.2 32.6% 17.5%;
+		--secondary-foreground: 210 40% 98%;
+		--muted: 217.2 32.6% 17.5%;
+		--muted-foreground: 215 20.2% 65.1%;
+		--accent: 217.2 32.6% 17.5%;
+		--accent-foreground: 210 40% 98%;
+		--destructive: 0 62.8% 30.6%;
+		--destructive-foreground: 210 40% 98%;
+		--border: 217.2 32.6% 17.5%;
+		--input: 217.2 32.6% 17.5%;
+		--ring: 142 76% 36%;
+	}
+}
+
+@layer utilities {
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.no-scrollbar {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+
+	/* iPhone-specific utilities */
+	.pb-safe {
+		padding-bottom: env(safe-area-inset-bottom, 1.5rem);
+	}
+
+	.pt-safe {
+		padding-top: env(safe-area-inset-top, 1.5rem);
+	}
+
+	.pl-safe {
+		padding-left: env(safe-area-inset-left, 0);
+	}
+
+	.pr-safe {
+		padding-right: env(safe-area-inset-right, 0);
+	}
+
+	.touch-target-min {
+		min-height: 44px;
+		min-width: 44px;
+	}
+
+	.animation-delay-100 {
+		animation-delay: 100ms;
+	}
+
+	.animation-delay-200 {
+		animation-delay: 200ms;
+	}
+
+	/* iPhone-specific layout */
+	.iphone-container {
+		max-width: 428px; /* iPhone 13 Pro Max width */
+		margin: 0 auto;
+		height: 100%;
+		position: relative;
+	}
+
+	.iphone-header {
+		padding-top: env(safe-area-inset-top, 47px);
+		position: sticky;
+		top: 0;
+		z-index: 40;
+	}
+
+	.iphone-bottom-nav {
+		padding-bottom: env(safe-area-inset-bottom, 34px);
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 40;
+	}
+
+	.iphone-content {
+		padding-bottom: calc(env(safe-area-inset-bottom, 34px) + 4rem);
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/* iPhone-specific animations */
+	.iphone-slide-up {
+		animation: iphone-slide-up var(--card-animation-duration) var(--card-animation-easing) forwards;
+	}
+
+	.iphone-slide-down {
+		animation: iphone-slide-down var(--card-animation-duration) var(--card-animation-easing) forwards;
+	}
+
+	.iphone-fade-in {
+		animation: iphone-fade-in var(--card-animation-duration) ease forwards;
+	}
+
+	.iphone-fade-out {
+		animation: iphone-fade-out var(--card-animation-duration) ease forwards;
+	}
+
+	/* Custom styles for mobile optimization */
+	@media (max-width: 768px) {
+		.mobile-safe-area {
+			padding-top: env(safe-area-inset-top);
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+	}
+
+	.hide-scrollbar {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+
+	.hide-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.line-clamp-2 {
+		overflow: hidden;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+	body {
+		@apply bg-background text-foreground;
+		/* Prevent overscroll bounce effect on iOS */
+		overscroll-behavior-y: none;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	/* Increase touch targets for better mobile usability */
+	button,
+	a,
+	input,
+	select,
+	textarea {
+		@apply touch-target-min;
+	}
+}
+
+@keyframes gradientShift {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+}
