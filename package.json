@@ -59,7 +59,6 @@
     "upgrade:tooling": "npx npm-check-updates && npm install"
   },
   "dependencies": {
-    "babel-plugin-module-resolver": "^5.0.2",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.3",
     "@invertase/react-native-apple-authentication": "^2.5.1",

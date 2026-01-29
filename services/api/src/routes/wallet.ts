@@ -50,7 +50,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
   if (stripeKey) {
     stripe = new Stripe(stripeKey, {
-      apiVersion: '2025-12-15.clover',
+      apiVersion: '2026-01-28.clover',
     });
   }
 

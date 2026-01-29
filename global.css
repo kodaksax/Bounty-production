@@ -58,6 +58,7 @@
 	}
 }
 
+/* 
 @layer utilities {
 	.no-scrollbar::-webkit-scrollbar {
 		display: none;
@@ -68,7 +69,6 @@
 		scrollbar-width: none;
 	}
 
-	/* iPhone-specific utilities */
 	.pb-safe {
 		padding-bottom: env(safe-area-inset-bottom, 1.5rem);
 	}
@@ -98,9 +98,8 @@
 		animation-delay: 200ms;
 	}
 
-	/* iPhone-specific layout */
 	.iphone-container {
-		max-width: 428px; /* iPhone 13 Pro Max width */
+		max-width: 428px;
 		margin: 0 auto;
 		height: 100%;
 		position: relative;
@@ -128,7 +127,6 @@
 		-webkit-overflow-scrolling: touch;
 	}
 
-	/* iPhone-specific animations */
 	.iphone-slide-up {
 		animation: iphone-slide-up var(--card-animation-duration) var(--card-animation-easing) forwards;
 	}
@@ -145,7 +143,6 @@
 		animation: iphone-fade-out var(--card-animation-duration) ease forwards;
 	}
 
-	/* Custom styles for mobile optimization */
 	@media (max-width: 768px) {
 		.mobile-safe-area {
 			padding-top: env(safe-area-inset-top);
@@ -176,12 +173,10 @@
 	}
 	body {
 		@apply bg-background text-foreground;
-		/* Prevent overscroll bounce effect on iOS */
 		overscroll-behavior-y: none;
 		-webkit-tap-highlight-color: transparent;
 	}
 
-	/* Increase touch targets for better mobile usability */
 	button,
 	a,
 	input,
@@ -199,3 +194,4 @@
 		background-position: 100% 50%;
 	}
 }
+*/

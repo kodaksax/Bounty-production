@@ -3,8 +3,8 @@ module.exports = function (api) {
   return {
     // Ensure nativewind's JSX/runtime transform is available early
     presets: [
+      ["babel-preset-expo", { jsxImportSource: "nativewind" }],
       "nativewind/babel",
-      ["babel-preset-expo", {jsxImportSource: "nativewind" }],
     ],
     plugins: [
       // Allow root-based imports like "components/..." and "lib/..."

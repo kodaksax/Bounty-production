@@ -84,7 +84,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   }
 
   const stripe = new Stripe(stripeKey, {
-    apiVersion: '2025-12-15.clover',
+    apiVersion: '2026-01-28.clover',
   });
 
   /**

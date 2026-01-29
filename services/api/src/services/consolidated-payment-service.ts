@@ -24,7 +24,7 @@ const buildStripeRequestOptions = (idempotencyKey?: string): Stripe.RequestOptio
 // Initialize Stripe
 const stripe = new Stripe(config.stripe.secretKey, {
   // Align with repository-wide pinned Stripe API version
-  apiVersion: '2025-12-15.clover',
+  apiVersion: '2026-01-28.clover',
   typescript: true,
 });
 
