@@ -1,178 +1,111 @@
 #!/usr/bin/env node
 const { spawnSync } = require('child_process');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
-// Runs the bundle visualizer and enforces the configured size budget.
-const pkg = require('../package.json');
-const sanitize = (value) => (value ? value.replace(/[^a-zA-Z0-9_]/g, '') : '');
-const appName = sanitize(pkg.name) || 'UnknownApp';
-const baseDir = path.join(os.tmpdir(), 'react-native-bundle-visualizer', appName);
-const bundleOutput = path.join(baseDir, 'ios.bundle');
-const bundleDir = path.dirname(bundleOutput);
-const sourcemapOutput = path.join(baseDir, 'ios.bundle.map');
-const sizeBudgetBytes = 10 * 1024 * 1024; // 10 MB
+// Configuration
+const bundleDir = path.join(process.cwd(), 'tmp_bundle');
+const bundleOutput = path.join(bundleDir, 'ios.bundle');
+const sourcemapOutput = path.join(bundleDir, 'ios.bundle.map');
+const entryFile = 'index.js'; // Using index.js as it is the project main
 
+// Ensure clean state
+if (fs.existsSync(bundleDir)) {
+  fs.rmSync(bundleDir, { recursive: true, force: true });
+}
 fs.mkdirSync(bundleDir, { recursive: true });
 
-const cliArgs = [
-  'react-native-bundle-visualizer',
-  '--platform',
-  'ios',
-  '--expo',
-  'true',
-  '--entry-file',
-  'expo-router/entry.js',
-  '--bundle-output',
-  bundleOutput,
-  '--sourcemap-output',
-  sourcemapOutput,
-  '--minify',
-  'true',
-  '--format',
-  'json'
+console.log('📦 Generating bundle...');
+
+// 1. Generate Bundle manually using Expo CLI (this avoids the visualizer crashing on generation)
+// We use 'expo export:embed' which is the standard command for native bundling
+// We quote paths to handle spaces in directory names
+const generateArgs = [
+  'expo',
+  'export:embed',
+  '--platform', 'ios',
+  '--entry-file', entryFile,
+  '--bundle-output', `"${bundleOutput}"`,
+  '--sourcemap-output', `"${sourcemapOutput}"`,
+  '--dev', 'false',
+  '--minify', 'true'
 ];
 
-// Helper to persist the visualizer result into repo-local tmp for CI inspection.
-// Persist the visualizer result and full logs to `tmp_bundle/`.
-// Writes full `visualizer-stdout.log` and `visualizer-stderr.log` (if present)
-// and stores a compact `result.json` that references those files and
-// includes short previews for quick inspection.
-function persistRepoResult(resultObj, stdout, stderr) {
-  try {
-    const repoTmp = path.join(process.cwd(), 'tmp_bundle');
-    fs.mkdirSync(repoTmp, { recursive: true });
+const genResult = spawnSync('npx', generateArgs, {
+  stdio: 'inherit',
+  encoding: 'utf8',
+  shell: true,
+  env: { ...process.env, CI: 'true' }
+});
 
-    if (stdout) {
-      try { fs.writeFileSync(path.join(repoTmp, 'visualizer-stdout.log'), stdout, 'utf8'); } catch (e) { /* fallthrough */ }
-    }
-
-    if (stderr) {
-      try { fs.writeFileSync(path.join(repoTmp, 'visualizer-stderr.log'), stderr, 'utf8'); } catch (e) { /* fallthrough */ }
-    }
-
-    const preview = (str, len = 1024) => (str ? String(str).slice(0, len) : '');
-
-    const toWrite = Object.assign({}, resultObj || {});
-    toWrite.__logs = {
-      stdoutFile: stdout ? 'visualizer-stdout.log' : null,
-      stderrFile: stderr ? 'visualizer-stderr.log' : null,
-      stdoutPreview: preview(stdout, 1024),
-      stderrPreview: preview(stderr, 1024)
-    };
-
-    fs.writeFileSync(path.join(repoTmp, 'result.json'), JSON.stringify(toWrite, null, 2), 'utf8');
-  } catch (err) {
-    console.debug('check-bundle-size: failed to write result.json to tmp_bundle:', err);
-  }
+if (genResult.status !== 0) {
+  console.error('❌ Bundle generation failed.');
+  process.exit(genResult.status || 1);
 }
 
-// Validate the shape of the object returned by runBundleVisualizer.
-function validateVisualizerResult(res) {
-  if (!res || typeof res !== 'object') return false;
-  // Expected to contain at least one of these keys produced by the visualizer.
-  if (Array.isArray(res.bundles) || Array.isArray(res.errors)) return true;
-  if (res.sourcemap && typeof res.sourcemap === 'object') return true;
-  // Some versions may return other shapes; be conservative and require at least
-  // one of the above. If this fails, callers should fall back to the CLI.
-  return false;
+// 2. Sanitize Sourcemap
+console.log('🧹 Sanitizing sourcemap...');
+const sanitizeResult = spawnSync('node', ['scripts/sanitize-sourcemap.js'], {
+  stdio: 'inherit',
+  encoding: 'utf8',
+  shell: true
+});
+
+if (sanitizeResult.status !== 0) {
+  console.error('❌ Sourcemap sanitization failed.');
+  process.exit(sanitizeResult.status || 1);
 }
 
-// Attempt programmatic invocation first for more reliable JSON output.
-async function runProgrammatic() {
-  try {
-    const { runBundleVisualizer } = require('react-native-bundle-visualizer');
-    const result = await runBundleVisualizer({
-      platform: 'ios',
-      expo: true,
-      entryFile: 'expo-router/entry.js',
-      bundleOutput,
-      sourcemapOutput,
-      minify: true,
-      format: 'json'
-    });
-    // Persist programmatic result (no CLI stdout/stderr available).
-    persistRepoResult(result, null, null);
-    return { ok: true, stdout: JSON.stringify(result) };
-  } catch (err) {
-    return { ok: false, error: err };
-  }
+// 3. Analyze Bundle using source-map-explorer
+console.log('📊 Analyzing bundle...');
+
+// We use source-map-explorer to generate the JSON output we need
+// We parse the bundleOutput path to handle spaces safely in the args if needed, 
+// though quotes usually work best with shell=true.
+const analyzeArgs = [
+  '--yes', // npx auto-install
+  'source-map-explorer',
+  `"${bundleOutput}"`,
+  '--json',
+  '--no-border-checks'
+];
+
+const analyzeResult = spawnSync('npx', analyzeArgs, {
+  encoding: 'utf8',
+  shell: true,
+  maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large JSON
+});
+
+if (analyzeResult.status !== 0) {
+  console.error('❌ Bundle analysis failed.');
+  console.error(analyzeResult.stderr);
+  process.exit(analyzeResult.status || 1);
 }
 
-(async () => {
-  let runResult = await runProgrammatic();
-  let stdout = '';
-  let stderr = '';
+// Parse and process the result
+try {
+  const resultParams = JSON.parse(analyzeResult.stdout);
+  // source-map-explorer returns object with 'results' array usually, or just the object?
+  // Let's inspect the output structure if needed, but assuming standard format.
+  // Actually, source-map-explorer JSON output is usually: { results: [...], ... }
 
-  if (!runResult.ok) {
-    // Fallback to invoking via npx CLI if the programmatic API isn't available or fails.
-    const result = spawnSync('npx', cliArgs, {
-      shell: true,
-      env: {
-        ...process.env,
-        CI: process.env.CI || 'true'
-      },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+  // We need to match the expected output format if possible, or just dump it.
+  // The original script wanted to "persistRepoResult".
+  // We will simply write it to tmp_bundle/result.json.
 
-    if (result.status !== 0) {
-      console.error(result.stderr || result.stdout);
-      process.exit(result.status || 1);
-    }
+  const resultJsonPath = path.join(bundleDir, 'result.json');
+  fs.writeFileSync(resultJsonPath, analyzeResult.stdout);
 
-    stdout = result.stdout || '';
-    stderr = result.stderr || '';
-  } else {
-    stdout = runResult.stdout || '';
-  }
+  // Also print a summary if possible? 
+  // For now, just printing the JSON to stdout as requested by the original goal (it returned stdout: JSON).
+  // The original script printed the serialized JSON to stdout at the end.
 
-  // Run the sourcemap sanitizer so CI/workflows operate on a cleaned map.
-  // Treat sanitizer failures as fatal to avoid passing bundle checks
-  // when sourcemaps are corrupted. This logs a clear warning and exits
-  // with the sanitizer's exit code so CI fails fast for investigation.
-  try {
-    const sanResult = spawnSync('node', ['scripts/sanitize-sourcemap.js'], {
-      shell: true,
-      encoding: 'utf8'
-    });
+  console.log(analyzeResult.stdout);
 
-    if (sanResult.error || sanResult.status !== 0) {
-      console.warn('Sourcemap sanitization failed; bundle analysis may be incomplete');
-      if (sanResult.stdout) console.warn(sanResult.stdout);
-      if (sanResult.stderr) console.warn(sanResult.stderr);
-      process.exit(sanResult.status || 1);
-    }
-  } catch (sanErr) {
-    console.warn('Sourcemap sanitization failed; bundle analysis may be incomplete', sanErr);
-    process.exit(1);
-  }
-  // At this point we have `stdout`/`stderr` (from programmatic or CLI).
-  // Try to parse the visualizer JSON output if available and validate it.
-  let parsed = null;
-  let parseError = null;
-  try {
-    if (stdout) parsed = JSON.parse(stdout);
-  } catch (e) {
-    parseError = e;
-  }
+} catch (e) {
+  console.error('❌ Failed to parse analysis output.');
+  console.error(e);
+  console.log('Raw output preview:', analyzeResult.stdout.substring(0, 500));
+  process.exit(1);
+}
 
-  if (parsed && validateVisualizerResult(parsed)) {
-    persistRepoResult(parsed, stdout, stderr);
-    return { ok: true, stdout: JSON.stringify(parsed) };
-  }
-
-  // If parsing failed or result shape is unexpected, persist full logs
-  // and write a fallback result.json explaining the issue.
-  const fallback = {
-    success: false,
-    reason: parseError ? 'parse_failed' : 'invalid_result_shape',
-    message: parseError ? String(parseError.message || parseError) : 'Visualizer returned unexpected shape',
-    timestamp: new Date().toISOString()
-  };
-  persistRepoResult(fallback, stdout, stderr);
-  // Exit non-zero so CI notices the problem instead of silently passing.
-  console.error('Could not obtain valid visualizer JSON output. See tmp_bundle/ for logs.');
-  process.exit(2);
-})();
