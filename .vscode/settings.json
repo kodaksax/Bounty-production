@@ -10,5 +10,6 @@
         "copilot/auto"
       ]
     }
-  }
+  },
+  "css.lint.unknownAtRules": "ignore"
 }

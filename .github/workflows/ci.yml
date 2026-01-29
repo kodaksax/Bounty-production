@@ -152,8 +152,15 @@ jobs:
           path: tmp_bundle/**
           retention-days: 7
 
-      - name: Validate Expo export build
-        run: npx expo export --output-dir dist --platform web --max-workers 2
+      - name: Validate Expo iOS export
+        run: npx expo export --platform ios --output-dir dist/ios --max-workers 2
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Validate Expo Android export
+        run: npx expo export --platform android --output-dir dist/android --max-workers 2
         env:
           NODE_ENV: production
           EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
@@ -161,17 +168,17 @@ jobs:
       
       - name: Check build artifacts
         run: |
-          if [ ! -d "dist" ]; then
-            echo "❌ Build failed: dist directory not created"
+          if [ ! -d "dist/ios" ] || [ ! -d "dist/android" ]; then
+            echo "❌ Build failed: dist directories not created"
             exit 1
           fi
           echo "✅ Build validation successful"
-          ls -la dist/
+          ls -R dist/
       
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: expo-build-artifacts
+          name: expo-mobile-build-artifacts
           path: dist/
           retention-days: 7
 
