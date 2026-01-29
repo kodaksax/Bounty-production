@@ -24,7 +24,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
-  const refreshTimerRef = useRef<number | null>(null)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef<boolean>(false)
   const refreshPromiseRef = useRef<Promise<void> | null>(null) // Store in-flight promise
   const isMountedRef = useRef<boolean>(true)
