@@ -8,7 +8,7 @@ module.exports = function (api) {
     plugins: [
       // Allow root-based imports like "components/..." and "lib/..."
       [
-        "babel-plugin-module-resolver",
+        "module-resolver",
         {
           root: ["./"],
           alias: {
