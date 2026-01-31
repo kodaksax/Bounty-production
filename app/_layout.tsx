@@ -39,23 +39,8 @@ try {
   Sentry = null;
 }
 
-// Attempt to initialize Sentry at module evaluation time using the safe initializer.
-// This will lazy-require the native module and no-op in runtimes where Sentry
-// isn't available. Initializing before the root component mounts allows Sentry
-// to correctly track app-start spans and avoids timestamp warnings.
-try {
-  initializeSentry();
-  // If initializeSentry succeeded and Sentry wasn't already required above,
-  // attempt to get the SDK via the safe getter so we can wrap the root below.
-  if (!Sentry) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    Sentry = getSentryFromInit();
-  }
-} catch (e) {
-  // ignore initialization failures here; useEffect also logs issues
-  // eslint-disable-next-line no-console
-  console.error('[Sentry] module-level init failed:', e);
-}
+// NOTE: Sentry initialization moved into RootLayout startup effect
+// to avoid any chance of native-module access at module-evaluation time.
 
 // Load test utilities in development
 if (__DEV__) {
@@ -141,8 +126,15 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     const start = Date.now();
 
     (async () => {
-      // Sentry already initialized at module-eval when possible. Continue
-      // with other async startup tasks (Mixpanel, splash, assets).
+      // Initialize Sentry safely at startup (avoid module-eval native access).
+      try {
+        initializeSentry();
+        // Ensure Sentry is loaded/required without mutating any module-scope variable.
+        getSentryFromInit(); // intentionally ignore return; this call is only to force module load
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[Sentry] startup init failed:', e);
+      }
 
       try {
         await initMixpanel();
