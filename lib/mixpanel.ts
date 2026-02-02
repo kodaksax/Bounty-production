@@ -14,13 +14,13 @@ export async function initMixpanel() {
   _initialized = true; // mark attempted to avoid repeated noisy logs
 
   try {
-    // runtime import for native package; use the installed '@mixpanel/react-native'
-    // This app targets mobile (iOS/Android) only, so we intentionally avoid
-    // any web-only dependencies like `mixpanel-browser`.
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const nativeModule = await import('mixpanel-react-native');
-    const nativePkg: any = (nativeModule as any).default ?? nativeModule;
+    // Native modules should generally be required synchronously at the top level or
+    // inside a function using standard `require` to ensure they are bundled correctly.
+    // Dynamic `import()` for native modules is risky in production bundles.
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nativeModule = require('mixpanel-react-native');
+    const nativePkg: any = nativeModule.default ?? nativeModule;
 
     if (typeof nativePkg.init === 'function') {
       const instance = await nativePkg.init(MIXPANEL_TOKEN);

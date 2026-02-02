@@ -145,7 +145,11 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       // with other async startup tasks (Mixpanel, splash, assets).
 
       try {
-        await initMixpanel();
+        // Race Mixpanel init against a 2-second timeout to prevent it from blocking app start
+        await Promise.race([
+          initMixpanel(),
+          new Promise(resolve => setTimeout(resolve, 2000))
+        ]);
         try {
           track('Page View', { screen: 'root' });
         } catch {
