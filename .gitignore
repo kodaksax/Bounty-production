@@ -81,3 +81,6 @@ app-example
 .env.local
 google-service-account.json
 .env
+
+# Ignore generated temporary JS bundles that may contain secrets
+tmp_bundle/
