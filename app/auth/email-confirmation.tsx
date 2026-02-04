@@ -8,11 +8,12 @@ import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Animated,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -52,9 +53,13 @@ export default function EmailConfirmationScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Animated Email Icon */}
-        <Animated.View 
+        <Animated.View
           style={[
             styles.iconContainer,
             { transform: [{ scale: pulseAnim }] }
@@ -66,7 +71,7 @@ export default function EmailConfirmationScreen() {
         </Animated.View>
 
         <Text style={styles.title}>Check Your Email</Text>
-        
+
         <View style={styles.stepsContainer}>
           <View style={styles.step}>
             <View style={styles.stepNumber}>
@@ -120,7 +125,7 @@ export default function EmailConfirmationScreen() {
             t find the email? Check your spam folder or request a new confirmation email.
           </Text>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Action Button */}
       <View style={styles.actions}>
@@ -145,18 +150,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
   },
-  brandingText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 3,
-    marginLeft: 10,
-  },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 24,
   },
+
   iconContainer: {
     marginBottom: 24,
   },
