@@ -108,7 +108,6 @@ export function SignUpForm() {
       if (data.session) {
         console.log('[sign-up] User automatically signed in, checking profile', { correlationId })
         
-        // Check if user needs to complete onboarding
         try {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
@@ -116,34 +115,35 @@ export function SignUpForm() {
             .eq('id', data.session.user.id)
             .single()
           
-          if (profileError && profileError.code !== 'PGRST116') {
-            // For unexpected errors, proceed to onboarding to be safe
-            console.log('[sign-up] Profile check error, redirecting to onboarding:', profileError.message, { correlationId })
-            router.replace('/onboarding')
-            return
+          // Handle profile errors
+          if (profileError) {
+            if (profileError.code === 'PGRST116') {
+              // Profile doesn't exist yet (expected for new users) - proceed to onboarding
+              console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
+              router.replace('/onboarding')
+              return
+            }
+            // For other errors, throw to be caught by catch block
+            throw profileError
           }
           
-          // Check if user needs to complete onboarding
-          // User needs onboarding if:
-          // 1. No profile exists (PGRST116)
-          // 2. Profile exists but has no username (incomplete)
-          // 3. Profile exists but onboarding_completed is false
-          if (!profile || !profile.username || profile.onboarding_completed === false) {
+          // Profile exists - check if onboarding is complete
+          // User needs onboarding if username is missing or onboarding_completed is false
+          if (!profile.username || profile.onboarding_completed === false) {
             console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
               correlationId,
-              hasProfile: !!profile,
-              hasUsername: !!profile?.username,
-              onboardingCompleted: profile?.onboarding_completed
+              hasUsername: !!profile.username,
+              onboardingCompleted: profile.onboarding_completed
             })
             router.replace('/onboarding')
           } else {
-            // User has completed onboarding somehow (edge case), go to app
+            // User has completed onboarding (edge case) - go to app
             console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
             router.replace({ pathname: '/tabs/bounty-app', params: { screen: 'bounty' } } as any)
           }
         } catch (err) {
           // On error, proceed to onboarding to be safe
-          console.log('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
+          console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
           router.replace('/onboarding')
         }
       } else {
