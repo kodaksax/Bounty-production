@@ -102,6 +102,13 @@ export function SignUpForm() {
 
       console.log('[sign-up] Sign-up successful', { correlationId, hasSession: !!data.session })
       
+      // Clear form data for security (especially password)
+      setEmail('')
+      setPassword('')
+      setConfirmPassword('')
+      setAgeVerified(false)
+      setTermsAccepted(false)
+      
       // Keep user signed in after account creation (auto sign-in)
       // The user will be redirected to onboarding or app based on their profile status
       // Email verification gates will prevent posting/applying until verified
@@ -120,7 +127,7 @@ export function SignUpForm() {
             if (profileError.code === 'PGRST116') {
               // Profile doesn't exist yet (expected for new users) - proceed to onboarding
               console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
-              router.replace('/onboarding')
+              router.replace('/onboarding' as Href)
               return
             }
             // For other errors, throw to be caught by catch block
@@ -135,16 +142,16 @@ export function SignUpForm() {
               hasUsername: !!profile.username,
               onboardingCompleted: profile.onboarding_completed
             })
-            router.replace('/onboarding')
+            router.replace('/onboarding' as Href)
           } else {
             // User has completed onboarding (edge case) - go to app
             console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
-            router.replace({ pathname: '/tabs/bounty-app', params: { screen: 'bounty' } } as any)
+            router.replace('/tabs/bounty-app' as Href)
           }
         } catch (err) {
           // On error, proceed to onboarding to be safe
           console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
-          router.replace('/onboarding')
+          router.replace('/onboarding' as Href)
         }
       } else {
         // No session was created (shouldn't happen, but handle gracefully)
