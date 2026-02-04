@@ -135,8 +135,9 @@ export function SignUpForm() {
           }
           
           // Profile exists - check if onboarding is complete
-          // User needs onboarding if username is missing or onboarding_completed is false
-          if (!profile.username || profile.onboarding_completed === false) {
+          // User needs onboarding if username is missing or onboarding_completed is not true
+          // Note: onboarding_completed could be false or null for new users
+          if (!profile.username || profile.onboarding_completed !== true) {
             console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
               correlationId,
               hasUsername: !!profile.username,
