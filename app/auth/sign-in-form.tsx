@@ -192,8 +192,8 @@ export function SignInForm() {
             // User needs onboarding if:
             // 1. No profile exists
             // 2. Profile exists but has no username (incomplete)
-            // 3. Profile exists but onboarding_completed is false
-            if (!profile || !profile.username || profile.onboarding_completed === false) {
+            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+            if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // User needs to complete onboarding
               console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
                 correlationId,
@@ -343,8 +343,8 @@ export function SignInForm() {
             // User needs onboarding if:
             // 1. No profile exists
             // 2. Profile exists but has no username (incomplete)
-            // 3. Profile exists but onboarding_completed is false
-            if (!profile || !profile.username || profile.onboarding_completed === false) {
+            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+            if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // User needs to complete onboarding
               console.log('[google] Profile incomplete or onboarding not completed, redirecting to onboarding', {
                 hasUsername: !!profile?.username,
@@ -541,8 +541,8 @@ export function SignInForm() {
                             // User needs onboarding if:
                             // 1. No profile exists
                             // 2. Profile exists but has no username (incomplete)
-                            // 3. Profile exists but onboarding_completed is false
-                            if (!profile || !profile.username || profile.onboarding_completed === false) {
+                            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+                            if (!profile || !profile.username || profile.onboarding_completed !== true) {
                               console.log('[apple] Profile incomplete or onboarding not completed, redirecting to onboarding', {
                                 hasUsername: !!profile?.username,
                                 onboardingCompleted: profile?.onboarding_completed

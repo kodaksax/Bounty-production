@@ -100,24 +100,65 @@ export function SignUpForm() {
         return
       }
 
-      // Ensure any implicit session is cleared so we land on a fresh sign-in screen
-      if (data.session) {
-        try {
-          await supabase.auth.signOut()
-        } catch (signOutError) {
-          console.error('[sign-up] Unable to sign out newly created session', signOutError, { correlationId })
-        }
-      }
-
+      console.log('[sign-up] Sign-up successful', { correlationId, hasSession: !!data.session })
+      
+      // Clear form data for security (especially password)
       setEmail('')
       setPassword('')
       setConfirmPassword('')
       setAgeVerified(false)
       setTermsAccepted(false)
-
-      console.log('[sign-up] Sign-up successful, navigating to email confirmation', { correlationId })
-      // Navigate to the email confirmation screen with clear instructions
-      router.replace('/auth/email-confirmation' as Href)
+      
+      // Keep user signed in after account creation (auto sign-in)
+      // The user will be redirected to onboarding or app based on their profile status
+      // Email verification gates will prevent posting/applying until verified
+      if (data.session) {
+        console.log('[sign-up] User automatically signed in, checking profile', { correlationId })
+        
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('username, onboarding_completed')
+            .eq('id', data.session.user.id)
+            .single()
+          
+          // Handle profile errors
+          if (profileError) {
+            if (profileError.code === 'PGRST116') {
+              // Profile doesn't exist yet (expected for new users) - proceed to onboarding
+              console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
+              router.replace('/onboarding' as Href)
+              return
+            }
+            // For other errors, throw to be caught by catch block
+            throw profileError
+          }
+          
+          // Profile exists - check if onboarding is complete
+          // User needs onboarding if username is missing or onboarding_completed is not true
+          // Note: onboarding_completed could be false or null for new users
+          if (!profile.username || profile.onboarding_completed !== true) {
+            console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
+              correlationId,
+              hasUsername: !!profile.username,
+              onboardingCompleted: profile.onboarding_completed
+            })
+            router.replace('/onboarding' as Href)
+          } else {
+            // User has completed onboarding (edge case) - go to app
+            console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
+            router.replace('/tabs/bounty-app' as Href)
+          }
+        } catch (err) {
+          // On error, proceed to onboarding to be safe
+          console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
+          router.replace('/onboarding' as Href)
+        }
+      } else {
+        // No session was created (shouldn't happen, but handle gracefully)
+        console.warn('[sign-up] No session created after sign-up, showing email confirmation', { correlationId })
+        router.replace('/auth/email-confirmation' as Href)
+      }
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e, { correlationId })
       
