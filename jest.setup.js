@@ -345,7 +345,9 @@ global.console = {
       firstArg.includes('Draft error') ||
       firstArg.includes('Preference error') ||
       firstArg.includes('Token error') ||
-      firstArg.includes('Cleanup errors (non-critical)')
+      firstArg.includes('Cleanup errors (non-critical)') ||
+      firstArg.includes('Sharing is not available on this device') ||
+      firstArg.includes('Error sharing receipt:')
     ) {
       return;
     }
