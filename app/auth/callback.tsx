@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -32,11 +32,7 @@ export default function AuthCallbackScreen() {
   const [message, setMessage] = useState('Processing your request...');
   const [errorDetails, setErrorDetails] = useState('');
 
-  useEffect(() => {
-    handleAuthCallback();
-  }, []);
-
-  const handleAuthCallback = async () => {
+  const handleAuthCallback = useCallback(async () => {
     try {
       // Get URL parameters from deep link
       // Supabase sends: ?token=xxx&type=signup|recovery|invite|email_change|magiclink
@@ -128,7 +124,11 @@ export default function AuthCallbackScreen() {
       setMessage('Something Went Wrong');
       setErrorDetails('An unexpected error occurred. Please try again.');
     }
-  };
+  }, [params, router]);
+
+  useEffect(() => {
+    handleAuthCallback();
+  }, [handleAuthCallback]);
 
   const handleGoToSignIn = () => {
     router.replace('/auth/sign-in-form' as Href);
