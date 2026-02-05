@@ -1174,10 +1174,18 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       throw txError;
     }
 
-    // Update user balance
-    await supabase.from('profiles')
-      .update({ balance: supabase.raw(`balance - ${amount}`) })
-      .eq('id', userId);
+    // Update user balance using parameterized RPC function
+    // This prevents SQL injection by using a stored procedure with proper parameter binding
+    const { data: newBalance, error: balanceError } = await supabase
+      .rpc('update_balance', {
+        p_user_id: userId,
+        p_amount: -amount  // Negative amount for withdrawal
+      });
+
+    if (balanceError) {
+      console.error('[Connect] Error updating balance:', balanceError);
+      throw new Error('Failed to update balance');
+    }
 
     console.log(`[Connect] Transfer created: ${transfer.id} for user ${userId}, amount ${amount}`);
     
