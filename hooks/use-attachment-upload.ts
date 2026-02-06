@@ -179,7 +179,9 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         
         // If this isn't the last attempt, wait before retrying
         if (attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // Exponential backoff: 1s, 2s, 4s
+          // Exponential backoff: 1s (2^0), 2s (2^1), 4s (2^2)
+          // Cap at 5s for potential future use with more retries
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
           console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
           await new Promise(resolve => setTimeout(resolve, delay))
         }
