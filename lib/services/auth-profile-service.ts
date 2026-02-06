@@ -42,6 +42,17 @@ export class AuthProfileService {
   private currentProfile: AuthProfile | null = null;
   private listeners: ((profile: AuthProfile | null) => void)[] = [];
   private externalProfileCache = new Map<string, CachedProfile>();
+  // Re-entrancy guard for notification cycles. If notifyListeners is called
+  // while a notification is already in progress, the latest pending profile
+  // will be scheduled to run after the current cycle completes. This preserves
+  // synchronous delivery semantics for `subscribe()` while preventing
+  // recursive feedback loops.
+  private isNotifying = false;
+  private hasPendingNotification = false;
+  private pendingProfile: AuthProfile | null = null;
+  // Track the timestamp of the most recent fetchAndSyncProfile call to prevent
+  // race conditions where background fetches complete out of order
+  private latestFetchTimestamp: number = 0;
 
   private constructor() {}
 
@@ -59,24 +70,32 @@ export class AuthProfileService {
    * refetching for the same card renders.
    */
   async getProfileById(userId: string, options: { bypassCache?: boolean } = {}): Promise<AuthProfile | null> {
-    console.log('[authProfileService] getProfileById called', { userId, isSupabaseConfigured });
-    
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('[authProfileService] getProfileById called', { userId, isSupabaseConfigured });
+    }
+
     if (!isSupabaseConfigured) {
-      console.error('[authProfileService] Supabase not configured - cannot fetch profile by ID');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.error('[authProfileService] Supabase not configured - cannot fetch profile by ID');
+      }
       return null;
     }
 
     const { bypassCache = false } = options;
-    if (!bypassCache) {
+      if (!bypassCache) {
       const cached = this.externalProfileCache.get(userId);
       if (cached && Date.now() - cached.timestamp < PROFILE_CACHE_EXPIRY) {
-        console.log('[authProfileService] Returning cached profile for userId:', userId);
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log('[authProfileService] Returning cached profile for userId:', userId);
+        }
         return cached.profile;
       }
     }
 
     try {
-      console.log('[authProfileService] Fetching profile from Supabase for userId:', userId);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[authProfileService] Fetching profile from Supabase for userId:', userId);
+      }
       // Try canonical profiles table first
       let data: any = null;
       let error: any = null;
@@ -92,9 +111,13 @@ export class AuthProfileService {
           .maybeSingle();
         data = res.data ?? null;
         error = res.error ?? null;
-        console.log('[authProfileService] Profiles table query result', { hasData: !!data, hasError: !!error });
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log('[authProfileService] Profiles table query result', { hasData: !!data, hasError: !!error });
+        }
       } catch (e: any) {
-        console.error('[authProfileService] Profiles table query exception:', e);
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.error('[authProfileService] Profiles table query exception:', e);
+        }
         logger.warning('Profile fetch error', { userId, error: e });
         data = null;
         error = e;
@@ -102,7 +125,9 @@ export class AuthProfileService {
 
       // If profiles returned an error or no data, attempt public_profiles fallback
       if (!data) {
-        console.log('[authProfileService] Trying public_profiles fallback...');
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log('[authProfileService] Trying public_profiles fallback...');
+        }
         try {
           // Use Supabase SDK without custom timeout wrapper
           // Allows SDK to use its internal network handling and retry logic
@@ -113,7 +138,9 @@ export class AuthProfileService {
             .select('id,username,displayName:display_name,avatar,location')
             .eq('id', userId)
             .maybeSingle();
-          console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
+          }
           if (pub.error) {
             // If both attempts fail, surface a warning and return null
             // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
@@ -129,7 +156,9 @@ export class AuthProfileService {
 
           if (!pub.data) {
             // No public profile either
-            console.log('[authProfileService] No data in public_profiles either');
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+              console.log('[authProfileService] No data in public_profiles either');
+            }
             return null;
           }
 
@@ -233,11 +262,17 @@ export class AuthProfileService {
 
   /**
    * Fetch profile from Supabase and sync with local cache
+   * OPTIMIZATION: Check cache first for faster session restoration on app reopen
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
+    // Track this fetch attempt with a timestamp to prevent race conditions
+    const fetchTimestamp = Date.now();
+    this.latestFetchTimestamp = fetchTimestamp;
+    
     console.log('[authProfileService] fetchAndSyncProfile START', { 
       userId,
-      isSupabaseConfigured 
+      isSupabaseConfigured,
+      fetchTimestamp
     });
     
     if (!isSupabaseConfigured) {
@@ -261,8 +296,25 @@ export class AuthProfileService {
       return fallbackProfile;
     }
 
+    // OPTIMIZATION: Check cache first for instant session restoration
+    // This allows the app to show the main screen immediately while fresh data loads
+    const cachedProfile = await this.loadFromCache(userId);
+    if (cachedProfile) {
+      console.log('[authProfileService] Using cached profile for fast restoration:', cachedProfile.username);
+      this.currentProfile = cachedProfile;
+      // Notify listeners immediately with cached data
+      this.notifyListeners(cachedProfile);
+      // Continue to fetch fresh data in background (don't await to avoid blocking)
+      // Pass the fetchTimestamp to enable race condition detection
+      // Use void to explicitly indicate intentional fire-and-forget behavior
+      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch((error) => {
+        console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
+      });
+      return cachedProfile;
+    }
+
     try {
-      console.log('[authProfileService] Querying Supabase profiles table...');
+      console.log('[authProfileService] No cache found, querying Supabase profiles table...');
       
       // Use Supabase SDK's built-in network handling and timeouts
       const { data, error } = await supabase
@@ -378,6 +430,64 @@ export class AuthProfileService {
       this.currentProfile = null;
       this.notifyListeners(null);
       return null;
+    }
+  }
+
+  /**
+   * Fetch fresh profile data in background without blocking
+   * Used after returning cached data for instant UI update
+   * @param userId - The user ID to fetch profile for
+   * @param callerFetchTimestamp - The timestamp from the calling fetchAndSyncProfile to detect race conditions
+   * @private
+   */
+  private async fetchFreshProfileInBackground(userId: string, callerFetchTimestamp: number): Promise<void> {
+    try {
+      console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        // Don't throw, just log - we already have cached data displayed
+        console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
+        return;
+      }
+
+      // Check if a newer fetch has started since we began
+      // This prevents race conditions where multiple background fetches complete out of order
+      // Only apply results if no newer fetch has been initiated
+      if (callerFetchTimestamp < this.latestFetchTimestamp) {
+        console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
+        return;
+      }
+
+      if (data) {
+        const freshProfile: AuthProfile = {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          avatar: data.avatar,
+          about: data.about,
+          phone: data.phone,
+          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+          age_verified_at: data.age_verified_at || undefined,
+          balance: data.balance || 0,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+        };
+
+        console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');
+        this.currentProfile = freshProfile;
+        await this.cacheProfile(freshProfile);
+        this.notifyListeners(freshProfile);
+      }
+    } catch (error) {
+      // Silent failure - we have cached data already displayed
+      console.log('[authProfileService] Background fetch failed (non-critical):', error);
     }
   }
 
@@ -588,13 +698,23 @@ export class AuthProfileService {
 
   /**
    * Subscribe to profile changes
+   *
+   * Immediately notifies the new subscriber synchronously with the current
+   * profile value. A re-entrancy guard prevents listeners from causing
+   * recursive notification loops: if notifications are triggered while a
+   * delivery is in progress, the latest pending profile will be delivered
+   * after the current cycle completes.
    */
   subscribe(listener: (profile: AuthProfile | null) => void): () => void {
     this.listeners.push(listener);
-    
-    // Immediately notify with current profile
-    listener(this.currentProfile);
-    
+
+    // Immediately notify synchronously (preserve historical behavior).
+    try {
+      listener(this.currentProfile);
+    } catch (e) {
+      logger.error('Error in initial profile listener', { error: e });
+    }
+
     // Return unsubscribe function
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
@@ -605,13 +725,39 @@ export class AuthProfileService {
    * Notify all listeners of profile changes
    */
   private notifyListeners(profile: AuthProfile | null): void {
-    this.listeners.forEach(listener => {
-      try {
-        listener(profile);
-      } catch (error) {
-        logger.error('Error in profile listener', { error });
+    // If a notification cycle is already in progress, schedule the latest
+    // profile as a pending notification and return. It will be delivered
+    // once the current cycle completes. This prevents re-entrant listeners
+    // from causing infinite or nested notification loops while keeping
+    // delivery synchronous for subscribers added via `subscribe()`.
+    if (this.isNotifying) {
+      this.hasPendingNotification = true;
+      this.pendingProfile = profile;
+      return;
+    }
+
+    this.isNotifying = true;
+    try {
+      const listenersSnapshot = [...this.listeners];
+      for (const listener of listenersSnapshot) {
+        try {
+          listener(profile);
+        } catch (error) {
+          logger.error('Error in profile listener', { error });
+        }
       }
-    });
+    } finally {
+      this.isNotifying = false;
+      if (this.hasPendingNotification) {
+        // Consume pending notification and reset the flag before delivering
+        // to avoid re-entrancy races.
+        this.hasPendingNotification = false;
+        const next = this.pendingProfile;
+        this.pendingProfile = null;
+        // Deliver the pending notification synchronously as well.
+        this.notifyListeners(next);
+      }
+    }
   }
 
   /**

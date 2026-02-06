@@ -74,6 +74,7 @@ export function ConnectOnboardingWrapper({
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingOnboarding, setIsStartingOnboarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = React.useRef(true);
 
   // Check current Connect account status
   const checkAccountStatus = useCallback(async () => {
@@ -89,11 +90,15 @@ export function ConnectOnboardingWrapper({
         },
       });
 
+      if (!isMountedRef.current) return;
+
       if (!response.ok) {
         throw new Error('Failed to verify account status');
       }
 
       const data = await response.json();
+
+      if (!isMountedRef.current) return;
 
       const accountStatus: ConnectAccountStatus = {
         hasAccount: !!data.accountId,
@@ -113,15 +118,22 @@ export function ConnectOnboardingWrapper({
       }
     } catch (err: any) {
       console.error('[ConnectOnboardingWrapper] Status check error:', err);
+      if (!isMountedRef.current) return;
       setError(err.message || 'Failed to check account status');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [authToken, onComplete]);
 
-  // Check status on mount
+  // Check status on mount and cleanup
   useEffect(() => {
     checkAccountStatus();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [checkAccountStatus]);
 
   // Handle deep link returns
@@ -161,12 +173,16 @@ export function ConnectOnboardingWrapper({
         }),
       });
 
+      if (!isMountedRef.current) return;
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to create onboarding link');
       }
 
       const { url } = await response.json();
+
+      if (!isMountedRef.current) return;
 
       // Check if we can open the URL
       const supported = await Linking.canOpenURL(url);
@@ -185,6 +201,8 @@ export function ConnectOnboardingWrapper({
       );
     } catch (err: any) {
       console.error('[ConnectOnboardingWrapper] Onboarding start error:', err);
+
+      if (!isMountedRef.current) return;
 
       let errorMessage = err.message || 'Failed to start onboarding';
       let requiresSupport = false;
@@ -205,7 +223,9 @@ export function ConnectOnboardingWrapper({
         requiresSupport,
       });
     } finally {
-      setIsStartingOnboarding(false);
+      if (isMountedRef.current) {
+        setIsStartingOnboarding(false);
+      }
     }
   }, [authToken, returnUrl, refreshUrl, onError]);
 
