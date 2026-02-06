@@ -97,7 +97,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const list = await messageService.getConversations()
         if (!mounted) return
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
-        if (mounted) setConversation(match)
+        setConversation(match)
 
         // Fetch hunter name if available
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
@@ -119,15 +119,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           const submission = await completionService.getSubmission(String(bounty.id))
           if (!mounted) return
           const foundSubmission = !!submission && submission.status === 'pending'
-          if (mounted) {
-            setHasSubmission(foundSubmission)
-            // Auto-expand Review & Verify section when submission is detected
-            if (foundSubmission) {
-              setReviewExpanded(true)
-              setWipExpanded(false)
-              // Move the visual stepper to Review & Verify so owner sees where action is needed
-              setLocalStageOverride('review_verify')
-            }
+          setHasSubmission(foundSubmission)
+          // Auto-expand Review & Verify section when submission is detected
+          if (foundSubmission) {
+            setReviewExpanded(true)
+            setWipExpanded(false)
+            // Move the visual stepper to Review & Verify so owner sees where action is needed
+            setLocalStageOverride('review_verify')
           }
         }
         // For hunters, initialize revision indicator state from latest submission
