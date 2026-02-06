@@ -1,7 +1,8 @@
 /**
  * Onboarding Carousel
- * Shows 5 screens explaining app features on first launch
- * Includes value statement, how-it-works tutorial, and trust messaging
+ * Shows 7 screens explaining app features on first launch
+ * Includes welcome, step-by-step workflow tutorial, hunter perspective, and trust messaging
+ * Features skip confirmation modal and visual step indicators
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -11,6 +12,7 @@ import React, { useRef, useState } from 'react';
 import { Animated,
   Dimensions,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,6 +23,10 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
+
+// Workflow step configuration
+const WORKFLOW_STEP_START = 1; // Slide index for first workflow step (slide 2)
+const WORKFLOW_STEP_END = 4;   // Slide index for last workflow step (slide 5)
 
 type SlideData = {
   id: string;
@@ -34,36 +40,50 @@ const slides: SlideData[] = [
   {
     id: '1',
     icon: 'gps-fixed',
-    title: 'Get Tasks Done Faster',
+    title: 'Welcome to Bounty',
     description: 'The trusted marketplace for getting things done. Post a task, find local help, and pay safely — all in one place.',
     color: '#a7f3d0',
   },
   {
     id: '2',
-    icon: 'attach-money',
-    title: 'Earn Money on Your Schedule',
-    description: 'Browse bounties in your area, accept the ones you like, and get paid for completing them. Work when you want, where you want.',
+    icon: 'add-circle-outline',
+    title: 'Step 1: Post Your Task',
+    description: 'Create a bounty with details about what you need done. Set your budget, location, and timeline. Your task goes live instantly for hunters to see.',
     color: '#6ee7b7',
   },
   {
     id: '3',
-    icon: 'security',
-    title: 'Payments Protected by Escrow',
-    description: 'Funds are held securely until you confirm the work is complete. Your money is always protected, and hunters are guaranteed payment.',
+    icon: 'people',
+    title: 'Step 2: Review & Accept',
+    description: 'Receive applications from qualified hunters. Review their profiles and ratings, then accept the best match. Funds are held safely in escrow.',
     color: '#34d399',
   },
   {
     id: '4',
     icon: 'chat-bubble',
-    title: 'Coordinate Everything In-App',
-    description: 'Review applications, pick your helper, and chat directly. Coordinate details, timing, and expectations — all within the app.',
+    title: 'Step 3: Chat & Coordinate',
+    description: 'Message your hunter directly in the app. Share details, coordinate timing, and track progress. Everything stays organized in one place.',
     color: '#10b981',
   },
   {
     id: '5',
     icon: 'verified-user',
-    title: 'Built on Trust',
-    description: 'Verified profiles, user ratings, and escrow protection keep everyone safe. Phone verification adds an extra layer of security.',
+    title: 'Step 4: Complete & Pay',
+    description: 'Once the work is done, confirm completion. Payment is released from escrow to the hunter. Rate your experience to help others.',
+    color: '#059669',
+  },
+  {
+    id: '6',
+    icon: 'attach-money',
+    title: 'Or Browse & Earn',
+    description: 'Flip the script! Browse bounties in your area, apply to the ones you like, and get paid for completing them. Work on your schedule.',
+    color: '#6ee7b7',
+  },
+  {
+    id: '7',
+    icon: 'security',
+    title: 'Safe & Secure',
+    description: 'Payments protected by escrow. Verified profiles and ratings. Phone verification adds extra security. Your money is always safe.',
     color: '#a7f3d0',
   },
 ];
@@ -72,6 +92,7 @@ export default function OnboardingCarousel() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showSkipModal, setShowSkipModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -85,9 +106,18 @@ export default function OnboardingCarousel() {
     }
   };
 
-  const handleSkip = async () => {
+  const handleSkip = () => {
+    setShowSkipModal(true);
+  };
+
+  const handleConfirmSkip = async () => {
+    setShowSkipModal(false);
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     router.replace('/onboarding/username');
+  };
+
+  const handleCancelSkip = () => {
+    setShowSkipModal(false);
   };
 
   const handleGetStarted = async () => {
@@ -115,9 +145,19 @@ export default function OnboardingCarousel() {
       extrapolate: 'clamp',
     });
 
+    // Determine if this is a workflow step (slides 2-5, which are indices 1-4)
+    const isWorkflowStep = index >= WORKFLOW_STEP_START && index <= WORKFLOW_STEP_END;
+    const stepNumber = isWorkflowStep ? index : null;
+
     return (
       <View style={styles.slide}>
         <Animated.View style={[styles.slideContent, { opacity, transform: [{ scale }] }]}>
+          {stepNumber && (
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepBadgeText}>STEP {stepNumber}</Text>
+            </View>
+          )}
+          
           <View style={[styles.iconContainer, { backgroundColor: 'rgba(5,46,27,0.5)' }]}>
             <MaterialIcons name={item.icon} size={80} color={item.color} />
           </View>
@@ -227,6 +267,38 @@ export default function OnboardingCarousel() {
           />
         </TouchableOpacity>
       </View>
+
+      {/* Skip Confirmation Modal */}
+      <Modal
+        visible={showSkipModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelSkip}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <MaterialIcons name="info-outline" size={48} color="#059669" />
+            <Text style={styles.modalTitle}>Skip Tutorial?</Text>
+            <Text style={styles.modalDescription}>
+              This quick tour helps you understand how Bounty works. You can always come back to it later in settings.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalButtonSecondary}
+                onPress={handleCancelSkip}
+              >
+                <Text style={styles.modalButtonTextSecondary}>Continue Tour</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButtonPrimary}
+                onPress={handleConfirmSkip}
+              >
+                <Text style={styles.modalButtonTextPrimary}>Skip</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -273,6 +345,21 @@ const styles = StyleSheet.create({
   slideContent: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stepBadge: {
+    backgroundColor: 'rgba(167,243,208,0.3)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.5)',
+  },
+  stepBadgeText: {
+    color: '#a7f3d0',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
   },
   iconContainer: {
     width: 160,
@@ -328,5 +415,64 @@ const styles = StyleSheet.create({
     color: '#052e1b',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#052e1b',
+    marginTop: 16,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: '#4b5563',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButtonPrimary: {
+    flex: 1,
+    backgroundColor: '#059669',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonSecondary: {
+    flex: 1,
+    backgroundColor: '#e5e7eb',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonTextPrimary: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextSecondary: {
+    color: '#052e1b',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
