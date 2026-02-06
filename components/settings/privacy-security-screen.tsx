@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, Touchabl
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
 import { deviceService, UserDevice } from '../../lib/services/device-service';
 import { supabase } from '../../lib/supabase';
+import { validateNewPassword } from '../../lib/utils/password-validation';
 import { getSecureJSON, SecureKeys, setSecureJSON } from '../../lib/utils/secure-storage';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
@@ -77,30 +78,33 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   const changePassword = async () => {
-    if (!state.passwordCurrent || !state.passwordNew) {
-      Alert.alert('Incomplete', 'Fill in current and new password.');
-      return;
-    }
-    if (state.passwordNew !== state.passwordConfirm) {
-      Alert.alert('Mismatch', 'New password & confirmation differ.');
-      return;
-    }
-
-    // Validate strong password
-    const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!strongPasswordPattern.test(state.passwordNew)) {
-      Alert.alert(
-        'Weak Password',
-        'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&).'
-      );
+    // Validate strong password using shared utility
+    const validationError = validateNewPassword(state.passwordNew);
+    if (validationError) {
+      Alert.alert('Weak Password', validationError);
       return;
     }
 
     try {
+      setLoading(true);
+
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
         Alert.alert('Error', 'Unable to verify current user.');
+        setLoading(false);
+        return;
+      }
+
+      // Verify current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: state.passwordCurrent,
+      });
+
+      if (signInError) {
+        Alert.alert('Incorrect Password', 'The current password you entered is incorrect.');
+        setLoading(false);
         return;
       }
 
@@ -120,6 +124,8 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     } catch (err) {
       console.error('Password change error:', err);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -429,6 +435,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     </View>
   );
 };
+
 
 const SectionHeader = ({ icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
   <View className="mb-3">
