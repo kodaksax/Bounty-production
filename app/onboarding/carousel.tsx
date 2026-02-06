@@ -1,7 +1,8 @@
 /**
  * Onboarding Carousel
- * Shows 5 screens explaining app features on first launch
- * Includes value statement, how-it-works tutorial, and trust messaging
+ * Shows 7 screens explaining app features on first launch
+ * Includes welcome, step-by-step workflow tutorial, hunter perspective, and trust messaging
+ * Features skip confirmation modal and visual step indicators
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
