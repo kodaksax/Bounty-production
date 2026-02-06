@@ -86,7 +86,8 @@ const mockStripe = {
 };
 
 jest.mock('stripe', () => {
-  return jest.fn(() => mockStripe);
+  // Return a constructor function that returns the mock Stripe instance
+  return jest.fn().mockImplementation(() => mockStripe);
 });
 
 // Import service after mocks

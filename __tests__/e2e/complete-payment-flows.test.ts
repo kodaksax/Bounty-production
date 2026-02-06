@@ -118,7 +118,10 @@ const mockStripe = {
   },
 };
 
-jest.mock('stripe', () => jest.fn(() => mockStripe));
+jest.mock('stripe', () => {
+  // Return a constructor function that returns the mock Stripe instance
+  return jest.fn().mockImplementation(() => mockStripe);
+});
 
 describe('Complete Payment Flow E2E Tests', () => {
   beforeEach(() => {

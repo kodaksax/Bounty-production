@@ -64,7 +64,7 @@ jest.mock('../../../services/api/src/middleware/error-handler', () => ({
   }),
 }));
 
-// Mock Stripe
+// Mock Stripe - must be set up before service import
 const mockStripePaymentIntent = {
   id: 'pi_test123',
   client_secret: 'pi_test123_secret_abc',
@@ -116,7 +116,8 @@ const mockStripe = {
 };
 
 jest.mock('stripe', () => {
-  return jest.fn(() => mockStripe);
+  // Return a constructor function that returns the mock Stripe instance
+  return jest.fn().mockImplementation(() => mockStripe);
 });
 
 // Import service after mocks are set up
