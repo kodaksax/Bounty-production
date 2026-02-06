@@ -53,22 +53,22 @@ function sanitizeNumber(input, allowNegative = false) {
   if (input === null || input === undefined) {
     throw new Error('Number is required');
   }
-  
+
   // Convert to number first
   const num = Number(input);
-  
+
   // Check if valid number
   if (isNaN(num) || !isFinite(num)) {
     throw new Error('Invalid numeric format');
   }
-  
+
   // Validate format - allow decimals, optionally allow negative
   const str = String(input).trim();
   const pattern = allowNegative ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
   if (!pattern.test(str)) {
     throw new Error('Invalid numeric format');
   }
-  
+
   return num;
 }
 
@@ -76,6 +76,14 @@ function sanitizeNonNegativeNumber(input) {
   const num = sanitizeNumber(input, false);
   if (num < 0) {
     throw new Error('Number must be non-negative');
+  }
+  return num;
+}
+
+function sanitizePositiveNumber(input) {
+  const num = sanitizeNumber(input, false);
+  if (num <= 0) {
+    throw new Error('Number must be positive');
   }
   return num;
 }
@@ -95,23 +103,27 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
     // Check if request is secure
-    const isSecure = req.secure || 
-                     req.headers['x-forwarded-proto'] === 'https' ||
-                     req.headers['x-forwarded-ssl'] === 'on';
-    
+    const isSecure = req.secure ||
+      req.headers['x-forwarded-proto'] === 'https' ||
+      req.headers['x-forwarded-ssl'] === 'on';
+
     if (!isSecure) {
       console.error(`[SECURITY] Rejected insecure HTTP request from ${req.ip} to ${req.path}`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'HTTPS required',
         message: 'All requests must use HTTPS in production. Please use https:// instead of http://',
         code: 'INSECURE_CONNECTION'
       });
     }
-    
+
     // Add HSTS header to enforce HTTPS on client side
     // max-age=31536000 (1 year), includeSubDomains, preload
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-    
+
+    // Add Content Security Policy
+    // Allow scripts from self and Stripe
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://js.stripe.com; frame-src https://js.stripe.com; img-src 'self' data:;");
+
     // Add additional security headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -121,15 +133,15 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : ['http://localhost:8081', 'http://localhost:19000', 'http://localhost:19006'];
 
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -168,8 +180,8 @@ async function authenticateUser(req, res, next) {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     supabaseConfigured: !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -245,7 +257,7 @@ app.get('/debug', (req, res) => {
       host: host,
       port: port,
       requesterIp: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || req.ip,
-      headersSnippet: Object.keys(req.headers).slice(0,10)
+      headersSnippet: Object.keys(req.headers).slice(0, 10)
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -267,16 +279,16 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
         throw new Error('Amount must be positive');
       }
     } catch (error) {
-      return res.status(400).json({ 
-        error: 'Invalid amount. Must be a positive number in cents.' 
+      return res.status(400).json({
+        error: 'Invalid amount. Must be a positive number in cents.'
       });
     }
-    
+
     // Sanitize currency
     const validatedCurrency = sanitizeText(currency).toLowerCase();
     if (!['usd', 'eur', 'gbp'].includes(validatedCurrency)) {
-      return res.status(400).json({ 
-        error: 'Invalid currency. Supported: usd, eur, gbp.' 
+      return res.status(400).json({
+        error: 'Invalid currency. Supported: usd, eur, gbp.'
       });
     }
 
@@ -288,7 +300,7 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
       .single();
 
     let customerId = profile?.stripe_customer_id;
-    
+
     // Create Stripe customer if doesn't exist
     if (!customerId && profile?.email) {
       const customer = await stripe.customers.create({
@@ -296,7 +308,7 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
         metadata: { user_id: userId }
       });
       customerId = customer.id;
-      
+
       // Save customer ID to profile
       await supabase
         .from('profiles')
@@ -336,8 +348,8 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
 
   } catch (error) {
     console.error('[PaymentIntent] Error:', error.message);
-    res.status(500).json({ 
-      error: error.message || 'Failed to create payment intent' 
+    res.status(500).json({
+      error: error.message || 'Failed to create payment intent'
     });
   }
 });
@@ -523,7 +535,7 @@ app.post('/payments/methods', paymentLimiter, authenticateUser, async (req, res)
 
   } catch (error) {
     console.error('[PaymentMethods] Error attaching:', error.message);
-    
+
     // Handle specific Stripe errors
     if (error.type === 'StripeCardError') {
       return res.status(400).json({ error: error.message });
@@ -531,7 +543,7 @@ app.post('/payments/methods', paymentLimiter, authenticateUser, async (req, res)
     if (error.code === 'payment_method_not_found') {
       return res.status(404).json({ error: 'Payment method not found' });
     }
-    
+
     res.status(500).json({ error: 'Failed to attach payment method' });
   }
 });
@@ -556,7 +568,7 @@ app.delete('/payments/methods/:id', apiLimiter, authenticateUser, async (req, re
 
     // Retrieve the payment method to verify ownership
     const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-    
+
     if (paymentMethod.customer !== profile.stripe_customer_id) {
       return res.status(403).json({ error: 'Not authorized to remove this payment method' });
     }
@@ -569,11 +581,11 @@ app.delete('/payments/methods/:id', apiLimiter, authenticateUser, async (req, re
 
   } catch (error) {
     console.error('[PaymentMethods] Error detaching:', error.message);
-    
+
     if (error.code === 'resource_missing') {
       return res.status(404).json({ error: 'Payment method not found' });
     }
-    
+
     res.status(500).json({ error: 'Failed to remove payment method' });
   }
 });
@@ -596,7 +608,7 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
     // Both values must be strings and match exactly
     const metadataUserId = String(paymentIntent.metadata?.user_id || '');
     const requestUserId = String(userId);
-    
+
     if (!metadataUserId || metadataUserId !== requestUserId) {
       console.warn(`[PaymentConfirm] Ownership mismatch: metadata=${metadataUserId}, request=${requestUserId}`);
       return res.status(403).json({ error: 'Not authorized to confirm this payment' });
@@ -618,7 +630,7 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
       if (paymentMethodId) {
         confirmParams.payment_method = paymentMethodId;
       }
-      
+
       confirmedIntent = await stripe.paymentIntents.confirm(paymentIntentId, confirmParams);
     }
 
@@ -644,7 +656,7 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
 
   } catch (error) {
     console.error('[PaymentConfirm] Error:', error.message);
-    
+
     // Handle specific Stripe errors
     if (error.type === 'StripeCardError') {
       return res.status(400).json({
@@ -653,7 +665,7 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
         decline_code: error.decline_code,
       });
     }
-    
+
     res.status(500).json({ error: 'Failed to confirm payment' });
   }
 });
@@ -707,14 +719,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object;
         const userId = paymentIntent.metadata?.user_id;
-        
+
         if (!userId) {
           console.error('[Webhook] Missing user_id in payment intent metadata');
           break;
         }
 
         console.log(`[Webhook] PaymentIntent succeeded: ${paymentIntent.id} for user ${userId}`);
-        
+
         // Create wallet transaction
         const { data: transaction, error: txError } = await supabase
           .from('wallet_transactions')
@@ -749,7 +761,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
               p_user_id: userId,
               p_amount: paymentIntent.amount / 100
             });
-            
+
             if (retryError) {
               // Last resort: direct update (log error about potential race condition)
               console.error('[Webhook] Atomic balance update failed after retry - using non-atomic update. Please add increment_balance RPC function to prevent race conditions.', {
@@ -763,7 +775,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
                 .select('balance')
                 .eq('id', userId)
                 .single();
-              
+
               const currentBalance = profile?.balance || 0;
               await supabase.from('profiles')
                 .update({ balance: currentBalance + (paymentIntent.amount / 100) })
@@ -775,7 +787,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         }
 
         console.log(`[Webhook] Transaction created: ${transaction.id}, balance updated for user ${userId}`);
-        
+
         // Note: User notification should be implemented via a notification service
         // when available (push notifications, email, etc.)
         break;
@@ -785,10 +797,10 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         const paymentIntent = event.data.object;
         const userId = paymentIntent.metadata?.user_id;
         const error = paymentIntent.last_payment_error;
-        
+
         console.log(`[Webhook] PaymentIntent failed: ${paymentIntent.id} for user ${userId}`);
         console.log(`[Webhook] Failure reason: ${error?.code} - ${error?.message}`);
-        
+
         // Log failed payment attempt for analytics/fraud detection
         await supabase.from('stripe_events').update({
           processed: true,
@@ -798,7 +810,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             _processed_notes: `Payment failed: ${error?.code}`
           }
         }).eq('stripe_event_id', event.id);
-        
+
         // TODO: Send notification to user about failed payment
         break;
       }
@@ -806,7 +818,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'payment_intent.requires_action': {
         const paymentIntent = event.data.object;
         const userId = paymentIntent.metadata?.user_id;
-        
+
         console.log(`[Webhook] PaymentIntent requires action (3DS): ${paymentIntent.id} for user ${userId}`);
         // This is informational - the client-side SDK handles 3DS authentication
         break;
@@ -815,9 +827,9 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'charge.refunded': {
         const charge = event.data.object;
         const paymentIntentId = charge.payment_intent;
-        
+
         console.log(`[Webhook] Charge refunded: ${charge.id}`);
-        
+
         // Find original transaction
         const { data: originalTx } = await supabase
           .from('wallet_transactions')
@@ -845,14 +857,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             p_user_id: originalTx.user_id,
             p_amount: charge.amount_refunded / 100
           });
-          
+
           if (rpcError) {
             // Retry the atomic RPC once in case of transient error
             const { error: retryError } = await supabase.rpc('decrement_balance', {
               p_user_id: originalTx.user_id,
               p_amount: charge.amount_refunded / 100
             });
-            
+
             if (retryError) {
               console.error('[Webhook] Atomic balance update for refund failed after retry. Please add decrement_balance RPC function.', {
                 user_id: originalTx.user_id,
@@ -866,7 +878,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
                 .select('balance')
                 .eq('id', originalTx.user_id)
                 .single();
-              
+
               const currentBalance = profile?.balance || 0;
               await supabase.from('profiles')
                 .update({ balance: Math.max(0, currentBalance - (charge.amount_refunded / 100)) })
@@ -876,14 +888,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
           console.log(`[Webhook] Refund processed for user ${originalTx.user_id}`);
         }
-        
+
         break;
       }
 
       case 'transfer.created': {
         const transfer = event.data.object;
         console.log(`[Webhook] Transfer created: ${transfer.id} to ${transfer.destination} for $${transfer.amount / 100}`);
-        
+
         // Update related transaction with transfer ID
         // Match by user_id, type, amount, and null stripe_transfer_id for more accurate association
         const userId = transfer.metadata?.user_id;
@@ -908,7 +920,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'transfer.paid': {
         const transfer = event.data.object;
         console.log(`[Webhook] Transfer paid: ${transfer.id}`);
-        
+
         // Update transaction status
         await supabase
           .from('wallet_transactions')
@@ -917,7 +929,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             metadata: { transfer_status: 'paid', paid_at: new Date().toISOString() }
           })
           .eq('stripe_transfer_id', transfer.id);
-        
+
         // TODO: Send notification to user that funds have been transferred
         break;
       }
@@ -925,14 +937,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'transfer.failed': {
         const transfer = event.data.object;
         console.log(`[Webhook] Transfer failed: ${transfer.id}`);
-        
+
         // Mark transaction as failed and prepare for retry
         const { data: tx } = await supabase
           .from('wallet_transactions')
           .update({
             status: 'failed',
-            metadata: { 
-              transfer_status: 'failed', 
+            metadata: {
+              transfer_status: 'failed',
               failure_reason: transfer.failure_code,
               retry_count: 0
             }
@@ -945,19 +957,19 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           // Refund the amount back to user's wallet for failed withdrawal
           // Use atomic RPC if available, with fallback
           const refundAmount = Math.abs(tx.amount);
-          
+
           const { error: rpcError } = await supabase.rpc('increment_balance', {
             p_user_id: tx.user_id,
             p_amount: refundAmount
           });
-          
+
           if (rpcError) {
             // Retry the atomic RPC once in case of transient error
             const { error: retryError } = await supabase.rpc('increment_balance', {
               p_user_id: tx.user_id,
               p_amount: refundAmount
             });
-            
+
             if (retryError) {
               console.error('[Webhook] Atomic balance update for transfer refund failed after retry. Using non-atomic fallback.', {
                 user_id: tx.user_id,
@@ -971,16 +983,16 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
                 .select('balance')
                 .eq('id', tx.user_id)
                 .single();
-              
+
               const currentBalance = profile?.balance || 0;
               await supabase.from('profiles')
                 .update({ balance: currentBalance + refundAmount })
                 .eq('id', tx.user_id);
             }
           }
-          
+
           console.log(`[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`);
-          
+
           // Note: User notification should be implemented via notification service when available
         }
         break;
@@ -989,14 +1001,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
       case 'account.updated': {
         const account = event.data.object;
         console.log(`[Webhook] Connect account updated: ${account.id}`);
-        
+
         // Update user's Connect status
         if (account.metadata?.user_id) {
           await supabase
             .from('profiles')
             .update({
-              stripe_connect_onboarded_at: account.details_submitted && account.payouts_enabled 
-                ? new Date().toISOString() 
+              stripe_connect_onboarded_at: account.details_submitted && account.payouts_enabled
+                ? new Date().toISOString()
                 : null
             })
             .eq('id', account.metadata.user_id);
@@ -1088,7 +1100,7 @@ app.post('/connect/create-account-link', apiLimiter, authenticateUser, async (re
     });
 
     console.log(`[Connect] Account link created for ${accountId}`);
-    
+
     res.json({
       url: accountLink.url,
       accountId: accountId,
@@ -1119,7 +1131,7 @@ app.post('/connect/verify-onboarding', apiLimiter, authenticateUser, async (req,
 
     // Check account status with Stripe
     const account = await stripe.accounts.retrieve(profile.stripe_connect_account_id);
-    
+
     const onboarded = account.charges_enabled && account.payouts_enabled;
 
     // Update profile if onboarded
@@ -1218,7 +1230,7 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
     }
 
     console.log(`[Connect] Transfer created: ${transfer.id} for user ${userId}, amount ${amount}`);
-    
+
     res.json({
       transferId: transfer.id,
       status: 'pending',
@@ -1337,9 +1349,9 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
     // Check retry count
     const retryCount = tx.metadata?.retry_count || 0;
     if (retryCount >= 3) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Maximum retry attempts reached. Please contact support.',
-        maxRetriesReached: true 
+        maxRetriesReached: true
       });
     }
 
@@ -1367,12 +1379,12 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
       p_user_id: userId,
       p_amount: amount
     });
-    
+
     let balanceDeducted = !rpcError;
-    
+
     if (rpcError) {
       console.warn('[Connect] RPC not available, using optimistic locking for transfer retry');
-      
+
       // Optimistic locking: re-check balance and update atomically
       const { data: updatedProfile, error: updateError } = await supabase
         .from('profiles')
@@ -1381,9 +1393,9 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
         .eq('balance', profile.balance) // Optimistic lock: only update if balance hasn't changed
         .select()
         .single();
-      
+
       if (updateError || !updatedProfile) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: 'Balance changed during processing. Please try again.',
           code: 'BALANCE_CONFLICT'
         });
@@ -1402,7 +1414,7 @@ app.post('/connect/retry-transfer', paymentLimiter, authenticateUser, async (req
         amount: Math.round(amount * 100),
         currency: 'usd',
         destination: profile.stripe_connect_account_id,
-        metadata: { 
+        metadata: {
           user_id: userId,
           retry_of_transaction: transactionId,
         }
