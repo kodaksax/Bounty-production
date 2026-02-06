@@ -6,6 +6,11 @@ import { storageService } from '../lib/services/storage-service'
 import type { Attachment } from '../lib/types'
 import { getFileInfo } from '../lib/utils/fs-utils'
 
+// Upload retry configuration
+const MAX_UPLOAD_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 1000 // 1 second
+const MAX_RETRY_DELAY_MS = 5000 // 5 seconds
+
 export interface AttachmentUploadOptions {
   bucket?: string // Supabase storage bucket name
   folder?: string // Folder within bucket (e.g., 'bounties', 'profiles', 'proofs')
@@ -119,10 +124,9 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     mimeType?: string
     size?: number
   }): Promise<Attachment | null> => {
-    const maxRetries = 3
     let lastError: Error | null = null
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= MAX_UPLOAD_RETRIES; attempt++) {
       try {
         setState((s) => ({ 
           ...s, 
@@ -137,7 +141,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
 
         // Show retry attempt if not first try
         if (attempt > 1) {
-          console.log(`[AttachmentUpload] Retry attempt ${attempt}/${maxRetries}`)
+          console.log(`[AttachmentUpload] Retry attempt ${attempt}/${MAX_UPLOAD_RETRIES}`)
         }
 
         const uploadResult = await storageService.uploadFile(file.uri, {
@@ -177,11 +181,9 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Upload failed')
         
-        // If this isn't the last attempt, wait before retrying
-        if (attempt < maxRetries) {
-          // Exponential backoff: 1s (2^0), 2s (2^1), 4s (2^2)
-          // Cap at 5s for potential future use with more retries
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        // If this isn't the last attempt, wait before retrying with exponential backoff
+        if (attempt < MAX_UPLOAD_RETRIES) {
+          const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS)
           console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
           await new Promise(resolve => setTimeout(resolve, delay))
         }

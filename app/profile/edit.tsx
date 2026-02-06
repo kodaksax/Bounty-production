@@ -436,6 +436,9 @@ export default function EditProfileScreen() {
   );
 }
 
+// Banner configuration
+const BANNER_HEIGHT = 140; // Increased from 120px for better visual presence
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -532,7 +535,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bannerPlaceholder: {
-    height: 140,
+    height: BANNER_HEIGHT,
     backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
@@ -602,7 +605,7 @@ const styles = StyleSheet.create({
   fieldContainer: {
     backgroundColor: "rgba(16, 185, 129, 0.08)",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 14, // Increased for better mobile touch targets (44x44 minimum)
     marginBottom: 1,
     borderLeftWidth: 3,
     borderLeftColor: "transparent",
