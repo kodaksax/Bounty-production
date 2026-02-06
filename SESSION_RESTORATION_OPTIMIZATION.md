@@ -51,12 +51,19 @@ const BRANDED_MIN_MS = 800; // Reduced from 1500ms for faster session restoratio
 
 **Key Logic**:
 ```typescript
+// Track this fetch attempt with a timestamp to prevent race conditions
+const fetchTimestamp = Date.now();
+this.latestFetchTimestamp = fetchTimestamp;
+
 // Check cache first for instant session restoration
 const cachedProfile = await this.loadFromCache(userId);
 if (cachedProfile) {
   this.currentProfile = cachedProfile;
   this.notifyListeners(cachedProfile); // Immediate UI update
-  this.fetchFreshProfileInBackground(userId); // Non-blocking refresh
+  // Non-blocking refresh with race condition protection
+  void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch((error) => {
+    console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
+  });
   return cachedProfile;
 }
 // Fall back to network fetch if no cache exists

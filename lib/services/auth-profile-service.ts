@@ -458,8 +458,8 @@ export class AuthProfileService {
 
       // Check if a newer fetch has started since we began
       // This prevents race conditions where multiple background fetches complete out of order
-      // Use strict inequality to ensure we only apply results from the most recent fetch
-      if (callerFetchTimestamp !== this.latestFetchTimestamp) {
+      // Only apply results if no newer fetch has been initiated
+      if (callerFetchTimestamp < this.latestFetchTimestamp) {
         console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
         return;
       }
