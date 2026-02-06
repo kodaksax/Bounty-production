@@ -91,18 +91,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   useEffect(() => {
     let mounted = true
+    
     async function load() {
       try {
         const list = await messageService.getConversations()
+        if (!mounted) return
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
-        if (mounted) setConversation(match)
+        setConversation(match)
 
         // Fetch hunter name if available
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
         if (hunterId) {
           try {
             const hunterProfile = await userProfileService.getProfile(hunterId)
-            if (mounted && hunterProfile?.username) {
+            if (!mounted) return
+            if (hunterProfile?.username) {
               setHunterName(hunterProfile.username)
             }
           } catch (error) {
@@ -114,23 +117,23 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
           const submission = await completionService.getSubmission(String(bounty.id))
+          if (!mounted) return
           const foundSubmission = !!submission && submission.status === 'pending'
-          if (mounted) {
-            setHasSubmission(foundSubmission)
-            // Auto-expand Review & Verify section when submission is detected
-            if (foundSubmission) {
-              setReviewExpanded(true)
-              setWipExpanded(false)
-              // Move the visual stepper to Review & Verify so owner sees where action is needed
-              setLocalStageOverride('review_verify')
-            }
+          setHasSubmission(foundSubmission)
+          // Auto-expand Review & Verify section when submission is detected
+          if (foundSubmission) {
+            setReviewExpanded(true)
+            setWipExpanded(false)
+            // Move the visual stepper to Review & Verify so owner sees where action is needed
+            setLocalStageOverride('review_verify')
           }
         }
         // For hunters, initialize revision indicator state from latest submission
         if (bounty.status === 'in_progress' && variant === 'hunter') {
           try {
             const submission = await completionService.getSubmission(String(bounty.id))
-            if (mounted && submission) {
+            if (!mounted) return
+            if (submission) {
               // Only check pending-for-hunter if currentUserId is defined
               let isPendingForHunter = false
               if (currentUserId) {
@@ -166,13 +169,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
           const ready = await completionService.getReady(String(bounty.id))
-          if (mounted) setReadyRecord(ready)
+          if (!mounted) return
+          setReadyRecord(ready)
         } catch {}
         
         // Check for cancellation request
         try {
           const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
-          if (mounted && cancellation && cancellation.status === 'pending') {
+          if (!mounted) return
+          if (cancellation && cancellation.status === 'pending') {
             setHasCancellationRequest(true)
           }
         } catch {}
@@ -180,7 +185,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Check for active dispute
         try {
           const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
-          if (mounted && dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+          if (!mounted) return
+          if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
             setHasDispute(true)
           }
         } catch {}
@@ -190,7 +196,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   // Also load for hunters even when the card is not expanded so revision-requested state
   // is available in the compact card (shows badge) without needing to open the card first.
   if (expanded || variant === 'owner' || variant === 'hunter') load()
-    return () => { mounted = false }
+    return () => { 
+      mounted = false
+    }
   }, [expanded, bounty.id, bounty.status, variant])
   
   // owner detection

@@ -39,13 +39,19 @@ const Skeleton = React.memo(function Skeleton({
 
   // Check for reduced motion preference
   useEffect(() => {
+    let mounted = true
+    
     const checkMotionPreference = async () => {
       try {
         const isReduceMotionEnabled = await AccessibilityInfo.isReduceMotionEnabled()
-        setPrefersReducedMotion(isReduceMotionEnabled)
+        if (mounted) {
+          setPrefersReducedMotion(isReduceMotionEnabled)
+        }
       } catch {
         // Default to false if we can't determine
-        setPrefersReducedMotion(false)
+        if (mounted) {
+          setPrefersReducedMotion(false)
+        }
       }
     }
     checkMotionPreference()
@@ -59,6 +65,7 @@ const Skeleton = React.memo(function Skeleton({
     )
 
     return () => {
+      mounted = false
       subscription?.remove()
     }
   }, [])
