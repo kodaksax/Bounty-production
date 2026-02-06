@@ -79,7 +79,6 @@ export function ConnectOnboardingWrapper({
   // Check current Connect account status
   const checkAccountStatus = useCallback(async () => {
     try {
-      if (!isMountedRef.current) return;
       setIsLoading(true);
       setError(null);
 
@@ -159,7 +158,6 @@ export function ConnectOnboardingWrapper({
   // Start the onboarding flow
   const startOnboarding = useCallback(async () => {
     try {
-      if (!isMountedRef.current) return;
       setIsStartingOnboarding(true);
       setError(null);
 
