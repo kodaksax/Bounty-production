@@ -50,6 +50,9 @@ export class AuthProfileService {
   private isNotifying = false;
   private hasPendingNotification = false;
   private pendingProfile: AuthProfile | null = null;
+  // Track the timestamp of the most recent fetchAndSyncProfile call to prevent
+  // race conditions where background fetches complete out of order
+  private latestFetchTimestamp: number = 0;
 
   private constructor() {}
 
@@ -262,9 +265,14 @@ export class AuthProfileService {
    * OPTIMIZATION: Check cache first for faster session restoration on app reopen
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
+    // Track this fetch attempt with a timestamp to prevent race conditions
+    const fetchTimestamp = Date.now();
+    this.latestFetchTimestamp = fetchTimestamp;
+    
     console.log('[authProfileService] fetchAndSyncProfile START', { 
       userId,
-      isSupabaseConfigured 
+      isSupabaseConfigured,
+      fetchTimestamp
     });
     
     if (!isSupabaseConfigured) {
@@ -297,7 +305,10 @@ export class AuthProfileService {
       // Notify listeners immediately with cached data
       this.notifyListeners(cachedProfile);
       // Continue to fetch fresh data in background (don't await to avoid blocking)
-      this.fetchFreshProfileInBackground(userId);
+      // Use void to explicitly indicate intentional fire-and-forget behavior
+      void this.fetchFreshProfileInBackground(userId).catch((error) => {
+        console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
+      });
       return cachedProfile;
     }
 
@@ -427,6 +438,9 @@ export class AuthProfileService {
    * @private
    */
   private async fetchFreshProfileInBackground(userId: string): Promise<void> {
+    // Capture the fetch timestamp at call time to detect races
+    const fetchTimestamp = this.latestFetchTimestamp;
+    
     try {
       console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
       
@@ -439,6 +453,13 @@ export class AuthProfileService {
       if (error) {
         // Don't throw, just log - we already have cached data displayed
         console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
+        return;
+      }
+
+      // Check if a newer fetch has started since we began
+      // This prevents race conditions where multiple background fetches complete out of order
+      if (fetchTimestamp < this.latestFetchTimestamp) {
+        console.log('[authProfileService] Discarding stale background fetch result (newer fetch in progress)');
         return;
       }
 
