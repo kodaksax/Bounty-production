@@ -50,6 +50,9 @@ export class AuthProfileService {
   private isNotifying = false;
   private hasPendingNotification = false;
   private pendingProfile: AuthProfile | null = null;
+  // Track the timestamp of the most recent fetchAndSyncProfile call to prevent
+  // race conditions where background fetches complete out of order
+  private latestFetchTimestamp: number = 0;
 
   private constructor() {}
 
@@ -259,11 +262,17 @@ export class AuthProfileService {
 
   /**
    * Fetch profile from Supabase and sync with local cache
+   * OPTIMIZATION: Check cache first for faster session restoration on app reopen
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
+    // Track this fetch attempt with a timestamp to prevent race conditions
+    const fetchTimestamp = Date.now();
+    this.latestFetchTimestamp = fetchTimestamp;
+    
     console.log('[authProfileService] fetchAndSyncProfile START', { 
       userId,
-      isSupabaseConfigured 
+      isSupabaseConfigured,
+      fetchTimestamp
     });
     
     if (!isSupabaseConfigured) {
@@ -287,8 +296,25 @@ export class AuthProfileService {
       return fallbackProfile;
     }
 
+    // OPTIMIZATION: Check cache first for instant session restoration
+    // This allows the app to show the main screen immediately while fresh data loads
+    const cachedProfile = await this.loadFromCache(userId);
+    if (cachedProfile) {
+      console.log('[authProfileService] Using cached profile for fast restoration:', cachedProfile.username);
+      this.currentProfile = cachedProfile;
+      // Notify listeners immediately with cached data
+      this.notifyListeners(cachedProfile);
+      // Continue to fetch fresh data in background (don't await to avoid blocking)
+      // Pass the fetchTimestamp to enable race condition detection
+      // Use void to explicitly indicate intentional fire-and-forget behavior
+      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch((error) => {
+        console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
+      });
+      return cachedProfile;
+    }
+
     try {
-      console.log('[authProfileService] Querying Supabase profiles table...');
+      console.log('[authProfileService] No cache found, querying Supabase profiles table...');
       
       // Use Supabase SDK's built-in network handling and timeouts
       const { data, error } = await supabase
@@ -404,6 +430,64 @@ export class AuthProfileService {
       this.currentProfile = null;
       this.notifyListeners(null);
       return null;
+    }
+  }
+
+  /**
+   * Fetch fresh profile data in background without blocking
+   * Used after returning cached data for instant UI update
+   * @param userId - The user ID to fetch profile for
+   * @param callerFetchTimestamp - The timestamp from the calling fetchAndSyncProfile to detect race conditions
+   * @private
+   */
+  private async fetchFreshProfileInBackground(userId: string, callerFetchTimestamp: number): Promise<void> {
+    try {
+      console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        // Don't throw, just log - we already have cached data displayed
+        console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
+        return;
+      }
+
+      // Check if a newer fetch has started since we began
+      // This prevents race conditions where multiple background fetches complete out of order
+      // Only apply results if no newer fetch has been initiated
+      if (callerFetchTimestamp < this.latestFetchTimestamp) {
+        console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
+        return;
+      }
+
+      if (data) {
+        const freshProfile: AuthProfile = {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          avatar: data.avatar,
+          about: data.about,
+          phone: data.phone,
+          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
+          age_verified_at: data.age_verified_at || undefined,
+          balance: data.balance || 0,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+        };
+
+        console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');
+        this.currentProfile = freshProfile;
+        await this.cacheProfile(freshProfile);
+        this.notifyListeners(freshProfile);
+      }
+    } catch (error) {
+      // Silent failure - we have cached data already displayed
+      console.log('[authProfileService] Background fetch failed (non-critical):', error);
     }
   }
 

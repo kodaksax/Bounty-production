@@ -103,7 +103,7 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
 function RootLayout({ children }: { children: React.ReactNode }) {
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
-  const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
+  const BRANDED_MIN_MS = 800; // Reduced from 1500ms for faster session restoration
 
   // Load any custom fonts (add family names if you have them)
   const [fontsLoaded] = useFonts({
