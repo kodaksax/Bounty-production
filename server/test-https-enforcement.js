@@ -64,7 +64,7 @@ function makeRequest(path, headers = {}) {
 
 async function runTests() {
   log('\n🧪 HTTPS Enforcement Test Suite', colors.blue);
-  log('=' .repeat(60), colors.blue);
+  log('='.repeat(60), colors.blue);
   
   const results = {
     passed: 0,
@@ -219,9 +219,9 @@ async function runTests() {
   }
 
   // Summary
-  log('\n' + '=' .repeat(60), colors.blue);
+  log('\n' + '='.repeat(60), colors.blue);
   log('📊 Test Summary', colors.blue);
-  log('=' .repeat(60), colors.blue);
+  log('='.repeat(60), colors.blue);
   
   results.tests.forEach(test => {
     const icon = test.status === 'PASSED' ? '✅' : test.status === 'FAILED' ? '❌' : '⏭️';
