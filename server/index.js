@@ -90,6 +90,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// HTTPS enforcement middleware for production
+// CWE-319 Fix: Enforce encrypted connections in production
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    // Check if request is secure
+    const isSecure = req.secure || 
+                     req.headers['x-forwarded-proto'] === 'https' ||
+                     req.headers['x-forwarded-ssl'] === 'on';
+    
+    if (!isSecure) {
+      console.error(`[SECURITY] Rejected insecure HTTP request from ${req.ip} to ${req.path}`);
+      return res.status(403).json({ 
+        error: 'HTTPS required',
+        message: 'All requests must use HTTPS in production. Please use https:// instead of http://',
+        code: 'INSECURE_CONNECTION'
+      });
+    }
+    
+    // Add HSTS header to enforce HTTPS on client side
+    // max-age=31536000 (1 year), includeSubDomains, preload
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    
+    // Add additional security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+  }
+  next();
+});
+
 // CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -1174,10 +1204,18 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       throw txError;
     }
 
-    // Update user balance
-    await supabase.from('profiles')
-      .update({ balance: supabase.raw(`balance - ${amount}`) })
-      .eq('id', userId);
+    // Update user balance using parameterized RPC function
+    // This prevents SQL injection by using a stored procedure with proper parameter binding
+    const { data: newBalance, error: balanceError } = await supabase
+      .rpc('update_balance', {
+        p_user_id: userId,
+        p_amount: -amount  // Negative amount for withdrawal
+      });
+
+    if (balanceError) {
+      console.error('[Connect] Error updating balance:', balanceError);
+      throw new Error('Failed to update balance');
+    }
 
     console.log(`[Connect] Transfer created: ${transfer.id} for user ${userId}, amount ${amount}`);
     
@@ -1427,8 +1465,9 @@ app.use((err, req, res, next) => {
 });
 
 // Start server (bind to 0.0.0.0 so LAN devices can reach it)
-// SECURITY: In production, ensure this server runs behind a reverse proxy (nginx, Apache)
-// that enforces HTTPS. All client requests should use HTTPS URLs.
+// SECURITY: HTTPS enforcement is active in production mode
+// HTTP requests will be rejected with 403 Forbidden
+// For production, use a reverse proxy (nginx, Apache, Cloudflare) or enable direct HTTPS
 // Rate limiting is configured above to prevent abuse.
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 BountyExpo Stripe Server running on port ${PORT}`);
@@ -1436,7 +1475,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔐 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY ? 'Yes' : 'No'}`);
   console.log(`📝 Webhook secret configured: ${!!process.env.STRIPE_WEBHOOK_SECRET ? 'Yes' : 'No'}`);
   if (process.env.NODE_ENV === 'production') {
-    console.log(`⚠️  SECURITY: Ensure this server is behind HTTPS proxy in production`);
+    console.log(`🔒 HTTPS ENFORCEMENT: ACTIVE - HTTP requests will be rejected`);
+    console.log(`   ├─ HSTS enabled (max-age: 1 year)`);
+    console.log(`   ├─ Security headers configured`);
+    console.log(`   └─ Supports reverse proxy (X-Forwarded-Proto)`);
+  } else {
+    console.log(`⚠️  Development mode: HTTPS enforcement disabled`);
   }
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /health`);

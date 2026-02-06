@@ -189,18 +189,69 @@ For production:
 
 ## Security Considerations
 
-⚠️ **Important**: This is a minimal implementation for development.
+⚠️ **Important**: This server implements production-grade security measures.
+
+### HTTPS Enforcement (CWE-319 Protection)
+
+**Production Mode**: When `NODE_ENV=production`, the server automatically:
+- ✅ **Rejects all HTTP requests** with 403 Forbidden
+- ✅ **Enforces HTTPS-only connections** (prevents cleartext transmission)
+- ✅ **Adds HSTS header** (Strict-Transport-Security: max-age=31536000)
+- ✅ **Adds security headers** (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection)
+- ✅ **Supports reverse proxy** (detects X-Forwarded-Proto header)
+
+**Development Mode**: HTTPS enforcement is disabled for local development convenience.
+
+### Production Deployment Options
+
+#### Option A: Reverse Proxy (Recommended)
+Deploy behind a reverse proxy that handles SSL/TLS termination:
+- **Nginx**: Configure with SSL certificates and set `proxy_set_header X-Forwarded-Proto $scheme;`
+- **Apache**: Use mod_proxy with SSL and `RequestHeader set X-Forwarded-Proto "https"`
+- **Cloudflare**: Automatically handles HTTPS and sets X-Forwarded-Proto
+- **AWS ALB/ELB**: Configure with SSL certificate and X-Forwarded-Proto
+
+Example nginx configuration:
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name api.yourdomain.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+#### Option B: Direct HTTPS (Advanced)
+For direct HTTPS without a reverse proxy, the server would need modifications to use the `https` module with SSL certificates.
+
+### Additional Security Measures
 
 For production deployment:
-- Use HTTPS only
-- Implement proper authentication (JWT, API keys, etc.)
-- Add rate limiting
-- Store data in a secure database, not JSON files
-- Validate all inputs
-- Add logging and monitoring
-- Use environment-specific configurations
-- Keep dependencies updated
-- Follow Stripe's security best practices
+- ✅ **Authentication**: JWT token validation via Supabase (implemented)
+- ✅ **Rate limiting**: Prevents abuse (implemented)
+- ✅ **Input sanitization**: XSS and injection protection (implemented)
+- ✅ **CORS**: Configurable allowed origins (implemented)
+- ✅ **HTTPS enforcement**: Rejects insecure connections (implemented)
+- ⚠️ **Database security**: Store data in a secure database, not JSON files
+- ⚠️ **Logging**: Add comprehensive security logging and monitoring
+- ⚠️ **Updates**: Keep dependencies updated regularly
+- ⚠️ **Stripe best practices**: Follow all Stripe security guidelines
+
+### Security Headers Explained
+
+When running in production, these headers protect against common attacks:
+- **Strict-Transport-Security (HSTS)**: Forces browsers to use HTTPS for 1 year
+- **X-Content-Type-Options**: Prevents MIME-type sniffing attacks
+- **X-Frame-Options**: Prevents clickjacking attacks
+- **X-XSS-Protection**: Enables browser XSS filtering
 
 ## Troubleshooting
 
