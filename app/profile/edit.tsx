@@ -50,6 +50,7 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
@@ -192,10 +193,7 @@ export default function EditProfileScreen() {
   const maxBioLength = 160;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={[styles.container, { paddingTop: insets.top }]}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Pinned Header: Twitter-style Cancel/Save */}
       <View style={styles.pinnedHeader}>
         <TouchableOpacity
@@ -233,11 +231,17 @@ export default function EditProfileScreen() {
         </View>
       )}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Banner + Avatar Overlap (Twitter-style) */}
         <View style={styles.bannerSection}>
           <TouchableOpacity
@@ -310,12 +314,14 @@ export default function EditProfileScreen() {
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'name' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Name</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
+              onFocus={() => setFocusedField('name')}
+              onBlur={() => setFocusedField(null)}
               placeholder="Your display name"
               placeholderTextColor="#6b7280"
               accessibilityLabel="Display name"
@@ -323,12 +329,14 @@ export default function EditProfileScreen() {
             />
           </View>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'username' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Username</Text>
             <TextInput
               style={styles.input}
               value={formData.username}
               onChangeText={(text) => setFormData({ ...formData, username: text })}
+              onFocus={() => setFocusedField('username')}
+              onBlur={() => setFocusedField(null)}
               placeholder="@username"
               placeholderTextColor="#6b7280"
               autoCapitalize="none"
@@ -337,12 +345,14 @@ export default function EditProfileScreen() {
             />
           </View>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'bio' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Bio</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.bio}
               onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
+              onFocus={() => setFocusedField('bio')}
+              onBlur={() => setFocusedField(null)}
               placeholder="Tell others about yourself..."
               placeholderTextColor="#6b7280"
               multiline
@@ -361,12 +371,14 @@ export default function EditProfileScreen() {
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Location & Links</Text>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'location' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Location</Text>
             <TextInput
               style={styles.input}
               value={formData.location}
               onChangeText={(text) => setFormData({ ...formData, location: text })}
+              onFocus={() => setFocusedField('location')}
+              onBlur={() => setFocusedField(null)}
               placeholder="City, Country"
               placeholderTextColor="#6b7280"
               accessibilityLabel="Location"
@@ -374,12 +386,14 @@ export default function EditProfileScreen() {
             />
           </View>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'portfolio' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Website / Portfolio</Text>
             <TextInput
               style={styles.input}
               value={formData.portfolio}
               onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
+              onFocus={() => setFocusedField('portfolio')}
+              onBlur={() => setFocusedField(null)}
               placeholder="https://yourwebsite.com"
               placeholderTextColor="#6b7280"
               keyboardType="url"
@@ -393,12 +407,14 @@ export default function EditProfileScreen() {
         <View style={styles.fieldGroup}>
           <Text style={styles.sectionTitle}>Skills & Expertise</Text>
 
-          <View style={styles.fieldContainer}>
+          <View style={[styles.fieldContainer, focusedField === 'skillsets' && styles.fieldContainerFocused]}>
             <Text style={styles.label}>Skillsets</Text>
             <TextInput
               style={styles.input}
               value={formData.skillsets}
               onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
+              onFocus={() => setFocusedField('skillsets')}
+              onBlur={() => setFocusedField(null)}
               placeholder="e.g., React, Node.js, Design"
               placeholderTextColor="#6b7280"
               accessibilityLabel="Skillsets"
@@ -414,8 +430,9 @@ export default function EditProfileScreen() {
             Badges and Achievements are earned automatically and cannot be edited here.
           </Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -496,6 +513,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
@@ -505,18 +525,26 @@ const styles = StyleSheet.create({
   bannerSection: {
     position: "relative",
     marginBottom: 60,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   bannerPlaceholder: {
-    height: 120,
+    height: 140,
     backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   bannerHelpText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#d1fae5",
-    marginTop: 4,
+    marginTop: 6,
     fontStyle: "italic",
+    fontWeight: "500",
   },
   avatarOverlap: {
     position: "absolute",
@@ -530,8 +558,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 4,
+    borderWidth: 5,
     borderColor: "#064e3b",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   avatarText: {
     fontSize: 40,
@@ -545,11 +578,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#047857",
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: "#064e3b",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
   },
   fieldGroup: {
     marginBottom: 24,
@@ -564,8 +602,14 @@ const styles = StyleSheet.create({
   fieldContainer: {
     backgroundColor: "rgba(16, 185, 129, 0.08)",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginBottom: 1,
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+  },
+  fieldContainerFocused: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderLeftColor: "#10b981",
   },
   label: {
     fontSize: 12,
@@ -577,9 +621,10 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth: 0,
     paddingHorizontal: 0,
-    paddingVertical: 4,
+    paddingVertical: 6,
     fontSize: 16,
     color: "#ffffff",
+    lineHeight: 22,
   },
   textArea: {
     minHeight: 80,

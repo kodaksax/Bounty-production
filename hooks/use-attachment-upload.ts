@@ -111,7 +111,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
   }
 
   /**
-   * Upload attachment to storage
+   * Upload attachment to storage with retry logic
    */
   const uploadAttachment = async (file: {
     uri: string
@@ -119,59 +119,84 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     mimeType?: string
     size?: number
   }): Promise<Attachment | null> => {
-    try {
-      setState((s) => ({ ...s, isUploading: true, progress: 0, error: null }))
+    const maxRetries = 3
+    let lastError: Error | null = null
 
-      const timestamp = Date.now()
-      const fileName = file.name || `attachment-${timestamp}`
-      const filePath = `${folder}/${timestamp}-${fileName}`
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        setState((s) => ({ 
+          ...s, 
+          isUploading: true, 
+          progress: 0, 
+          error: null 
+        }))
 
-      const uploadResult = await storageService.uploadFile(file.uri, {
-        bucket,
-        path: filePath,
-        onProgress: (progress) => {
-          setState((s) => ({ ...s, progress }))
-        },
-      })
+        const timestamp = Date.now()
+        const fileName = file.name || `attachment-${timestamp}`
+        const filePath = `${folder}/${timestamp}-${fileName}`
 
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed')
+        // Show retry attempt if not first try
+        if (attempt > 1) {
+          console.log(`[AttachmentUpload] Retry attempt ${attempt}/${maxRetries}`)
+        }
+
+        const uploadResult = await storageService.uploadFile(file.uri, {
+          bucket,
+          path: filePath,
+          onProgress: (progress) => {
+            setState((s) => ({ ...s, progress }))
+          },
+        })
+
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || 'Upload failed')
+        }
+
+        const attachment: Attachment = {
+          id: `att-${timestamp}`,
+          name: fileName,
+          uri: file.uri, // Keep local URI for immediate display
+          remoteUri: uploadResult.url,
+          mimeType: file.mimeType,
+          size: file.size,
+          status: 'uploaded',
+          progress: 1,
+        }
+
+        setState((s) => ({
+          ...s,
+          isUploading: false,
+          progress: 1,
+          lastUploaded: attachment,
+          error: null,
+        }))
+
+        onUploaded?.(attachment)
+
+        return attachment
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload failed')
+        
+        // If this isn't the last attempt, wait before retrying
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // Exponential backoff: 1s, 2s, 4s
+          console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-
-      const attachment: Attachment = {
-        id: `att-${timestamp}`,
-        name: fileName,
-        uri: file.uri, // Keep local URI for immediate display
-        remoteUri: uploadResult.url,
-        mimeType: file.mimeType,
-        size: file.size,
-        status: 'uploaded',
-        progress: 1,
-      }
-
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 1,
-        lastUploaded: attachment,
-        error: null,
-      }))
-
-      onUploaded?.(attachment)
-
-      return attachment
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error('Upload failed')
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 0,
-        error: err.message,
-      }))
-      onError?.(err)
-      Alert.alert('Upload Failed', err.message)
-      return null
     }
+
+    // All retries failed
+    const err = lastError || new Error('Upload failed after all retries')
+    setState((s) => ({
+      ...s,
+      isUploading: false,
+      progress: 0,
+      error: err.message,
+    }))
+    onError?.(err)
+    Alert.alert('Upload Failed', `${err.message}\n\nPlease check your connection and try again.`)
+    return null
   }
 
   /**
