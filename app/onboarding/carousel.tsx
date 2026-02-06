@@ -24,6 +24,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
+// Workflow step configuration
+const WORKFLOW_STEP_START = 1; // Slide index for first workflow step (slide 2)
+const WORKFLOW_STEP_END = 4;   // Slide index for last workflow step (slide 5)
+
 type SlideData = {
   id: string;
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -141,8 +145,8 @@ export default function OnboardingCarousel() {
       extrapolate: 'clamp',
     });
 
-    // Determine if this is a workflow step (slides 2-5)
-    const isWorkflowStep = index >= 1 && index <= 4;
+    // Determine if this is a workflow step (slides 2-5, which are indices 1-4)
+    const isWorkflowStep = index >= WORKFLOW_STEP_START && index <= WORKFLOW_STEP_END;
     const stepNumber = isWorkflowStep ? index : null;
 
     return (
