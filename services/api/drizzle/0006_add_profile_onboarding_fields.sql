@@ -3,10 +3,10 @@
 -- These fields are collected during onboarding but were not being saved to Supabase
 
 -- Add title column for professional title/role
-ALTER TABLE profiles 
+ALTER TABLE profiles
 ADD COLUMN IF NOT EXISTS title text;
 
--- Add location column for user's geographic location  
+-- Add location column for user's geographic location
 ALTER TABLE profiles
 ADD COLUMN IF NOT EXISTS location text;
 

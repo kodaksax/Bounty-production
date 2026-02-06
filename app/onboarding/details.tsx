@@ -37,7 +37,7 @@ export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
+  const { updateProfile: updateAuthProfile } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
