@@ -60,9 +60,7 @@ const Skeleton = React.memo(function Skeleton({
     const subscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
       (reduceMotionEnabled) => {
-        if (mounted) {
-          setPrefersReducedMotion(reduceMotionEnabled)
-        }
+        setPrefersReducedMotion(reduceMotionEnabled)
       }
     )
 
