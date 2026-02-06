@@ -91,7 +91,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   useEffect(() => {
     let mounted = true
-    const abortController = new AbortController()
     
     async function load() {
       try {
@@ -206,7 +205,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   if (expanded || variant === 'owner' || variant === 'hunter') load()
     return () => { 
       mounted = false
-      abortController.abort()
     }
   }, [expanded, bounty.id, bounty.status, variant])
   
