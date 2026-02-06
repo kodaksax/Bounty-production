@@ -91,9 +91,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   useEffect(() => {
     let mounted = true
+    const abortController = new AbortController()
+    
     async function load() {
       try {
+        // Check if component is still mounted before each async operation
+        if (!mounted) return
+        
         const list = await messageService.getConversations()
+        if (!mounted) return
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
         if (mounted) setConversation(match)
 
@@ -101,6 +107,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
         if (hunterId) {
           try {
+            if (!mounted) return
             const hunterProfile = await userProfileService.getProfile(hunterId)
             if (mounted && hunterProfile?.username) {
               setHunterName(hunterProfile.username)
@@ -113,7 +120,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
+          if (!mounted) return
           const submission = await completionService.getSubmission(String(bounty.id))
+          if (!mounted) return
           const foundSubmission = !!submission && submission.status === 'pending'
           if (mounted) {
             setHasSubmission(foundSubmission)
@@ -129,7 +138,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // For hunters, initialize revision indicator state from latest submission
         if (bounty.status === 'in_progress' && variant === 'hunter') {
           try {
+            if (!mounted) return
             const submission = await completionService.getSubmission(String(bounty.id))
+            if (!mounted) return
             if (mounted && submission) {
               // Only check pending-for-hunter if currentUserId is defined
               let isPendingForHunter = false
@@ -165,12 +176,14 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         }
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
+          if (!mounted) return
           const ready = await completionService.getReady(String(bounty.id))
           if (mounted) setReadyRecord(ready)
         } catch {}
         
         // Check for cancellation request
         try {
+          if (!mounted) return
           const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
           if (mounted && cancellation && cancellation.status === 'pending') {
             setHasCancellationRequest(true)
@@ -179,6 +192,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         
         // Check for active dispute
         try {
+          if (!mounted) return
           const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
           if (mounted && dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
             setHasDispute(true)
@@ -190,7 +204,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   // Also load for hunters even when the card is not expanded so revision-requested state
   // is available in the compact card (shows badge) without needing to open the card first.
   if (expanded || variant === 'owner' || variant === 'hunter') load()
-    return () => { mounted = false }
+    return () => { 
+      mounted = false
+      abortController.abort()
+    }
   }, [expanded, bounty.id, bounty.status, variant])
   
   // owner detection
