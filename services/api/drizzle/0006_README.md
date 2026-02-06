@@ -17,7 +17,7 @@ This migration should be applied via the migration runner or directly in Supabas
 ```bash
 # Using the migration runner (if available)
 cd services/api
-npm run migrate
+npm run db:migrate
 
 # Or manually in Supabase SQL editor
 # Copy and paste the contents of 0006_add_profile_onboarding_fields.sql

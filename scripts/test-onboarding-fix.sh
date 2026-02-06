@@ -35,9 +35,9 @@ else
 fi
 
 # Check if details.tsx saves to Supabase
-if grep -q "updates.title" app/onboarding/details.tsx && \
-   grep -q "updates.location" app/onboarding/details.tsx && \
-   grep -q "updates.skills" app/onboarding/details.tsx; then
+if grep -q "title: title.trim()" app/onboarding/details.tsx && \
+   grep -q "location: location.trim()" app/onboarding/details.tsx && \
+   grep -q "skills: skills.length > 0" app/onboarding/details.tsx; then
     echo "✅ Details screen saves all fields to Supabase"
 else
     echo "❌ Details screen not saving all fields"
