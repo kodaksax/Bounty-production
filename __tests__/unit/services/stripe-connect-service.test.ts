@@ -3,8 +3,6 @@
  * Tests Stripe Connect onboarding, account management, and payouts
  */
 
-import Stripe from 'stripe';
-
 // Mock environment
 beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
@@ -92,7 +90,7 @@ jest.mock('stripe', () => {
 });
 
 // Import service after mocks
-import * as stripeConnectService from '../../../services/api/src/services/stripe-connect-service';
+import { stripeConnectService } from '../../../services/api/src/services/stripe-connect-service';
 
 describe('Stripe Connect Service', () => {
   beforeEach(() => {

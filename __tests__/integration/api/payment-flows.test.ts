@@ -1,6 +1,12 @@
 /**
  * Comprehensive Integration Tests for Payment Endpoints
  * Tests all payment API endpoints with mocked dependencies
+ * 
+ * NOTE: These tests use a mock Express app with inline handlers rather than
+ * the actual Fastify routes from services/api/src/routes/*. This approach
+ * allows testing endpoint behavior in isolation, but tests may pass even if
+ * production routes break. Consider enhancing these tests to use real API
+ * routes for more accurate integration testing.
  */
 
 import express from 'express';

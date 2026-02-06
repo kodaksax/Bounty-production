@@ -1,6 +1,12 @@
 /**
  * E2E Tests for Complete Payment Flows
  * Tests end-to-end user scenarios for bounty payments, escrow, and refunds
+ * 
+ * NOTE: These tests interact directly with mocked Stripe/Supabase objects
+ * rather than calling the actual app services or HTTP endpoints. While this
+ * provides good coverage of business logic flows, true end-to-end tests would
+ * drive the actual API/service layer. Consider enhancing these to test the
+ * full stack for more comprehensive validation.
  */
 
 // Mock environment
@@ -447,12 +453,12 @@ describe('Complete Payment Flow E2E Tests', () => {
 
   describe('Payment Method Management Flow', () => {
     it('should save payment method for future use', async () => {
-      // Step 1: Create setup intent
-      const setupIntent = {
+      // Step 1: Create setup intent (for saving payment method)
+      mockStripe.setupIntents.create.mockResolvedValueOnce({
         id: 'seti_test123',
         client_secret: 'seti_test123_secret',
         status: 'requires_payment_method',
-      };
+      });
 
       // Step 2: Confirm setup with payment method
       const paymentMethod = {
@@ -572,11 +578,8 @@ describe('Complete Payment Flow E2E Tests', () => {
         amount: 10000,
       };
 
-      // Simulate failure
-      const error = new Error('Temporary failure');
-
-      // Create outbox event for retry
-      const outboxEvent = await mockSupabaseClient
+      // Create outbox event for retry (failure is implicit)
+      await mockSupabaseClient
         .from('outbox_events')
         .insert({
           event_type: 'escrow_release_retry',

@@ -3,8 +3,6 @@
  * Tests Stripe PaymentIntent operations, payment methods, and customer management
  */
 
-import Stripe from 'stripe';
-
 // Mock config first
 jest.mock('../../../services/api/src/config', () => ({
   config: {
@@ -154,7 +152,10 @@ describe('Consolidated Payment Service', () => {
           currency: 'usd',
           customer: 'cus_test123',
           description: 'Test payment',
-          metadata: { bountyId: 'bounty123' },
+          metadata: expect.objectContaining({
+            bountyId: 'bounty123',
+            user_id: 'user123',
+          }),
         }),
         {}
       );
@@ -322,7 +323,7 @@ describe('Consolidated Payment Service', () => {
     });
 
     it('should confirm without payment method if already attached', async () => {
-      const result = await paymentService.confirmPaymentIntent(
+      await paymentService.confirmPaymentIntent(
         'pi_test123',
         'user123'
       );

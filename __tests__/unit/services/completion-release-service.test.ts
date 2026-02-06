@@ -106,7 +106,7 @@ jest.mock('../../../services/api/src/utils/logger', () => ({
 }));
 
 // Import service
-import * as completionReleaseService from '../../../services/api/src/services/completion-release-service';
+import { completionReleaseService } from '../../../services/api/src/services/completion-release-service';
 
 describe('Completion Release Service', () => {
   beforeEach(() => {

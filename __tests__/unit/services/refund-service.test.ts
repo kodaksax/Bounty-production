@@ -55,7 +55,7 @@ const mockDb = {
   })),
 };
 
-jest.mock('../../../services/api/src/db', () => ({
+jest.mock('../../../services/api/src/db/connection', () => ({
   db: mockDb,
 }));
 
@@ -87,7 +87,7 @@ jest.mock('../../../services/api/src/utils/logger', () => ({
 }));
 
 // Import service
-import * as refundService from '../../../services/api/src/services/refund-service';
+import { refundService } from '../../../services/api/src/services/refund-service';
 
 describe('Refund Service', () => {
   beforeEach(() => {

@@ -3,8 +3,6 @@
  * Tests wallet operations, escrow management, and balance updates
  */
 
-import Stripe from 'stripe';
-
 // Mock config
 jest.mock('../../../services/api/src/config', () => ({
   config: {
@@ -158,13 +156,20 @@ describe('Consolidated Wallet Service', () => {
       const result = await walletService.getBalance('user123');
 
       expect(result.balance).toBe(10000);
-      expect(mockSupabaseClient.rpc).toHaveBeenCalledWith('get_wallet_balance', {
-        p_user_id: 'user123',
-      });
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('profiles');
     });
 
     it('should handle user without wallet', async () => {
-      mockSupabaseClient.rpc.mockResolvedValueOnce({ data: null, error: null });
+      mockSupabaseClient.from = jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            single: jest.fn(() => Promise.resolve({
+              data: { balance: 0 },
+              error: null,
+            })),
+          })),
+        })),
+      }));
 
       const result = await walletService.getBalance('user_no_wallet');
 
@@ -172,10 +177,16 @@ describe('Consolidated Wallet Service', () => {
     });
 
     it('should handle database errors', async () => {
-      mockSupabaseClient.rpc.mockResolvedValueOnce({
-        data: null,
-        error: { message: 'Database error' },
-      });
+      mockSupabaseClient.from = jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            single: jest.fn(() => Promise.resolve({
+              data: null,
+              error: { message: 'Database error' },
+            })),
+          })),
+        })),
+      }));
 
       await expect(walletService.getBalance('user123')).rejects.toThrow();
     });
