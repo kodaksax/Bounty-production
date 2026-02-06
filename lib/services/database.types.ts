@@ -59,6 +59,8 @@ export type Profile = {
   updated_at?: string
   display_name?: string
   location?: string
+  title?: string
+  skills?: string[] // Array of skill names
   onboarding_completed?: boolean
   // Withdrawal and cancellation tracking
   withdrawal_count?: number

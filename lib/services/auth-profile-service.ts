@@ -22,6 +22,9 @@ export interface AuthProfile {
   avatar?: string;
   about?: string;
   phone?: string;
+  title?: string; // Professional title/role
+  location?: string; // Geographic location
+  skills?: string[]; // Array of skills/expertise
   age_verified?: boolean;
   age_verified_at?: string; // ISO timestamp for audit purposes
   balance: number;
@@ -180,6 +183,9 @@ export class AuthProfileService {
         avatar: data.avatar || undefined,
         about: data.about || undefined,
         phone: data.phone || undefined,
+        title: data.title || undefined,
+        location: data.location || undefined,
+        skills: Array.isArray(data.skills) ? data.skills : undefined,
         age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
         age_verified_at: data.age_verified_at || undefined,
         balance: data.balance || 0,
@@ -337,6 +343,9 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          title: data.title || undefined,
+          location: data.location || undefined,
+          skills: Array.isArray(data.skills) ? data.skills : undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -514,6 +523,9 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          title: data.title || undefined,
+          location: data.location || undefined,
+          skills: Array.isArray(data.skills) ? data.skills : undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -579,6 +591,9 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          title: data.title || undefined,
+          location: data.location || undefined,
+          skills: Array.isArray(data.skills) ? data.skills : undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,

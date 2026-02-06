@@ -27,6 +27,7 @@ import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { attachmentService } from '../../lib/services/attachment-service';
+import { supabase } from '../../lib/supabase';
 
 const COMMON_SKILLS = [
   'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
@@ -37,7 +38,7 @@ export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { updateProfile: updateAuthProfile } = useAuthProfile();
+  const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
@@ -173,11 +174,39 @@ export default function DetailsScreen() {
       return;
     }
 
-    // Also sync to Supabase via AuthProfileService
+    // Also sync all fields to Supabase via AuthProfileService
+    // This ensures profile data is available across devices and persists
     await updateAuthProfile({
       about: bio.trim() || undefined,
       avatar: avatarUri || undefined,
+      // Note: title, location, and skills will be handled separately via direct Supabase update
+      // since AuthProfileService doesn't support these fields yet
     });
+    
+    // Save title, location, and skills directly to Supabase profiles table
+    if (userId) {
+      try {
+        const updates: Record<string, any> = {};
+        if (title.trim()) updates.title = title.trim();
+        if (location.trim()) updates.location = location.trim();
+        if (skills.length > 0) updates.skills = skills;
+        
+        if (Object.keys(updates).length > 0) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId);
+          
+          if (updateError) {
+            console.error('[onboarding] Error updating profile fields:', updateError);
+            // Don't block navigation - these are optional fields
+          }
+        }
+      } catch (error) {
+        console.error('[onboarding] Error saving additional profile fields:', error);
+        // Don't block navigation
+      }
+    }
 
     setSaving(false);
     router.push('/onboarding/phone');
