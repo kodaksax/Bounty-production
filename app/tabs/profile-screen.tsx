@@ -15,7 +15,7 @@ import { CURRENT_USER_ID } from "lib/utils/data-utils";
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
@@ -61,6 +61,20 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // Determine if viewing own profile (then let EnhancedProfileSection load current-user)
   const isOwnProfile = !!(authUserId && profileUuid && profileUuid === authUserId)
 
+  // Debounce guard for refreshes triggered by mount/focus
+  const lastRefreshAtRef = useRef<number>(0);
+  const REFRESH_DEBOUNCE_MS = 2000;
+
+  // Helper to centralize debounce logic for refreshes.
+  // Returns true and updates `lastRefreshAtRef` when a refresh should proceed.
+  const shouldRefresh = () => {
+    const now = Date.now();
+    const last = lastRefreshAtRef.current || 0;
+    if (now - last < REFRESH_DEBOUNCE_MS) return false;
+    lastRefreshAtRef.current = now;
+    return true;
+  };
+
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
     const fetchStats = async () => {
@@ -105,21 +119,24 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   useEffect(() => {
     const ensureProfile = async () => {
       if (!authUserId || authUserId === CURRENT_USER_ID) return;
-      
+      // Debounced refresh to avoid repeated calls when mounting + focusing
+      if (!shouldRefresh()) return;
+
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();
-      
-  // Also refresh normalized profile (local + supabase)
-  await refreshUserProfile();
+
+      // Also refresh normalized profile (local + supabase)
+      await refreshUserProfile();
     };
     ensureProfile();
   }, [authUserId, refreshUserProfile, refreshAuthProfile]);
 
-  // On-focus refresh to ensure latest avatar and fields are shown when returning
   useFocusEffect(
     React.useCallback(() => {
       const run = async () => {
         try {
+          // Debounce guard
+          if (!shouldRefresh()) return;
           await Promise.all([refreshAuthProfile(), refreshUserProfile()]);
         } catch (e) {
           console.error('[ProfileScreen] focus refresh failed:', e);
