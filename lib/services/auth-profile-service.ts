@@ -305,8 +305,9 @@ export class AuthProfileService {
       // Notify listeners immediately with cached data
       this.notifyListeners(cachedProfile);
       // Continue to fetch fresh data in background (don't await to avoid blocking)
+      // Pass the fetchTimestamp to enable race condition detection
       // Use void to explicitly indicate intentional fire-and-forget behavior
-      void this.fetchFreshProfileInBackground(userId).catch((error) => {
+      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch((error) => {
         console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
       });
       return cachedProfile;
@@ -435,12 +436,11 @@ export class AuthProfileService {
   /**
    * Fetch fresh profile data in background without blocking
    * Used after returning cached data for instant UI update
+   * @param userId - The user ID to fetch profile for
+   * @param callerFetchTimestamp - The timestamp from the calling fetchAndSyncProfile to detect race conditions
    * @private
    */
-  private async fetchFreshProfileInBackground(userId: string): Promise<void> {
-    // Capture the fetch timestamp at call time to detect races
-    const fetchTimestamp = this.latestFetchTimestamp;
-    
+  private async fetchFreshProfileInBackground(userId: string, callerFetchTimestamp: number): Promise<void> {
     try {
       console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
       
@@ -458,8 +458,9 @@ export class AuthProfileService {
 
       // Check if a newer fetch has started since we began
       // This prevents race conditions where multiple background fetches complete out of order
-      if (fetchTimestamp < this.latestFetchTimestamp) {
-        console.log('[authProfileService] Discarding stale background fetch result (newer fetch in progress)');
+      // Use strict inequality to ensure we only apply results from the most recent fetch
+      if (callerFetchTimestamp !== this.latestFetchTimestamp) {
+        console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
         return;
       }
 
