@@ -7,7 +7,9 @@ import nock from 'nock';
 
 // Mock environment
 beforeAll(() => {
-  process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
+  // Using a valid Stripe test key format for mocking purposes
+  // This is not a real key - it's a mock for unit tests
+  process.env.STRIPE_SECRET_KEY = 'sk_test_51MockTestKey000000000000000000000000000000000000000000000000';
 });
 
 // Mock database

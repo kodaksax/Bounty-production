@@ -9,7 +9,9 @@ import nock from 'nock';
 jest.mock('../../../services/api/src/config', () => ({
   config: {
     stripe: {
-      secretKey: 'sk_test_mock_key',
+      // Using a valid Stripe test key format for mocking purposes
+      // This is not a real key - it's a mock for unit tests
+      secretKey: 'sk_test_51MockTestKey000000000000000000000000000000000000000000000000',
     },
     supabase: {
       url: 'https://test.supabase.co',
