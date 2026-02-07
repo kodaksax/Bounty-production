@@ -204,7 +204,7 @@ function BountyAppInner() {
       })
     }
     return list
-  }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance, appliedBountyIds])
+  }, [bounties, activeCategory, distanceFilter, userLocation, permission, bountyDistances, appliedBountyIds])
 
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {

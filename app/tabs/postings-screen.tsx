@@ -957,6 +957,19 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
   
+  // getItemLayout for better FlatList performance
+  const getItemLayoutBounty = React.useCallback((_data: any, index: number) => ({
+    length: 150, // Approximate collapsed item height (expandable cards are variable, this is for collapsed)
+    offset: 150 * index,
+    index,
+  }), []);
+  
+  const getItemLayoutRequest = React.useCallback((_data: any, index: number) => ({
+    length: 120, // Approximate applicant card height
+    offset: 120 * index,
+    index,
+  }), []);
+  
   // Memoized render functions for better performance
   const renderMyPostingItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
     <View
@@ -1176,6 +1189,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   ref={inProgressListRef}
                   data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
+                  getItemLayout={getItemLayoutBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
@@ -1243,6 +1257,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                 <FlatList
                   data={bountyRequests}
                   keyExtractor={keyExtractorRequest}
+                  getItemLayout={getItemLayoutRequest}
                   renderItem={renderRequestItem}
                   ListEmptyComponent={
                     isLoading.requests ? (
@@ -1288,6 +1303,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   ref={myPostingsListRef}
                   data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
+                  getItemLayout={getItemLayoutBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
