@@ -330,8 +330,8 @@ export default function EnhancedSearchScreen() {
         )}
         {item.skills && item.skills.length > 0 && (
           <View style={styles.skillsRow}>
-            {item.skills.slice(0, 3).map((skill) => (
-              <View key={`${item.id}-${skill}`} style={styles.skillChip}>
+            {item.skills.slice(0, 3).map((skill, idx) => (
+              <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={styles.skillChip}>
                 <Text style={styles.skillText}>{skill}</Text>
               </View>
             ))}
@@ -368,24 +368,9 @@ export default function EnhancedSearchScreen() {
   const keyExtractorUser = useCallback((item: UserProfile) => item.id, []);
   const keyExtractorRecent = useCallback((item: RecentSearch) => item.id, []);
 
-  // getItemLayout for FlatList performance optimization
-  const getItemLayoutBounty = useCallback((_data: any, index: number) => ({
-    length: 120, // Approximate bounty card height
-    offset: 120 * index,
-    index,
-  }), []);
-
-  const getItemLayoutUser = useCallback((_data: any, index: number) => ({
-    length: 80, // Approximate user card height
-    offset: 80 * index,
-    index,
-  }), []);
-
-  const getItemLayoutRecent = useCallback((_data: any, index: number) => ({
-    length: 48, // Approximate recent search item height
-    offset: 48 * index,
-    index,
-  }), []);
+  // NOTE: Search result cards have variable height (title/description lines, optional chips),
+  // so getItemLayout with fixed heights would cause incorrect offsets and blank space.
+  // Removed getItemLayout to allow FlatList to measure items dynamically.
 
   const hasActiveFilters = useMemo(() => 
     filters.location ||
@@ -566,7 +551,6 @@ export default function EnhancedSearchScreen() {
             data={recentSearches}
             keyExtractor={keyExtractorRecent}
             renderItem={renderRecentSearch}
-            getItemLayout={getItemLayoutRecent}
             scrollEnabled={false}
             removeClippedSubviews={true}
             maxToRenderPerBatch={10}
@@ -582,7 +566,6 @@ export default function EnhancedSearchScreen() {
           data={bountyResults}
           keyExtractor={keyExtractorBounty}
           renderItem={renderBountyItem}
-          getItemLayout={getItemLayoutBounty}
           contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
@@ -606,7 +589,6 @@ export default function EnhancedSearchScreen() {
           data={userResults}
           keyExtractor={keyExtractorUser}
           renderItem={renderUserItem}
-          getItemLayout={getItemLayoutUser}
           contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={

@@ -957,12 +957,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
   
-  // getItemLayout for better FlatList performance
-  const getItemLayoutBounty = React.useCallback((_data: any, index: number) => ({
-    length: 150, // Approximate collapsed item height (expandable cards are variable, this is for collapsed)
-    offset: 150 * index,
-    index,
-  }), []);
+  // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
+  // MyPostingExpandable rows can change height when expanded/collapsed, so passing
+  // a fixed getItemLayout would break virtualization and scroll offsets.
+  // Only use getItemLayout for truly fixed-height items like ApplicantCard.
   
   const getItemLayoutRequest = React.useCallback((_data: any, index: number) => ({
     length: 120, // Approximate applicant card height
@@ -1189,7 +1187,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   ref={inProgressListRef}
                   data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
-                  getItemLayout={getItemLayoutBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
@@ -1303,7 +1300,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   ref={myPostingsListRef}
                   data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
-                  getItemLayout={getItemLayoutBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">

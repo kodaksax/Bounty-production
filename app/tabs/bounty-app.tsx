@@ -371,7 +371,7 @@ function BountyAppInner() {
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
 
   const getItemLayout = useCallback((_data: any, index: number) => ({
-    length: 88, // Approximate item height + margin
+    length: 90, // Item height (88) + ItemSeparatorComponent height (2)
     offset: 90 * index,
     index
   }), []);

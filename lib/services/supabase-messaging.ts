@@ -143,11 +143,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     if (!conversations) return [];
 
     // OPTIMIZATION: Batch fetch all participants for all conversations in one query
-    const { data: allConversationParticipants } = await supabase
+    const { data: allConversationParticipants, error: participantsError } = await supabase
       .from('conversation_participants')
       .select('conversation_id, user_id')
       .in('conversation_id', conversationIds)
       .is('deleted_at', null);
+
+    if (participantsError) throw participantsError;
 
     // Group participants by conversation ID
     const participantsByConversation = new Map<string, string[]>();
@@ -169,10 +171,22 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
       }
     });
 
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, username, full_name, avatar')
-      .in('id', Array.from(otherUserIds));
+    // Guard against empty otherUserIds to avoid generating an invalid `IN ()` clause
+    let profiles:
+      | { id: string; username?: string | null; full_name?: string | null; avatar?: string | null }[]
+      | null = null;
+
+    if (otherUserIds.size > 0) {
+      const { data, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar')
+        .in('id', Array.from(otherUserIds));
+      
+      if (profilesError) throw profilesError;
+      profiles = data ?? [];
+    } else {
+      profiles = [];
+    }
 
     // Create a map for quick profile lookups
     const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
