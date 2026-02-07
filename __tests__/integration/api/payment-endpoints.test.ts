@@ -8,7 +8,9 @@ import request from 'supertest';
 
 // Set environment variables before requiring the server
 beforeAll(() => {
-  process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
+  // Using a valid Stripe test key format for mocking purposes
+  // This is not a real key - it's a mock for integration tests
+  process.env.STRIPE_SECRET_KEY = 'sk_test_51MockTestKey000000000000000000000000000000000000000000000000';
   process.env.SUPABASE_URL = 'https://test.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
   (process.env as any).NODE_ENV = 'test';
