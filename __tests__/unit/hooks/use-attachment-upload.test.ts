@@ -7,7 +7,7 @@
  * @jest-environment node
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
 // Mock dependencies
@@ -38,9 +38,9 @@ jest.mock('../../../lib/utils/fs-utils', () => ({
 }));
 
 // Import after mocks
-import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
-import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
 import { storageService } from '../../../lib/services/storage-service';
 import { getFileInfo } from '../../../lib/utils/fs-utils';
 
@@ -416,8 +416,9 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onError })
       );
 
-      const uploadPromise = await act(async () => {
-        await result.current.pickAttachment('photos');
+      let uploadPromise: Promise<any>;
+      await act(async () => {
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through retry delays
@@ -436,7 +437,7 @@ describe('useAttachmentUpload', () => {
         jest.advanceTimersByTime(4000);
       });
 
-      await uploadPromise;
+      await uploadPromise!;
 
       // Should attempt upload 3 times
       expect(storageService.uploadFile).toHaveBeenCalledTimes(3);
@@ -484,8 +485,9 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onUploaded })
       );
 
-      const uploadPromise = await act(async () => {
-        await result.current.pickAttachment('photos');
+      let uploadPromise: Promise<any>;
+      await act(async () => {
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through first retry delay (1s)
@@ -493,7 +495,7 @@ describe('useAttachmentUpload', () => {
         jest.advanceTimersByTime(1000);
       });
 
-      await uploadPromise;
+      await uploadPromise!;
 
       // Should attempt upload 2 times (initial + 1 retry)
       expect(storageService.uploadFile).toHaveBeenCalledTimes(2);
@@ -536,8 +538,9 @@ describe('useAttachmentUpload', () => {
 
       const { result } = renderHook(() => useAttachmentUpload());
 
-      const uploadPromise = await act(async () => {
-        await result.current.pickAttachment('photos');
+      let uploadPromise: Promise<any>;
+      await act(async () => {
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through all retries
@@ -551,7 +554,7 @@ describe('useAttachmentUpload', () => {
         jest.advanceTimersByTime(4000); // Third retry
       });
 
-      await uploadPromise;
+      await uploadPromise!;
 
       // Verify 3 attempts were made
       expect(uploadTimes.length).toBe(3);
@@ -596,7 +599,7 @@ describe('useAttachmentUpload', () => {
 
       await act(async () => {
         const promise = result.current.pickAttachment('photos');
-        
+
         // Simulate progress updates
         if (progressCallback) {
           progressCallback(0.25);
@@ -604,7 +607,7 @@ describe('useAttachmentUpload', () => {
           progressCallback(0.75);
           progressCallback(1);
         }
-        
+
         await promise;
       });
 
@@ -689,16 +692,23 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onError })
       );
 
-      const uploadPromise = await act(async () => {
-        await result.current.pickAttachment('photos');
+      let uploadPromise: Promise<any>;
+      await act(async () => {
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through all retry delays
       await act(async () => {
-        jest.advanceTimersByTime(1000 + 2000 + 4000);
+        jest.advanceTimersByTime(1000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(4000);
       });
 
-      await uploadPromise;
+      await uploadPromise!;
 
       expect(onError).toHaveBeenCalled();
       expect(result.current.error).toBeTruthy();
@@ -738,16 +748,23 @@ describe('useAttachmentUpload', () => {
 
       const { result } = renderHook(() => useAttachmentUpload());
 
-      const uploadPromise = await act(async () => {
-        await result.current.pickAttachment('photos');
+      let uploadPromise: Promise<any>;
+      await act(async () => {
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through all retry delays
       await act(async () => {
-        jest.advanceTimersByTime(1000 + 2000 + 4000);
+        jest.advanceTimersByTime(1000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(4000);
       });
 
-      await uploadPromise;
+      await uploadPromise!;
 
       expect(Alert.alert).toHaveBeenCalledWith(
         'Upload Failed',
@@ -758,7 +775,7 @@ describe('useAttachmentUpload', () => {
     it('should allow clearing error state', async () => {
       const mockImagePicker = ImagePicker as jest.Mocked<typeof ImagePicker>;
       const mockStorageService = storageService as jest.Mocked<typeof storageService>;
-      
+
       // Setup mocks for file picking and upload failure
       mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue({
         status: 'granted',
@@ -766,7 +783,7 @@ describe('useAttachmentUpload', () => {
         canAskAgain: true,
         expires: 'never',
         accessPrivileges: 'all',
-      });
+      } as any);
 
       mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
         canceled: false,
@@ -784,14 +801,23 @@ describe('useAttachmentUpload', () => {
       const { result } = renderHook(() => useAttachmentUpload());
 
       // Trigger an actual error via pickAttachment
+      let uploadPromise: Promise<any>;
       await act(async () => {
-        await result.current.pickAttachment('photos');
+        uploadPromise = result.current.pickAttachment('photos');
       });
 
       // Fast-forward through all retry delays
       await act(async () => {
-        jest.advanceTimersByTime(1000 + 2000 + 4000);
+        jest.advanceTimersByTime(1000);
       });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(4000);
+      });
+
+      await uploadPromise!;
 
       // Verify error was set
       expect(result.current.error).toBeTruthy();
