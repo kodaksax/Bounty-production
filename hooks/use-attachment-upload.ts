@@ -139,8 +139,8 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         const fileName = file.name || `attachment-${timestamp}`
         const filePath = `${folder}/${timestamp}-${fileName}`
 
-        // Show retry attempt if not first try
-        if (attempt > 1) {
+        // Show retry attempt if not first try (dev only)
+        if (attempt > 1 && __DEV__) {
           console.log(`[AttachmentUpload] Retry attempt ${attempt}/${MAX_UPLOAD_RETRIES}`)
         }
 
@@ -184,7 +184,9 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         // If this isn't the last attempt, wait before retrying with exponential backoff
         if (attempt < MAX_UPLOAD_RETRIES) {
           const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS)
-          console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
+          if (__DEV__) {
+            console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
+          }
           await new Promise(resolve => setTimeout(resolve, delay))
         }
       }

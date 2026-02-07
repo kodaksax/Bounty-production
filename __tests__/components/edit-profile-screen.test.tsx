@@ -6,13 +6,10 @@
  * 1. KeyboardAvoidingView restructuring for proper keyboard scrolling
  * 2. Retry logic (3 attempts with exponential backoff) for photo uploads
  * 3. Improved focus indicators and visual styling
- * 
- * @jest-environment jsdom
  */
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
-import { act } from 'react-test-renderer';
+import { render } from '@testing-library/react-native';
 import { Alert, Platform } from 'react-native';
 
 // Mock dependencies before imports
@@ -215,16 +212,22 @@ describe('EditProfileScreen', () => {
 
       const { UNSAFE_root } = render(<EditProfileScreen />);
       
-      // Get the root View
+      // Get the root View (top-level container of the screen)
       const rootView = UNSAFE_root.findAllByType('View')[0];
       
-      // The header should be outside KeyboardAvoidingView
-      // KeyboardAvoidingView should be a sibling, not a parent, of header
-      const children = rootView.props.children;
-      
-      // Verify structure: header comes before KeyboardAvoidingView
-      expect(children).toBeTruthy();
-      expect(Array.isArray(children)).toBe(true);
+      // Ensure the entire component is not wrapped in KeyboardAvoidingView
+      expect(rootView.type).not.toBe('KeyboardAvoidingView');
+
+      // Find the KeyboardAvoidingView in the tree
+      const keyboardAvoidingViews = UNSAFE_root.findAllByType('KeyboardAvoidingView');
+      expect(keyboardAvoidingViews.length).toBeGreaterThan(0);
+      const keyboardAvoidingView = keyboardAvoidingViews[0];
+      expect(keyboardAvoidingView).toBeTruthy();
+      expect(keyboardAvoidingView).not.toBe(rootView);
+
+      // Ensure that the ScrollView is wrapped by KeyboardAvoidingView
+      const scrollViewsInsideKAV = keyboardAvoidingView.findAllByType('ScrollView');
+      expect(scrollViewsInsideKAV.length).toBeGreaterThan(0);
     });
   });
 

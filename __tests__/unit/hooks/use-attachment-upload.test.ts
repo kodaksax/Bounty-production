@@ -755,18 +755,53 @@ describe('useAttachmentUpload', () => {
       );
     });
 
-    it('should allow clearing error state', () => {
-      const { result } = renderHook(() => useAttachmentUpload());
-
-      act(() => {
-        // Manually set error state
-        (result.current as any).error = 'Test error';
+    it('should allow clearing error state', async () => {
+      const mockImagePicker = ImagePicker as jest.Mocked<typeof ImagePicker>;
+      const mockStorageService = storageService as jest.Mocked<typeof storageService>;
+      
+      // Setup mocks for file picking and upload failure
+      mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue({
+        status: 'granted',
+        granted: true,
+        canAskAgain: true,
+        expires: 'never',
+        accessPrivileges: 'all',
       });
 
+      mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+        canceled: false,
+        assets: [{
+          uri: 'file://test.jpg',
+          width: 100,
+          height: 100,
+          fileName: 'test.jpg',
+        }],
+      });
+
+      // Mock upload to fail, triggering error state
+      mockStorageService.uploadFile.mockRejectedValue(new Error('Upload failed'));
+
+      const { result } = renderHook(() => useAttachmentUpload());
+
+      // Trigger an actual error via pickAttachment
+      await act(async () => {
+        await result.current.pickAttachment('photos');
+      });
+
+      // Fast-forward through all retry delays
+      await act(async () => {
+        jest.advanceTimersByTime(1000 + 2000 + 4000);
+      });
+
+      // Verify error was set
+      expect(result.current.error).toBeTruthy();
+
+      // Clear error
       act(() => {
         result.current.clearError();
       });
 
+      // Verify error is cleared
       expect(result.current.error).toBeNull();
     });
   });

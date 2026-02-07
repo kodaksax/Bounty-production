@@ -11,11 +11,11 @@
  * @jest-environment node
  */
 
-import { authProfileService } from '../../../lib/services/auth-profile-service';
-import { storageService } from '../../../lib/services/storage-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
+import { storageService } from '../../lib/services/storage-service';
 
 // Mock dependencies
-jest.mock('../../../lib/supabase', () => ({
+jest.mock('../../lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
     auth: {
@@ -25,13 +25,13 @@ jest.mock('../../../lib/supabase', () => ({
   isSupabaseConfigured: true,
 }));
 
-jest.mock('../../../lib/services/storage-service', () => ({
+jest.mock('../../lib/services/storage-service', () => ({
   storageService: {
     uploadFile: jest.fn(),
   },
 }));
 
-jest.mock('../../../lib/utils/error-logger', () => ({
+jest.mock('../../lib/utils/error-logger', () => ({
   logger: {
     info: jest.fn(),
     warning: jest.fn(),
@@ -59,7 +59,7 @@ describe('Edit Profile Integration Flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
-    const { supabase } = require('../../../lib/supabase');
+    const { supabase } = require('../../lib/supabase');
     mockSupabase = supabase;
     
     // Reset auth profile service
