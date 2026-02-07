@@ -416,7 +416,7 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onError })
       );
 
-      const uploadPromise = act(async () => {
+      const uploadPromise = await act(async () => {
         await result.current.pickAttachment('photos');
       });
 
@@ -484,7 +484,7 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onUploaded })
       );
 
-      const uploadPromise = act(async () => {
+      const uploadPromise = await act(async () => {
         await result.current.pickAttachment('photos');
       });
 
@@ -536,7 +536,7 @@ describe('useAttachmentUpload', () => {
 
       const { result } = renderHook(() => useAttachmentUpload());
 
-      const uploadPromise = act(async () => {
+      const uploadPromise = await act(async () => {
         await result.current.pickAttachment('photos');
       });
 
@@ -689,7 +689,7 @@ describe('useAttachmentUpload', () => {
         useAttachmentUpload({ onError })
       );
 
-      const uploadPromise = act(async () => {
+      const uploadPromise = await act(async () => {
         await result.current.pickAttachment('photos');
       });
 
@@ -738,7 +738,7 @@ describe('useAttachmentUpload', () => {
 
       const { result } = renderHook(() => useAttachmentUpload());
 
-      const uploadPromise = act(async () => {
+      const uploadPromise = await act(async () => {
         await result.current.pickAttachment('photos');
       });
 
