@@ -44,48 +44,49 @@ jest.mock('drizzle-orm', () => ({
 }));
 
 // Mock Stripe
-const mockStripeAccount = {
-  id: 'acct_test123',
-  type: 'express',
-  details_submitted: true,
-  charges_enabled: true,
-  payouts_enabled: true,
-  requirements: {
-    currently_due: [],
-    eventually_due: [],
-  },
-};
-
-const mockStripe = {
-  accounts: {
-    create: jest.fn(async () => mockStripeAccount),
-    retrieve: jest.fn(async () => mockStripeAccount),
-  },
-  accountLinks: {
-    create: jest.fn(async () => ({
-      url: 'https://connect.stripe.com/setup/test',
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-    })),
-  },
-  paymentIntents: {
-    create: jest.fn(async () => ({
-      id: 'pi_test123',
-      client_secret: 'pi_test123_secret_abc',
-      amount: 5000,
-      currency: 'usd',
-      status: 'requires_payment_method',
-    })),
-  },
-  refunds: {
-    create: jest.fn(async () => ({
-      id: 'ref_test123',
-      amount: 5000,
-      status: 'succeeded',
-    })),
-  },
-};
-
 jest.mock('stripe', () => {
+  // Define mock inside factory function to ensure it's available when hoisted
+  const mockStripeAccount = {
+    id: 'acct_test123',
+    type: 'express',
+    details_submitted: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    requirements: {
+      currently_due: [],
+      eventually_due: [],
+    },
+  };
+
+  const mockStripe = {
+    accounts: {
+      create: jest.fn(async () => mockStripeAccount),
+      retrieve: jest.fn(async () => mockStripeAccount),
+    },
+    accountLinks: {
+      create: jest.fn(async () => ({
+        url: 'https://connect.stripe.com/setup/test',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      })),
+    },
+    paymentIntents: {
+      create: jest.fn(async () => ({
+        id: 'pi_test123',
+        client_secret: 'pi_test123_secret_abc',
+        amount: 5000,
+        currency: 'usd',
+        status: 'requires_payment_method',
+      })),
+    },
+    refunds: {
+      create: jest.fn(async () => ({
+        id: 'ref_test123',
+        amount: 5000,
+        status: 'succeeded',
+      })),
+    },
+  };
+
   // Return a constructor function that returns the mock Stripe instance
   return jest.fn().mockImplementation(() => mockStripe);
 });

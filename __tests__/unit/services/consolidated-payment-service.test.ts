@@ -65,57 +65,58 @@ jest.mock('../../../services/api/src/middleware/error-handler', () => ({
 }));
 
 // Mock Stripe - must be set up before service import
-const mockStripePaymentIntent = {
-  id: 'pi_test123',
-  client_secret: 'pi_test123_secret_abc',
-  amount: 5000,
-  currency: 'usd',
-  status: 'requires_payment_method',
-  metadata: {},
-};
-
-const mockStripeCustomer = {
-  id: 'cus_test123',
-  email: 'test@example.com',
-  metadata: {},
-};
-
-const mockStripePaymentMethod = {
-  id: 'pm_test123',
-  type: 'card',
-  card: {
-    brand: 'visa',
-    last4: '4242',
-    exp_month: 12,
-    exp_year: 2025,
-  },
-};
-
-const mockStripe = {
-  customers: {
-    create: jest.fn(async () => mockStripeCustomer),
-    retrieve: jest.fn(async () => mockStripeCustomer),
-  },
-  paymentIntents: {
-    create: jest.fn(async () => mockStripePaymentIntent),
-    confirm: jest.fn(async () => ({ ...mockStripePaymentIntent, status: 'succeeded' })),
-    retrieve: jest.fn(async () => mockStripePaymentIntent),
-    cancel: jest.fn(async () => ({ ...mockStripePaymentIntent, status: 'canceled' })),
-  },
-  paymentMethods: {
-    list: jest.fn(async () => ({ data: [mockStripePaymentMethod] })),
-    attach: jest.fn(async () => mockStripePaymentMethod),
-    detach: jest.fn(async () => mockStripePaymentMethod),
-  },
-  setupIntents: {
-    create: jest.fn(async () => ({
-      id: 'seti_test123',
-      client_secret: 'seti_test123_secret_abc',
-    })),
-  },
-};
-
 jest.mock('stripe', () => {
+  // Define mock data inside the factory function to ensure it's available when hoisted
+  const mockStripePaymentIntent = {
+    id: 'pi_test123',
+    client_secret: 'pi_test123_secret_abc',
+    amount: 5000,
+    currency: 'usd',
+    status: 'requires_payment_method',
+    metadata: {},
+  };
+
+  const mockStripeCustomer = {
+    id: 'cus_test123',
+    email: 'test@example.com',
+    metadata: {},
+  };
+
+  const mockStripePaymentMethod = {
+    id: 'pm_test123',
+    type: 'card',
+    card: {
+      brand: 'visa',
+      last4: '4242',
+      exp_month: 12,
+      exp_year: 2025,
+    },
+  };
+
+  const mockStripe = {
+    customers: {
+      create: jest.fn(async () => mockStripeCustomer),
+      retrieve: jest.fn(async () => mockStripeCustomer),
+    },
+    paymentIntents: {
+      create: jest.fn(async () => mockStripePaymentIntent),
+      confirm: jest.fn(async () => ({ ...mockStripePaymentIntent, status: 'succeeded' })),
+      retrieve: jest.fn(async () => mockStripePaymentIntent),
+      cancel: jest.fn(async () => ({ ...mockStripePaymentIntent, status: 'canceled' })),
+    },
+    paymentMethods: {
+      list: jest.fn(async () => ({ data: [mockStripePaymentMethod] })),
+      attach: jest.fn(async () => mockStripePaymentMethod),
+      detach: jest.fn(async () => mockStripePaymentMethod),
+    },
+    setupIntents: {
+      create: jest.fn(async () => ({
+        id: 'seti_test123',
+        client_secret: 'seti_test123_secret_abc',
+      })),
+    },
+  };
+
   // Return a constructor function that returns the mock Stripe instance
   return jest.fn().mockImplementation(() => mockStripe);
 });
