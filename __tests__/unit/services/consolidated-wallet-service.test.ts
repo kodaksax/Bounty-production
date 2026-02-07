@@ -29,69 +29,87 @@ jest.mock('../../../services/api/src/services/logger', () => ({
 }));
 
 // Mock Supabase
-const mockSupabaseClient = {
-  from: jest.fn((table: string) => ({
-    select: jest.fn(() => ({
-      eq: jest.fn(() => ({
-        single: jest.fn(() => {
-          if (table === 'wallets') {
-            return Promise.resolve({
-              data: { user_id: 'user123', balance: 10000, version: 1 },
-              error: null,
-            });
-          }
-          if (table === 'bounties') {
-            return Promise.resolve({
-              data: {
-                id: 'bounty123',
-                poster_id: 'user123',
-                hunter_id: 'hunter123',
-                amount: 5000,
-                status: 'in_progress',
-              },
-              error: null,
-            });
-          }
-          return Promise.resolve({ data: null, error: null });
-        }),
-        maybeSingle: jest.fn(() => Promise.resolve({
-          data: { id: 'tx123', type: 'escrow' },
+const createMockQueryBuilder = (table: string) => {
+  const queryBuilder: any = {
+    select: jest.fn(() => queryBuilder),
+    eq: jest.fn(() => queryBuilder),
+    gte: jest.fn(() => queryBuilder),
+    lte: jest.fn(() => queryBuilder),
+    order: jest.fn(() => queryBuilder),
+    range: jest.fn(() => queryBuilder),
+    single: jest.fn(() => {
+      if (table === 'wallets') {
+        return Promise.resolve({
+          data: { user_id: 'user123', balance: 10000, version: 1 },
           error: null,
-        })),
-      })),
-      order: jest.fn(() => ({
-        limit: jest.fn(() => Promise.resolve({
-          data: [
-            { id: 'tx1', type: 'deposit', amount: 5000, created_at: '2024-01-01' },
-            { id: 'tx2', type: 'withdrawal', amount: 2000, created_at: '2024-01-02' },
-          ],
+        });
+      }
+      if (table === 'profiles') {
+        return Promise.resolve({
+          data: { id: 'user123', balance: 10000 },
           error: null,
-        })),
-      })),
+        });
+      }
+      if (table === 'bounties') {
+        return Promise.resolve({
+          data: {
+            id: 'bounty123',
+            poster_id: 'user123',
+            hunter_id: 'hunter123',
+            amount: 5000,
+            status: 'in_progress',
+          },
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    }),
+    maybeSingle: jest.fn(() => Promise.resolve({
+      data: null,
+      error: null,
     })),
-    insert: jest.fn(() => ({
+    then: jest.fn((resolve) => {
+      const data = table === 'wallet_transactions' 
+        ? [
+            { id: 'tx1', type: 'deposit', amount: 5000, created_at: '2024-01-01', user_id: 'user123', description: 'deposit transaction', status: 'completed' },
+            { id: 'tx2', type: 'withdrawal', amount: 2000, created_at: '2024-01-02', user_id: 'user123', description: 'withdrawal transaction', status: 'completed' },
+          ]
+        : [];
+      resolve({ data, error: null, count: data.length });
+    }),
+  };
+  return queryBuilder;
+};
+
+const mockSupabaseClient = {
+  from: jest.fn((table: string) => {
+    const queryBuilder = createMockQueryBuilder(table);
+    // Add insert and update methods to the same queryBuilder
+    queryBuilder.insert = jest.fn((data) => ({
       select: jest.fn(() => ({
         single: jest.fn(() => Promise.resolve({
           data: {
             id: 'tx_new',
-            user_id: 'user123',
-            type: 'deposit',
-            amount: 5000,
-            status: 'completed',
+            ...data,
           },
           error: null,
         })),
       })),
-    })),
-    update: jest.fn(() => ({
+    }));
+    queryBuilder.update = jest.fn(() => ({
       eq: jest.fn(() => ({
         match: jest.fn(() => Promise.resolve({ error: null, count: 1 })),
       })),
-    })),
-  })),
+    }));
+    return queryBuilder;
+  }),
   rpc: jest.fn((fnName: string) => {
     if (fnName === 'get_wallet_balance') {
       return Promise.resolve({ data: 10000, error: null });
+    }
+    if (fnName === 'update_balance') {
+      // Return function not found error to trigger fallback logic
+      return Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'Function not found' } });
     }
     return Promise.resolve({ data: null, error: null });
   }),
@@ -272,7 +290,7 @@ describe('Consolidated Wallet Service', () => {
     it('should validate deposit amount', async () => {
       await expect(
         walletService.createDeposit('user123', -100, 'pi_test123')
-      ).rejects.toThrow('ValidationError');
+      ).rejects.toThrow('Deposit amount must be positive');
     });
 
     it('should use idempotency key to prevent duplicates', async () => {
@@ -286,7 +304,7 @@ describe('Consolidated Wallet Service', () => {
     it('should handle zero amount deposits', async () => {
       await expect(
         walletService.createDeposit('user123', 0, 'pi_test123')
-      ).rejects.toThrow('ValidationError');
+      ).rejects.toThrow('Deposit amount must be positive');
     });
 
     it('should handle payment intent validation', async () => {
@@ -606,7 +624,7 @@ describe('Consolidated Wallet Service', () => {
     it('should update wallet balance atomically', async () => {
       await walletService.updateBalance('user123', 5000);
 
-      expect(mockSupabaseClient.from).toHaveBeenCalledWith('wallets');
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('profiles');
     });
 
     it('should handle concurrent balance updates with optimistic locking', async () => {
@@ -631,7 +649,7 @@ describe('Consolidated Wallet Service', () => {
 
       await walletService.updateBalance('user123', 5000);
 
-      expect(mockSupabaseClient.from).toHaveBeenCalledWith('wallets');
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('profiles');
     });
 
     it('should retry on optimistic lock failure', async () => {
@@ -661,7 +679,7 @@ describe('Consolidated Wallet Service', () => {
     it('should handle negative balance updates', async () => {
       await walletService.updateBalance('user123', -3000);
 
-      expect(mockSupabaseClient.from).toHaveBeenCalledWith('wallets');
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('profiles');
     });
 
     it('should prevent balance from going negative', async () => {

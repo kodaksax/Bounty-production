@@ -20,7 +20,7 @@ beforeAll(() => {
 });
 
 // Mock Supabase
-const mockSupabaseClient = {
+const createDefaultSupabaseMock = () => ({
   from: jest.fn((table: string) => ({
     select: jest.fn(() => ({
       eq: jest.fn(() => ({
@@ -54,10 +54,10 @@ const mockSupabaseClient = {
         maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
       })),
     })),
-    insert: jest.fn(() => ({
+    insert: jest.fn((data) => ({
       select: jest.fn(() => ({
         single: jest.fn(() => Promise.resolve({
-          data: { id: 'tx_new', type: 'escrow', amount: 10000 },
+          data: { id: 'tx_new', ...data },
           error: null,
         })),
       })),
@@ -67,7 +67,9 @@ const mockSupabaseClient = {
     })),
   })),
   rpc: jest.fn(() => Promise.resolve({ data: 15000, error: null })),
-};
+});
+
+const mockSupabaseClient = createDefaultSupabaseMock();
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
@@ -118,6 +120,13 @@ const mockStripe = {
       destination: 'acct_hunter',
     })),
   },
+  setupIntents: {
+    create: jest.fn(async () => ({
+      id: 'seti_test123',
+      client_secret: 'seti_test123_secret',
+      status: 'requires_payment_method',
+    })),
+  },
 };
 
 jest.mock('stripe', () => {
@@ -128,6 +137,9 @@ jest.mock('stripe', () => {
 describe('Complete Payment Flow E2E Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Reset Supabase mock to default state
+    Object.assign(mockSupabaseClient, createDefaultSupabaseMock());
     
     // Setup nock to intercept Stripe API calls
     nock.cleanAll();
