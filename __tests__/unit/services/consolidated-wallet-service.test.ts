@@ -28,16 +28,20 @@ jest.mock('../../../services/api/src/services/logger', () => ({
   },
 }));
 
-// Mock Supabase
-const createMockQueryBuilder = (table: string) => {
-  const queryBuilder: any = {
-    select: jest.fn(() => queryBuilder),
-    eq: jest.fn(() => queryBuilder),
-    gte: jest.fn(() => queryBuilder),
-    lte: jest.fn(() => queryBuilder),
-    order: jest.fn(() => queryBuilder),
-    range: jest.fn(() => queryBuilder),
-    single: jest.fn(() => {
+// Mock Supabase - Create a reference we can use in tests
+let mockSupabaseClient: any;
+
+jest.mock('@supabase/supabase-js', () => {
+  const createMockQueryBuilder = (table: string) => {
+    const queryBuilder: any = {};
+    
+    queryBuilder.select = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.eq = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.gte = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.lte = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.order = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.range = jest.fn().mockReturnValue(queryBuilder);
+    queryBuilder.single = jest.fn(() => {
       if (table === 'wallets') {
         return Promise.resolve({
           data: { user_id: 'user123', balance: 10000, version: 1 },
@@ -63,12 +67,12 @@ const createMockQueryBuilder = (table: string) => {
         });
       }
       return Promise.resolve({ data: null, error: null });
-    }),
-    maybeSingle: jest.fn(() => Promise.resolve({
+    });
+    queryBuilder.maybeSingle = jest.fn(() => Promise.resolve({
       data: null,
       error: null,
-    })),
-    then: jest.fn((resolve) => {
+    }));
+    queryBuilder.then = jest.fn((resolve) => {
       const data = table === 'wallet_transactions' 
         ? [
             { id: 'tx1', type: 'deposit', amount: 5000, created_at: '2024-01-01', user_id: 'user123', description: 'deposit transaction', status: 'completed' },
@@ -76,48 +80,49 @@ const createMockQueryBuilder = (table: string) => {
           ]
         : [];
       resolve({ data, error: null, count: data.length });
+    });
+    
+    return queryBuilder;
+  };
+
+  mockSupabaseClient = {
+    from: jest.fn((table: string) => {
+      const queryBuilder = createMockQueryBuilder(table);
+      // Add insert and update methods to the same queryBuilder
+      queryBuilder.insert = jest.fn((data) => ({
+        select: jest.fn(() => ({
+          single: jest.fn(() => Promise.resolve({
+            data: {
+              id: 'tx_new',
+              ...data,
+            },
+            error: null,
+          })),
+        })),
+      }));
+      queryBuilder.update = jest.fn(() => ({
+        eq: jest.fn(() => ({
+          match: jest.fn(() => Promise.resolve({ error: null, count: 1 })),
+        })),
+      }));
+      return queryBuilder;
+    }),
+    rpc: jest.fn((fnName: string) => {
+      if (fnName === 'get_wallet_balance') {
+        return Promise.resolve({ data: 10000, error: null });
+      }
+      if (fnName === 'update_balance') {
+        // Return function not found error to trigger fallback logic
+        return Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'Function not found' } });
+      }
+      return Promise.resolve({ data: null, error: null });
     }),
   };
-  return queryBuilder;
-};
 
-const mockSupabaseClient = {
-  from: jest.fn((table: string) => {
-    const queryBuilder = createMockQueryBuilder(table);
-    // Add insert and update methods to the same queryBuilder
-    queryBuilder.insert = jest.fn((data) => ({
-      select: jest.fn(() => ({
-        single: jest.fn(() => Promise.resolve({
-          data: {
-            id: 'tx_new',
-            ...data,
-          },
-          error: null,
-        })),
-      })),
-    }));
-    queryBuilder.update = jest.fn(() => ({
-      eq: jest.fn(() => ({
-        match: jest.fn(() => Promise.resolve({ error: null, count: 1 })),
-      })),
-    }));
-    return queryBuilder;
-  }),
-  rpc: jest.fn((fnName: string) => {
-    if (fnName === 'get_wallet_balance') {
-      return Promise.resolve({ data: 10000, error: null });
-    }
-    if (fnName === 'update_balance') {
-      // Return function not found error to trigger fallback logic
-      return Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'Function not found' } });
-    }
-    return Promise.resolve({ data: null, error: null });
-  }),
-};
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => mockSupabaseClient),
-}));
+  return {
+    createClient: jest.fn(() => mockSupabaseClient),
+  };
+});
 
 // Mock Stripe
 const mockStripe = {
