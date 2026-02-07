@@ -9,6 +9,8 @@
  * full stack for more comprehensive validation.
  */
 
+import nock from 'nock';
+
 // Mock environment
 beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
@@ -126,6 +128,50 @@ jest.mock('stripe', () => {
 describe('Complete Payment Flow E2E Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Setup nock to intercept Stripe API calls
+    nock.cleanAll();
+    
+    // Mock comprehensive Stripe API endpoints for E2E flows
+    nock('https://api.stripe.com:443')
+      .persist()
+      .post('/v1/customers')
+      .reply(200, { id: 'cus_new', email: 'user@example.com' })
+      .get(/\/v1\/customers/)
+      .reply(200, { id: 'cus_poster', email: 'poster@example.com' })
+      .post('/v1/payment_intents')
+      .reply(200, (uri, requestBody) => {
+        const params = typeof requestBody === 'string' ? JSON.parse(requestBody) : requestBody;
+        return {
+          id: 'pi_test123',
+          object: 'payment_intent',
+          client_secret: 'pi_test123_secret_abc',
+          amount: params.amount || 10000,
+          currency: params.currency || 'usd',
+          status: 'requires_payment_method',
+          metadata: params.metadata || {},
+        };
+      })
+      .post(/\/v1\/payment_intents\/.*\/confirm/)
+      .reply(200, { id: 'pi_test123', status: 'succeeded', amount: 10000 })
+      .get(/\/v1\/payment_intents/)
+      .reply(200, { id: 'pi_test123', status: 'succeeded', amount: 10000 })
+      .post(/\/v1\/payment_intents\/.*\/cancel/)
+      .reply(200, { id: 'pi_test123', status: 'canceled', amount: 10000 })
+      .post(/\/v1\/refunds/)
+      .reply(200, { id: 'ref_test123', amount: 10000, status: 'succeeded' })
+      .post('/v1/transfers')
+      .reply(200, { id: 'tr_test123', amount: 9500, destination: 'acct_hunter' })
+      .post('/v1/payment_methods')
+      .reply(200, { id: 'pm_test123', type: 'card' })
+      .post(/\/v1\/payment_methods\/.*\/attach/)
+      .reply(200, { id: 'pm_test123', type: 'card' })
+      .get(/\/v1\/customers\/.*\/payment_methods/)
+      .reply(200, { object: 'list', data: [{ id: 'pm_test123', type: 'card' }] });
+  });
+  
+  afterEach(() => {
+    nock.cleanAll();
   });
 
   describe('Full Bounty Payment Flow - Happy Path', () => {

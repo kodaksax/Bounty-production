@@ -123,6 +123,11 @@ describe('Edit Profile Integration Flow', () => {
 
   describe('Profile Update', () => {
     beforeEach(() => {
+      // Set up auth session for update operations
+      (authProfileService as any).currentSession = {
+        user: { id: mockUserId },
+      };
+      
       // Set up initial profile state
       mockSupabase.from.mockReturnValue({
         select: jest.fn().mockReturnThis(),
@@ -210,6 +215,13 @@ describe('Edit Profile Integration Flow', () => {
   });
 
   describe('Avatar Upload Flow', () => {
+    beforeEach(() => {
+      // Set up auth session for avatar upload operations
+      (authProfileService as any).currentSession = {
+        user: { id: mockUserId },
+      };
+    });
+
     it('should upload avatar and update profile', async () => {
       const mockFile = {
         uri: 'file://avatar.jpg',
@@ -510,6 +522,13 @@ describe('Edit Profile Integration Flow', () => {
   });
 
   describe('Complete Edit Flow', () => {
+    beforeEach(() => {
+      // Set up auth session for complete flow
+      (authProfileService as any).currentSession = {
+        user: { id: mockUserId },
+      };
+    });
+
     it('should complete full profile edit flow', async () => {
       // 1. Load profile
       mockSupabase.from.mockReturnValue({
@@ -603,6 +622,13 @@ describe('Edit Profile Integration Flow', () => {
   });
 
   describe('Concurrent Operations', () => {
+    beforeEach(() => {
+      // Set up auth session for concurrent operations
+      (authProfileService as any).currentSession = {
+        user: { id: mockUserId },
+      };
+    });
+
     it('should handle simultaneous profile updates', async () => {
       mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
