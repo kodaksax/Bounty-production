@@ -100,19 +100,18 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  // Define mock inside factory function to ensure it's available when hoisted
-  const mockStripe = {
-    transfers: {
-      create: jest.fn(async () => ({
-        id: 'tr_test123',
-        amount: 5000,
-        currency: 'usd',
-        destination: 'acct_test123',
-      })),
-    },
-  };
+const mockStripe = {
+  transfers: {
+    create: jest.fn(async () => ({
+      id: 'tr_test123',
+      amount: 5000,
+      currency: 'usd',
+      destination: 'acct_test123',
+    })),
+  },
+};
 
+jest.mock('stripe', () => {
   // Return a constructor function that returns the mock Stripe instance
   return jest.fn().mockImplementation(() => mockStripe);
 });

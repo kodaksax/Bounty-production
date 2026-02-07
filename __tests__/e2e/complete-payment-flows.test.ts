@@ -72,54 +72,53 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  // Define mock inside factory function to ensure it's available when hoisted
-  const mockStripe = {
-    customers: {
-      create: jest.fn(async () => ({ id: 'cus_new', email: 'user@example.com' })),
-      retrieve: jest.fn(async () => ({ id: 'cus_poster', email: 'poster@example.com' })),
-    },
-    paymentIntents: {
-      create: jest.fn(async (params: any) => ({
-        id: 'pi_test123',
-        client_secret: 'pi_test123_secret_abc',
-        amount: params.amount,
-        currency: params.currency || 'usd',
-        status: 'requires_payment_method',
-        metadata: params.metadata || {},
-      })),
-      confirm: jest.fn(async () => ({
-        id: 'pi_test123',
-        status: 'succeeded',
-        amount: 10000,
-      })),
-      retrieve: jest.fn(async () => ({
-        id: 'pi_test123',
-        status: 'succeeded',
-        amount: 10000,
-      })),
-      cancel: jest.fn(async () => ({
-        id: 'pi_test123',
-        status: 'canceled',
-      })),
-    },
-    refunds: {
-      create: jest.fn(async () => ({
-        id: 'ref_test123',
-        amount: 10000,
-        status: 'succeeded',
-        payment_intent: 'pi_test123',
-      })),
-    },
-    transfers: {
-      create: jest.fn(async () => ({
-        id: 'tr_test123',
-        amount: 9500,
-        destination: 'acct_hunter',
-      })),
-    },
-  };
+const mockStripe = {
+  customers: {
+    create: jest.fn(async () => ({ id: 'cus_new', email: 'user@example.com' })),
+    retrieve: jest.fn(async () => ({ id: 'cus_poster', email: 'poster@example.com' })),
+  },
+  paymentIntents: {
+    create: jest.fn(async (params: any) => ({
+      id: 'pi_test123',
+      client_secret: 'pi_test123_secret_abc',
+      amount: params.amount,
+      currency: params.currency || 'usd',
+      status: 'requires_payment_method',
+      metadata: params.metadata || {},
+    })),
+    confirm: jest.fn(async () => ({
+      id: 'pi_test123',
+      status: 'succeeded',
+      amount: 10000,
+    })),
+    retrieve: jest.fn(async () => ({
+      id: 'pi_test123',
+      status: 'succeeded',
+      amount: 10000,
+    })),
+    cancel: jest.fn(async () => ({
+      id: 'pi_test123',
+      status: 'canceled',
+    })),
+  },
+  refunds: {
+    create: jest.fn(async () => ({
+      id: 'ref_test123',
+      amount: 10000,
+      status: 'succeeded',
+      payment_intent: 'pi_test123',
+    })),
+  },
+  transfers: {
+    create: jest.fn(async () => ({
+      id: 'tr_test123',
+      amount: 9500,
+      destination: 'acct_hunter',
+    })),
+  },
+};
 
+jest.mock('stripe', () => {
   // Return a constructor function that returns the mock Stripe instance
   return jest.fn().mockImplementation(() => mockStripe);
 });

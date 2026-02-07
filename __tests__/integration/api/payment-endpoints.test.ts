@@ -53,45 +53,44 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  // Define mock inside factory function to ensure it's available when hoisted
-  const mockStripe = {
-    customers: {
-      create: jest.fn(async (_params?: any) => ({
-        id: 'cus_new123',
-        email: 'test@example.com',
-      })),
-      retrieve: jest.fn(async (_id?: any) => ({
-        id: 'cus_test123',
-        email: 'test@example.com',
-      })),
-    },
-    paymentIntents: {
-      create: jest.fn(async (_params?: any) => ({
-        id: 'pi_test123',
-        client_secret: 'pi_test123_secret_abc',
-        amount: 5000,
-        currency: 'usd',
-        status: 'requires_payment_method',
-      })),
-      confirm: jest.fn(async (_idOrParams?: any) => ({
-        id: 'pi_test123',
-        status: 'succeeded',
-      })),
-      cancel: jest.fn(async (_id?: any) => ({
-        id: 'pi_test123',
-        status: 'canceled',
-      })),
-    },
-    refunds: {
-      create: jest.fn(async (_params?: any) => ({
-        id: 'ref_test123',
-        amount: 5000,
-        status: 'succeeded',
-      })),
-    },
-  };
+const mockStripe = {
+  customers: {
+    create: jest.fn(async (_params?: any) => ({
+      id: 'cus_new123',
+      email: 'test@example.com',
+    })),
+    retrieve: jest.fn(async (_id?: any) => ({
+      id: 'cus_test123',
+      email: 'test@example.com',
+    })),
+  },
+  paymentIntents: {
+    create: jest.fn(async (_params?: any) => ({
+      id: 'pi_test123',
+      client_secret: 'pi_test123_secret_abc',
+      amount: 5000,
+      currency: 'usd',
+      status: 'requires_payment_method',
+    })),
+    confirm: jest.fn(async (_idOrParams?: any) => ({
+      id: 'pi_test123',
+      status: 'succeeded',
+    })),
+    cancel: jest.fn(async (_id?: any) => ({
+      id: 'pi_test123',
+      status: 'canceled',
+    })),
+  },
+  refunds: {
+    create: jest.fn(async (_params?: any) => ({
+      id: 'ref_test123',
+      amount: 5000,
+      status: 'succeeded',
+    })),
+  },
+};
 
+jest.mock('stripe', () => {
   // Return a constructor function that returns the mock Stripe instance
   return jest.fn().mockImplementation(() => mockStripe);
 });
