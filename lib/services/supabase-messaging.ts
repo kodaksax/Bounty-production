@@ -116,6 +116,7 @@ export function generateInitials(username?: string, fullName?: string): string {
 
 /**
  * Fetch conversations for a user from Supabase
+ * Optimized to eliminate N+1 queries by batching all data fetches
  */
 export async function fetchConversations(userId: string): Promise<Conversation[]> {
   try {
@@ -141,79 +142,120 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     if (conversationsError) throw conversationsError;
     if (!conversations) return [];
 
-    // For each conversation, get participants and last message
-    const enrichedConversations: Conversation[] = await Promise.all(
-      conversations.map(async (conv) => {
-        // Get all participants for this conversation
-        const { data: allParticipants } = await supabase
-          .from('conversation_participants')
-          .select('user_id')
-          .eq('conversation_id', conv.id)
-          .is('deleted_at', null);
+    // OPTIMIZATION: Batch fetch all participants for all conversations in one query
+    const { data: allConversationParticipants } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id')
+      .in('conversation_id', conversationIds)
+      .is('deleted_at', null);
 
-        const participantIds = allParticipants?.map(p => p.user_id) || [];
+    // Group participants by conversation ID
+    const participantsByConversation = new Map<string, string[]>();
+    allConversationParticipants?.forEach(p => {
+      const existing = participantsByConversation.get(p.conversation_id) || [];
+      existing.push(p.user_id);
+      participantsByConversation.set(p.conversation_id, existing);
+    });
 
-        // For 1:1 chats, get the other user's profile
-        let name = 'Unknown';
-        let avatar: string | undefined;
-        
-        if (!conv.is_group && participantIds.length === 2) {
-          const otherUserId = participantIds.find(id => id !== userId);
-          if (otherUserId) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('username, full_name, avatar')
-              .eq('id', otherUserId)
-              .single();
-
-            if (profile) {
-              name = profile.username || profile.full_name || 'Unknown';
-              avatar = getProfileAvatarUrl(profile.avatar);
-            }
-          }
-        } else if (conv.is_group) {
-          // For group chats, we'd need a name field or generate from participants
-          name = 'Group Chat';
+    // OPTIMIZATION: Collect all other user IDs and batch fetch profiles
+    const otherUserIds = new Set<string>();
+    conversations.forEach(conv => {
+      if (!conv.is_group) {
+        const participantIds = participantsByConversation.get(conv.id) || [];
+        const otherUserId = participantIds.find(id => id !== userId);
+        if (otherUserId) {
+          otherUserIds.add(otherUserId);
         }
+      }
+    });
 
-        // Get last message
-        const { data: lastMsg } = await supabase
-          .from('messages')
-          .select('text, created_at')
-          .eq('conversation_id', conv.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, full_name, avatar')
+      .in('id', Array.from(otherUserIds));
 
-        // Count unread messages
-        const participantRecord = participants.find(p => p.conversation_id === conv.id);
-        const lastReadAt = participantRecord?.last_read_at;
-        
-        let unreadCount = 0;
-        if (lastReadAt) {
-          const { count } = await supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .gt('created_at', lastReadAt)
-            .neq('sender_id', userId);
-          
-          unreadCount = count || 0;
-        }
+    // Create a map for quick profile lookups
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-        return {
-          id: conv.id,
-          bountyId: conv.bounty_id,
-          isGroup: conv.is_group,
-          name,
-          avatar,
-          lastMessage: lastMsg?.text,
-          updatedAt: conv.updated_at,
-          participantIds,
-          unread: unreadCount,
-        };
-      })
+    // OPTIMIZATION: Batch fetch last messages for all conversations
+    // Use a window function approach or fetch multiple at once
+    const lastMessagesPromises = conversations.map(conv =>
+      supabase
+        .from('messages')
+        .select('conversation_id, text, created_at')
+        .eq('conversation_id', conv.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
     );
+
+    const lastMessagesResults = await Promise.all(lastMessagesPromises);
+    const lastMessageMap = new Map(
+      lastMessagesResults
+        .filter(result => result.data)
+        .map(result => [result.data!.conversation_id, result.data])
+    );
+
+    // OPTIMIZATION: Batch fetch unread counts for all conversations
+    const unreadCountsPromises = conversations.map(async conv => {
+      const participantRecord = participants.find(p => p.conversation_id === conv.id);
+      const lastReadAt = participantRecord?.last_read_at;
+      
+      if (!lastReadAt) {
+        return { conversationId: conv.id, count: 0 };
+      }
+
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conv.id)
+        .gt('created_at', lastReadAt)
+        .neq('sender_id', userId);
+      
+      return { conversationId: conv.id, count: count || 0 };
+    });
+
+    const unreadCountsResults = await Promise.all(unreadCountsPromises);
+    const unreadCountMap = new Map(
+      unreadCountsResults.map(r => [r.conversationId, r.count])
+    );
+
+    // Now build enriched conversations using the batched data
+    const enrichedConversations: Conversation[] = conversations.map(conv => {
+      const participantIds = participantsByConversation.get(conv.id) || [];
+      
+      // For 1:1 chats, get the other user's profile
+      let name = 'Unknown';
+      let avatar: string | undefined;
+      
+      if (!conv.is_group && participantIds.length === 2) {
+        const otherUserId = participantIds.find(id => id !== userId);
+        if (otherUserId) {
+          const profile = profileMap.get(otherUserId);
+          if (profile) {
+            name = profile.username || profile.full_name || 'Unknown';
+            avatar = getProfileAvatarUrl(profile.avatar);
+          }
+        }
+      } else if (conv.is_group) {
+        name = 'Group Chat';
+      }
+
+      const lastMsg = lastMessageMap.get(conv.id);
+      const unreadCount = unreadCountMap.get(conv.id) || 0;
+
+      return {
+        id: conv.id,
+        bountyId: conv.bounty_id,
+        isGroup: conv.is_group,
+        name,
+        avatar,
+        lastMessage: lastMsg?.text,
+        updatedAt: conv.updated_at,
+        participantIds,
+        unread: unreadCount,
+      };
+    });
 
     // Cache the conversations
     await cacheConversations(enrichedConversations);

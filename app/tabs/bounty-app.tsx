@@ -139,6 +139,15 @@ function BountyAppInner() {
     return 1 + ((hash % seed) % 15)
   }, [userLocation, permission])
 
+  // Memoize distance calculations to avoid recalculating on each filter/sort
+  const bountyDistances = useMemo(() => {
+    const distances = new Map<string, number | null>();
+    bounties.forEach(bounty => {
+      distances.set(String(bounty.id), calculateDistance(bounty.location || ""));
+    });
+    return distances;
+  }, [bounties, calculateDistance]);
+
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
@@ -171,7 +180,7 @@ function BountyAppInner() {
       list = list.filter((b) => {
         // Don't filter out online/remote bounties or bounties with no location
         if (b.work_type === 'online') return true
-        const distance = calculateDistance(b.location || "")
+        const distance = bountyDistances.get(String(b.id))
         // Keep bounties with no location data (they'll show "Location TBD")
         if (distance === null) return true
         return distance <= distanceFilter
@@ -185,8 +194,8 @@ function BountyAppInner() {
     } else {
       // default by proximity - null distances (missing location) go to end
       list.sort((a, b) => {
-        const distA = calculateDistance(a.location || "")
-        const distB = calculateDistance(b.location || "")
+        const distA = bountyDistances.get(String(a.id))
+        const distB = bountyDistances.get(String(b.id))
         // Put null distances at the end
         if (distA === null && distB === null) return 0
         if (distA === null) return 1
@@ -361,8 +370,14 @@ function BountyAppInner() {
   // FlatList optimization: memoized functions
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
 
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: 88, // Approximate item height + margin
+    offset: 90 * index,
+    index
+  }), []);
+
   const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
-    const distance = calculateDistance(item.location || '')
+    const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')
     return (
       <BountyListItem
         id={item.id}
@@ -377,7 +392,7 @@ function BountyAppInner() {
         poster_avatar={item.poster_avatar}
       />
     )
-  }, [calculateDistance]);
+  }, [bountyDistances, calculateDistance]);
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) {
@@ -685,9 +700,7 @@ function BountyAppInner() {
         updateCellsBatchingPeriod={100}
         initialNumToRender={8}
         windowSize={10}
-        getItemLayout={(data, index) => (
-          {length: 88, offset: 90 * index, index} // Approximate item height + margin
-        )}
+        getItemLayout={getItemLayout}
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
