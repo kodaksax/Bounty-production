@@ -17,7 +17,7 @@ jest.mock('../../../services/api/src/config', () => ({
 }));
 
 // Mock logger
-jest.mock('../../../services/api/src/utils/logger', () => ({
+jest.mock('../../../services/api/src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

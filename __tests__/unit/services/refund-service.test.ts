@@ -78,7 +78,7 @@ const mockOutboxService = {
 jest.mock('../../../services/api/src/services/outbox-service', () => mockOutboxService);
 
 // Mock logger
-jest.mock('../../../services/api/src/utils/logger', () => ({
+jest.mock('../../../services/api/src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

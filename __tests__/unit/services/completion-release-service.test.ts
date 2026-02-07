@@ -56,7 +56,7 @@ const mockDb = {
   })),
 };
 
-jest.mock('../../../services/api/src/db', () => ({
+jest.mock('../../../services/api/src/db/connection', () => ({
   db: mockDb,
 }));
 
@@ -97,7 +97,7 @@ const mockRealtimeService = {
 jest.mock('../../../services/api/src/services/realtime-service', () => mockRealtimeService);
 
 // Mock logger
-jest.mock('../../../services/api/src/utils/logger', () => ({
+jest.mock('../../../services/api/src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

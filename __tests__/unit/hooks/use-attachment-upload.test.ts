@@ -3,8 +3,6 @@
  * 
  * Tests the upload functionality with retry logic (3 attempts with exponential backoff),
  * file validation, progress tracking, and error handling.
- * 
- * @jest-environment node
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
