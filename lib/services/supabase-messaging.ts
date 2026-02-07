@@ -143,13 +143,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     if (!conversations) return [];
 
     // OPTIMIZATION: Batch fetch all participants for all conversations in one query
-    const { data: allConversationParticipants, error: participantsError } = await supabase
+    const { data: allConversationParticipants, error: participantsBatchError } = await supabase
       .from('conversation_participants')
       .select('conversation_id, user_id')
       .in('conversation_id', conversationIds)
       .is('deleted_at', null);
 
-    if (participantsError) throw participantsError;
+    if (participantsBatchError) throw participantsBatchError;
 
     // Group participants by conversation ID
     const participantsByConversation = new Map<string, string[]>();
