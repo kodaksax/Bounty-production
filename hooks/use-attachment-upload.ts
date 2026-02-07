@@ -6,6 +6,11 @@ import { storageService } from '../lib/services/storage-service'
 import type { Attachment } from '../lib/types'
 import { getFileInfo } from '../lib/utils/fs-utils'
 
+// Upload retry configuration
+const MAX_UPLOAD_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 1000 // 1 second
+const MAX_RETRY_DELAY_MS = 5000 // 5 seconds
+
 export interface AttachmentUploadOptions {
   bucket?: string // Supabase storage bucket name
   folder?: string // Folder within bucket (e.g., 'bounties', 'profiles', 'proofs')
@@ -111,7 +116,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
   }
 
   /**
-   * Upload attachment to storage
+   * Upload attachment to storage with retry logic
    */
   const uploadAttachment = async (file: {
     uri: string
@@ -119,59 +124,85 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     mimeType?: string
     size?: number
   }): Promise<Attachment | null> => {
-    try {
-      setState((s) => ({ ...s, isUploading: true, progress: 0, error: null }))
+    let lastError: Error | null = null
 
-      const timestamp = Date.now()
-      const fileName = file.name || `attachment-${timestamp}`
-      const filePath = `${folder}/${timestamp}-${fileName}`
+    for (let attempt = 1; attempt <= MAX_UPLOAD_RETRIES; attempt++) {
+      try {
+        setState((s) => ({ 
+          ...s, 
+          isUploading: true, 
+          progress: 0, 
+          error: null 
+        }))
 
-      const uploadResult = await storageService.uploadFile(file.uri, {
-        bucket,
-        path: filePath,
-        onProgress: (progress) => {
-          setState((s) => ({ ...s, progress }))
-        },
-      })
+        const timestamp = Date.now()
+        const fileName = file.name || `attachment-${timestamp}`
+        const filePath = `${folder}/${timestamp}-${fileName}`
 
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed')
+        // Show retry attempt if not first try (dev only)
+        if (attempt > 1 && __DEV__) {
+          console.log(`[AttachmentUpload] Retry attempt ${attempt}/${MAX_UPLOAD_RETRIES}`)
+        }
+
+        const uploadResult = await storageService.uploadFile(file.uri, {
+          bucket,
+          path: filePath,
+          onProgress: (progress) => {
+            setState((s) => ({ ...s, progress }))
+          },
+        })
+
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || 'Upload failed')
+        }
+
+        const attachment: Attachment = {
+          id: `att-${timestamp}`,
+          name: fileName,
+          uri: file.uri, // Keep local URI for immediate display
+          remoteUri: uploadResult.url,
+          mimeType: file.mimeType,
+          size: file.size,
+          status: 'uploaded',
+          progress: 1,
+        }
+
+        setState((s) => ({
+          ...s,
+          isUploading: false,
+          progress: 1,
+          lastUploaded: attachment,
+          error: null,
+        }))
+
+        onUploaded?.(attachment)
+
+        return attachment
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload failed')
+        
+        // If this isn't the last attempt, wait before retrying with exponential backoff
+        if (attempt < MAX_UPLOAD_RETRIES) {
+          const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS)
+          if (__DEV__) {
+            console.log(`[AttachmentUpload] Waiting ${delay}ms before retry...`)
+          }
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-
-      const attachment: Attachment = {
-        id: `att-${timestamp}`,
-        name: fileName,
-        uri: file.uri, // Keep local URI for immediate display
-        remoteUri: uploadResult.url,
-        mimeType: file.mimeType,
-        size: file.size,
-        status: 'uploaded',
-        progress: 1,
-      }
-
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 1,
-        lastUploaded: attachment,
-        error: null,
-      }))
-
-      onUploaded?.(attachment)
-
-      return attachment
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error('Upload failed')
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 0,
-        error: err.message,
-      }))
-      onError?.(err)
-      Alert.alert('Upload Failed', err.message)
-      return null
     }
+
+    // All retries failed
+    const err = lastError || new Error('Upload failed after all retries')
+    setState((s) => ({
+      ...s,
+      isUploading: false,
+      progress: 0,
+      error: err.message,
+    }))
+    onError?.(err)
+    Alert.alert('Upload Failed', `${err.message}\n\nPlease check your connection and try again.`)
+    return null
   }
 
   /**

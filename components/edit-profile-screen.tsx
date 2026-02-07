@@ -6,7 +6,7 @@ import { AvatarFallback } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from "react"
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -377,8 +377,17 @@ export function EditProfileScreen({
         </TouchableOpacity>
       </View>
 
-      {/* Scrollable Content */}
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Scrollable Content with KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Banner area (Twitter-like aesthetic placeholder) */}
         <View className="h-24 bg-emerald-800/40" />
 
@@ -489,6 +498,7 @@ export function EditProfileScreen({
         {/* Footer space */}
         <View style={{ height: 40 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }
