@@ -65,7 +65,7 @@ class AlertingService {
       condition: () => {
         const histogram = metrics.getHistogram(METRICS.HTTP_REQUEST_DURATION_MS);
         if (!histogram || histogram.count < 100) return false;
-        
+
         // Calculate p95
         const p95 = this.calculateP95(histogram);
         return p95 > 1000; // > 1000ms (1s) p95
@@ -86,7 +86,7 @@ class AlertingService {
       condition: () => {
         const histogram = metrics.getHistogram(METRICS.DB_QUERY_DURATION_MS);
         if (!histogram || histogram.count < 50) return false;
-        
+
         // Calculate p95
         const p95 = this.calculateP95(histogram);
         return p95 > 5000; // > 5000ms (5s) p95
@@ -195,7 +195,7 @@ class AlertingService {
    */
   private triggerAlert(name: string, rule: AlertRule): void {
     const value = rule.currentValue();
-    
+
     const alert: AlertInstance = {
       rule: name,
       severity: rule.severity,
@@ -208,7 +208,7 @@ class AlertingService {
 
     this.activeAlerts.set(name, alert);
     this.lastAlertTime.set(name, Date.now());
-    
+
     // Add to history
     this.addToHistory(alert);
 
@@ -233,7 +233,7 @@ class AlertingService {
     if (alert && !alert.resolved) {
       alert.resolved = true;
       this.activeAlerts.delete(name);
-      
+
       logger.info({ rule: name }, '[alerts] Alert resolved');
     }
   }
@@ -257,11 +257,20 @@ class AlertingService {
    */
   private addToHistory(alert: AlertInstance): void {
     this.alertHistory.push(alert);
-    
+
     // Limit history size
     if (this.alertHistory.length > this.maxHistorySize) {
       this.alertHistory = this.alertHistory.slice(-this.maxHistorySize);
     }
+  }
+
+  /**
+   * Reset the alerting service (useful for testing)
+   */
+  reset(): void {
+    this.activeAlerts.clear();
+    this.lastAlertTime.clear();
+    this.alertHistory = [];
   }
 
   /**
@@ -271,14 +280,12 @@ class AlertingService {
     if (!histogram || histogram.count === 0) return 0;
 
     const targetCount = histogram.count * 0.95;
-    let cumulativeCount = 0;
-
     for (const bucket of histogram.buckets) {
-      cumulativeCount += bucket.count;
-      if (cumulativeCount >= targetCount) {
+      if (bucket.count >= targetCount) {
         return bucket.le;
       }
     }
+
 
     return histogram.buckets[histogram.buckets.length - 1].le;
   }

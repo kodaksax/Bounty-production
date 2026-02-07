@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/__tests__', '<rootDir>/lib', '<rootDir>/server'],
+  roots: ['<rootDir>/__tests__', '<rootDir>/lib', '<rootDir>/server', '<rootDir>/services'],
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
@@ -18,6 +18,7 @@ module.exports = {
     'lib/services/**/*.{ts,tsx,js,jsx}',
     'lib/utils/**/*.{ts,tsx,js,jsx}',
     'server/**/*.{ts,tsx,js,jsx}',
+    'services/**/*.{ts,tsx,js,jsx}',
     '!**/*.d.ts',
     '!**/node_modules/**',
     '!**/dist/**',
@@ -41,6 +42,8 @@ module.exports = {
     '^components/(.*)$': '<rootDir>/components/$1',
     '^hooks/(.*)$': '<rootDir>/hooks/$1',
     '^providers/(.*)$': '<rootDir>/providers/$1',
+    '^stripe$': '<rootDir>/node_modules/stripe',
+    '^@supabase/supabase-js$': '<rootDir>/node_modules/@supabase/supabase-js',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

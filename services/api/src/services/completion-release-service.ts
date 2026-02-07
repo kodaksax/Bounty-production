@@ -109,8 +109,14 @@ export class CompletionReleaseService {
 
       // Calculate amounts
       const platformFeePercentage = request.platformFeePercentage || this.DEFAULT_PLATFORM_FEE_PERCENTAGE;
+
+      if (platformFeePercentage < 0 || platformFeePercentage > 100) {
+        throw new Error('Platform fee percentage must be between 0 and 100');
+      }
+
       const platformFeeCents = Math.round((bounty.amount_cents * platformFeePercentage) / 100);
       const releaseAmountCents = bounty.amount_cents - platformFeeCents;
+
 
       console.log(`💰 Processing completion release for bounty ${request.bountyId}:`, {
         totalAmount: bounty.amount_cents,

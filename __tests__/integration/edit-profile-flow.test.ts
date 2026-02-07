@@ -58,14 +58,23 @@ describe('Edit Profile Integration Flow', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     const { supabase } = require('../../lib/supabase');
     mockSupabase = supabase;
-    
+
     // Reset auth profile service
     (authProfileService as any).currentProfile = null;
     (authProfileService as any).currentSession = null;
     (authProfileService as any).listeners = [];
+
+    // Set up default session for all tests
+    authProfileService.setSession({
+      user: { id: mockUserId, email: 'john@example.com' },
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh',
+      expires_in: 3600,
+      token_type: 'bearer',
+    } as any);
   });
 
   describe('Profile Loading', () => {
@@ -133,6 +142,14 @@ describe('Edit Profile Integration Flow', () => {
         }),
         update: jest.fn().mockReturnThis(),
       });
+
+      authProfileService.setSession({
+        user: { id: mockUserId, email: 'john@example.com' },
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+      } as any);
     });
 
     it('should update profile successfully', async () => {
@@ -201,8 +218,8 @@ describe('Edit Profile Integration Flow', () => {
       });
 
       const result = await authProfileService.updateProfile({
-        avatar_url: avatarUrl,
-      } as any);
+        avatar: avatarUrl,
+      });
 
       expect(result).not.toBeNull();
       expect(result?.avatar).toBe(avatarUrl);
@@ -251,8 +268,8 @@ describe('Edit Profile Integration Flow', () => {
       });
 
       const result = await authProfileService.updateProfile({
-        avatar_url: uploadedUrl,
-      } as any);
+        avatar: uploadedUrl,
+      });
 
       expect(result?.avatar).toBe(uploadedUrl);
     });
@@ -312,7 +329,7 @@ describe('Edit Profile Integration Flow', () => {
 
       const maxRetries = 3;
       let uploadResult: any;
-      
+
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         uploadResult = await storageService.uploadFile(mockFile.uri, {
           bucket: 'profiles',
@@ -353,7 +370,7 @@ describe('Edit Profile Integration Flow', () => {
         const trimmed = username.trim();
         const hasSpaces = username.includes(' ');
         const hasSpecialChars = /[@!#$%^&*()]/.test(username);
-        
+
         expect(
           trimmed.length === 0 || hasSpaces || hasSpecialChars
         ).toBe(true);
@@ -423,7 +440,7 @@ describe('Edit Profile Integration Flow', () => {
 
       await authProfileService.fetchAndSyncProfile('user-2');
       let profile2 = authProfileService.getCurrentProfile();
-      
+
       expect(profile2?.username).toBe('user2');
       expect(profile2?.username).not.toBe('user1');
     });
@@ -446,7 +463,7 @@ describe('Edit Profile Integration Flow', () => {
       });
 
       await authProfileService.setSession(mockSession as any);
-      
+
       const profile = authProfileService.getCurrentProfile();
       expect(profile?.id).toBe(mockUserId);
     });
@@ -461,7 +478,7 @@ describe('Edit Profile Integration Flow', () => {
       });
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
-      
+
       // Should return null instead of throwing
       expect(profile).toBeNull();
     });
@@ -524,6 +541,11 @@ describe('Edit Profile Integration Flow', () => {
       const loadedProfile = await authProfileService.fetchAndSyncProfile(mockUserId);
       expect(loadedProfile).not.toBeNull();
 
+      await authProfileService.setSession({
+        user: { id: mockUserId, email: 'john@example.com' },
+        access_token: 'mock-token',
+      } as any);
+
       // 2. Upload avatar
       const avatarUrl = 'https://storage.example.com/avatars/123-avatar.jpg';
       (storageService.uploadFile as jest.Mock).mockResolvedValue({
@@ -559,8 +581,8 @@ describe('Edit Profile Integration Flow', () => {
       const result = await authProfileService.updateProfile({
         username: 'johndoe_new',
         about: 'Updated developer bio',
-        avatar_url: avatarUrl,
-      } as any);
+        avatar: avatarUrl,
+      });
 
       expect(result).not.toBeNull();
       expect(result?.username).toBe('johndoe_new');
@@ -595,7 +617,7 @@ describe('Edit Profile Integration Flow', () => {
       });
 
       expect(result).toBeNull();
-      
+
       // Current profile should still be the original
       const currentProfile = authProfileService.getCurrentProfile();
       expect(currentProfile?.username).toBe(initialUsername);
@@ -618,13 +640,13 @@ describe('Edit Profile Integration Flow', () => {
       const update1 = authProfileService.updateProfile({
         username: 'update1',
       });
-      
+
       const update2 = authProfileService.updateProfile({
         username: 'update2',
       });
 
       const results = await Promise.all([update1, update2]);
-      
+
       // Both should complete without crashing
       expect(results[0]).not.toBeNull();
       expect(results[1]).not.toBeNull();

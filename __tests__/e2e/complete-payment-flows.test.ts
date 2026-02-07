@@ -17,7 +17,7 @@ beforeAll(() => {
   process.env.NODE_ENV = 'test';
 });
 
-// Mock Supabase
+// Mock Supabase  
 const mockSupabaseClient = {
   from: jest.fn((table: string) => ({
     select: jest.fn(() => ({
@@ -52,12 +52,19 @@ const mockSupabaseClient = {
         maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
       })),
     })),
-    insert: jest.fn(() => ({
+    insert: jest.fn((data: any) => ({
       select: jest.fn(() => ({
-        single: jest.fn(() => Promise.resolve({
-          data: { id: 'tx_new', type: 'escrow', amount: 10000 },
-          error: null,
-        })),
+        single: jest.fn(() => {
+          // Return the transaction with the type that was inserted
+          const insertedData = Array.isArray(data) ? data[0] : data;
+          return Promise.resolve({
+            data: {
+              id: 'tx_new',
+              ...insertedData
+            },
+            error: null,
+          });
+        }),
       })),
     })),
     update: jest.fn(() => ({
@@ -116,7 +123,15 @@ const mockStripe = {
       destination: 'acct_hunter',
     })),
   },
+  setupIntents: {
+    create: jest.fn(async () => ({
+      id: 'seti_test123',
+      client_secret: 'seti_test123_secret',
+      status: 'requires_payment_method',
+    })),
+  },
 };
+
 
 jest.mock('stripe', () => {
   // Return a constructor function that returns the mock Stripe instance
@@ -126,6 +141,59 @@ jest.mock('stripe', () => {
 describe('Complete Payment Flow E2E Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Restore mock implementations after clearAllMocks
+    (mockSupabaseClient.from as jest.Mock).mockImplementation((table: string) => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          single: jest.fn(() => {
+            if (table === 'bounties') {
+              return Promise.resolve({
+                data: {
+                  id: 'bounty123',
+                  poster_id: 'poster123',
+                  hunter_id: 'hunter123',
+                  amount: 10000,
+                  status: 'in_progress',
+                  payment_intent_id: 'pi_test123',
+                },
+                error: null,
+              });
+            }
+            if (table === 'users') {
+              return Promise.resolve({
+                data: {
+                  id: 'poster123',
+                  email: 'poster@example.com',
+                  stripe_customer_id: 'cus_poster',
+                  stripe_account_id: 'acct_poster',
+                },
+                error: null,
+              });
+            }
+            return Promise.resolve({ data: null, error: null });
+          }),
+          maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
+      insert: jest.fn((data: any) => ({
+        select: jest.fn(() => ({
+          single: jest.fn(() => {
+            const insertedData = Array.isArray(data) ? data[0] : data;
+            return Promise.resolve({
+              data: {
+                id: 'tx_new',
+                ...insertedData
+              },
+              error: null,
+            });
+          }),
+        })),
+      })),
+      update: jest.fn(() => ({
+        eq: jest.fn(() => Promise.resolve({ error: null, count: 1 })),
+      })),
+    }));
   });
 
   describe('Full Bounty Payment Flow - Happy Path', () => {
@@ -277,7 +345,7 @@ describe('Complete Payment Flow E2E Tests', () => {
 
       // Should not allow refund for completed bounty
       expect(bounty.data.status).toBe('completed');
-      
+
       // Attempt to refund would fail validation
       const shouldNotRefund = bounty.data.status === 'completed';
       expect(shouldNotRefund).toBe(true);
@@ -362,7 +430,7 @@ describe('Complete Payment Flow E2E Tests', () => {
 
     it('should prevent withdrawal with insufficient funds', async () => {
       // Mock low balance
-      mockSupabaseClient.rpc = jest.fn(() => 
+      mockSupabaseClient.rpc = jest.fn(() =>
         Promise.resolve({ data: 1000, error: null })
       );
 
@@ -399,7 +467,7 @@ describe('Complete Payment Flow E2E Tests', () => {
 
       expect(existingEscrow.data).not.toBeNull();
       expect(existingEscrow.data.type).toBe('escrow');
-      
+
       // Should prevent duplicate
       const isDuplicate = existingEscrow.data !== null;
       expect(isDuplicate).toBe(true);
@@ -425,10 +493,10 @@ describe('Complete Payment Flow E2E Tests', () => {
         .maybeSingle();
 
       expect(existingRelease.data).not.toBeNull();
-      
+
       // Should prevent duplicate release
-      const alreadyReleased = existingRelease.data !== null && 
-                               existingRelease.data.type === 'release';
+      const alreadyReleased = existingRelease.data !== null &&
+        existingRelease.data.type === 'release';
       expect(alreadyReleased).toBe(true);
     });
 
@@ -457,13 +525,13 @@ describe('Complete Payment Flow E2E Tests', () => {
   describe('Payment Method Management Flow', () => {
     it('should save payment method for future use', async () => {
       // Step 1: Create setup intent (for saving payment method)
-      mockStripe.setupIntents.create.mockResolvedValueOnce({
-        id: 'seti_test123',
-        client_secret: 'seti_test123_secret',
-        status: 'requires_payment_method',
-      });
+      const setupIntent = await mockStripe.setupIntents.create();
+
+      expect(setupIntent.id).toBe('seti_test123');
+      expect(setupIntent.client_secret).toBe('seti_test123_secret');
 
       // Step 2: Confirm setup with payment method
+
       const paymentMethod = {
         id: 'pm_test123',
         type: 'card',
@@ -664,7 +732,7 @@ describe('Complete Payment Flow E2E Tests', () => {
       while (/<[^>]*>/.test(sanitizedDesc)) {
         sanitizedDesc = sanitizedDesc.replace(/<[^>]*>/g, '');
       }
-      
+
       const sanitized = {
         bountyId: unsafeMetadata.bountyId,
         description: sanitizedDesc,
