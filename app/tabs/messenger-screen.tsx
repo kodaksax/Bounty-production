@@ -192,6 +192,13 @@ export function MessengerScreen({
     />
   ), [handleConversationClick, handleDeleteConversation]);
 
+  // getItemLayout for better scroll performance
+  const getItemLayout = useCallback((_: any, index: number) => ({
+    length: 76, // Approximate height: 12px (padding-top) + 48px (content) + 12px (padding-bottom) + 4px (margin)
+    offset: 76 * index,
+    index,
+  }), []);
+
   // Empty list component
   const ListEmptyComponent = useCallback(() => {
     if (loading) {
@@ -280,6 +287,7 @@ export function MessengerScreen({
           />
         }
         // Performance optimizations
+        getItemLayout={getItemLayout}
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
         windowSize={5}
