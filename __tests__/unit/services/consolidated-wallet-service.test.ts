@@ -3,6 +3,8 @@
  * Tests wallet operations, escrow management, and balance updates
  */
 
+import nock from 'nock';
+
 // Mock config
 jest.mock('../../../services/api/src/config', () => ({
   config: {
@@ -17,7 +19,7 @@ jest.mock('../../../services/api/src/config', () => ({
 }));
 
 // Mock logger
-jest.mock('../../../services/api/src/utils/logger', () => ({
+jest.mock('../../../services/api/src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),
@@ -150,6 +152,26 @@ import * as walletService from '../../../services/api/src/services/consolidated-
 describe('Consolidated Wallet Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Setup nock to intercept Stripe API calls
+    nock.cleanAll();
+    
+    // Mock Stripe Transfer API
+    nock('https://api.stripe.com:443')
+      .persist()
+      .post('/v1/transfers')
+      .reply(200, {
+        id: 'tr_test123',
+        object: 'transfer',
+        amount: 5000,
+        currency: 'usd',
+        destination: 'acct_test123',
+        created: Math.floor(Date.now() / 1000),
+      });
+  });
+  
+  afterEach(() => {
+    nock.cleanAll();
   });
 
   describe('getBalance', () => {

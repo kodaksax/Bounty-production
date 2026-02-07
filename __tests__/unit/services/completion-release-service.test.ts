@@ -16,19 +16,21 @@ jest.mock('../../../services/api/src/config', () => ({
   },
 }));
 
-// Mock database
+// Mock database with proper Drizzle ORM chain including .limit()
 const mockDb = {
   select: jest.fn(() => ({
     from: jest.fn(() => ({
-      where: jest.fn(() => Promise.resolve([
-        {
-          id: 'bounty123',
-          poster_id: 'poster123',
-          hunter_id: 'hunter123',
-          amount: 10000,
-          status: 'in_progress',
-        },
-      ])),
+      where: jest.fn(() => ({
+        limit: jest.fn(() => Promise.resolve([
+          {
+            id: 'bounty123',
+            poster_id: 'poster123',
+            hunter_id: 'hunter123',
+            amount: 10000,
+            status: 'in_progress',
+          },
+        ])),
+      })),
     })),
   })),
   insert: jest.fn(() => ({
@@ -56,8 +58,28 @@ const mockDb = {
   })),
 };
 
-jest.mock('../../../services/api/src/db', () => ({
+jest.mock('../../../services/api/src/db/connection', () => ({
   db: mockDb,
+}));
+
+// Mock database schema
+jest.mock('../../../services/api/src/db/schema', () => ({
+  bounties: { id: 'bounties', poster_id: 'poster_id', hunter_id: 'hunter_id', amount: 'amount', status: 'status' },
+  users: { id: 'users', email: 'email', stripe_account_id: 'stripe_account_id' },
+  walletTransactions: { 
+    id: 'walletTransactions', 
+    bounty_id: 'bounty_id', 
+    type: 'type',
+    user_id: 'user_id',
+    amount: 'amount',
+    platform_fee: 'platform_fee'
+  },
+}));
+
+// Mock drizzle-orm
+jest.mock('drizzle-orm', () => ({
+  eq: jest.fn(() => 'eq_condition'),
+  and: jest.fn((...conditions) => `and(${conditions.join(', ')})`),
 }));
 
 // Mock consolidated wallet service
@@ -97,7 +119,7 @@ const mockRealtimeService = {
 jest.mock('../../../services/api/src/services/realtime-service', () => mockRealtimeService);
 
 // Mock logger
-jest.mock('../../../services/api/src/utils/logger', () => ({
+jest.mock('../../../services/api/src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

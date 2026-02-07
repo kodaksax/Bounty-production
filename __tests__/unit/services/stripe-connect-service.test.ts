@@ -3,6 +3,8 @@
  * Tests Stripe Connect onboarding, account management, and payouts
  */
 
+import nock from 'nock';
+
 // Mock environment
 beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
@@ -96,6 +98,43 @@ import { stripeConnectService } from '../../../services/api/src/services/stripe-
 describe('Stripe Connect Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Setup nock to intercept Stripe API calls
+    nock.cleanAll();
+    
+    // Mock Stripe API endpoints
+    nock('https://api.stripe.com:443')
+      .persist()
+      .post('/v1/accounts')
+      .reply(200, mockStripeAccount)
+      .get(/\/v1\/accounts\/acct_test123/)
+      .reply(200, mockStripeAccount)
+      .post('/v1/account_links')
+      .reply(200, {
+        object: 'account_link',
+        url: 'https://connect.stripe.com/setup/test',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      })
+      .post('/v1/payment_intents')
+      .reply(200, {
+        id: 'pi_test123',
+        object: 'payment_intent',
+        client_secret: 'pi_test123_secret_abc',
+        amount: 5000,
+        currency: 'usd',
+        status: 'requires_payment_method',
+      })
+      .post(/\/v1\/refunds/)
+      .reply(200, {
+        id: 'ref_test123',
+        object: 'refund',
+        amount: 5000,
+        status: 'succeeded',
+      });
+  });
+  
+  afterEach(() => {
+    nock.cleanAll();
   });
 
   describe('createOnboardingLink', () => {

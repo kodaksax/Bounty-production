@@ -3,6 +3,8 @@
  * Tests Stripe PaymentIntent operations, payment methods, and customer management
  */
 
+import nock from 'nock';
+
 // Mock config first
 jest.mock('../../../services/api/src/config', () => ({
   config: {
@@ -128,6 +130,99 @@ import * as paymentService from '../../../services/api/src/services/consolidated
 describe('Consolidated Payment Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Setup nock to intercept Stripe API calls
+    nock.cleanAll();
+    
+    // Mock Stripe API endpoints
+    nock('https://api.stripe.com:443')
+      .persist()
+      .post('/v1/customers')
+      .reply(200, {
+        id: 'cus_test123',
+        object: 'customer',
+        email: 'test@example.com',
+        metadata: {},
+      })
+      .get(/\/v1\/customers\/cus_/)
+      .reply(200, {
+        id: 'cus_test123',
+        object: 'customer',
+        email: 'test@example.com',
+        metadata: {},
+      })
+      .post('/v1/payment_intents')
+      .reply(200, {
+        id: 'pi_test123',
+        object: 'payment_intent',
+        client_secret: 'pi_test123_secret_abc',
+        amount: 5000,
+        currency: 'usd',
+        status: 'requires_payment_method',
+        metadata: {},
+      })
+      .post(/\/v1\/payment_intents\/pi_.*\/confirm/)
+      .reply(200, {
+        id: 'pi_test123',
+        object: 'payment_intent',
+        client_secret: 'pi_test123_secret_abc',
+        amount: 5000,
+        currency: 'usd',
+        status: 'succeeded',
+        metadata: {},
+      })
+      .get(/\/v1\/payment_intents\/pi_/)
+      .reply(200, {
+        id: 'pi_test123',
+        object: 'payment_intent',
+        amount: 5000,
+        currency: 'usd',
+        status: 'requires_payment_method',
+        metadata: {},
+      })
+      .post(/\/v1\/payment_intents\/pi_.*\/cancel/)
+      .reply(200, {
+        id: 'pi_test123',
+        object: 'payment_intent',
+        amount: 5000,
+        currency: 'usd',
+        status: 'canceled',
+        metadata: {},
+      })
+      .post('/v1/setup_intents')
+      .reply(200, {
+        id: 'seti_test123',
+        object: 'setup_intent',
+        client_secret: 'seti_test123_secret_abc',
+      })
+      .get(/\/v1\/customers\/cus_.*\/payment_methods/)
+      .reply(200, {
+        object: 'list',
+        data: [{
+          id: 'pm_test123',
+          object: 'payment_method',
+          type: 'card',
+          card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2025 },
+        }],
+      })
+      .post(/\/v1\/payment_methods\/pm_.*\/attach/)
+      .reply(200, {
+        id: 'pm_test123',
+        object: 'payment_method',
+        type: 'card',
+        card: { brand: 'visa', last4: '4242' },
+      })
+      .post(/\/v1\/payment_methods\/pm_.*\/detach/)
+      .reply(200, {
+        id: 'pm_test123',
+        object: 'payment_method',
+        type: 'card',
+        card: { brand: 'visa', last4: '4242' },
+      });
+  });
+  
+  afterEach(() => {
+    nock.cleanAll();
   });
 
   describe('createPaymentIntent', () => {
