@@ -85,6 +85,11 @@ export async function initializeIdempotencyService(): Promise<void> {
  * @returns true if key exists (duplicate), false if available
  */
 export async function checkIdempotencyKey(key: string): Promise<boolean> {
+  // Validate key is not empty
+  if (!key || key.trim() === '') {
+    return false; // Empty keys are not considered valid/existing
+  }
+  
   if (redisEnabled && redisClient) {
     try {
       const exists = await redisClient.exists(key);
@@ -105,6 +110,11 @@ export async function checkIdempotencyKey(key: string): Promise<boolean> {
  * @param ttlSeconds - Time to live in seconds (default: 24 hours)
  */
 export async function storeIdempotencyKey(key: string, ttlSeconds: number = 86400): Promise<void> {
+  // Validate key is not empty
+  if (!key || key.trim() === '') {
+    throw new Error('Idempotency key cannot be empty');
+  }
+  
   if (redisEnabled && redisClient) {
     try {
       // Store with TTL
