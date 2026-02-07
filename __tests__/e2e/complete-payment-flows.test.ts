@@ -9,6 +9,8 @@
  * full stack for more comprehensive validation.
  */
 
+import nock from 'nock';
+
 // Mock environment
 beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
