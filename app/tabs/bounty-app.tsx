@@ -13,13 +13,12 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useLocalSearchParams, useRouter, Redirect } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Alert, Animated, ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
-import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 
 import { useAdmin } from '../../lib/admin-context'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
@@ -30,7 +29,7 @@ import { locationService } from '../../lib/services/location-service'
 import { searchService } from '../../lib/services/search-service'
 import type { TrendingBounty } from '../../lib/types'
 import { CURRENT_USER_ID } from '../../lib/utils/data-utils'
-import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { WalletProvider } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
 // Use the proper Bounty type from database types
@@ -139,6 +138,15 @@ function BountyAppInner() {
     return 1 + ((hash % seed) % 15)
   }, [userLocation, permission])
 
+  // Memoize distance calculations to avoid recalculating on each filter/sort
+  const bountyDistances = useMemo(() => {
+    const distances = new Map<string, number | null>();
+    bounties.forEach(bounty => {
+      distances.set(String(bounty.id), calculateDistance(bounty.location || ""));
+    });
+    return distances;
+  }, [bounties, calculateDistance]);
+
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
@@ -171,9 +179,9 @@ function BountyAppInner() {
       list = list.filter((b) => {
         // Don't filter out online/remote bounties or bounties with no location
         if (b.work_type === 'online') return true
-        const distance = calculateDistance(b.location || "")
+        const distance = bountyDistances.get(String(b.id))
         // Keep bounties with no location data (they'll show "Location TBD")
-        if (distance === null) return true
+        if (distance == null) return true
         return distance <= distanceFilter
       })
     }
@@ -185,17 +193,17 @@ function BountyAppInner() {
     } else {
       // default by proximity - null distances (missing location) go to end
       list.sort((a, b) => {
-        const distA = calculateDistance(a.location || "")
-        const distB = calculateDistance(b.location || "")
-        // Put null distances at the end
-        if (distA === null && distB === null) return 0
-        if (distA === null) return 1
-        if (distB === null) return -1
-        return distA - distB
+        const distA = bountyDistances.get(String(a.id))
+        const distB = bountyDistances.get(String(b.id))
+        // Put null/undefined distances at the end
+        if (distA == null && distB == null) return 0
+        if (distA == null) return 1
+        if (distB == null) return -1
+        return (distA ?? Infinity) - (distB ?? Infinity)
       })
     }
     return list
-  }, [bounties, activeCategory, distanceFilter, userLocation, permission, calculateDistance, appliedBountyIds])
+  }, [bounties, activeCategory, distanceFilter, userLocation, permission, bountyDistances, appliedBountyIds])
 
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
@@ -361,8 +369,14 @@ function BountyAppInner() {
   // FlatList optimization: memoized functions
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), []);
 
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: 90, // Item height (88) + ItemSeparatorComponent height (2)
+    offset: 90 * index,
+    index
+  }), []);
+
   const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
-    const distance = calculateDistance(item.location || '')
+    const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')
     return (
       <BountyListItem
         id={item.id}
@@ -377,7 +391,7 @@ function BountyAppInner() {
         poster_avatar={item.poster_avatar}
       />
     )
-  }, [calculateDistance]);
+  }, [bountyDistances, calculateDistance]);
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) {
@@ -685,9 +699,7 @@ function BountyAppInner() {
         updateCellsBatchingPeriod={100}
         initialNumToRender={8}
         windowSize={10}
-        getItemLayout={(data, index) => (
-          {length: 88, offset: 90 * index, index} // Approximate item height + margin
-        )}
+        getItemLayout={getItemLayout}
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient

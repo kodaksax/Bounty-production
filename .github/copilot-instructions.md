@@ -7,6 +7,11 @@ Key pointers
 - Backend: server and `services/api` (see `../server/README.md` and `../services/api/README.md`).
 - Auth & DB: Supabase migrations live under `supabase/`; data models in `lib/types.ts`.
 
+IMPORTANT: Platform target
+- This project targets mobile platforms only: iOS and Android.
+- Avoid adding or relying on web-only dependencies. If a bundler or CI step (`expo`/`eas`) requires a web build, provide safe web fallbacks (stubs) and do not import native-only modules on web.
+- When making changes, prefer runtime/dynamic imports and platform guards (`Platform.OS`, conditional imports) rather than adding web-specific SDKs.
+
 Architecture & data flow (high-level)
 - Mobile app (app/) ↔ services/api (server) ↔ Supabase/Stripe. Core domain shapes: `Bounty` → `Posting` → `Request` → `Conversation` → `WalletTransaction` (see `lib/types.ts`).
 - UI routing uses Expo Router (file-based routes under `app/`). Bottom nav is global — do NOT render BottomNav inside screens.

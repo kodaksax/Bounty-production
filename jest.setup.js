@@ -34,7 +34,7 @@ class MockEventEmitter {
   constructor() {
     this.listeners = {};
   }
-  
+
   addListener(event, callback) {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
@@ -42,19 +42,19 @@ class MockEventEmitter {
     this.listeners[event].push(callback);
     return { remove: () => this.removeListener(event, callback) };
   }
-  
+
   removeListener(event, callback) {
     if (this.listeners[event]) {
       this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
     }
   }
-  
+
   emit(event, ...args) {
     if (this.listeners[event]) {
       this.listeners[event].forEach(callback => callback(...args));
     }
   }
-  
+
   removeAllListeners(event) {
     if (event) {
       delete this.listeners[event];
@@ -83,7 +83,7 @@ jest.mock('react-native', () => {
       flatten: (style) => style,
     },
     Animated: {
-      Value: jest.fn().mockImplementation((value) => ({ 
+      Value: jest.fn().mockImplementation((value) => ({
         _value: value,
         setValue: jest.fn(),
         interpolate: jest.fn().mockReturnValue(value),
@@ -112,8 +112,13 @@ jest.mock('react-native', () => {
     TouchableOpacity: 'TouchableOpacity',
     TextInput: 'TextInput',
     ScrollView: 'ScrollView',
+    KeyboardAvoidingView: 'KeyboardAvoidingView',
     FlatList: 'FlatList',
     ActivityIndicator: 'ActivityIndicator',
+    Alert: {
+      alert: jest.fn(),
+    },
+    Image: 'Image',
   };
 });
 
@@ -183,7 +188,7 @@ jest.mock('@react-native-community/netinfo', () => ({
     type: 'wifi',
     details: null,
   }),
-  addEventListener: jest.fn().mockReturnValue(() => {}),
+  addEventListener: jest.fn().mockReturnValue(() => { }),
 }));
 
 // Mock @react-native-async-storage/async-storage
@@ -243,7 +248,7 @@ jest.mock('expo-modules-core', () => ({
     constructor() {
       this.listeners = {};
     }
-    
+
     addListener(event, callback) {
       if (!this.listeners[event]) {
         this.listeners[event] = [];
@@ -251,19 +256,19 @@ jest.mock('expo-modules-core', () => ({
       this.listeners[event].push(callback);
       return { remove: () => this.removeListener(event, callback) };
     }
-    
+
     removeListener(event, callback) {
       if (this.listeners[event]) {
         this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
       }
     }
-    
+
     emit(event, ...args) {
       if (this.listeners[event]) {
         this.listeners[event].forEach(callback => callback(...args));
       }
     }
-    
+
     removeAllListeners(event) {
       if (event) {
         delete this.listeners[event];
@@ -328,7 +333,7 @@ global.console = {
   error: (...args) => {
     // Convert first argument to string for pattern matching
     const firstArg = args[0]?.toString() || '';
-    
+
     // Only suppress specific known noisy errors from test error paths
     if (
       firstArg.includes('DeprecationWarning') ||
@@ -345,7 +350,15 @@ global.console = {
       firstArg.includes('Draft error') ||
       firstArg.includes('Preference error') ||
       firstArg.includes('Token error') ||
-      firstArg.includes('Cleanup errors (non-critical)')
+      firstArg.includes('Cleanup errors (non-critical)') ||
+      firstArg.includes('Sharing is not available on this device') ||
+      firstArg.includes('Error sharing receipt:') ||
+      firstArg.includes('Error getting connect status:') ||
+      firstArg.includes('Error creating escrow PaymentIntent') ||
+      firstArg.includes('Error creating onboarding link:') ||
+      firstArg.includes('Error refunding PaymentIntent:') ||
+      firstArg.includes('Error validating payment capability:') ||
+      firstArg.includes('Error in Stripe webhook handler:')
     ) {
       return;
     }

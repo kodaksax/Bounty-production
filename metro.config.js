@@ -1,5 +1,6 @@
 /** Metro config — extend expo/metro-config and merge project aliases. */
 const path = require('path');
+const { resolve } = require('metro-resolver');
 const projectRoot = __dirname;
 
 const aliasExtraNodeModules = {
@@ -17,10 +18,26 @@ try {
   const { getDefaultConfig } = require('expo/metro-config');
   const defaultConfig = getDefaultConfig(projectRoot);
 
+  const originalResolver = (defaultConfig.resolver && defaultConfig.resolver.resolveRequest) || resolve;
+
+  // Custom resolver: on web, route @stripe/stripe-react-native to a local web stub
+  const resolveRequest = (context, realModuleName, platform, moduleName) => {
+    const targetName = realModuleName || moduleName;
+    if (platform === 'web' && targetName === '@stripe/stripe-react-native') {
+      return {
+        type: 'sourceFile',
+        filePath: path.resolve(projectRoot, 'lib/services/stripe-mock.web.js'),
+      };
+    }
+
+    return originalResolver(context, realModuleName, platform, moduleName);
+  };
+
   let finalConfig = Object.assign({}, defaultConfig, {
     resolver: Object.assign({}, defaultConfig.resolver || {}, {
       extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
       sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
+      resolveRequest,
     }),
     watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
   });

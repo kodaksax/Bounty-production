@@ -299,7 +299,7 @@ export async function createDeposit(
   // Create transaction record
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: userId,
       type: 'deposit',
       amount,
@@ -311,7 +311,7 @@ export async function createDeposit(
         created_via: 'webhook',
         idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
 
@@ -356,7 +356,7 @@ export async function createWithdrawal(
   // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: userId,
       type: 'withdrawal',
       amount: -amount, // Negative for debit
@@ -366,7 +366,7 @@ export async function createWithdrawal(
       metadata: {
         idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
 
@@ -500,7 +500,7 @@ export async function createEscrow(
   // Create escrow transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: posterId,
       bounty_id: bountyId,
       type: 'escrow',
@@ -512,7 +512,7 @@ export async function createEscrow(
         escrowed_at: new Date().toISOString(),
         idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
 
@@ -582,7 +582,7 @@ export async function releaseEscrow(
   // Record release transaction for hunter
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: hunterId,
       bounty_id: bountyId,
       type: 'release',
@@ -596,7 +596,7 @@ export async function releaseEscrow(
         released_at: new Date().toISOString(),
         idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
 
@@ -608,7 +608,7 @@ export async function releaseEscrow(
 
   // Record platform fee transaction
   const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
-  await admin.from('wallet_transactions').insert({
+  await admin.from('wallet_transactions').insert([{
     user_id: PLATFORM_ACCOUNT_ID,
     bounty_id: bountyId,
     type: 'deposit', // Platform fee is a deposit for the platform
@@ -620,7 +620,7 @@ export async function releaseEscrow(
       source_transaction_id: transaction.id,
       type: 'platform_fee',
     }
-  });
+  }]);
 
   // Add to hunter's balance atomically
   await updateBalance(hunterId, hunterAmount);
@@ -713,7 +713,7 @@ export async function refundEscrow(
   // Create refund transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: posterId,
       bounty_id: bountyId,
       type: 'refund',
@@ -727,7 +727,7 @@ export async function refundEscrow(
         refunded_at: new Date().toISOString(),
         idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
 

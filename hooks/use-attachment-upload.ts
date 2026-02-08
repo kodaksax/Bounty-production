@@ -1,10 +1,15 @@
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Platform } from 'react-native'
 import { storageService } from '../lib/services/storage-service'
 import type { Attachment } from '../lib/types'
 import { getFileInfo } from '../lib/utils/fs-utils'
+
+// Upload retry configuration
+const MAX_UPLOAD_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 1000 // 1 second
+const MAX_RETRY_DELAY_MS = 5000 // 5 seconds
 
 export interface AttachmentUploadOptions {
   bucket?: string // Supabase storage bucket name
@@ -46,6 +51,15 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     lastUploaded: null,
   })
 
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
+
   const maxSizeBytes = maxSizeMB * 1024 * 1024
 
   /**
@@ -53,14 +67,14 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
    */
   const pickAttachment = async (source?: PickSource) => {
     try {
-      setState((s) => ({ ...s, isPicking: true, error: null }))
+      if (isMounted.current) setState((s) => ({ ...s, isPicking: true, error: null }))
 
       // If source not specified, show picker dialog
       let selectedSource: PickSource | null | undefined = source
       if (!selectedSource) {
         selectedSource = await showSourcePicker(allowedTypes)
         if (!selectedSource) {
-          setState((s) => ({ ...s, isPicking: false }))
+          if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
           return null
         }
       }
@@ -85,33 +99,33 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
       }
 
       if (!result) {
-        setState((s) => ({ ...s, isPicking: false }))
+        if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
         return null
       }
 
       // Validate file size
       if (result.size && result.size > maxSizeBytes) {
         const error = new Error(`File too large. Maximum size is ${maxSizeMB}MB`)
-        setState((s) => ({ ...s, isPicking: false, error: error.message }))
+        if (isMounted.current) setState((s) => ({ ...s, isPicking: false, error: error.message }))
         onError?.(error)
         Alert.alert('File Too Large', `Maximum file size is ${maxSizeMB}MB`)
         return null
       }
 
-      setState((s) => ({ ...s, isPicking: false }))
+      if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
 
       // Upload the attachment
       return await uploadAttachment(result)
     } catch (error) {
       const err = error instanceof Error ? error : new Error('Failed to pick attachment')
-      setState((s) => ({ ...s, isPicking: false, isUploading: false, error: err.message }))
+      if (isMounted.current) setState((s) => ({ ...s, isPicking: false, isUploading: false, error: err.message }))
       onError?.(err)
       return null
     }
   }
 
   /**
-   * Upload attachment to storage
+   * Upload attachment to storage with retry logic
    */
   const uploadAttachment = async (file: {
     uri: string
@@ -119,73 +133,91 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     mimeType?: string
     size?: number
   }): Promise<Attachment | null> => {
-    try {
-      setState((s) => ({ ...s, isUploading: true, progress: 0, error: null }))
+    let lastError: Error | null = null
 
-      const timestamp = Date.now()
-      const fileName = file.name || `attachment-${timestamp}`
-      const filePath = `${folder}/${timestamp}-${fileName}`
+    for (let attempt = 1; attempt <= MAX_UPLOAD_RETRIES; attempt++) {
+      try {
+        if (isMounted.current) setState((s) => ({
+          ...s,
+          isUploading: true,
+          progress: 0,
+          error: null
+        }))
 
-      const uploadResult = await storageService.uploadFile(file.uri, {
-        bucket,
-        path: filePath,
-        onProgress: (progress) => {
-          setState((s) => ({ ...s, progress }))
-        },
-      })
+        const timestamp = Date.now()
+        const fileName = file.name || `attachment-${timestamp}`
+        const filePath = `${folder}/${timestamp}-${fileName}`
 
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed')
+        const uploadResult = await storageService.uploadFile(file.uri, {
+          bucket,
+          path: filePath,
+          onProgress: (progress) => {
+            if (isMounted.current) setState((s) => ({ ...s, progress }))
+          },
+        })
+
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || 'Upload failed')
+        }
+
+        const attachment: Attachment = {
+          id: `att-${timestamp}`,
+          name: fileName,
+          uri: file.uri, // Keep local URI for immediate display
+          remoteUri: uploadResult.url,
+          mimeType: file.mimeType,
+          size: file.size,
+          status: 'uploaded',
+          progress: 1,
+        }
+
+        if (isMounted.current) setState((s) => ({
+          ...s,
+          isUploading: false,
+          progress: 1,
+          lastUploaded: attachment,
+          error: null,
+        }))
+
+        onUploaded?.(attachment)
+
+        return attachment
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload failed')
+
+        // If this isn't the last attempt, wait before retrying with exponential backoff
+        if (attempt < MAX_UPLOAD_RETRIES) {
+          const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-
-      const attachment: Attachment = {
-        id: `att-${timestamp}`,
-        name: fileName,
-        uri: file.uri, // Keep local URI for immediate display
-        remoteUri: uploadResult.url,
-        mimeType: file.mimeType,
-        size: file.size,
-        status: 'uploaded',
-        progress: 1,
-      }
-
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 1,
-        lastUploaded: attachment,
-        error: null,
-      }))
-
-      onUploaded?.(attachment)
-
-      return attachment
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error('Upload failed')
-      setState((s) => ({
-        ...s,
-        isUploading: false,
-        progress: 0,
-        error: err.message,
-      }))
-      onError?.(err)
-      Alert.alert('Upload Failed', err.message)
-      return null
     }
+
+    // All retries failed
+    const err = lastError || new Error('Upload failed after all retries')
+    if (isMounted.current) setState((s) => ({
+      ...s,
+      isUploading: false,
+      progress: 0,
+      error: err.message,
+    }))
+    onError?.(err)
+    Alert.alert('Upload Failed', `${err.message}\n\nPlease check your connection and try again.`)
+    return null
   }
 
   /**
    * Clear error message
    */
   const clearError = () => {
-    setState((s) => ({ ...s, error: null }))
+    if (isMounted.current) setState((s) => ({ ...s, error: null }))
   }
 
   /**
    * Reset state
    */
   const reset = () => {
-    setState({
+    if (isMounted.current) setState({
       isUploading: false,
       isPicking: false,
       progress: 0,
@@ -215,7 +247,7 @@ async function showSourcePicker(allowedTypes: 'all' | 'images' | 'videos' | 'doc
     options.push('Choose from Photos')
     sources.push('photos')
   }
-  
+
   if (allowedTypes === 'all' || allowedTypes === 'documents') {
     options.push('Choose File')
     sources.push('files')

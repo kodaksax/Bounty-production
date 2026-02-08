@@ -173,11 +173,38 @@ export default function DetailsScreen() {
       return;
     }
 
-    // Also sync to Supabase via AuthProfileService
-    await updateAuthProfile({
+    // Sync all fields to Supabase via AuthProfileService
+    // This ensures profile data is available across devices and persists
+    const profileResult = await updateAuthProfile({
       about: bio.trim() || undefined,
       avatar: avatarUri || undefined,
+      title: title.trim() || undefined,
+      location: location.trim() || undefined,
+      skills: skills.length > 0 ? skills : undefined,
     });
+
+    // Check if the profile update failed (offline, timeout, RLS policy, etc.)
+    // If it fails, the user would complete onboarding with only local AsyncStorage state
+    // which defeats the purpose of this fix
+    if (!profileResult) {
+      setSaving(false);
+      Alert.alert(
+        'Connection Error',
+        'Failed to save your profile. Please check your internet connection and try again.',
+        [
+          {
+            text: 'Retry',
+            onPress: () => handleNext(),
+          },
+          {
+            text: 'Skip for now',
+            style: 'cancel',
+            onPress: () => router.push('/onboarding/phone'),
+          },
+        ]
+      );
+      return;
+    }
 
     setSaving(false);
     router.push('/onboarding/phone');

@@ -331,7 +331,7 @@ export default function EnhancedSearchScreen() {
         {item.skills && item.skills.length > 0 && (
           <View style={styles.skillsRow}>
             {item.skills.slice(0, 3).map((skill, idx) => (
-              <View key={idx} style={styles.skillChip}>
+              <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={styles.skillChip}>
                 <Text style={styles.skillText}>{skill}</Text>
               </View>
             ))}
@@ -367,6 +367,10 @@ export default function EnhancedSearchScreen() {
   const keyExtractorBounty = useCallback((item: BountyRowItem) => item.id, []);
   const keyExtractorUser = useCallback((item: UserProfile) => item.id, []);
   const keyExtractorRecent = useCallback((item: RecentSearch) => item.id, []);
+
+  // NOTE: Search result cards have variable height (title/description lines, optional chips),
+  // so getItemLayout with fixed heights would cause incorrect offsets and blank space.
+  // Removed getItemLayout to allow FlatList to measure items dynamically.
 
   const hasActiveFilters = useMemo(() => 
     filters.location ||

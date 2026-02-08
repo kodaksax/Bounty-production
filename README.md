@@ -1,6 +1,8 @@
 # BOUNTY
 
-> Mobile-first micro‑bounty marketplace. Create → Match → Chat → Complete → Settle. Fast, transparent, escrow‑backed.
+> Mobile-first mobile-only micro‑bounty marketplace (iOS & Android). Create → Match → Chat → Complete → Settle. Fast, transparent, escrow‑backed.
+
+**Platform note:** This project targets iOS and Android only. Avoid adding or relying on web-only dependencies; if CI/tooling requires a web build, add safe web stubs and platform guards rather than importing native-only modules on web.
 
 ## 🚀 Elevator Pitch
 BOUNTYExpo makes it **fast and safe** to post small jobs ("bounties"), get matched with a hunter, coordinate in-app, and settle payment via an escrow flow. Designed for trust, speed, and clarity.

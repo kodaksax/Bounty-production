@@ -50,6 +50,7 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
@@ -192,10 +193,7 @@ export default function EditProfileScreen() {
   const maxBioLength = 160;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={[styles.container, { paddingTop: insets.top }]}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Pinned Header: Twitter-style Cancel/Save */}
       <View style={styles.pinnedHeader}>
         <TouchableOpacity
@@ -233,191 +231,213 @@ export default function EditProfileScreen() {
         </View>
       )}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        {/* Banner + Avatar Overlap (Twitter-style) */}
-        <View style={styles.bannerSection}>
-          <TouchableOpacity
-            style={styles.bannerPlaceholder}
-            onPress={() => bannerUpload.pickAttachment()}
-            disabled={bannerUpload.isUploading || bannerUpload.isPicking}
-            accessibilityLabel="Change banner image"
-            accessibilityRole="button"
-          >
-            {bannerUrl ? (
-              <Image
-                source={{ uri: bannerUrl }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
-              />
-            ) : bannerUpload.isUploading ? (
-              <>
-                <ActivityIndicator size="large" color="#6b7280" />
-                <Text style={styles.bannerHelpText}>
-                  Uploading... {Math.round(bannerUpload.progress * 100)}%
-                </Text>
-              </>
-            ) : (
-              <>
-                <MaterialIcons name="image" size={32} color="#6b7280" />
-                <Text style={styles.bannerHelpText}>Tap to upload banner</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <View style={styles.avatarOverlap}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Banner + Avatar Overlap (Twitter-style) */}
+          <View style={styles.bannerSection}>
             <TouchableOpacity
-              style={styles.avatar}
-              onPress={() => avatarUpload.pickAttachment()}
-              disabled={avatarUpload.isUploading || avatarUpload.isPicking}
-              accessibilityLabel="Change profile picture"
+              style={styles.bannerPlaceholder}
+              onPress={() => bannerUpload.pickAttachment()}
+              disabled={bannerUpload.isUploading || bannerUpload.isPicking}
+              accessibilityLabel="Change banner image"
               accessibilityRole="button"
             >
-              {avatarUrl ? (
+              {bannerUrl ? (
                 <Image
-                  source={{ uri: avatarUrl }}
-                  style={{ width: '100%', height: '100%', borderRadius: 50 }}
+                  source={{ uri: bannerUrl }}
+                  style={{ width: '100%', height: '100%' }}
                   resizeMode="cover"
                 />
-              ) : avatarUpload.isUploading ? (
-                <ActivityIndicator size="large" color="#ffffff" />
+              ) : bannerUpload.isUploading ? (
+                <>
+                  <ActivityIndicator size="large" color="#6b7280" />
+                  <Text style={styles.bannerHelpText}>
+                    Uploading... {Math.round(bannerUpload.progress * 100)}%
+                  </Text>
+                </>
               ) : (
-                <Text style={styles.avatarText}>
-                  {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
-                </Text>
+                <>
+                  <MaterialIcons name="image" size={32} color="#6b7280" />
+                  <Text style={styles.bannerHelpText}>Tap to upload banner</Text>
+                </>
               )}
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.avatarChangeButton}
-              onPress={() => avatarUpload.pickAttachment()}
-              disabled={avatarUpload.isUploading || avatarUpload.isPicking}
-              accessibilityLabel="Change profile picture"
-              accessibilityRole="button"
-              accessibilityHint="Upload a new profile picture"
-            >
-              {avatarUpload.isUploading || avatarUpload.isPicking ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <MaterialIcons name="camera-alt" size={18} color="#fff" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Form Fields with clear sections */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="Your display name"
-              placeholderTextColor="#6b7280"
-              accessibilityLabel="Display name"
-              accessibilityHint="Enter your display name"
-            />
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.username}
-              onChangeText={(text) => setFormData({ ...formData, username: text })}
-              placeholder="@username"
-              placeholderTextColor="#6b7280"
-              autoCapitalize="none"
-              accessibilityLabel="Username"
-              accessibilityHint="Enter your unique username"
-            />
+            <View style={styles.avatarOverlap}>
+              <TouchableOpacity
+                style={styles.avatar}
+                onPress={() => avatarUpload.pickAttachment()}
+                disabled={avatarUpload.isUploading || avatarUpload.isPicking}
+                accessibilityLabel="Current profile picture"
+                accessibilityRole="imagebutton"
+              >
+                {avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={{ width: '100%', height: '100%', borderRadius: 50 }}
+                    resizeMode="cover"
+                  />
+                ) : avatarUpload.isUploading ? (
+                  <ActivityIndicator size="large" color="#ffffff" />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {formData.name?.[0]?.toUpperCase() || formData.username[1]?.toUpperCase() || "U"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.avatarChangeButton}
+                onPress={() => avatarUpload.pickAttachment()}
+                disabled={avatarUpload.isUploading || avatarUpload.isPicking}
+                accessibilityLabel="Change profile picture"
+                accessibilityRole="button"
+                accessibilityHint="Upload a new profile picture"
+              >
+                {avatarUpload.isUploading || avatarUpload.isPicking ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialIcons name="camera-alt" size={18} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Bio</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.bio}
-              onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
-              placeholder="Tell others about yourself..."
-              placeholderTextColor="#6b7280"
-              multiline
-              numberOfLines={4}
-              maxLength={maxBioLength}
-              textAlignVertical="top"
-              accessibilityLabel="Bio"
-              accessibilityHint={`Enter your bio, ${bioLength} of ${maxBioLength} characters used`}
-            />
-            <Text style={styles.characterCounter}>
-              {bioLength}/{maxBioLength}
+          {/* Form Fields with clear sections */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.sectionTitle}>Basic Information</Text>
+
+            <View style={[styles.fieldContainer, focusedField === 'name' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                onFocus={() => setFocusedField('name')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="Your display name"
+                placeholderTextColor="#6b7280"
+                accessibilityLabel="Display name"
+                accessibilityHint="Enter your display name"
+              />
+            </View>
+
+            <View style={[styles.fieldContainer, focusedField === 'username' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.username}
+                onChangeText={(text) => setFormData({ ...formData, username: text })}
+                onFocus={() => setFocusedField('username')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="@username"
+                placeholderTextColor="#6b7280"
+                autoCapitalize="none"
+                accessibilityLabel="Username"
+                accessibilityHint="Enter your unique username"
+              />
+            </View>
+
+            <View style={[styles.fieldContainer, focusedField === 'bio' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Bio</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formData.bio}
+                onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
+                onFocus={() => setFocusedField('bio')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="Tell others about yourself..."
+                placeholderTextColor="#6b7280"
+                multiline
+                numberOfLines={4}
+                maxLength={maxBioLength}
+                textAlignVertical="top"
+                accessibilityLabel="Bio"
+                accessibilityHint={`Enter your bio, ${bioLength} of ${maxBioLength} characters used`}
+              />
+              <Text style={styles.characterCounter}>
+                {bioLength}/{maxBioLength}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.sectionTitle}>Location & Links</Text>
+
+            <View style={[styles.fieldContainer, focusedField === 'location' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Location</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.location}
+                onChangeText={(text) => setFormData({ ...formData, location: text })}
+                onFocus={() => setFocusedField('location')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="City, Country"
+                placeholderTextColor="#6b7280"
+                accessibilityLabel="Location"
+                accessibilityHint="Enter your city and country"
+              />
+            </View>
+
+            <View style={[styles.fieldContainer, focusedField === 'portfolio' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Website / Portfolio</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.portfolio}
+                onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
+                onFocus={() => setFocusedField('portfolio')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="https://yourwebsite.com"
+                placeholderTextColor="#6b7280"
+                keyboardType="url"
+                autoCapitalize="none"
+                accessibilityLabel="Website or Portfolio URL"
+                accessibilityHint="Enter your website or portfolio link"
+              />
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.sectionTitle}>Skills & Expertise</Text>
+
+            <View style={[styles.fieldContainer, focusedField === 'skillsets' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Skillsets</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.skillsets}
+                onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
+                onFocus={() => setFocusedField('skillsets')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="e.g., React, Node.js, Design"
+                placeholderTextColor="#6b7280"
+                accessibilityLabel="Skillsets"
+                accessibilityHint="Enter your skills separated by commas"
+              />
+              <Text style={styles.helpText}>Separate with commas. Max 4 skills recommended.</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoBox}>
+            <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
+            <Text style={styles.infoText}>
+              Badges and Achievements are earned automatically and cannot be edited here.
             </Text>
           </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.sectionTitle}>Location & Links</Text>
-
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Location</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.location}
-              onChangeText={(text) => setFormData({ ...formData, location: text })}
-              placeholder="City, Country"
-              placeholderTextColor="#6b7280"
-              accessibilityLabel="Location"
-              accessibilityHint="Enter your city and country"
-            />
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Website / Portfolio</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.portfolio}
-              onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
-              placeholder="https://yourwebsite.com"
-              placeholderTextColor="#6b7280"
-              keyboardType="url"
-              autoCapitalize="none"
-              accessibilityLabel="Website or Portfolio URL"
-              accessibilityHint="Enter your website or portfolio link"
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.sectionTitle}>Skills & Expertise</Text>
-
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Skillsets</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.skillsets}
-              onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
-              placeholder="e.g., React, Node.js, Design"
-              placeholderTextColor="#6b7280"
-              accessibilityLabel="Skillsets"
-              accessibilityHint="Enter your skills separated by commas"
-            />
-            <Text style={styles.helpText}>Separate with commas. Max 4 skills recommended.</Text>
-          </View>
-        </View>
-
-        <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
-          <Text style={styles.infoText}>
-            Badges and Achievements are earned automatically and cannot be edited here.
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
+
+// Banner configuration
+const BANNER_HEIGHT = 140; // Increased from 120px for better visual presence
 
 const styles = StyleSheet.create({
   container: {
@@ -496,6 +516,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
@@ -505,18 +528,26 @@ const styles = StyleSheet.create({
   bannerSection: {
     position: "relative",
     marginBottom: 60,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   bannerPlaceholder: {
-    height: 120,
+    height: BANNER_HEIGHT,
     backgroundColor: "#047857",
     justifyContent: "center",
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   bannerHelpText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#d1fae5",
-    marginTop: 4,
+    marginTop: 6,
     fontStyle: "italic",
+    fontWeight: "500",
   },
   avatarOverlap: {
     position: "absolute",
@@ -530,8 +561,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 4,
+    borderWidth: 5,
     borderColor: "#064e3b",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   avatarText: {
     fontSize: 40,
@@ -545,11 +581,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#047857",
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: "#064e3b",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
   },
   fieldGroup: {
     marginBottom: 24,
@@ -564,8 +605,14 @@ const styles = StyleSheet.create({
   fieldContainer: {
     backgroundColor: "rgba(16, 185, 129, 0.08)",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14, // Increased for better mobile touch targets (44x44 minimum)
     marginBottom: 1,
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+  },
+  fieldContainerFocused: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderLeftColor: "#10b981",
   },
   label: {
     fontSize: 12,
@@ -577,9 +624,10 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth: 0,
     paddingHorizontal: 0,
-    paddingVertical: 4,
+    paddingVertical: 6,
     fontSize: 16,
     color: "#ffffff",
+    lineHeight: 22,
   },
   textArea: {
     minHeight: 80,

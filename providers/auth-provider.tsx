@@ -20,6 +20,35 @@ type AuthData = {
 const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000
 
 export default function AuthProvider({ children }: PropsWithChildren) {
+  const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
+  // Centralized logging helpers
+  const devLog = (...args: any[]) => {
+    if (__DEV__flag) console.log(...args)
+  }
+
+  const reportWarning = (message: any, extra?: any) => {
+    try {
+      const Sentry = getSentry?.();
+      if (Sentry && typeof (Sentry as any).captureMessage === 'function') {
+        ;(Sentry as any).captureMessage(String(message), { level: 'warning', extra })
+      }
+    } catch (_) {}
+    if (__DEV__flag) console.warn(message, extra)
+  }
+
+  const reportError = (err: any, context?: any) => {
+    try {
+      const Sentry = getSentry?.();
+      if (Sentry) {
+        if (err instanceof Error && typeof (Sentry as any).captureException === 'function') {
+          ;(Sentry as any).captureException(err)
+        } else if (typeof (Sentry as any).captureMessage === 'function') {
+          ;(Sentry as any).captureMessage(String(context ?? err), { level: 'error', extra: err })
+        }
+      }
+    } catch (_) {}
+    if (__DEV__flag) console.error(context ?? '', err)
+  }
   const [session, setSession] = useState<Session | undefined | null>()
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -40,13 +69,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const refreshTokenNow = async () => {
     // If refresh is in progress, wait for it instead of returning early
     if (refreshPromiseRef.current) {
-      console.log('[AuthProvider] Refresh already in progress, waiting for completion')
+      devLog('[AuthProvider] Refresh already in progress, waiting for completion')
       return refreshPromiseRef.current
     }
 
     // Check if component is still mounted
     if (!isMountedRef.current) {
-      console.log('[AuthProvider] Component unmounted, skipping refresh')
+      devLog('[AuthProvider] Component unmounted, skipping refresh')
       return
     }
 
@@ -55,11 +84,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       isRefreshingRef.current = true
 
       try {
-        console.log('[AuthProvider] Attempting to refresh token...')
+        devLog('[AuthProvider] Attempting to refresh token...')
         const { data, error } = await supabase.auth.refreshSession()
         
         if (error) {
-          console.error('[AuthProvider] Token refresh failed:', error)
+          reportError(error, '[AuthProvider] Token refresh failed:')
           
           // Distinguish between network errors and auth errors
           const isNetworkError = error.message?.includes('network') || 
@@ -68,7 +97,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                                  error.status === 504
           
           if (isNetworkError) {
-            console.log('[AuthProvider] Network error during refresh, will retry')
+            devLog('[AuthProvider] Network error during refresh, will retry')
             // Don't clear session on network errors, let it be retried
             return
           }
@@ -79,44 +108,44 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             try {
               await authProfileService.setSession(null)
             } catch (e) {
-              console.error('[AuthProvider] Error clearing session in profile service:', e)
+              reportError(e, '[AuthProvider] Error clearing session in profile service:')
             }
           }
           return
         }
 
         if (data.session) {
-          console.log('[AuthProvider] Token refreshed successfully')
+          devLog('[AuthProvider] Token refreshed successfully')
           if (isMountedRef.current) {
             setSession(data.session)
             try {
               await authProfileService.setSession(data.session)
             } catch (e) {
-              console.error('[AuthProvider] Error setting session in profile service:', e)
+              reportError(e, '[AuthProvider] Error setting session in profile service:')
             }
             
             // Schedule next refresh
             scheduleTokenRefresh(data.session)
           }
         } else {
-          console.warn('[AuthProvider] Token refresh returned no session')
+          reportWarning('[AuthProvider] Token refresh returned no session')
           if (isMountedRef.current) {
             setSession(null)
             try {
               await authProfileService.setSession(null)
             } catch (e) {
-              console.error('[AuthProvider] Error clearing session in profile service:', e)
+              reportError(e, '[AuthProvider] Error clearing session in profile service:')
             }
           }
         }
       } catch (error) {
-        console.error('[AuthProvider] Unexpected error refreshing token:', error)
+        reportError(error, '[AuthProvider] Unexpected error refreshing token:')
         if (isMountedRef.current) {
           setSession(null)
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            console.error('[AuthProvider] Error clearing session in profile service:', e)
+            reportError(e, '[AuthProvider] Error clearing session in profile service:')
           }
         }
       } finally {
@@ -156,7 +185,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     // If already expired, refresh immediately
     if (timeUntilExpiry <= 0) {
-      console.log('[AuthProvider] Token expired, refreshing immediately')
+      devLog('[AuthProvider] Token expired, refreshing immediately')
       refreshTokenNow()
       return
     }
@@ -165,10 +194,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // If token expires sooner than threshold, refreshIn will be 0 (immediate refresh)
     const refreshIn = Math.max(0, timeUntilExpiry - TOKEN_REFRESH_THRESHOLD_MS)
     
-    console.log('[AuthProvider] Scheduling token refresh in', Math.floor(refreshIn / 1000), 'seconds')
+    devLog('[AuthProvider] Scheduling token refresh in', Math.floor(refreshIn / 1000), 'seconds')
     
     refreshTimerRef.current = setTimeout(() => {
-      console.log('[AuthProvider] Proactive token refresh triggered')
+      devLog('[AuthProvider] Proactive token refresh triggered')
       refreshTokenNow()
     }, refreshIn)
   }
@@ -192,17 +221,17 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         if (!isMountedRef.current) return
 
         if (error) {
-          console.error('[AuthProvider] Error fetching session:', error)
+          reportError(error, '[AuthProvider] Error fetching session:')
           setSession(null)
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            console.error('[AuthProvider] Error clearing session in profile service:', e)
+            reportError(e, '[AuthProvider] Error clearing session in profile service:')
           }
         } else if (session) {
           // Valid session found
           sessionFound = true
-          console.log('[AuthProvider] Session loaded: authenticated')
+          devLog('[AuthProvider] Session loaded: authenticated')
           setSession(session)
           sessionIdRef.current = session.user.id
           
@@ -212,7 +241,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             // Mark that profile fetch has completed (successfully or not)
             profileFetchCompletedRef.current = true
           } catch (e) {
-            console.error('[AuthProvider] Error setting session in profile service:', e)
+            reportError(e, '[AuthProvider] Error setting session in profile service:')
             // Even on error, mark as completed to avoid blocking
             profileFetchCompletedRef.current = true
           }
@@ -231,22 +260,22 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           }
         } else {
           // No error but also no session (user not logged in)
-          console.log('[AuthProvider] Session loaded: not authenticated')
+          devLog('[AuthProvider] Session loaded: not authenticated')
           setSession(null)
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            console.error('[AuthProvider] Error clearing session in profile service:', e)
+            reportError(e, '[AuthProvider] Error clearing session in profile service:')
           }
         }
       } catch (error) {
-        console.error('[AuthProvider] Unexpected error fetching session:', error)
+        reportError(error, '[AuthProvider] Unexpected error fetching session:')
         if (!isMountedRef.current) return
         setSession(null)
         try {
           await authProfileService.setSession(null)
         } catch (e) {
-          console.error('[AuthProvider] Error clearing session in profile service:', e)
+          reportError(e, '[AuthProvider] Error clearing session in profile service:')
         }
       } finally {
         if (isMountedRef.current) {
@@ -269,7 +298,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // events that occur while the initial session fetch is in progress.
       // We rely on the subsequent logic (profile sync + timers) to be idempotent.
 
-      console.log('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
+      devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
       
       if (!isMountedRef.current) return
       
@@ -280,15 +309,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       profileFetchCompletedRef.current = false
       
       // Sync session with auth profile service
-      try {
-        await authProfileService.setSession(session)
-        // Mark profile fetch as completed after setSession finishes
-        profileFetchCompletedRef.current = true
-      } catch (e) {
-        console.error('[AuthProvider] Error syncing session in profile service:', e)
-        // Mark as completed even on error to avoid blocking
-        profileFetchCompletedRef.current = true
-      }
+        try {
+          await authProfileService.setSession(session)
+          // Mark profile fetch as completed after setSession finishes
+          profileFetchCompletedRef.current = true
+        } catch (e) {
+          reportError(e, '[AuthProvider] Error syncing session in profile service:')
+          // Mark as completed even on error to avoid blocking
+          profileFetchCompletedRef.current = true
+        }
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(
@@ -337,7 +366,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           analyticsService.trackEvent('user_logged_out'),
           analyticsService.reset(),
         ]).catch(e => {
-          console.error('[AuthProvider] Analytics cleanup failed (non-critical)', e);
+          reportError(e, '[AuthProvider] Analytics cleanup failed (non-critical)')
         });
         // Sentry user clear is synchronous and fast
         try {
@@ -353,10 +382,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           userId: session.user.id,
         })
       } else if (_event === 'TOKEN_REFRESHED') {
-        console.log('[AuthProvider] Token refreshed by Supabase')
+        devLog('[AuthProvider] Token refreshed by Supabase')
       }
     })
-    console.log('[AuthProvider] mounted')
+    devLog('[AuthProvider] mounted')
     
     // Cleanup subscription and timer on unmount
     return () => {
@@ -384,16 +413,16 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Only log profile updates in development and only when the username changes
       try {
         const username = authProfile?.username ?? null
-        if (__DEV__ && lastProfileLogRef.current !== username) {
+        if (__DEV__flag && lastProfileLogRef.current !== username) {
           lastProfileLogRef.current = username
           if (shouldSetLoadingFalse) {
-            console.log('[AuthProvider] Profile update received, setting isLoading to false:', {
+            devLog('[AuthProvider] Profile update received, setting isLoading to false:', {
               hasSession: Boolean(currentSessionId),
               hasProfile: Boolean(authProfile),
               username,
             })
           } else {
-            console.log('[AuthProvider] Profile update received but waiting for fetch to complete')
+            devLog('[AuthProvider] Profile update received but waiting for fetch to complete')
           }
         }
       } catch (e) {
@@ -414,10 +443,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // This prevents perpetual skeleton screens if profile fetch hangs
     // Use setState with callback to access current value, avoiding stale closure
     const safetyTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
+            if (isMountedRef.current) {
         setIsLoading((currentLoading) => {
           if (currentLoading) {
-            console.warn('[AuthProvider] Safety timeout: forcing isLoading = false after 10s')
+            reportWarning('[AuthProvider] Safety timeout: forcing isLoading = false after 10s')
             return false
           }
           return currentLoading
