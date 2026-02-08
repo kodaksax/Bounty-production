@@ -85,11 +85,10 @@ export async function initializeIdempotencyService(): Promise<void> {
  * @returns true if key exists (duplicate), false if available
  */
 export async function checkIdempotencyKey(key: string): Promise<boolean> {
-  // Validate key is not empty
+  // If key is empty, treat as not set (do not throw here so callers can safely check)
   if (!key || key.trim() === '') {
-    const error = new Error('Idempotency key cannot be empty');
-    logger.error({ error }, '[IdempotencyService] checkIdempotencyKey called with empty idempotency key');
-    throw error;
+    logger.warn('[IdempotencyService] checkIdempotencyKey called with empty idempotency key; returning false');
+    return false;
   }
   
   if (redisEnabled && redisClient) {

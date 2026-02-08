@@ -1,7 +1,13 @@
-// Mock database chain helper
-const mockCreateChain = (tableName: string, error: Error | null = null, customData: any[] | null = null) => {
+// Mock database chain helper (supports simple .where() filtering)
+const mockCreateChain = (tableName: any, error: Error | null = null, customData: any[] | null = null) => {
+  // Allow callers to pass customData as the first argument
+  if (Array.isArray(tableName)) {
+    customData = tableName;
+    tableName = 'wallet_transactions';
+  }
   const chain: any = {
-    where: jest.fn().mockReturnThis(),
+    _where: null,
+    where: jest.fn().mockImplementation((cond: any) => { chain._where = cond; return chain; }),
     and: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
@@ -21,6 +27,9 @@ const mockCreateChain = (tableName: string, error: Error | null = null, customDa
           title: 'Test Bounty',
         }]);
       }
+      if (tableName === 'wallet_transactions') {
+        return Promise.resolve([]);
+      }
       return Promise.resolve([]);
     }),
     then: jest.fn().mockImplementation((onFulfilled, onRejected) => {
@@ -36,6 +45,20 @@ const mockCreateChain = (tableName: string, error: Error | null = null, customDa
             title: 'Test Bounty',
           }];
         }
+      }
+
+      // If no customData provided, attempt to apply simple equality filtering
+      try {
+        const cond = chain._where;
+        if (!customData && cond && Array.isArray(data) && data.length > 0) {
+          const valueChunk = cond?.queryChunks ? cond.queryChunks.find((c: any) => typeof c === 'string' || typeof c === 'number' || typeof c === 'boolean') : undefined;
+          const fieldChunk = cond?.queryChunks ? cond.queryChunks.find((c: any) => c && c.name) : undefined;
+          if (valueChunk !== undefined && fieldChunk && fieldChunk.name) {
+            data = data.filter((row: any) => row[fieldChunk.name] === valueChunk);
+          }
+        }
+      } catch (e) {
+        // ignore filtering errors in mock
       }
 
       const p = error ? Promise.reject(error) : Promise.resolve(data);
@@ -60,7 +83,7 @@ const mockCreateChain = (tableName: string, error: Error | null = null, customDa
 jest.mock('../config', () => ({
   config: {
     stripe: {
-      secretKey: 'sk_test_mock_key',
+      secretKey: 'sk_test_FAKE_PLACEHOLDER',
     },
     supabase: {
       url: 'https://test.supabase.co',
@@ -165,6 +188,16 @@ import { stripeConnectService } from '../services/stripe-connect-service';
 describe('Refund Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Ensure queued/resolvedOnce fixtures on the stripe mock do not leak between tests
+    (stripeConnectService.refundPaymentIntent as jest.Mock).mockReset();
+    // Restore a sane default implementation so tests that don't set per-test
+    // responses still get a successful refund by default.
+    (stripeConnectService.refundPaymentIntent as jest.Mock).mockResolvedValue({
+      success: true,
+      refundId: 'ref_test123',
+      amount: 5000,
+      status: 'succeeded',
+    });
   });
 
   describe('processRefund', () => {
@@ -217,7 +250,7 @@ describe('Refund Service', () => {
         from: jest.fn(() => mockCreateChain('bounties', null, [
           {
             id: 'bounty123',
-            amount: 0,
+            amount_cents: 0,
             status: 'cancelled',
           },
         ])),
@@ -359,7 +392,7 @@ describe('Refund Service', () => {
 
     it('should sanitize error messages for security', async () => {
       (stripeConnectService.refundPaymentIntent as jest.Mock).mockRejectedValueOnce({
-        message: 'Stripe error with API key: sk_live_123456',
+        message: 'Stripe error with API key: sk_test_FAKE_PLACEHOLDER',
       });
 
 
@@ -425,9 +458,8 @@ describe('Refund Service', () => {
           {
             id: 'tx_refund',
             type: 'refund',
-            amount: 5000,
+            amount_cents: 5000,
             bounty_id: 'bounty123',
-            reason: 'Bounty cancelled',
           },
         ])),
       }));
@@ -437,9 +469,11 @@ describe('Refund Service', () => {
 
       const result = await refundService.getRefundTransaction('bounty123');
 
-      expect(result.id).toBe('tx_refund');
-      expect(result.amount).toBe(5000);
-      expect(result.reason).toBe('Bounty cancelled');
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('tx_refund');
+      expect(result!.amount_cents).toBe(5000);
+      // `reason` is not stored on the wallet_transactions schema; ensure other
+      // relevant fields are present instead.
     });
 
     it('should return null if no refund transaction exists', async () => {
@@ -531,7 +565,7 @@ describe('Refund Service', () => {
         from: jest.fn(() => mockCreateChain('bounties', null, [
           {
             id: 'bounty123',
-            amount: 10000,
+            amount_cents: 10000,
             status: 'cancelled',
             payment_intent_id: 'pi_test123',
           },

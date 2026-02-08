@@ -13,13 +13,12 @@ import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useLocalSearchParams, useRouter, Redirect } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Alert, Animated, ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
-import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
 
 import { useAdmin } from '../../lib/admin-context'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
@@ -30,7 +29,7 @@ import { locationService } from '../../lib/services/location-service'
 import { searchService } from '../../lib/services/search-service'
 import type { TrendingBounty } from '../../lib/types'
 import { CURRENT_USER_ID } from '../../lib/utils/data-utils'
-import { WalletProvider, useWallet } from '../../lib/wallet-context'
+import { WalletProvider } from '../../lib/wallet-context'
 // Calendar removed in favor of Profile as the last tab
 
 // Use the proper Bounty type from database types
@@ -182,7 +181,7 @@ function BountyAppInner() {
         if (b.work_type === 'online') return true
         const distance = bountyDistances.get(String(b.id))
         // Keep bounties with no location data (they'll show "Location TBD")
-        if (distance === null) return true
+        if (distance == null) return true
         return distance <= distanceFilter
       })
     }
@@ -196,11 +195,11 @@ function BountyAppInner() {
       list.sort((a, b) => {
         const distA = bountyDistances.get(String(a.id))
         const distB = bountyDistances.get(String(b.id))
-        // Put null distances at the end
-        if (distA === null && distB === null) return 0
-        if (distA === null) return 1
-        if (distB === null) return -1
-        return distA - distB
+        // Put null/undefined distances at the end
+        if (distA == null && distB == null) return 0
+        if (distA == null) return 1
+        if (distB == null) return -1
+        return (distA ?? Infinity) - (distB ?? Infinity)
       })
     }
     return list

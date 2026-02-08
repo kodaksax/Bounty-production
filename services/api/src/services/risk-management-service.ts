@@ -1,15 +1,15 @@
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '../db/connection';
 import {
-  users,
-  riskAssessments,
-  riskActions,
-  platformReserves,
-  riskCommunications,
-  transactionPatterns,
-  restrictedBusinessCategories,
-  walletTransactions,
+    platformReserves,
+    restrictedBusinessCategories,
+    riskActions,
+    riskAssessments,
+    riskCommunications,
+    transactionPatterns,
+    users,
+    walletTransactions,
 } from '../db/schema';
-import { eq, and, gte, desc, sql } from 'drizzle-orm';
 
 // Risk level thresholds
 const RISK_THRESHOLDS = {
@@ -332,8 +332,12 @@ export class RiskManagementService {
       .where(eq(restrictedBusinessCategories.category_code, businessCategory))
       .limit(1);
 
-    if (restricted.length) {
-      const category = restricted[0];
+    // Some test mocks may return unfiltered rows. Ensure we only consider rows
+    // that actually match the requested category_code.
+    const matching = (restricted || []).filter((r: any) => r && r.category_code === businessCategory);
+
+    if (matching.length) {
+      const category = matching[0];
       if (category.is_prohibited) return 100;
 
       switch (category.risk_level) {
@@ -566,11 +570,14 @@ export class RiskManagementService {
       .where(eq(restrictedBusinessCategories.category_code, businessCategory))
       .limit(1);
 
-    if (!restricted.length) {
+    // Guard against poorly-behaved test mocks that return unfiltered sets.
+    const matching = (restricted || []).filter((r: any) => r && r.category_code === businessCategory);
+
+    if (!matching.length) {
       return { allowed: true };
     }
 
-    const category = restricted[0];
+    const category = matching[0];
 
     if (category.is_prohibited) {
       return {

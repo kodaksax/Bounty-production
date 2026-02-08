@@ -4,9 +4,15 @@
  */
 
 // Mock database chain helper
-const mockCreateChain = (tableName: string, error: Error | null = null, customData: any[] | null = null) => {
+const mockCreateChain = (tableName: any, error: Error | null = null, customData: any[] | null = null) => {
+  // Allow callers to pass customData as the first argument (some tests do this)
+  if (Array.isArray(tableName)) {
+    customData = tableName;
+    tableName = 'wallet_transactions';
+  }
   const chain: any = {
-    where: jest.fn().mockReturnThis(),
+    _where: null,
+    where: jest.fn().mockImplementation((cond: any) => { chain._where = cond; return chain; }),
     and: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
@@ -56,6 +62,22 @@ const mockCreateChain = (tableName: string, error: Error | null = null, customDa
         }
 
       }
+
+      // If no customData provided, attempt to apply simple equality filtering
+      try {
+        const cond = chain._where;
+        if (!customData && cond && Array.isArray(data) && data.length > 0) {
+          // Attempt to extract a primitive value from condition (drizzle eq)
+          const valueChunk = cond?.queryChunks ? cond.queryChunks.find((c: any) => typeof c === 'string' || typeof c === 'number' || typeof c === 'boolean') : undefined;
+          const fieldChunk = cond?.queryChunks ? cond.queryChunks.find((c: any) => c && c.name) : undefined;
+          if (valueChunk !== undefined && fieldChunk && fieldChunk.name) {
+            data = data.filter((row: any) => row[fieldChunk.name] === valueChunk);
+          }
+        }
+      } catch (e) {
+        // ignore filtering errors in mock
+      }
+
       const p = error ? Promise.reject(error) : Promise.resolve(data);
       return p.then(onFulfilled, onRejected);
     }),
@@ -82,7 +104,7 @@ const mockCreateChain = (tableName: string, error: Error | null = null, customDa
 jest.mock('../config', () => ({
   config: {
     stripe: {
-      secretKey: 'sk_test_mock_key',
+      secretKey: 'sk_test_FAKE_PLACEHOLDER',
     },
     supabase: {
       url: 'https://test.supabase.co',
@@ -180,6 +202,8 @@ jest.mock('../services/email-service', () => ({
 jest.mock('../services/outbox-service', () => ({
   outboxService: {
     createEvent: jest.fn(async () => ({ id: 'outbox_event_123' })),
+    // Some tests assert against legacy name `createOutboxEvent` — provide alias
+    createOutboxEvent: jest.fn(async () => ({ id: 'outbox_event_123' })),
   },
 }));
 
@@ -259,12 +283,14 @@ describe('Completion Release Service', () => {
     });
 
     it('should prevent duplicate releases', async () => {
+      // First select -> bounty, Second select -> wallet_transactions existing release
       (db.select as jest.Mock).mockImplementationOnce(() => ({
-        from: jest.fn()
-          .mockImplementationOnce(() => mockCreateChain('bounties'))
-          .mockImplementationOnce(() => mockCreateChain('wallet_transactions', null, [
-            { id: 'tx_existing', type: 'release', bounty_id: 'bounty123' },
-          ])),
+        from: jest.fn().mockImplementation(() => mockCreateChain('bounties')),
+      }));
+      (db.select as jest.Mock).mockImplementationOnce(() => ({
+        from: jest.fn().mockImplementation(() => mockCreateChain('wallet_transactions', null, [
+          { id: 'tx_existing', type: 'release', bounty_id: 'bounty123' },
+        ])),
       }));
 
 
@@ -345,7 +371,7 @@ describe('Completion Release Service', () => {
       try {
         await completionReleaseService.processCompletionRelease(request);
       } catch (error) {
-        expect(outboxService.createOutboxEvent).toHaveBeenCalledWith(
+        expect((outboxService as any).createOutboxEvent).toHaveBeenCalledWith(
           expect.objectContaining({
             event_type: 'completion_release_retry',
             payload: request,
@@ -444,7 +470,7 @@ describe('Completion Release Service', () => {
     it('should return true if release transaction exists', async () => {
       (db.select as jest.Mock).mockImplementationOnce(() => ({
         from: jest.fn(() => mockCreateChain('wallet_transactions', null, [
-          { id: 'tx_release', type: 'release' },
+          { id: 'tx_release', type: 'release', bounty_id: 'bounty123' },
         ])),
       }));
 
@@ -497,9 +523,10 @@ describe('Completion Release Service', () => {
 
       const result = await completionReleaseService.getReleaseTransaction('bounty123');
 
-      expect(result.id).toBe('tx_release');
-      expect(result.amount_cents).toBe(9500);
-      expect(result.platform_fee_cents).toBe(500);
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('tx_release');
+      expect(result!.amount_cents).toBe(9500);
+      expect(result!.platform_fee_cents).toBe(500);
 
     });
 
@@ -552,9 +579,13 @@ describe('Completion Release Service', () => {
     });
 
     it('should skip if already released', async () => {
+      // First select -> bounty, Second select -> wallet_transactions shows existing release
       (db.select as jest.Mock).mockImplementationOnce(() => ({
-        from: jest.fn(() => mockCreateChain([
-          { id: 'tx_release', type: 'release' },
+        from: jest.fn().mockImplementation(() => mockCreateChain('bounties')),
+      }));
+      (db.select as jest.Mock).mockImplementationOnce(() => ({
+        from: jest.fn().mockImplementation(() => mockCreateChain('wallet_transactions', null, [
+          { id: 'tx_release', type: 'release', bounty_id: 'bounty123' },
         ])),
       }));
 

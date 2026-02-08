@@ -24,6 +24,7 @@ module.exports = {
     '!**/dist/**',
     '!**/*.test.{ts,tsx,js,jsx}',
   ],
+  testPathIgnorePatterns: ['<rootDir>/services/api/dist/'],
   // Coverage thresholds disabled to prevent CI failures
   // Coverage is still collected and reported for visibility
   // TODO: Gradually increase coverage and re-enable thresholds
