@@ -353,7 +353,35 @@ describe('Refund Service', () => {
 
       await refundService.processRefund(request);
 
-      expect(db.insert).toHaveBeenCalled();
+      // Verify transaction was called
+      expect(db.transaction).toHaveBeenCalled();
+      
+      // Get the callback passed to transaction and check that values() was called with reason
+      const transactionCallback = (db.transaction as jest.Mock).mock.calls[0][0];
+      const mockTx = {
+        insert: jest.fn().mockImplementation(() => ({
+          values: jest.fn().mockImplementation(() => mockCreateChain('wallet_transactions')),
+        })),
+        update: jest.fn().mockImplementation(() => ({
+          set: jest.fn().mockImplementation(() => mockCreateChain('bounties')),
+        })),
+        select: jest.fn().mockImplementation(() => ({
+          from: jest.fn().mockImplementation(() => mockCreateChain('wallet_transactions')),
+        })),
+      };
+      
+      await transactionCallback(mockTx);
+      
+      // Verify insert was called and check the values parameter
+      expect(mockTx.insert).toHaveBeenCalled();
+      const insertChain = mockTx.insert.mock.results[0].value;
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'Poster requested cancellation',
+          type: 'refund',
+          bounty_id: 'bounty123',
+        })
+      );
     });
 
     it('should default reason when not provided', async () => {

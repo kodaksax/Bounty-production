@@ -56,6 +56,7 @@ export const walletTransactions = pgTable('wallet_transactions', {
   amount_cents: integer('amount_cents').notNull(),
   stripe_transfer_id: text('stripe_transfer_id'), // Store Stripe Transfer ID for release transactions
   platform_fee_cents: integer('platform_fee_cents').default(0), // Platform fee for the transaction
+  reason: text('reason'), // Optional reason for the transaction (e.g., refund reason, cancellation reason)
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   // Unique constraint to prevent double releases

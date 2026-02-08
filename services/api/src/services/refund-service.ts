@@ -160,6 +160,7 @@ export class RefundService {
           amount_cents: refundResult.amount || bounty.amount_cents,
           stripe_transfer_id: refundResult.refundId,
           platform_fee_cents: 0, // No fee on refunds
+          reason: request.reason, // Include the reason for the refund
         });
 
         await tx
