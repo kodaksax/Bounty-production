@@ -134,14 +134,18 @@ describe('Bank Account Management', () => {
     });
 
     it('should return empty array if no Connect account', async () => {
+      const originalAccountId = mockSupabaseData.stripe_connect_account_id;
+
       // Temporarily set mock data to return null account ID
       mockSupabaseData.stripe_connect_account_id = null;
-      
-      const result = await consolidatedStripeConnectService.listBankAccounts('user_no_account');
-      expect(result).toEqual([]);
-      
-      // Restore mock data for other tests
-      mockSupabaseData.stripe_connect_account_id = 'acct_test_123';
+
+      try {
+        const result = await consolidatedStripeConnectService.listBankAccounts('user_no_account');
+        expect(result).toEqual([]);
+      } finally {
+        // Restore mock data for other tests
+        mockSupabaseData.stripe_connect_account_id = originalAccountId;
+      }
     });
   });
 
