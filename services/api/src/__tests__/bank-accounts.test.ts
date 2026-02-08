@@ -58,14 +58,18 @@ jest.mock('stripe', () => {
 });
 
 // Mock Supabase
+const mockSupabaseData = {
+  stripe_connect_account_id: 'acct_test_123',
+};
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn(() => ({
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
           single: jest.fn(() => ({
-            data: {
-              stripe_connect_account_id: 'acct_test_123',
+            get data() {
+              return mockSupabaseData;
             },
             error: null,
           })),
@@ -96,15 +100,16 @@ describe('Bank Account Management', () => {
 
     it('should handle invalid routing number from Stripe API', async () => {
       // Mock Stripe to reject invalid routing number
-      const { default: Stripe } = require('stripe');
-      const stripeMock = Stripe as jest.MockedClass<typeof Stripe>;
-      const stripeInstance = stripeMock.mock.results[0].value;
+      const Stripe = require('stripe');
+      const mockTokens = Stripe.mock.results[0]?.value?.tokens;
       
-      stripeInstance.tokens.create.mockRejectedValueOnce({
-        type: 'StripeInvalidRequestError',
-        code: 'invalid_routing_number',
-        message: 'Invalid routing number',
-      });
+      if (mockTokens) {
+        mockTokens.create.mockRejectedValueOnce({
+          type: 'StripeInvalidRequestError',
+          code: 'invalid_routing_number',
+          message: 'Invalid routing number',
+        });
+      }
 
       await expect(
         consolidatedStripeConnectService.addBankAccount(
@@ -129,25 +134,18 @@ describe('Bank Account Management', () => {
     });
 
     it('should return empty array if no Connect account', async () => {
-      // Mock no Connect account scenario
-      const { createClient } = require('@supabase/supabase-js');
-      createClient.mockImplementationOnce(() => ({
-        from: jest.fn(() => ({
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              single: jest.fn(() => ({
-                data: {
-                  stripe_connect_account_id: null,
-                },
-                error: null,
-              })),
-            })),
-          })),
-        })),
-      }));
+      const originalAccountId = mockSupabaseData.stripe_connect_account_id;
 
-      const result = await consolidatedStripeConnectService.listBankAccounts('user_no_account');
-      expect(result).toEqual([]);
+      // Temporarily set mock data to return null account ID
+      mockSupabaseData.stripe_connect_account_id = null;
+
+      try {
+        const result = await consolidatedStripeConnectService.listBankAccounts('user_no_account');
+        expect(result).toEqual([]);
+      } finally {
+        // Restore mock data for other tests
+        mockSupabaseData.stripe_connect_account_id = originalAccountId;
+      }
     });
   });
 
