@@ -1,6 +1,9 @@
 
 // Stripe API types
 import { API_BASE_URL } from '../config/api';
+import { API_TIMEOUTS } from '../config/network';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
+import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
     checkDuplicatePayment,
@@ -270,8 +273,8 @@ class StripeService {
         };
       }
       
-      // Call backend API to create PaymentIntent
-      const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+      // Call backend API to create PaymentIntent with timeout and retry
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,6 +287,8 @@ class StripeService {
             purpose: 'wallet_deposit',
           },
         }),
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment intent creation
+        retries: 2,
       });
 
       if (!response.ok) {
@@ -449,7 +454,7 @@ class StripeService {
         // This ensures the backend is aware of 3DS authentication completion
         try {
           const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
-          await fetch(`${API_BASE_URL}/payments/confirm`, {
+          await fetchWithTimeout(`${API_BASE_URL}/payments/confirm`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -459,6 +464,8 @@ class StripeService {
               paymentIntentId,
               paymentMethodId,
             }),
+            timeout: API_TIMEOUTS.DEFAULT,
+            retries: 1,
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
@@ -539,16 +546,16 @@ class StripeService {
         return [];
       }
 
-      // Use fetch API without custom timeout wrapper
-      // This relies on the network stack's TCP timeouts and browser defaults
-      // Allows requests to complete naturally without premature cancellation
-      // Fetch payment methods from backend
-      const response = await fetch(`${API_BASE_URL}/payments/methods`, {
+      // Use fetchWithTimeout with retry logic for better reliability
+      // Configured with longer timeout for payment operations
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
+        retries: 2, // Retry twice on failure
       });
 
       if (!response.ok) {
@@ -580,10 +587,16 @@ class StripeService {
       });
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
+      
+      // Enhance error message for network-related issues
+      const errorMessage = getNetworkErrorMessage(error);
+      const enhancedError = new Error(errorMessage);
+      enhancedError.name = error instanceof Error ? error.name : 'Error';
+      
       // Rethrow a handled error so upstream callers (context/services) can
       // present a clear error message to the user instead of silently
       // treating an error as "no payment methods".
-      throw this.handleStripeError(error);
+      throw this.handleStripeError(enhancedError);
     }
   }
 
@@ -598,12 +611,14 @@ class StripeService {
         throw new Error('Authentication required to remove payment method');
       }
 
-      const response = await fetch(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
+        retries: 1,
       });
 
       if (!response.ok) {
