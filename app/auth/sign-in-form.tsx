@@ -239,7 +239,16 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
-  const redirectUri = useMemo(() => makeRedirectUri({}), [])
+  // Use custom scheme for more reliable OAuth redirects
+  // The scheme is defined in app.json as "bountyexpo-workspace"
+  const redirectUri = useMemo(() => {
+    const uri = makeRedirectUri({
+      scheme: 'bountyexpo-workspace',
+      path: 'auth/callback'
+    });
+    console.log('[Google Auth] Redirect URI:', uri);
+    return uri;
+  }, [])
 
   // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
   const [request, response, promptAsync] = useIdTokenAuthRequest({

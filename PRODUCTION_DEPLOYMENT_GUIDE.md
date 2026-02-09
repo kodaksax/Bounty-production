@@ -168,6 +168,68 @@ eas build --profile development --platform ios
 
 ## Apple Authentication Setup
 
+### Step 1: Enable Apple Provider in Supabase
+
+**CRITICAL**: Apple Sign-in will not work until you enable it in Supabase!
+
+1. **Go to Supabase Dashboard**
+   - Navigate to https://supabase.com/dashboard
+   - Select your project
+   - Go to Authentication → Providers
+
+2. **Enable Apple Provider**
+   - Find "Apple" in the providers list
+   - Toggle to **Enabled**
+
+3. **Configure Required Fields**
+
+   You need these credentials from Apple Developer Portal:
+
+   ```
+   Service ID: com.bountyexpo.service
+   Secret Key: [Content of your .p8 key file]
+   Key ID: [10-character identifier, e.g., ABC123DEFG]
+   Team ID: [Your Apple Team ID, e.g., XYZ987UVWX]
+   ```
+
+4. **Get Credentials from Apple Developer Portal**
+
+   **Service ID** (create if doesn't exist):
+   - Go to https://developer.apple.com/account
+   - Certificates, Identifiers & Profiles → Identifiers
+   - Click + to create new
+   - Select "Services IDs"
+   - Identifier: `com.bountyexpo.service`
+   - Description: "BOUNTY Sign In"
+   - Enable "Sign In with Apple"
+   - Configure with your domains and return URLs
+
+   **Create Sign In with Apple Key**:
+   - Go to Keys → + button
+   - Name: "BOUNTY Sign In Key"
+   - Enable "Sign In with Apple"
+   - Configure and select your primary App ID
+   - Download the .p8 file (you can only download once!)
+   - Note the Key ID (10 characters)
+
+   **Get Team ID**:
+   - Top right of Apple Developer Portal
+   - Click on your name → Membership
+   - Copy your Team ID
+
+5. **Add Credentials to Supabase**
+   - Paste Service ID: `com.bountyexpo.service`
+   - Paste Secret Key: Content of .p8 file
+   - Paste Key ID: 10-character code
+   - Paste Team ID: Your team ID
+   - Click **Save**
+
+6. **Test Configuration**
+   - Go to Authentication → Users
+   - Click "Invite user"
+   - Try Apple Sign In from Supabase dashboard
+   - If it works, your configuration is correct!
+
 ### Step 1: Create Service ID
 
 #### 1.1 Register Service ID
@@ -299,9 +361,21 @@ keytool -list -v -keystore /path/to/your-release-key.keystore
 4. Authorized JavaScript origins:
    - `https://bountyfinder.app`
    - `http://localhost:19006` (for development)
-5. Authorized redirect URIs:
+5. **Authorized redirect URIs** (ADD ALL OF THESE):
    - `https://bountyfinder.app/auth/callback`
    - `http://localhost:19006/auth/callback`
+   - `bountyexpo-workspace://auth/callback` (custom scheme)
+   - `com.bounty.BOUNTYExpo://auth/callback` (iOS bundle ID)
+   - `app.bountyfinder.BOUNTYExpo://auth/callback` (Android package)
+   - `exp://localhost:8081` (Expo dev - localhost)
+   - `exp://127.0.0.1:8081` (Expo dev - IP)
+   
+   **For dynamic local IPs** (optional, for development):
+   - `exp://192.168.0.0/--/auth/callback` (allows any 192.168.x.x IP)
+   
+   **Note**: The error you saw (`exp://192.168.0.59:8081`) happens because Google requires
+   exact redirect URI matches. Adding these URIs will fix the "invalid_request" error.
+
 6. Click **Create**
 7. Copy the **Client ID**
 
