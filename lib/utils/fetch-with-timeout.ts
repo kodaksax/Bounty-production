@@ -34,8 +34,8 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 function calculateBackoff(attempt: number, config: RetryConfig): number {
   const exponentialDelay = config.baseDelay * Math.pow(config.backoffMultiplier, attempt);
   const delay = Math.min(exponentialDelay, config.maxDelay);
-  // Add jitter (±25% random variation)
-  const jitter = delay * 0.25 * (Math.random() - 0.5) * 2;
+  // Add jitter (±25% random variation) - simplified calculation
+  const jitter = delay * (Math.random() - 0.5) * 0.5;
   return Math.max(0, delay + jitter);
 }
 
@@ -69,6 +69,9 @@ function shouldRetryDefault(response: Response | null, error: Error | null): boo
  * @param options - Fetch options with timeout and retry configuration
  * @returns Promise resolving to Response
  * @throws Error if all retries fail or timeout occurs
+ * 
+ * Note: retries parameter is the number of ADDITIONAL attempts after the initial request.
+ * For example, retries: 2 means 3 total attempts (1 initial + 2 retries).
  */
 export async function fetchWithTimeout(
   url: string,
@@ -91,7 +94,10 @@ export async function fetchWithTimeout(
   let lastError: Error | null = null;
   let lastResponse: Response | null = null;
 
-  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+  // Total attempts = initial + retries (e.g., retries: 2 means 3 total attempts)
+  const totalAttempts = retryConfig.maxRetries + 1;
+  
+  for (let attempt = 0; attempt < totalAttempts; attempt++) {
     try {
       // Create abort controller for timeout
       const controller = new AbortController();
@@ -110,9 +116,10 @@ export async function fetchWithTimeout(
         lastError = null;
 
         // Check if we should retry based on response
-        if (attempt < retryConfig.maxRetries && retryOn(response, null)) {
+        const isLastAttempt = attempt === totalAttempts - 1;
+        if (!isLastAttempt && retryOn(response, null)) {
           const delay = calculateBackoff(attempt, retryConfig);
-          console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms (attempt ${attempt + 1}/${retryConfig.maxRetries})`);
+          console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -133,9 +140,10 @@ export async function fetchWithTimeout(
       }
 
       // Check if we should retry based on error
-      if (attempt < retryConfig.maxRetries && retryOn(null, lastError)) {
+      const isLastAttempt = attempt === totalAttempts - 1;
+      if (!isLastAttempt && retryOn(null, lastError)) {
         const delay = calculateBackoff(attempt, retryConfig);
-        console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms due to error: ${lastError.message} (attempt ${attempt + 1}/${retryConfig.maxRetries})`);
+        console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms due to error: ${lastError.message} (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

@@ -588,10 +588,12 @@ class StripeService {
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
       
-      // Enhance error message for network-related issues
+      // Enhance error message for network-related issues while preserving original error
       const errorMessage = getNetworkErrorMessage(error);
-      const enhancedError = new Error(errorMessage);
+      const enhancedError: any = new Error(errorMessage);
       enhancedError.name = error instanceof Error ? error.name : 'Error';
+      // Preserve original error for debugging
+      enhancedError.cause = error;
       
       // Rethrow a handled error so upstream callers (context/services) can
       // present a clear error message to the user instead of silently
