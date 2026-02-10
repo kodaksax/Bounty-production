@@ -18,11 +18,18 @@ export async function waitForAuthEvent(timeoutMs = 5000): Promise<Session | null
       if (newSession && !resolved) {
         resolved = true
         if (timeoutId) {
-          try { clearTimeout(timeoutId) } catch (e) {}
+          clearTimeout(timeoutId)
         }
 
         if (subscription) {
-          try { subscription.unsubscribe() } catch (e) {}
+          try {
+            subscription.unsubscribe()
+          } catch (e) {
+              const isDebug = (typeof __DEV__ !== 'undefined' && __DEV__) ||
+                (typeof process !== 'undefined' && process.env != null &&
+                  (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production'))
+              if (isDebug) console.error('supabase-auth: unsubscribe failed', e)
+          }
         } else {
           unsubPending = true
         }
@@ -31,19 +38,36 @@ export async function waitForAuthEvent(timeoutMs = 5000): Promise<Session | null
       }
     })
 
-    try {
-      subscription = (ret && (ret as any).data && (ret as any).data.subscription) || undefined
-      if (unsubPending && subscription) {
-        try { subscription.unsubscribe() } catch (e) {}
+    interface SupabaseAuthReturn {
+      data?: { subscription?: { unsubscribe: () => void } }
+    }
+
+    const maybeRet = ret as SupabaseAuthReturn | undefined
+    subscription = maybeRet?.data?.subscription
+    if (unsubPending && subscription) {
+      try {
+        subscription.unsubscribe()
+      } catch (e) {
+        const isDebug = (typeof __DEV__ !== 'undefined' && __DEV__) ||
+          (typeof process !== 'undefined' && process.env != null &&
+            (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production'))
+        if (isDebug) console.error('supabase-auth: unsubscribe failed', e)
       }
-    } catch (e) {
-      // ignore
     }
 
     timeoutId = setTimeout(() => {
       if (!resolved) {
         resolved = true
-        try { if (subscription) subscription.unsubscribe() } catch (e) {}
+        if (subscription) {
+          try {
+            subscription.unsubscribe()
+          } catch (e) {
+            const isDebug = (typeof __DEV__ !== 'undefined' && __DEV__) ||
+              (typeof process !== 'undefined' && process.env != null &&
+                (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production'))
+            if (isDebug) console.error('supabase-auth: unsubscribe failed', e)
+          }
+        }
         resolve(null)
       }
     }, timeoutMs)

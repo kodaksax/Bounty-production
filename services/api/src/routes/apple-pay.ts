@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 
@@ -117,6 +117,38 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({
         error: 'Failed to confirm payment'
       });
+    }
+  });
+
+  /**
+   * Stripe webhook endpoint
+   * Note: Stripe requires the raw request body for signature verification. The server
+   * should be configured to expose `request.rawBody` (see consolidated-webhooks for example).
+   */
+  fastify.post('/webhooks/stripe', async (request: FastifyRequest, reply: FastifyReply) => {
+    const sig = request.headers['stripe-signature'] as string | undefined;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      fastify.log.warn('[apple-pay] STRIPE_WEBHOOK_SECRET not set; rejecting webhook');
+      return reply.code(501).send({ error: 'Webhooks not configured on this server' });
+    }
+
+    try {
+      const rawBody = (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
+
+      const event = stripe.webhooks.constructEvent(rawBody, sig || '', webhookSecret);
+
+      if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        // TODO: Update wallet balance, send receipt, notify user
+        fastify.log.info({ paymentIntentId: paymentIntent.id, amount: paymentIntent.amount }, 'payment_intent.succeeded received');
+      }
+
+      return { received: true };
+    } catch (err: any) {
+      fastify.log.warn({ err: err?.message }, 'Failed to verify Stripe webhook');
+      return reply.code(400).send({ error: err?.message });
     }
   });
 }
