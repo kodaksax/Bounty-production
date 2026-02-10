@@ -254,6 +254,11 @@ class StripeService {
   /**
    * Create a PaymentIntent via the backend API
    * This is the production-ready implementation that calls your backend
+   * 
+   * NOTE: This method uses retries for reliability but is NOT idempotent.
+   * If the backend doesn't use idempotency keys, retries could create duplicate
+   * PaymentIntents. For critical payment flows, use createPaymentIntentSecure()
+   * which includes built-in idempotency protection.
    */
   async createPaymentIntent(amount: number, currency: string = 'usd', authToken?: string): Promise<StripePaymentIntent> {
     performanceService.startMeasurement('payment_initiate', 'payment_process', {
@@ -588,12 +593,36 @@ class StripeService {
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
       
-      // Enhance error message for network-related issues while preserving original error
+      // Enhance error message for network-related issues while preserving structured fields
       const errorMessage = getNetworkErrorMessage(error);
-      const enhancedError: any = new Error(errorMessage);
-      enhancedError.name = error instanceof Error ? error.name : 'Error';
+      const originalError: any = error;
+      
+      // If error is already an Error, reuse it; otherwise create new Error
+      const enhancedError: any = error instanceof Error ? error : new Error(errorMessage);
+      
+      // Update message if it's a network error
+      if (errorMessage && enhancedError.message !== errorMessage) {
+        enhancedError.message = errorMessage;
+      }
+      
+      // Preserve structured fields (type, code) from non-Error throws for handleStripeError
+      if (originalError && typeof originalError === 'object' && !(error instanceof Error)) {
+        const { message, name, stack, ...structuredFields } = originalError as Record<string, unknown>;
+        for (const [key, value] of Object.entries(structuredFields)) {
+          if (!(key in enhancedError)) {
+            enhancedError[key] = value;
+          }
+        }
+      }
+      
+      if (!enhancedError.name) {
+        enhancedError.name = error instanceof Error ? error.name : 'Error';
+      }
+      
       // Preserve original error for debugging
-      enhancedError.cause = error;
+      if (!enhancedError.cause) {
+        enhancedError.cause = error;
+      }
       
       // Rethrow a handled error so upstream callers (context/services) can
       // present a clear error message to the user instead of silently

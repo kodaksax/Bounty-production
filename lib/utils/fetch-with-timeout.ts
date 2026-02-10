@@ -45,11 +45,14 @@ function calculateBackoff(attempt: number, config: RetryConfig): number {
 function shouldRetryDefault(response: Response | null, error: Error | null): boolean {
   // Retry on network errors (no response)
   if (error) {
+    // Normalize message for case-insensitive matching (catches "Network request failed", etc.)
+    const message = error.message.toLowerCase();
+    
     // Retry on timeout, network, and abort errors
     if (error.name === 'AbortError' || 
-        error.message.includes('timeout') ||
-        error.message.includes('network') ||
-        error.message.includes('fetch')) {
+        message.includes('timeout') ||
+        message.includes('network') ||
+        message.includes('fetch')) {
       return true;
     }
   }
@@ -72,6 +75,9 @@ function shouldRetryDefault(response: Response | null, error: Error | null): boo
  * 
  * Note: retries parameter is the number of ADDITIONAL attempts after the initial request.
  * For example, retries: 2 means 3 total attempts (1 initial + 2 retries).
+ * 
+ * If options.signal is provided, the request can be cancelled externally in addition
+ * to the internal timeout. Both signals will trigger cancellation.
  */
 export async function fetchWithTimeout(
   url: string,
@@ -82,6 +88,7 @@ export async function fetchWithTimeout(
     retries = DEFAULT_RETRY_CONFIG.maxRetries,
     retryDelay = DEFAULT_RETRY_CONFIG.baseDelay,
     retryOn = shouldRetryDefault,
+    signal: externalSignal,
     ...fetchOptions
   } = options;
 
@@ -92,7 +99,6 @@ export async function fetchWithTimeout(
   };
 
   let lastError: Error | null = null;
-  let lastResponse: Response | null = null;
 
   // Total attempts = initial + retries (e.g., retries: 2 means 3 total attempts)
   const totalAttempts = retryConfig.maxRetries + 1;
@@ -105,6 +111,15 @@ export async function fetchWithTimeout(
         controller.abort();
       }, timeout);
 
+      // If external signal provided, wire it to abort internal controller
+      if (externalSignal) {
+        if (externalSignal.aborted) {
+          controller.abort();
+        } else {
+          externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+        }
+      }
+
       try {
         const response = await fetch(url, {
           ...fetchOptions,
@@ -112,14 +127,18 @@ export async function fetchWithTimeout(
         });
 
         clearTimeout(timeoutId);
-        lastResponse = response;
         lastError = null;
 
         // Check if we should retry based on response
         const isLastAttempt = attempt === totalAttempts - 1;
         if (!isLastAttempt && retryOn(response, null)) {
           const delay = calculateBackoff(attempt, retryConfig);
-          console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
+          // Only log retry attempts in development to avoid noise and potential URL leakage
+          if (__DEV__) {
+            // Redact query params to avoid leaking sensitive data
+            const redactedUrl = url.split('?')[0];
+            console.log(`[fetchWithTimeout] Retrying request to ${redactedUrl} after ${delay}ms (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
+          }
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -131,19 +150,26 @@ export async function fetchWithTimeout(
       }
     } catch (error: any) {
       lastError = error;
-      lastResponse = null;
 
-      // Convert AbortError to timeout error for clarity
+      // Convert AbortError to timeout error for clarity, preserving original error
       if (error.name === 'AbortError') {
-        lastError = new Error(`Network request timed out after ${timeout}ms`);
-        lastError.name = 'TimeoutError';
+        const timeoutError: Error & { cause?: unknown } = new Error(
+          `Network request timed out after ${timeout}ms`
+        );
+        timeoutError.name = 'TimeoutError';
+        timeoutError.cause = error; // Preserve original error for debugging
+        lastError = timeoutError;
       }
 
       // Check if we should retry based on error
       const isLastAttempt = attempt === totalAttempts - 1;
       if (!isLastAttempt && retryOn(null, lastError)) {
         const delay = calculateBackoff(attempt, retryConfig);
-        console.log(`[fetchWithTimeout] Retrying request to ${url} after ${delay}ms due to error: ${lastError.message} (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
+        // Only log retry attempts in development
+        if (__DEV__) {
+          const redactedUrl = url.split('?')[0];
+          console.log(`[fetchWithTimeout] Retrying request to ${redactedUrl} after ${delay}ms due to error: ${lastError.message} (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
