@@ -1,12 +1,12 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { makeRedirectUri, ResponseType } from 'expo-auth-session'
+import { ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
@@ -20,6 +20,7 @@ import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import getAuthRedirectUri from './getAuthRedirectUri'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -239,7 +240,7 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
-  const redirectUri = useMemo(() => makeRedirectUri({}), [])
+  const redirectUri = useMemo(() => getAuthRedirectUri(), [])
 
   // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
   const [request, response, promptAsync] = useIdTokenAuthRequest({

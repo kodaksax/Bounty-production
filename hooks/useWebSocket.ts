@@ -1,9 +1,11 @@
 import NetInfo from '@react-native-community/netinfo';
+import { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { logClientError, logClientInfo } from '../lib/services/monitoring';
 import { wsAdapter } from '../lib/services/websocket-adapter';
 import { supabase } from '../lib/supabase';
+import { waitForAuthEvent as waitForAuthEventShared } from '../lib/utils/supabase-auth';
 
 export interface WebSocketState {
   isConnected: boolean;
@@ -38,11 +40,21 @@ export function useWebSocket() {
   // Connect to WebSocket
   const connect = useCallback(async () => {
     try {
-      // Check if user is authenticated
-      const { data: { session } } = await supabase.auth.getSession();
+      // Check if user is authenticated. If no session, wait briefly for auth state to change.
+      let session = (await supabase.auth.getSession()).data.session;
       if (!session) {
-        logClientInfo('WebSocket connect skipped - no active session');
-        return;
+        logClientInfo('WebSocket connect skipped - no active session; waiting briefly for auth');
+
+        // Wait up to 5s for a SIGNED_IN event that provides a session
+        const awaited = await waitForAuthEvent(5000);
+
+        if (!awaited) {
+          logClientInfo('No session after waiting, aborting WebSocket connect');
+          return;
+        }
+
+        // Update the local session variable so subsequent logic sees the signed-in session
+        session = awaited;
       }
 
       logClientInfo('Initiating WebSocket connection');
@@ -131,6 +143,12 @@ export function useWebSocket() {
     disconnect,
     reconnect,
   };
+}
+
+// Helper to wait for auth state change that provides a session.
+// Exported for unit testing the timing-dependent behavior.
+export async function waitForAuthEvent(timeoutMs = 5000): Promise<Session | null> {
+  return waitForAuthEventShared(timeoutMs)
 }
 
 /**

@@ -6,9 +6,10 @@
  */
 
 import NetInfo from '@react-native-community/netinfo';
-import { WEBSOCKET_CONFIG, calculateRetryDelay, ERROR_LOG_THROTTLE, isVerboseLogging } from 'lib/config/network';
-import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
+import { calculateRetryDelay, ERROR_LOG_THROTTLE, isVerboseLogging, WEBSOCKET_CONFIG } from 'lib/config/network';
 import getApiBaseFallback from 'lib/utils/dev-host';
+import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
+import { waitForAuthEvent } from 'lib/utils/supabase-auth';
 import { Platform } from 'react-native';
 import { getApiBaseUrl } from '../config/api';
 import { supabase } from '../supabase';
@@ -50,14 +51,35 @@ class WebSocketAdapter {
    * Connect to WebSocket server
    */
   async connect(url?: string): Promise<void> {
-    // Get auth token
-    const session = await supabase.auth.getSession();
-    if (!session?.data?.session?.access_token) {
-      console.error('[WebSocket] No auth token available, cannot connect');
+    // Get auth token (try immediate, then fall back to brief onAuthStateChange wait)
+    try {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session ?? null;
+      const token = session?.access_token ?? null;
+
+      if (!token) {
+        console.error('[WebSocket] No auth token available immediately; waiting briefly for auth state change');
+
+        // Wait up to 5s for auth state change that provides a session/token
+        const awaitedSession = await waitForAuthEvent(5000)
+        const awaitedToken: string | null = awaitedSession?.access_token ?? null
+
+        if (!awaitedToken) {
+          console.error('[WebSocket] No auth token available after waiting, cannot connect');
+          return;
+        }
+
+        this.token = awaitedToken;
+      } else {
+        // Use immediate token
+        // Mask token length in logs to avoid leaking secrets
+        if (this.verbose) console.log('[WebSocket] Auth token available, length=', token.length);
+        this.token = token;
+      }
+    } catch (e) {
+      console.error('[WebSocket] Error while retrieving session/token:', e);
       return;
     }
-
-    this.token = session.data.session.access_token;
     
     // Determine WebSocket URL (robustly resolve reachable host for devices)
     const preferredApi =
