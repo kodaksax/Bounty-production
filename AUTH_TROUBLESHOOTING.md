@@ -78,38 +78,63 @@ When using Expo in development:
 
 ### Fix Option 1: Use Custom Scheme (Recommended for Development)
 
-1. **Update app.json** to use a custom scheme:
-   ```json
-   {
-     "expo": {
-       "scheme": "bountyexpo"
-     }
-   }
-   ```
+**IMPORTANT**: Google Cloud Console rejects certain URI formats. Follow this exactly.
+
+1. **The app already uses custom scheme**: `bountyexpo-workspace` (configured in app.json)
 
 2. **Add Redirect URIs to Google Cloud Console**
    - Go to https://console.cloud.google.com
    - Select your project
    - APIs & Services → Credentials
-   - Click on your OAuth 2.0 Client ID
-   - Add these Authorized redirect URIs:
-     ```
-     bountyexpo://
-     bountyexpo://oauth
-     com.bounty.BOUNTYExpo://oauth
-     exp://localhost:8081
-     exp://127.0.0.1:8081
-     ```
-
-3. **Update sign-in-form.tsx** to use explicit redirect:
-   ```typescript
-   const redirectUri = useMemo(() => 
-     makeRedirectUri({
-       scheme: 'bountyexpo',
-       path: 'oauth'
-     }), []
-   )
+   - Click on your OAuth 2.0 Client ID (Web application)
+   
+3. **Add ONLY These URIs** (Google will reject wildcards):
    ```
+   bountyexpo-workspace://auth/callback
+   com.bounty.BOUNTYExpo://auth/callback
+   app.bountyfinder.BOUNTYExpo://auth/callback
+   exp://localhost:8081
+   exp://127.0.0.1:8081
+   http://localhost:19006/auth/callback
+   https://bountyfinder.app/auth/callback
+   ```
+
+4. **⚠️ URIs That Google WILL REJECT**:
+   ```
+   ❌ exp://192.168.0.0/--/auth/callback  (wildcard IPs)
+   ❌ exp://*/auth/callback               (wildcards)
+   ❌ Any URI with wildcards or patterns
+   ```
+
+5. **For Development with Changing IPs**:
+   
+   Your IP address (192.168.0.59) changes? You have two options:
+   
+   **Option A: Add Current IP Manually** (Quick fix)
+   - Check console log for current redirect URI
+   - Example: `exp://192.168.0.59:8081`
+   - Add this exact URI to Google Cloud Console
+   - Repeat when IP changes
+   
+   **Option B: Use Expo Auth Proxy** (Permanent fix)
+   - Update sign-in-form.tsx:
+     ```typescript
+     const redirectUri = useMemo(() => 
+       makeRedirectUri({
+         useProxy: true,  // Add this line
+         scheme: 'bountyexpo-workspace'
+       }), []
+     )
+     ```
+   - Add to Google Console: `https://auth.expo.io/@your-username/BOUNTYExpo`
+   - Replace `your-username` with your Expo username
+
+6. **Current Configuration Status**:
+   Based on your saved URIs, you should have:
+   - ✅ Custom scheme URIs (bountyexpo-workspace, bundle IDs)
+   - ✅ Localhost URIs (exp://localhost, exp://127.0.0.1)
+   - ✅ Production HTTPS URI
+   - ❌ Dynamic IP support (not possible with Google restrictions)
 
 ### Fix Option 2: Use ngrok for Consistent URLs
 

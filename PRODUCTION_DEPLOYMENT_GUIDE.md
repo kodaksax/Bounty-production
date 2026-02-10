@@ -355,29 +355,72 @@ keytool -list -v -keystore /path/to/your-release-key.keystore
 
 #### 2.4 Create Web OAuth Client
 
+**IMPORTANT**: Google OAuth has strict redirect URI validation. Some URI formats are rejected.
+
 1. Create Credentials → OAuth client ID
 2. Application type: **Web application**
 3. Name: `BOUNTY Web`
 4. Authorized JavaScript origins:
    - `https://bountyfinder.app`
    - `http://localhost:19006` (for development)
-5. **Authorized redirect URIs** (ADD ALL OF THESE):
-   - `https://bountyfinder.app/auth/callback`
-   - `http://localhost:19006/auth/callback`
-   - `bountyexpo-workspace://auth/callback` (custom scheme)
-   - `com.bounty.BOUNTYExpo://auth/callback` (iOS bundle ID)
-   - `app.bountyfinder.BOUNTYExpo://auth/callback` (Android package)
-   - `exp://localhost:8081` (Expo dev - localhost)
-   - `exp://127.0.0.1:8081` (Expo dev - IP)
+
+5. **Authorized redirect URIs** (Add these one at a time)
+
+   **Production URIs** (Always add these):
+   ```
+   https://bountyfinder.app/auth/callback
+   ```
+
+   **Custom Scheme URIs** (Required for mobile OAuth):
+   ```
+   bountyexpo-workspace://auth/callback
+   com.bounty.BOUNTYExpo://auth/callback
+   app.bountyfinder.BOUNTYExpo://auth/callback
+   ```
+
+   **Development URIs** (For local testing):
+   ```
+   http://localhost:19006/auth/callback
+   exp://localhost:8081
+   exp://127.0.0.1:8081
+   ```
+
+   **⚠️ Known Rejected URIs** (Google will NOT accept these):
+   - ❌ Wildcard IPs: `exp://192.168.0.0/--/auth/callback` 
+   - ❌ Dynamic ports with wildcards: `exp://*/auth/callback`
+   - ❌ URIs without proper scheme format
+
+   **For Development with Changing IPs**: 
    
-   **For dynamic local IPs** (optional, for development):
-   - `exp://192.168.0.0/--/auth/callback` (allows any 192.168.x.x IP)
-   
-   **Note**: The error you saw (`exp://192.168.0.59:8081`) happens because Google requires
-   exact redirect URI matches. Adding these URIs will fix the "invalid_request" error.
+   Since Google rejects wildcards, you have three options:
+
+   **Option 1: Use Expo Proxy (Recommended)**
+   - Add: `https://auth.expo.io/@your-username/your-app-slug`
+   - Update code to use `useProxy: true` in makeRedirectUri
+   - Most reliable for development
+
+   **Option 2: Add Specific IPs**
+   - Manually add your current IP when it changes
+   - Example: `exp://192.168.0.59:8081`
+   - Works but requires updates when IP changes
+
+   **Option 3: Use ngrok (For Consistent URL)**
+   - Set up ngrok tunnel: `ngrok http 8081`
+   - Add ngrok URL: `https://abc123.ngrok.io/auth/callback`
+   - Consistent URL during development
 
 6. Click **Create**
 7. Copy the **Client ID**
+
+**What You Should Have Configured** (minimum for mobile):
+```
+✅ https://bountyfinder.app/auth/callback
+✅ bountyexpo-workspace://auth/callback  
+✅ com.bounty.BOUNTYExpo://auth/callback
+✅ http://localhost:19006/auth/callback
+✅ exp://localhost:8081
+✅ exp://127.0.0.1:8081
+```
 
 ### Step 3: Update Environment Variables
 
