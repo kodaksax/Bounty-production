@@ -104,21 +104,27 @@ export async function fetchWithTimeout(
   const totalAttempts = retryConfig.maxRetries + 1;
   
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    let abortedByExternalSignal = false;
+    
+    // If external signal provided, wire it to abort internal controller (once, outside retry loop)
+    if (externalSignal && attempt === 0) {
+      if (externalSignal.aborted) {
+        controller.abort();
+        abortedByExternalSignal = true;
+      } else {
+        externalSignal.addEventListener('abort', () => {
+          controller.abort();
+          abortedByExternalSignal = true;
+        }, { once: true });
+      }
+    }
+    
     try {
-      // Create abort controller for timeout
-      const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
       }, timeout);
-
-      // If external signal provided, wire it to abort internal controller
-      if (externalSignal) {
-        if (externalSignal.aborted) {
-          controller.abort();
-        } else {
-          externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
-        }
-      }
 
       try {
         const response = await fetch(url, {
@@ -151,14 +157,23 @@ export async function fetchWithTimeout(
     } catch (error: any) {
       lastError = error;
 
-      // Convert AbortError to timeout error for clarity, preserving original error
+      // Convert AbortError to appropriate error type based on cause
       if (error.name === 'AbortError') {
-        const timeoutError: Error & { cause?: unknown } = new Error(
-          `Network request timed out after ${timeout}ms`
-        );
-        timeoutError.name = 'TimeoutError';
-        timeoutError.cause = error; // Preserve original error for debugging
-        lastError = timeoutError;
+        if (abortedByExternalSignal) {
+          // External cancellation - preserve as AbortError
+          const cancelError: Error & { cause?: unknown } = new Error('Request was cancelled');
+          cancelError.name = 'AbortError';
+          cancelError.cause = error;
+          lastError = cancelError;
+        } else {
+          // Internal timeout - convert to TimeoutError
+          const timeoutError: Error & { cause?: unknown } = new Error(
+            `Network request timed out after ${timeout}ms`
+          );
+          timeoutError.name = 'TimeoutError';
+          timeoutError.cause = error;
+          lastError = timeoutError;
+        }
       }
 
       // Check if we should retry based on error

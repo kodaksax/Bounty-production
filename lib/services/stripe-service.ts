@@ -595,10 +595,14 @@ class StripeService {
       
       // Enhance error message for network-related issues while preserving structured fields
       const errorMessage = getNetworkErrorMessage(error);
-      const originalError: any = error;
+      
+      // Use proper typing for enhanced error with dynamic properties
+      type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
       
       // If error is already an Error, reuse it; otherwise create new Error
-      const enhancedError: any = error instanceof Error ? error : new Error(errorMessage);
+      const enhancedError: EnhancedError = error instanceof Error 
+        ? error as EnhancedError
+        : new Error(errorMessage) as EnhancedError;
       
       // Update message if it's a network error
       if (errorMessage && enhancedError.message !== errorMessage) {
@@ -606,8 +610,9 @@ class StripeService {
       }
       
       // Preserve structured fields (type, code) from non-Error throws for handleStripeError
-      if (originalError && typeof originalError === 'object' && !(error instanceof Error)) {
-        const { message, name, stack, ...structuredFields } = originalError as Record<string, unknown>;
+      if (error && typeof error === 'object' && !(error instanceof Error)) {
+        const originalError = error as Record<string, unknown>;
+        const { message, name, stack, ...structuredFields } = originalError;
         for (const [key, value] of Object.entries(structuredFields)) {
           if (!(key in enhancedError)) {
             enhancedError[key] = value;
