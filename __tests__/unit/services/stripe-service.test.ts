@@ -27,11 +27,32 @@ jest.mock('@stripe/stripe-react-native', () => ({
   presentPaymentSheet: jest.fn(),
 }));
 
-// Mock global fetch for API calls
+// Mock fetchWithTimeout to behave like fetch for tests
+jest.mock('../../../lib/utils/fetch-with-timeout', () => ({
+  fetchWithTimeout: jest.fn(),
+}));
+
+// Mock network connectivity utilities
+jest.mock('../../../lib/utils/network-connectivity', () => ({
+  getNetworkErrorMessage: jest.fn((error: any) => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'object' && error?.message) return error.message;
+    return 'Network error occurred';
+  }),
+  checkNetworkConnectivity: jest.fn().mockResolvedValue({
+    isConnected: true,
+    isInternetReachable: true,
+    type: 'wifi',
+  }),
+  ensureNetworkConnectivity: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock global fetch for API calls (some tests may still use it directly)
 global.fetch = jest.fn();
 
 const { analyticsService } = require('../../../lib/services/analytics-service');
 const { performanceService } = require('../../../lib/services/performance-service');
+const { fetchWithTimeout } = require('../../../lib/utils/fetch-with-timeout');
 
 describe('Stripe Service', () => {
   // Set up environment variables before all tests to ensure proper configuration
@@ -46,8 +67,9 @@ describe('Stripe Service', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset fetch mock before each test
+    // Reset fetch and fetchWithTimeout mocks before each test
     (global.fetch as jest.Mock).mockClear();
+    (fetchWithTimeout as jest.Mock).mockClear();
   });
 
   describe('initialize', () => {
@@ -106,8 +128,8 @@ describe('Stripe Service', () => {
 
   describe('createPaymentIntent', () => {
     beforeEach(() => {
-      // Mock successful API response
-      (global.fetch as jest.Mock).mockResolvedValue({
+      // Mock successful API response for fetchWithTimeout
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({
           clientSecret: 'pi_mock_secret_12345',
@@ -190,10 +212,10 @@ describe('Stripe Service', () => {
       jest.clearAllMocks();
     });
 
-    it('should handle slow network requests without artificial timeout', async () => {
+    it('should handle slow network requests with fetchWithTimeout', async () => {
       // Mock a slow response that takes 20 seconds
-      // The service no longer has artificial timeout logic and relies on network stack timeouts
-      (global.fetch as jest.Mock).mockImplementation(() => 
+      // fetchWithTimeout now handles timeouts and retries
+      (fetchWithTimeout as jest.Mock).mockImplementation(() => 
         new Promise((resolve) => {
           setTimeout(() => resolve({
             ok: true,
@@ -204,19 +226,17 @@ describe('Stripe Service', () => {
 
       const authToken = 'test_token';
 
-      // The method will wait for the network request to complete naturally
-      // In this test, we'll let it timeout at Jest's test timeout
+      // The method will wait for the network request via fetchWithTimeout
       const methodsPromise = stripeService.listPaymentMethods(authToken);
       
       // For testing purposes, we'll verify it returns the result when it completes
-      // In a real scenario, the network stack would handle timeouts
       const methods = await methodsPromise;
       expect(Array.isArray(methods)).toBe(true);
     }, 30000); // Allow Jest to wait longer than the mock delay
 
     it('should handle network errors gracefully', async () => {
-      // Mock fetch to throw a network error
-      (global.fetch as jest.Mock).mockImplementation(() => {
+      // Mock fetchWithTimeout to throw a network error
+      (fetchWithTimeout as jest.Mock).mockImplementation(() => {
         const error = new Error('Network request failed');
         error.name = 'NetworkError';
         return Promise.reject(error);
@@ -233,7 +253,7 @@ describe('Stripe Service', () => {
 
     it('should successfully fetch payment methods within timeout', async () => {
       // Mock a fast successful response
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({
           paymentMethods: [
@@ -263,11 +283,11 @@ describe('Stripe Service', () => {
       const methods = await stripeService.listPaymentMethods();
       expect(methods).toEqual([]);
       // Verify no API call was made when auth token is not provided
-      expect(fetch).not.toHaveBeenCalled();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
     });
 
     it('should handle API errors correctly', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
         ok: false,
         status: 401,
         text: async () => 'Unauthorized'
@@ -283,7 +303,7 @@ describe('Stripe Service', () => {
     });
 
     it('should handle network errors with friendly messages', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(
+      (fetchWithTimeout as jest.Mock).mockRejectedValue(
         new Error('Network request failed')
       );
 
