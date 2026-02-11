@@ -93,11 +93,11 @@ describe('ApplePayReceiptService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return true when email is provided', async () => {
+    it('should return false when email is provided (stub not implemented)', async () => {
       const result = await applePayReceiptService.sendReceiptEmail(mockReceiptData);
 
-      // Currently returns true as it's a placeholder
-      expect(result).toBe(true);
+      // Returns false until an actual email provider is wired up
+      expect(result).toBe(false);
     });
   });
 

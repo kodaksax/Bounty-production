@@ -186,7 +186,9 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
       transactionId: transaction.id,
     }, 'Payment processed successfully');
 
-    // If this was an Apple Pay payment, send receipt
+    // If this was an Apple Pay payment, trigger receipt generation
+    // Note: Email delivery won't actually happen because userEmail isn't provided
+    // TODO: Once user email is accessible, pass it through for actual email delivery
     if (paymentMethod === 'apple_pay') {
       // Dynamically import to avoid circular dependencies
       const { applePayReceiptService } = await import('../services/apple-pay-receipt-service');
@@ -198,6 +200,7 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
         paymentIntentId: paymentIntent.id,
         paymentMethod: 'Apple Pay',
         timestamp: new Date(paymentIntent.created * 1000),
+        // TODO: Fetch and include user email for actual delivery
       }).catch(error => {
         logger.error({
           error,

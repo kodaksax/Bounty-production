@@ -281,6 +281,7 @@ Questions? support@bountyexpo.com
         return false;
       }
 
+      // Generate receipt content (unused until email service is wired up)
       const htmlContent = this.generateReceiptHTML(data);
       const textContent = this.generateReceiptText(data);
 
@@ -290,7 +291,7 @@ Questions? support@bountyexpo.com
         to: data.userEmail,
         subject: `BOUNTY - Apple Pay Receipt ($${data.amount.toFixed(2)})`,
         transactionId: data.transactionId
-      }, '[ApplePayReceipt] Email receipt would be sent');
+      }, '[ApplePayReceipt] Email receipt would be sent (not yet implemented)');
 
       // In production, this would call an email service:
       // await emailService.send({
@@ -300,7 +301,9 @@ Questions? support@bountyexpo.com
       //   text: textContent,
       // });
 
-      return true;
+      // Return false until an actual email provider is wired up to avoid
+      // signaling successful delivery when no email was sent
+      return false;
     } catch (error) {
       logger.error({
         error,

@@ -80,12 +80,10 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
         description: description || 'BountyExpo Wallet Deposit',
       };
 
-      // Add idempotency key if provided (for retry safety)
-      if (idempotencyKey) {
-        createParams.idempotency_key = idempotencyKey;
-      }
-
-      const paymentIntent = await stripe.paymentIntents.create(createParams);
+      // Apply idempotency key via request options (not as a parameter)
+      const paymentIntent = idempotencyKey
+        ? await stripe.paymentIntents.create(createParams, { idempotencyKey })
+        : await stripe.paymentIntents.create(createParams);
 
       logger.info({
         paymentIntentId: paymentIntent.id,
@@ -142,6 +140,16 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
       // Retrieve payment intent to check status
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
+      // SECURITY: Verify the payment intent belongs to the requesting user
+      if (paymentIntent.metadata?.user_id !== request.userId) {
+        logger.warn({
+          paymentIntentId,
+          requestUserId: request.userId,
+          paymentIntentUserId: paymentIntent.metadata?.user_id,
+        }, '[ApplePay] Payment intent user ID mismatch');
+        return reply.code(403).send({ error: 'Payment intent does not belong to this user' });
+      }
+
       if (paymentIntent.status === 'succeeded') {
         // Payment successful - record transaction in database
         const amountUSD = paymentIntent.amount / 100; // Convert cents to dollars
@@ -163,6 +171,8 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
           }, '[ApplePay] Successfully recorded deposit transaction');
 
           // Generate and send receipt asynchronously (don't block response)
+          // Note: Email delivery is not yet implemented because userEmail is unavailable here
+          // TODO: Once user email is accessible, re-introduce sendReceiptEmail with userEmail/userName populated
           applePayReceiptService.sendReceiptEmail({
             transactionId: transaction.id,
             userId: request.userId,
@@ -180,15 +190,17 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
             }, '[ApplePay] Failed to send receipt email');
           });
 
-          // Also log the receipt to console for development
-          applePayReceiptService.logReceipt({
-            transactionId: transaction.id,
-            userId: request.userId,
-            amount: amountUSD,
-            paymentIntentId: paymentIntent.id,
-            paymentMethod: 'Apple Pay',
-            timestamp: new Date(),
-          });
+          // Log receipt details for development (only in non-production)
+          if (process.env.NODE_ENV !== 'production') {
+            applePayReceiptService.logReceipt({
+              transactionId: transaction.id,
+              userId: request.userId,
+              amount: amountUSD,
+              paymentIntentId: paymentIntent.id,
+              paymentMethod: 'Apple Pay',
+              timestamp: new Date(),
+            });
+          }
 
           return {
             success: true,
@@ -205,12 +217,12 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
             amount: amountUSD
           }, '[ApplePay] Failed to record transaction in database');
 
-          // Return success since payment succeeded, but note DB issue
+          // Return success since payment succeeded, but note DB issue and pending wallet credit
           return {
             success: true,
             status: paymentIntent.status,
             amount: paymentIntent.amount,
-            warning: 'Transaction recorded but database update may be delayed',
+            warning: 'Payment succeeded but wallet credit is pending. Balance will be reconciled via webhook or retry.',
           };
         }
       } else {
