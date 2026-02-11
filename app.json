@@ -11,7 +11,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
-      "merchantId": "merchant.com.bountyexpo-workspace",
       "buildNumber": "1",
       "jsEngine": "hermes",
       "infoPlist": {
