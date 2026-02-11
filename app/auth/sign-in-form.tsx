@@ -240,7 +240,31 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
-  const redirectUri = useMemo(() => getAuthRedirectUri(), [])
+  
+  // Redirect URI configuration for Google OAuth
+  // Google rejects wildcard URIs, so we use specific schemes
+  const redirectUri = useMemo(() => {
+    // Try to use Expo's auth proxy for most reliable OAuth in development
+    // Falls back to custom scheme for production
+    const uri = makeRedirectUri({
+      // useProxy: true would use https://auth.expo.io/@username/slug
+      // but requires Expo account setup. For now, use custom scheme.
+      scheme: 'bountyexpo-workspace',
+      path: 'auth/callback'
+    });
+    console.log('[Google Auth] Redirect URI:', uri);
+    
+    // Log warning if using dynamic exp:// URI (will fail without exact match in Google Console)
+    if (uri.startsWith('exp://') && !uri.includes('localhost') && !uri.includes('127.0.0.1')) {
+      console.warn(
+        '[Google Auth] Using dynamic exp:// URI. This will fail unless you add ' +
+        'the exact URI to Google Cloud Console. Current URI:', uri
+      );
+      console.warn('[Google Auth] To fix: Add this exact URI to your Google OAuth client redirect URIs');
+    }
+    
+    return uri;
+  }, [])
 
   // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
   const [request, response, promptAsync] = useIdTokenAuthRequest({
