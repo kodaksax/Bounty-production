@@ -102,24 +102,28 @@ export async function fetchWithTimeout(
 
   // Total attempts = initial + retries (e.g., retries: 2 means 3 total attempts)
   const totalAttempts = retryConfig.maxRetries + 1;
-  
+
+  // Support external cancellation across retries by keeping a reference
+  // to the currently-active internal controller. When the external signal
+  // aborts we forward the abort to the current controller so subsequent
+  // attempts are also cancelled.
+  let currentController: AbortController | null = null;
+  let abortedByExternalSignal = false;
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      abortedByExternalSignal = true;
+    } else {
+      externalSignal.addEventListener('abort', () => {
+        abortedByExternalSignal = true;
+        currentController?.abort();
+      }, { once: true });
+    }
+  }
+
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
     // Create abort controller for timeout
     const controller = new AbortController();
-    let abortedByExternalSignal = false;
-    
-    // If external signal provided, wire it to abort internal controller (once, outside retry loop)
-    if (externalSignal && attempt === 0) {
-      if (externalSignal.aborted) {
-        controller.abort();
-        abortedByExternalSignal = true;
-      } else {
-        externalSignal.addEventListener('abort', () => {
-          controller.abort();
-          abortedByExternalSignal = true;
-        }, { once: true });
-      }
-    }
+    currentController = controller;
     
     try {
       const timeoutId = setTimeout(() => {
@@ -135,6 +139,14 @@ export async function fetchWithTimeout(
         clearTimeout(timeoutId);
         lastError = null;
 
+        // If the external signal aborted while we were waiting, short-circuit
+        // and treat this as an external cancellation (no retries).
+        if (abortedByExternalSignal) {
+          const cancelError: Error & { cause?: unknown } = new Error('Request was cancelled');
+          cancelError.name = 'AbortError';
+          throw cancelError;
+        }
+
         // Check if we should retry based on response
         const isLastAttempt = attempt === totalAttempts - 1;
         if (!isLastAttempt && retryOn(response, null)) {
@@ -146,6 +158,7 @@ export async function fetchWithTimeout(
             console.log(`[fetchWithTimeout] Retrying request to ${redactedUrl} after ${delay}ms (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
           }
           await new Promise(resolve => setTimeout(resolve, delay));
+          currentController = null;
           continue;
         }
 
@@ -178,14 +191,20 @@ export async function fetchWithTimeout(
 
       // Check if we should retry based on error
       const isLastAttempt = attempt === totalAttempts - 1;
+
+      // If cancellation was triggered externally, do not retry — short-circuit
+      if (abortedByExternalSignal) {
+        throw lastError;
+      }
       if (!isLastAttempt && retryOn(null, lastError)) {
         const delay = calculateBackoff(attempt, retryConfig);
         // Only log retry attempts in development
         if (__DEV__) {
           const redactedUrl = url.split('?')[0];
-          console.log(`[fetchWithTimeout] Retrying request to ${redactedUrl} after ${delay}ms due to error: ${lastError.message} (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
+          console.log(`[fetchWithTimeout] Retrying request to ${redactedUrl} after ${delay}ms due to error: ${lastError?.message} (attempt ${attempt + 1}/${totalAttempts - 1} retries)`);
         }
         await new Promise(resolve => setTimeout(resolve, delay));
+        currentController = null;
         continue;
       }
 
