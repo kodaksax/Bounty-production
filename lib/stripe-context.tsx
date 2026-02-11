@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 // Fixed import path: stripe-context.tsx sits in lib/, so services is a sibling folder under lib/
 import { API_BASE_URL } from 'lib/config/api';
+import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
 
@@ -100,22 +101,8 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       setPaymentMethods(methods);
     } catch (err: unknown) {
-      // Improve error messaging for network issues
-      let errorMessage = 'Failed to load payment methods';
-      
-      if (err && typeof err === 'object' && 'message' in err) {
-        const message = (err as { message: string }).message;
-        if (message.includes('timed out') || message.includes('timeout')) {
-          errorMessage = 'Connection timed out. Please check your internet connection and try again.';
-        } else if (message.includes('Network') || message.includes('fetch')) {
-          errorMessage = 'Unable to connect. Please check your internet connection.';
-        } else if ('type' in err && (err as { type: string }).type === 'api_error') {
-          errorMessage = 'Payment service temporarily unavailable. Please try again.';
-        } else {
-          errorMessage = message;
-        }
-      }
-      
+      // Improve error messaging for network issues using centralized utility
+      const errorMessage = getNetworkErrorMessage(err);
       setError(errorMessage);
       console.error('Error loading payment methods:', err);
       // Rethrow so callers (who may implement retry logic) can detect failures

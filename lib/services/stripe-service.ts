@@ -1,6 +1,9 @@
 
 // Stripe API types
 import { API_BASE_URL } from '../config/api';
+import { API_TIMEOUTS } from '../config/network';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
+import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
     checkDuplicatePayment,
@@ -251,6 +254,11 @@ class StripeService {
   /**
    * Create a PaymentIntent via the backend API
    * This is the production-ready implementation that calls your backend
+   * 
+   * NOTE: This method uses retries for reliability but is NOT idempotent.
+   * If the backend doesn't use idempotency keys, retries could create duplicate
+   * PaymentIntents. For critical payment flows, use createPaymentIntentSecure()
+   * which includes built-in idempotency protection.
    */
   async createPaymentIntent(amount: number, currency: string = 'usd', authToken?: string): Promise<StripePaymentIntent> {
     performanceService.startMeasurement('payment_initiate', 'payment_process', {
@@ -270,8 +278,8 @@ class StripeService {
         };
       }
       
-      // Call backend API to create PaymentIntent
-      const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+      // Call backend API to create PaymentIntent with timeout and retry
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,6 +292,8 @@ class StripeService {
             purpose: 'wallet_deposit',
           },
         }),
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment intent creation
+        retries: 2,
       });
 
       if (!response.ok) {
@@ -449,7 +459,7 @@ class StripeService {
         // This ensures the backend is aware of 3DS authentication completion
         try {
           const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
-          await fetch(`${API_BASE_URL}/payments/confirm`, {
+          await fetchWithTimeout(`${API_BASE_URL}/payments/confirm`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -459,6 +469,8 @@ class StripeService {
               paymentIntentId,
               paymentMethodId,
             }),
+            timeout: API_TIMEOUTS.DEFAULT,
+            retries: 1,
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
@@ -539,16 +551,16 @@ class StripeService {
         return [];
       }
 
-      // Use fetch API without custom timeout wrapper
-      // This relies on the network stack's TCP timeouts and browser defaults
-      // Allows requests to complete naturally without premature cancellation
-      // Fetch payment methods from backend
-      const response = await fetch(`${API_BASE_URL}/payments/methods`, {
+      // Use fetchWithTimeout with retry logic for better reliability
+      // Configured with longer timeout for payment operations
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
+        retries: 2, // Retry twice on failure
       });
 
       if (!response.ok) {
@@ -580,10 +592,47 @@ class StripeService {
       });
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
+      
+      // Enhance error message for network-related issues while preserving structured fields
+      const errorMessage = getNetworkErrorMessage(error);
+      
+      // Use proper typing for enhanced error with dynamic properties
+      type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
+      
+      // If error is already an Error, reuse it; otherwise create new Error
+      const enhancedError: EnhancedError = error instanceof Error 
+        ? error as EnhancedError
+        : new Error(errorMessage) as EnhancedError;
+      
+      // Update message if it's a network error
+      if (errorMessage && enhancedError.message !== errorMessage) {
+        enhancedError.message = errorMessage;
+      }
+      
+      // Preserve structured fields (type, code) from non-Error throws for handleStripeError
+      if (error && typeof error === 'object' && !(error instanceof Error)) {
+        const originalError = error as Record<string, unknown>;
+        const { message, name, stack, ...structuredFields } = originalError;
+        for (const [key, value] of Object.entries(structuredFields)) {
+          if (!(key in enhancedError)) {
+            enhancedError[key] = value;
+          }
+        }
+      }
+      
+      if (!enhancedError.name) {
+        enhancedError.name = error instanceof Error ? error.name : 'Error';
+      }
+      
+      // Preserve original error for debugging
+      if (!enhancedError.cause) {
+        enhancedError.cause = error;
+      }
+      
       // Rethrow a handled error so upstream callers (context/services) can
       // present a clear error message to the user instead of silently
       // treating an error as "no payment methods".
-      throw this.handleStripeError(error);
+      throw this.handleStripeError(enhancedError);
     }
   }
 
@@ -598,12 +647,14 @@ class StripeService {
         throw new Error('Authentication required to remove payment method');
       }
 
-      const response = await fetch(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
+        retries: 1,
       });
 
       if (!response.ok) {

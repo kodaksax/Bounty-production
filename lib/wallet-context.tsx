@@ -1,5 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { API_BASE_URL } from './config/api';
+import { API_TIMEOUTS } from './config/network';
+import { fetchWithTimeout } from './utils/fetch-with-timeout';
+import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { getSecureJSON, setSecureJSON, SecureKeys } from './utils/secure-storage';
 import { paymentService } from './services/payment-service';
 import { bountyService } from './services/bounty-service';
@@ -338,12 +341,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setIsLoading(true);
     try {
-      // Fetch balance from API
-      const balanceResponse = await fetch(`${API_BASE_URL}/wallet/balance`, {
+      // Fetch balance from API with timeout and retry
+      const balanceResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/balance`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 2,
       });
 
       if (balanceResponse.ok) {
@@ -352,12 +357,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await persist(balanceData.balance);
       }
 
-      // Fetch transactions from API
-      const txResponse = await fetch(`${API_BASE_URL}/wallet/transactions?limit=100`, {
+      // Fetch transactions from API with timeout and retry
+      const txResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/transactions?limit=100`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 2,
       });
 
       // Transaction types that represent outflow (money leaving the user's wallet)
@@ -396,7 +403,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
     } catch (error) {
-      console.error('[wallet] Error refreshing from API:', error);
+      const errorMessage = getNetworkErrorMessage(error);
+      console.error('[wallet] Error refreshing from API:', errorMessage, error);
       // Fall back to local data
     } finally {
       setIsLoading(false);
