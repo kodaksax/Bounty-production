@@ -157,6 +157,7 @@ async function handleWebhookError(eventId: string, errorMessage: string): Promis
 async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const userId = paymentIntent.metadata?.user_id;
+  const paymentMethod = paymentIntent.metadata?.payment_method;
 
   if (!userId) {
     logger.warn({ paymentIntentId: paymentIntent.id }, 'PaymentIntent succeeded but missing user_id in metadata');
@@ -167,11 +168,12 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     paymentIntentId: paymentIntent.id,
     userId,
     amount: paymentIntent.amount / 100,
+    paymentMethod: paymentMethod || 'card',
   }, 'Processing successful payment');
 
   try {
     // Create deposit transaction and update balance atomically
-    await WalletService.createDeposit(
+    const transaction = await WalletService.createDeposit(
       userId,
       paymentIntent.amount / 100, // Convert cents to dollars
       paymentIntent.id
@@ -181,7 +183,36 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
       paymentIntentId: paymentIntent.id,
       userId,
       amount: paymentIntent.amount / 100,
+      transactionId: transaction.id,
     }, 'Payment processed successfully');
+
+    // If this was an Apple Pay payment, trigger receipt generation
+    // Note: Email delivery won't actually happen because userEmail isn't provided
+    // TODO: Once user email is accessible, pass it through for actual email delivery
+    if (paymentMethod === 'apple_pay') {
+      // Dynamically import to avoid circular dependencies
+      const { applePayReceiptService } = await import('../services/apple-pay-receipt-service');
+      
+      applePayReceiptService.sendReceiptEmail({
+        transactionId: transaction.id,
+        userId,
+        amount: paymentIntent.amount / 100,
+        paymentIntentId: paymentIntent.id,
+        paymentMethod: 'Apple Pay',
+        timestamp: new Date(paymentIntent.created * 1000),
+        // TODO: Fetch and include user email for actual delivery
+      }).catch(error => {
+        logger.error({
+          error,
+          transactionId: transaction.id,
+        }, '[Webhook] Failed to send Apple Pay receipt email');
+      });
+
+      logger.info({
+        transactionId: transaction.id,
+        paymentIntentId: paymentIntent.id,
+      }, '[Webhook] Apple Pay receipt generation triggered');
+    }
   } catch (error: any) {
     logger.error({
       error: error.message,

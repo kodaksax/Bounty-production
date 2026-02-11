@@ -42,32 +42,83 @@ class ApplePayService {
   }
 
   /**
+   * Generate idempotency key for payment request
+   */
+  private generateIdempotencyKey(request: ApplePayPaymentRequest): string {
+    const timestamp = Date.now();
+    const amountKey = Math.round(request.amount * 100);
+    return `apple_pay_${amountKey}_${timestamp}`;
+  }
+
+  /**
+   * Retry helper for network requests
+   */
+  private async retryRequest<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    delayMs: number = 1000
+  ): Promise<T> {
+    let lastError: Error | undefined;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`[ApplePay] Attempt ${attempt}/${maxRetries} failed:`, error);
+        
+        // Don't retry on certain errors
+        if (error instanceof Error) {
+          const errorMessage = error.message.toLowerCase();
+          if (errorMessage.includes('unauthorized') || 
+              errorMessage.includes('invalid') || 
+              errorMessage.includes('cancelled')) {
+            throw error;
+          }
+        }
+        
+        // Wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+        }
+      }
+    }
+    
+    throw lastError || new Error('Request failed after retries');
+  }
+
+  /**
    * Process payment with Apple Pay
    */
   async processPayment(request: ApplePayPaymentRequest, authToken?: string): Promise<ApplePayResult> {
     try {
-      // Step 1: Create PaymentIntent on backend
-      const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
-      const token = authToken || await getAuthToken()
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          amountCents: Math.round(request.amount * 100),
-          bountyId: request.bountyId,
-          description: request.description,
-        }),
-      });
+      const idempotencyKey = this.generateIdempotencyKey(request);
+      
+      // Step 1: Create PaymentIntent on backend (with retry)
+      const { clientSecret, paymentIntentId } = await this.retryRequest(async () => {
+        const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
+        const token = authToken || await getAuthToken()
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            amountCents: Math.round(request.amount * 100),
+            bountyId: request.bountyId,
+            description: request.description,
+            idempotencyKey,
+          }),
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create payment intent');
-      }
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to create payment intent');
+        }
 
-      const { clientSecret, paymentIntentId } = await response.json();
+        return await response.json();
+      }, 3, 1000);
 
       // Step 2: Present Apple Pay sheet
       const stripe: any = await import('@stripe/stripe-react-native');
@@ -129,21 +180,28 @@ class ApplePayService {
         };
       }
 
-      // Step 4: Verify payment on backend
-      const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
-      const confirmResponse = await fetch(confirmEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          paymentIntentId,
-          bountyId: request.bountyId,
-        }),
-      });
+      // Step 4: Verify payment on backend (with retry)
+      const confirmResult = await this.retryRequest(async () => {
+        const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
+        const token = authToken || await getAuthToken()
+        const confirmResponse = await fetch(confirmEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            paymentIntentId,
+            bountyId: request.bountyId,
+          }),
+        });
 
-      const confirmResult = await confirmResponse.json();
+        if (!confirmResponse.ok) {
+          throw new Error('Failed to confirm payment on backend');
+        }
+
+        return await confirmResponse.json();
+      }, 3, 1000);
 
       if (confirmResult.success) {
         return {
