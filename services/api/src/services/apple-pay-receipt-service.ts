@@ -316,7 +316,12 @@ Questions? support@bountyexpo.com
    */
   logReceipt(data: ApplePayReceiptData): void {
     const textReceipt = this.generateReceiptText(data);
-    logger.info(textReceipt, '[ApplePayReceipt] Receipt generated');
+    logger.info({
+      transactionId: data.transactionId,
+      userId: data.userId,
+      amount: data.amount,
+      receipt: textReceipt
+    }, '[ApplePayReceipt] Receipt generated');
   }
 }
 
