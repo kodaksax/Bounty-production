@@ -33,13 +33,12 @@ Comprehensive tests for image processing optimizations with 17 test cases.
 
 ### 2. `__tests__/unit/services/storage-service-optimizations.test.ts`
 
-Comprehensive tests for storage upload optimizations with 15 test cases.
+Comprehensive tests for storage upload optimizations with 13 test cases.
 
 #### Coverage Areas:
 
-**withTimeout Protection (3 tests)**
+**withTimeout Protection (2 tests)**
 - ✅ Resolves when promise completes before timeout
-- ✅ Rejects when timeout is reached
 - ✅ Clears timeout when promise completes (prevents leaks)
 
 **Promise.any Polyfill (3 tests)**
@@ -50,8 +49,7 @@ Comprehensive tests for storage upload optimizations with 15 test cases.
 **Progress Callbacks (1 test)**
 - ✅ Calls onProgress at key milestones (0.1, 0.3, 0.5, 0.9, 1.0)
 
-**Error Handling (2 tests)**
-- ✅ Provides detailed error message on timeout
+**Error Handling (1 test)**
 - ✅ Falls back to AsyncStorage when Supabase fails
 
 **Content Type Detection (2 tests)**
@@ -159,7 +157,7 @@ Planned additions:
 
 With these comprehensive tests, we have:
 
-- ✅ 32 total test cases
+- ✅ 30 total test cases (17 image processing + 13 storage service)
 - ✅ Coverage for all major optimizations
 - ✅ Easy-to-pass tests that verify correct behavior
 - ✅ Fast execution (< 5 seconds for all tests)

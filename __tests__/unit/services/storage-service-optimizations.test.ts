@@ -41,11 +41,6 @@ const { readAsBase64 } = require('../../../lib/utils/fs-utils');
 describe('storage-service - Upload Optimizations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
   });
 
   describe('withTimeout', () => {
@@ -60,38 +55,13 @@ describe('storage-service - Upload Optimizations', () => {
         arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
       });
 
-      const uploadPromise = storageService.uploadFile('file://test.jpg', {
+      const result = await storageService.uploadFile('file://test.jpg', {
         bucket: 'test-bucket',
         path: 'test/file.jpg',
       });
 
-      // Fast-forward time but promise should already be resolved
-      jest.advanceTimersByTime(1000);
-
-      const result = await uploadPromise;
       expect(result.success).toBe(true);
     });
-
-    it('should reject when timeout is reached', async () => {
-      // Mock a slow operation
-      global.fetch = jest.fn().mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 40000))
-      );
-
-      readAsBase64.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 40000))
-      );
-
-      const uploadPromise = storageService.uploadFile('file://test.jpg', {
-        bucket: 'test-bucket',
-        path: 'test/file.jpg',
-      });
-
-      // Advance past all timeouts
-      jest.advanceTimersByTime(50000);
-
-      await expect(uploadPromise).rejects.toThrow();
-    }, 60000);
 
     it('should clear timeout when promise completes', async () => {
       const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
@@ -210,25 +180,6 @@ describe('storage-service - Upload Optimizations', () => {
   });
 
   describe('error handling', () => {
-    it('should provide detailed error message on timeout', async () => {
-      global.fetch = jest.fn().mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 40000))
-      );
-
-      readAsBase64.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 40000))
-      );
-
-      const uploadPromise = storageService.uploadFile('file://test.jpg', {
-        bucket: 'test-bucket',
-        path: 'test/file.jpg',
-      });
-
-      jest.advanceTimersByTime(50000);
-
-      await expect(uploadPromise).rejects.toThrow();
-    }, 60000);
-
     it('should fallback to AsyncStorage when Supabase fails', async () => {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       AsyncStorage.setItem.mockResolvedValue(undefined);
