@@ -82,9 +82,11 @@ export type BountyRequest = {
   id: string;  // uuid in database
   bounty_id: string;  // uuid reference
   hunter_id: string;
+  poster_id?: string | null;  // denormalized poster reference for faster queries
   user_id?: string | null;  // legacy column; prefer hunter_id
   status: "pending" | "accepted" | "rejected";
   created_at: string;
+  updated_at?: string;
 }
 
 export type BountyCancellation = {
