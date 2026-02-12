@@ -23,6 +23,7 @@ import {
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
 import { toJsonSchema } from '../utils/zod-json';
+import { notificationService } from '../services/notification-service';
 
 /**
  * Validation schemas using Zod
@@ -544,7 +545,7 @@ export async function registerConsolidatedBountyRequestRoutes(
         // Lookup bounty to validate it exists and is open
         const { data: bounty, error: bountyError } = await supabase
           .from('bounties')
-          .select('id, user_id, poster_id, status')
+          .select('id, user_id, poster_id, status, title')
           .eq('id', body.bounty_id)
           .single();
 
@@ -624,6 +625,26 @@ export async function registerConsolidatedBountyRequestRoutes(
           { userId, requestId: bountyRequest.id, bountyId: body.bounty_id },
           'Bounty request created successfully'
         );
+
+        // Send notification to the bounty poster
+        try {
+          await notificationService.notifyBountyApplication(
+            userId,           // hunterId - the applicant
+            posterId,         // posterId - receives the notification
+            body.bounty_id,   // bountyId
+            bounty.title      // bountyTitle
+          );
+          request.log.info(
+            { posterId, bountyId: body.bounty_id },
+            'Application notification sent to poster'
+          );
+        } catch (notificationError) {
+          // Log error but don't fail the request - notification failure shouldn't block application
+          request.log.error(
+            { error: notificationError, posterId, bountyId: body.bounty_id },
+            'Failed to send application notification'
+          );
+        }
 
         reply.code(201);
         return bountyRequest;
