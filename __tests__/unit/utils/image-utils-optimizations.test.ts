@@ -388,12 +388,13 @@ describe('image-utils - Upload Optimizations', () => {
 
   describe('compressImage', () => {
     it('should compress image with specified quality', async () => {
-      mockManipulateAsync.mockResolvedValueOnce({
+      const mockResult = {
         uri: 'file://compressed.jpg',
         width: 400,
         height: 400,
         base64: 'compressed-data',
-      } as any);
+      };
+      mockManipulateAsync.mockResolvedValueOnce(mockResult as any);
 
       const result = await compressImage('file://source.jpg', 0.5, 'jpeg');
 
@@ -411,12 +412,13 @@ describe('image-utils - Upload Optimizations', () => {
     });
 
     it('should support PNG format', async () => {
-      mockManipulateAsync.mockResolvedValueOnce({
+      const mockResult = {
         uri: 'file://compressed.png',
         width: 400,
         height: 400,
         base64: 'png-data',
-      } as any);
+      };
+      mockManipulateAsync.mockResolvedValueOnce(mockResult as any);
 
       await compressImage('file://source.jpg', 0.8, 'png');
 
@@ -432,12 +434,13 @@ describe('image-utils - Upload Optimizations', () => {
     });
 
     it('should support WebP format', async () => {
-      mockManipulateAsync.mockResolvedValueOnce({
+      const mockResult = {
         uri: 'file://compressed.webp',
         width: 400,
         height: 400,
         base64: 'webp-data',
-      } as any);
+      };
+      mockManipulateAsync.mockResolvedValueOnce(mockResult as any);
 
       await compressImage('file://source.jpg', 0.8, 'webp');
 
