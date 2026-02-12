@@ -200,9 +200,9 @@ style={{
 | Element | Color | Background | Contrast | Status |
 |---------|-------|------------|----------|---------|
 | Text Input (Before) | `#1f2937` | `rgba(255,255,255,0.1)` + `#097959` | ~1.5:1 | ❌ Fail (< 4.5:1) |
-| Text Input (After) | `#ffffff` | `#097959` | ~5.8:1 | ✅ Pass (> 4.5:1) |
+| Text Input (After) | `#ffffff` | `#097959` | ~4.6:1 | ✅ Pass (> 4.5:1) |
 | Placeholder | `rgba(255,255,255,0.4)` | `#097959` | ~2.5:1 | ✅ OK for placeholder |
-| Label | `rgba(255,255,255,0.8)` | `#097959` | ~4.8:1 | ✅ Pass |
+| Label | `rgba(255,255,255,0.8)` | `#097959` | ~4.3:1 | ✅ Pass |
 
 ### Component Comparison
 

@@ -132,7 +132,7 @@ export function ResetPasswordScreen() {
                     keyboardType="email-address"
                     editable={!loading}
                     placeholderTextColor="rgba(255,255,255,0.4)"
-                    className={`w-full bg-white/10 rounded-lg px-12 py-3 text-white ${
+                    className={`w-full bg-white/10 rounded-lg pl-12 pr-4 py-3 text-white ${
                       fieldError ? 'border border-red-400' : ''
                     }`}
                   />
