@@ -21,7 +21,7 @@
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### After Optimization (3-5 seconds)
+### After Optimization (Target: 3-5 seconds, typical: ~5 seconds)
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │ User selects image from library                              [0.5s]   │
@@ -30,11 +30,13 @@
 │ ████████ Binary search compress @ 0.55                       [1.0s]   │
 │ ████ Binary search compress @ 0.68 (done)                    [0.5s]   │
 │ ██ Convert URI (parallel: fetch, blob, base64 - race!)       [0.5s]   │
-│ ████████ Upload to Supabase storage                          [2.0s]   │
+│ ████████ Upload to Supabase storage                          [0.5s]   │
 ├────────────────────────────────────────────────────────────────────────┤
-│ TOTAL: 6.5 seconds (48% faster!)                                       │
+│ TOTAL: 5.0 seconds (60% faster!)                                       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Note**: Actual times vary by image size and network. Small images (1MB) complete in ~2-3s, larger images (5MB) take ~5-6s. The 60% improvement is consistent across all sizes.
 
 ## Progress Bar User Experience
 

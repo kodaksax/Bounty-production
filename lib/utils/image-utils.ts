@@ -97,31 +97,27 @@ export async function resizeImage(
   // Use provided dimensions or fetch them (optimization: pass dimensions to avoid redundant fetch)
   let originalWidth: number;
   let originalHeight: number;
+  let originalResult: any = null;
   
   if (originalDimensions) {
     originalWidth = originalDimensions.width;
     originalHeight = originalDimensions.height;
   } else {
-    const original = await ImageManipulator.manipulateAsync(
+    originalResult = await ImageManipulator.manipulateAsync(
       uri,
       [],
       { format: ImageManipulator.SaveFormat.JPEG }
     );
-    originalWidth = original.width;
-    originalHeight = original.height;
+    originalWidth = originalResult.width;
+    originalHeight = originalResult.height;
   }
 
   // Check if resize is needed
   if (originalWidth <= maxWidth && originalHeight <= maxHeight) {
-    // If no dimensions were provided, we need to return the original with dimensions
-    if (!originalDimensions) {
-      const original = await ImageManipulator.manipulateAsync(
-        uri,
-        [],
-        { format: ImageManipulator.SaveFormat.JPEG }
-      );
+    // If no dimensions were provided, return the original result we already fetched
+    if (!originalDimensions && originalResult) {
       return {
-        uri: original.uri,
+        uri: originalResult.uri,
         width: originalWidth,
         height: originalHeight,
       };
@@ -307,11 +303,18 @@ export async function processImage(
   }
 
   // OPTIMIZATION: Use binary search to find optimal quality faster
-  // Instead of linear steps (0.8 -> 0.65 -> 0.5 -> 0.35)
-  // Try: test both 0.65 and 0.45 in parallel, pick best
+  // Use a single, minimally compressed base image for all iterative compression steps
+  // to avoid compounding artifacts by recompressing already-compressed outputs.
+  const baseImageForCompression = await ImageManipulator.manipulateAsync(
+    result.uri,
+    [],
+    { compress: 1, format: saveFormat }
+  );
+
   let lowQuality = MIN_COMPRESS_QUALITY;
   let highQuality = quality;
   let bestResult = result;
+  let bestUnderTarget: ProcessedImage | null = null; // Track best result that meets size target
   let iterations = 0;
 
   while (iterations < MAX_COMPRESSION_ITERATIONS && highQuality - lowQuality > 0.1) {
@@ -319,7 +322,7 @@ export async function processImage(
     const midQuality = (lowQuality + highQuality) / 2;
     
     const compressed = await ImageManipulator.manipulateAsync(
-      result.uri,
+      baseImageForCompression.uri,
       [],
       { compress: midQuality, format: saveFormat, base64: true }
     );
@@ -330,6 +333,7 @@ export async function processImage(
       if (size <= maxFileSizeBytes) {
         // This quality works, try higher quality
         bestResult = compressed;
+        bestUnderTarget = compressed;
         lowQuality = midQuality;
         
         // If we're close enough to target, stop here
@@ -350,11 +354,30 @@ export async function processImage(
     iterations++;
   }
 
+  // If we still haven't found a result under target, try MIN_COMPRESS_QUALITY
+  if (!bestUnderTarget && lowQuality > MIN_COMPRESS_QUALITY) {
+    const minQualityResult = await ImageManipulator.manipulateAsync(
+      baseImageForCompression.uri,
+      [],
+      { compress: MIN_COMPRESS_QUALITY, format: saveFormat, base64: true }
+    );
+    
+    if (minQualityResult.base64) {
+      const size = estimateFileSizeFromBase64(minQualityResult.base64);
+      if (size <= maxFileSizeBytes) {
+        bestUnderTarget = minQualityResult;
+      }
+    }
+  }
+
+  // Return best result that meets target, or best overall if none meet target
+  const finalResult = bestUnderTarget || bestResult;
+
   return {
-    uri: bestResult.uri,
-    width: bestResult.width,
-    height: bestResult.height,
-    base64: bestResult.base64,
+    uri: finalResult.uri,
+    width: finalResult.width,
+    height: finalResult.height,
+    base64: finalResult.base64,
   };
 }
 

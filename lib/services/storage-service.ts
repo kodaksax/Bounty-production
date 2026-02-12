@@ -116,12 +116,23 @@ export const storageService = {
 
     // Helper: Wraps a promise with a timeout to prevent indefinite hangs
     function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-      return Promise.race([
-        promise,
-        new Promise<T>((_, reject) =>
-          setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-        ),
-      ])
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+      const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timeoutId = null
+          reject(new Error(errorMessage))
+        }, timeoutMs)
+      })
+
+      const wrappedPromise = promise.finally(() => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      })
+
+      return Promise.race([wrappedPromise, timeoutPromise])
     }
 
     // Helper: convert a URI to an ArrayBuffer for upload
@@ -183,18 +194,46 @@ export const storageService = {
       ]
 
       // Race all methods - first successful one wins
-      // Use Promise.any if available, otherwise use Promise.race with error handling
-      try {
-        // Check if Promise.any is available (ES2021+)
+      // Use Promise.any if available, otherwise use a polyfill that matches its semantics
+      const promiseAny = <T>(promises: Promise<T>[]): Promise<T> => {
+        // Native Promise.any (ES2021+) if available
         if (typeof Promise.any === 'function') {
-          return await Promise.any(methods)
-        } else {
-          // Fallback to Promise.race with manual handling
-          return await Promise.race(methods.map(p => p.catch(e => {
-            console.warn('[StorageService] Method failed:', e.message)
-            return Promise.reject(e)
-          })))
+          return Promise.any(promises)
         }
+
+        // Polyfill: resolve on first fulfilled promise, reject only after all reject
+        return new Promise<T>((resolve, reject) => {
+          const total = promises.length
+          if (total === 0) {
+            // No promises to wait on
+            reject(new Error('All promises were rejected'))
+            return
+          }
+
+          let remaining = total
+          const errors: any[] = new Array(total)
+
+          promises.forEach((p, index) => {
+            Promise.resolve(p).then(
+              value => {
+                // First fulfillment wins
+                resolve(value)
+              },
+              err => {
+                errors[index] = err
+                remaining -= 1
+                if (remaining === 0) {
+                  // All promises rejected
+                  reject(new Error(`All promises were rejected: ${errors.map(e => e?.message || 'Unknown').join(', ')}`))
+                }
+              }
+            )
+          })
+        })
+      }
+
+      try {
+        return await promiseAny(methods)
       } catch (e) {
         // All methods failed or timed out - try one more time with just base64
         console.error('[StorageService] All URI conversion methods failed, trying final base64 fallback:', e)
@@ -246,7 +285,7 @@ export const storageService = {
 
     // Upload to Supabase Storage (ArrayBuffer upload) with timeout protection
     try {
-      const { data, error } = await withTimeout(
+      const { error } = await withTimeout(
         supabaseClient.storage
           .from(bucket)
           .upload(path, arrayBuffer as any, {

@@ -184,13 +184,27 @@ export function EditProfileScreen({
         avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
       }
       
-      // Execute all secondary operations in parallel
-      await Promise.allSettled([
-        updateProfile(updates),
-        updateUserProfile(userProfileUpdate),
-        refreshNormalized?.(),
-        AsyncStorage.removeItem(DRAFT_KEY),
-      ])
+      // Execute all secondary operations in parallel and log any failures
+      const secondaryOperations = [
+        { name: 'updateProfile', promise: updateProfile(updates) },
+        { name: 'updateUserProfile', promise: updateUserProfile(userProfileUpdate) },
+        { name: 'refreshNormalized', promise: refreshNormalized?.() || Promise.resolve() },
+        { name: 'clearDraft', promise: AsyncStorage.removeItem(DRAFT_KEY) },
+      ]
+
+      const secondaryResults = await Promise.allSettled(
+        secondaryOperations.map((op) => op.promise)
+      )
+
+      secondaryResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const opName = secondaryOperations[index]?.name ?? `operation_${index}`
+          console.error(
+            '[EditProfileScreen] Secondary profile update failed',
+            { operation: opName, reason: result.reason }
+          )
+        }
+      })
       
       // Notify parent legacy state if provided
       onSave({ name: name.trim(), about: (bio || '').trim(), phone: '', avatar })
