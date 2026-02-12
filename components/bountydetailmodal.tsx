@@ -330,6 +330,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
       if (request) {
         setHasApplied(true)
+        setIsApplying(false)
         
         // Send notification to poster about the application
         try {
@@ -355,28 +356,37 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           // Don't block the flow if notification fails
         }
         
-        Alert.alert(
-          'Application Submitted',
-          'Your application has been submitted. The bounty poster will review it soon.',
-          [
-            {
-              text: 'View In Progress',
-              onPress: () => {
-                handleClose()
-                router.push(`/in-progress/${bounty.id}/hunter`)
+        // Defer Alert to allow React to process state updates and re-render
+        setTimeout(() => {
+          Alert.alert(
+            'Application Submitted',
+            'Your application has been submitted. The bounty poster will review it soon.',
+            [
+              {
+                text: 'View In Progress',
+                onPress: () => {
+                  handleClose()
+                  router.push(`/in-progress/${bounty.id}/hunter`)
+                },
               },
-            },
-            { text: 'OK' },
-          ]
-        )
+              { text: 'OK' },
+            ]
+          )
+        }, 100)
       } else {
-        Alert.alert('Error', 'Failed to submit application. Please try again.')
+        setIsApplying(false)
+        // Defer Alert to allow React to process state updates
+        setTimeout(() => {
+          Alert.alert('Error', 'Failed to submit application. Please try again.')
+        }, 100)
       }
     } catch (error) {
       console.error('Error applying for bounty:', error)
-      Alert.alert('Error', 'An error occurred while submitting your application.')
-    } finally {
       setIsApplying(false)
+      // Defer Alert to allow React to process state updates
+      setTimeout(() => {
+        Alert.alert('Error', 'An error occurred while submitting your application.')
+      }, 100)
     }
   }
 
