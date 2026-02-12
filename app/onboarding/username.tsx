@@ -119,7 +119,6 @@ export default function UsernameScreen() {
   const handleNext = async () => {
     // Validate prerequisites - guard against disabled state
     if (!isValid || checking || !accepted) {
-      console.log('[onboarding] Next button pressed but conditions not met:', { isValid, checking, accepted });
       return;
     }
 
@@ -334,10 +333,7 @@ export default function UsernameScreen() {
             </TouchableOpacity>
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
-              onPress={(e) => {
-                e.stopPropagation();
-                setLegalModal('terms');
-              }}
+              onPress={() => setLegalModal('terms')}
               accessibilityRole="link"
               accessibilityLabel="View Terms of Service"
             >
@@ -345,10 +341,7 @@ export default function UsernameScreen() {
             </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
             <TouchableOpacity 
-              onPress={(e) => {
-                e.stopPropagation();
-                setLegalModal('privacy');
-              }}
+              onPress={() => setLegalModal('privacy')}
               accessibilityRole="link"
               accessibilityLabel="View Privacy Policy"
             >
