@@ -1,7 +1,7 @@
 /**
  * Username Onboarding Screen
  * First step: collect unique username (required)
- * Features: Bounty branding, state persistence via context, modal for legal docs
+ * Features: Bounty branding, state persistence via context, navigation to legal docs
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,9 +10,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator,
     KeyboardAvoidingView,
-    Modal,
     Platform,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -20,16 +18,12 @@ import { ActivityIndicator,
     View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
-import { PRIVACY_TEXT } from '../../assets/legal/privacy';
-import { TERMS_TEXT } from '../../assets/legal/terms';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
-
-type LegalModalType = 'terms' | 'privacy' | null;
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -45,7 +39,6 @@ export default function UsernameScreen() {
   const [checking, setChecking] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [accepted, setAccepted] = useState(onboardingData.accepted);
-  const [legalModal, setLegalModal] = useState<LegalModalType>(null);
 
   // Sync from context on mount
   useEffect(() => {
@@ -117,8 +110,10 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    // Validate prerequisites
-    if (!isValid || checking || !accepted) return;
+    // Validate prerequisites - guard against disabled state
+    if (!isValid || checking || !accepted) {
+      return;
+    }
 
     // Check if user is authenticated
     if (!userId) {
@@ -217,47 +212,6 @@ export default function UsernameScreen() {
     }
   };
 
-  const renderLegalModal = () => {
-    const title = legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy';
-    const content = legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT;
-    const paragraphs = content.split(/\n\n+/);
-
-    return (
-      <Modal
-        visible={!!legalModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setLegalModal(null)}
-      >
-        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
-          <View style={styles.modalHeader}>
-            <MaterialIcons 
-              name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'} 
-              size={24} 
-              color="#a7f3d0" 
-            />
-            <Text style={styles.modalTitle}>{title}</Text>
-            <TouchableOpacity 
-              onPress={() => setLegalModal(null)} 
-              style={styles.modalCloseButton}
-              accessibilityLabel="Close"
-            >
-              <MaterialIcons name="close" size={24} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView 
-            style={styles.modalScroll}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-          >
-            {paragraphs.map((p, i) => (
-              <Text key={i} style={styles.modalParagraph}>{p}</Text>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
-    );
-  };
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
@@ -319,17 +273,19 @@ export default function UsernameScreen() {
 
         {/* Legal acceptance */}
         <View style={styles.legalBox}>
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setAccepted(!accepted)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: accepted }}
-            accessibilityLabel="Accept terms and privacy policy"
-          >
-            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+          <View style={styles.checkboxRow}>
+            <TouchableOpacity
+              onPress={() => setAccepted(!accepted)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: accepted }}
+              accessibilityLabel="Accept terms and privacy policy"
+              style={styles.checkboxButton}
+            >
+              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+            </TouchableOpacity>
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('terms')}
+              onPress={() => router.push('/legal/terms')}
               accessibilityRole="link"
               accessibilityLabel="View Terms of Service"
             >
@@ -337,13 +293,13 @@ export default function UsernameScreen() {
             </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('privacy')}
+              onPress={() => router.push('/legal/privacy')}
               accessibilityRole="link"
               accessibilityLabel="View Privacy Policy"
             >
               <Text style={styles.linkText}> Privacy Policy</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Next Button */}
@@ -366,9 +322,6 @@ export default function UsernameScreen() {
           <View style={styles.progressDot} />
         </View>
       </View>
-
-      {/* Legal Modal */}
-      {renderLegalModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -428,6 +381,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  checkboxButton: {
+    marginRight: 4,
   },
   legalText: {
     color: 'rgba(255,255,255,0.85)',
@@ -526,40 +482,5 @@ const styles = StyleSheet.create({
   },
   progressDotActive: {
     backgroundColor: '#a7f3d0',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(167,243,208,0.2)',
-  },
-  modalTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginLeft: 12,
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalScroll: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  modalParagraph: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 12,
   },
 });
