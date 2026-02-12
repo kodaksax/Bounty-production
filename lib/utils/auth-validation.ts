@@ -11,16 +11,18 @@ export interface ValidationResult {
 /**
  * Validate email format
  */
+import { isValidEmail } from './password-validation';
+
 export function validateEmail(email: string): string | null {
   if (!email || email.trim().length === 0) {
     return 'Email is required';
   }
-  
-  const emailRegex = /.+@.+\..+/;
-  if (!emailRegex.test(email)) {
+
+  const normalized = email.trim().toLowerCase()
+  if (!isValidEmail(normalized)) {
     return 'Invalid email address';
   }
-  
+
   return null;
 }
 
