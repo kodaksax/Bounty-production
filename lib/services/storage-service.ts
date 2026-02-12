@@ -65,8 +65,10 @@ export const storageService = {
         return true
       } else {
         // Delete from AsyncStorage
-        const cacheKey = STORAGE_PREFIX + path
-        await AsyncStorage.removeItem(cacheKey)
+        if (AsyncStorage && typeof AsyncStorage.removeItem === 'function') {
+          const cacheKey = STORAGE_PREFIX + path
+          await AsyncStorage.removeItem(cacheKey)
+        }
         return true
       }
     } catch (error) {
@@ -325,6 +327,11 @@ export const storageService = {
    */
   async _saveToAsyncStorage(fileUri: string, path: string): Promise<UploadResult> {
     try {
+      // Check if AsyncStorage is available and properly initialized
+      if (!AsyncStorage || typeof AsyncStorage.setItem !== 'function') {
+        throw new Error('AsyncStorage is not available or not properly initialized')
+      }
+
       const cacheKey = STORAGE_PREFIX + path
 
       // Ensure a cache directory base
@@ -387,6 +394,10 @@ export const storageService = {
    */
   async getFromAsyncStorage(key: string): Promise<string | null> {
     try {
+      if (!AsyncStorage || typeof AsyncStorage.getItem !== 'function') {
+        console.error('[StorageService] AsyncStorage is not available')
+        return null
+      }
       return await AsyncStorage.getItem(key)
     } catch (error) {
       console.error('[StorageService] AsyncStorage get failed:', error)
