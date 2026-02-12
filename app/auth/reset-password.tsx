@@ -2,12 +2,11 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { Button } from 'components/ui/button'
-import { Input } from 'components/ui/input'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
 import React, { useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
@@ -121,7 +120,7 @@ export function ResetPasswordScreen() {
               <View>
                 <Label className="text-white/80 mb-1">Email Address</Label>
                 <View className="relative">
-                  <Input 
+                  <TextInput
                     value={email} 
                     onChangeText={(text) => {
                       setEmail(text)
@@ -132,11 +131,10 @@ export function ResetPasswordScreen() {
                     autoComplete="email"
                     keyboardType="email-address"
                     editable={!loading}
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.1)',
-                      color: '#fff',
-                      paddingLeft: 44,
-                    }}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    className={`w-full bg-white/10 rounded-lg pl-12 pr-4 py-3 text-white ${
+                      fieldError ? 'border border-red-400' : ''
+                    }`}
                   />
                   <View className="absolute left-3 top-1/2 -translate-y-1/2">
                     <MaterialIcons name="email" size={20} color="rgba(255,255,255,0.5)" />
