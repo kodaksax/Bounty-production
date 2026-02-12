@@ -227,6 +227,8 @@ describe('image-utils - Upload Optimizations', () => {
       });
 
       // Binary search iterations - still too large
+      // The binary search will try midpoints between 0.3 (MIN) and 0.8 (initial quality)
+      // First try: (0.3 + 0.8) / 2 = 0.55
       mockManipulateAsync.mockResolvedValueOnce({
         uri: 'file://iter1.jpg',
         width: 400,
@@ -234,6 +236,7 @@ describe('image-utils - Upload Optimizations', () => {
         base64: stillLargeBase64,
       });
 
+      // Second try: (0.3 + 0.55) / 2 = 0.425
       mockManipulateAsync.mockResolvedValueOnce({
         uri: 'file://iter2.jpg',
         width: 400,
@@ -241,7 +244,15 @@ describe('image-utils - Upload Optimizations', () => {
         base64: stillLargeBase64,
       });
 
-      // MIN_COMPRESS_QUALITY attempt - success
+      // Third try: (0.3 + 0.425) / 2 = 0.3625
+      mockManipulateAsync.mockResolvedValueOnce({
+        uri: 'file://iter3.jpg',
+        width: 400,
+        height: 400,
+        base64: stillLargeBase64,
+      });
+
+      // After iterations, lowQuality will be > 0.3, so MIN_COMPRESS_QUALITY (0.3) will be tried
       mockManipulateAsync.mockResolvedValueOnce({
         uri: 'file://min-quality.jpg',
         width: 400,
