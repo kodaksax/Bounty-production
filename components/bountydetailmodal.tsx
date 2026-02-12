@@ -29,6 +29,9 @@ import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
+// Alert defer delay to allow React to process state updates before showing alert
+const ALERT_DEFER_DELAY = 100;
+
 // Type for detail rows in Additional Details section
 interface DetailRow {
   icon: 'schedule' | 'build' | 'place' | 'access-time';
@@ -330,7 +333,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
       if (request) {
         setHasApplied(true)
-        setIsApplying(false)
         
         // Send notification to poster about the application
         try {
@@ -356,6 +358,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           // Don't block the flow if notification fails
         }
         
+        // Set loading state to false after all async operations complete
+        setIsApplying(false)
+        
         // Defer Alert to allow React to process state updates and re-render
         setTimeout(() => {
           Alert.alert(
@@ -372,13 +377,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               { text: 'OK' },
             ]
           )
-        }, 100)
+        }, ALERT_DEFER_DELAY)
       } else {
         setIsApplying(false)
         // Defer Alert to allow React to process state updates
         setTimeout(() => {
           Alert.alert('Error', 'Failed to submit application. Please try again.')
-        }, 100)
+        }, ALERT_DEFER_DELAY)
       }
     } catch (error) {
       console.error('Error applying for bounty:', error)
@@ -386,7 +391,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       // Defer Alert to allow React to process state updates
       setTimeout(() => {
         Alert.alert('Error', 'An error occurred while submitting your application.')
-      }, 100)
+      }, ALERT_DEFER_DELAY)
     }
   }
 
