@@ -327,6 +327,13 @@ export async function processImage(
       { compress: midQuality, format: saveFormat, base64: true }
     );
 
+    // Some test mocks may return undefined or an object without base64.
+    // Guard against that to avoid throwing when reading properties.
+    if (!compressed || !compressed.base64) {
+      iterations++;
+      continue;
+    }
+
     if (compressed.base64) {
       const size = estimateFileSizeFromBase64(compressed.base64);
       
@@ -353,16 +360,16 @@ export async function processImage(
     
     iterations++;
   }
-
-  // If we still haven't found a result under target, try MIN_COMPRESS_QUALITY
-  if (!bestUnderTarget && lowQuality > MIN_COMPRESS_QUALITY) {
+  // If we still haven't found a result under target, try `MIN_COMPRESS_QUALITY`.
+  // Ensure we attempt the minimum quality at least once if binary search didn't find a solution.
+  if (!bestUnderTarget) {
     const minQualityResult = await ImageManipulator.manipulateAsync(
       baseImageForCompression.uri,
       [],
       { compress: MIN_COMPRESS_QUALITY, format: saveFormat, base64: true }
     );
     
-    if (minQualityResult.base64) {
+    if (minQualityResult && minQualityResult.base64) {
       const size = estimateFileSizeFromBase64(minQualityResult.base64);
       if (size <= maxFileSizeBytes) {
         bestUnderTarget = minQualityResult;
