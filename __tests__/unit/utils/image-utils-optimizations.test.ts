@@ -173,12 +173,12 @@ describe('image-utils - Upload Optimizations', () => {
       });
 
       // Create uncompressed base (compress: 1) - note: no base64 property
+      // Don't include base64 property at all since compress: 1 without base64: true doesn't return it
       mockManipulateAsync.mockResolvedValueOnce({
         uri: 'file://base-uncompressed.jpg',
         width: 400,
         height: 400,
-        base64: undefined, // Explicitly undefined when compress: 1 without base64: true
-      });
+      } as any);
 
       // Binary search iteration - this will have base64 since we request it
       mockManipulateAsync.mockResolvedValueOnce({
@@ -186,7 +186,7 @@ describe('image-utils - Upload Optimizations', () => {
         width: 400,
         height: 400,
         base64: mediumBase64,
-      });
+      } as any);
 
       const result = await processImage('file://source.jpg', {
         maxWidth: 400,
