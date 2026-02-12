@@ -117,8 +117,11 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    // Validate prerequisites
-    if (!isValid || checking || !accepted) return;
+    // Validate prerequisites - guard against disabled state
+    if (!isValid || checking || !accepted) {
+      console.log('[onboarding] Next button pressed but conditions not met:', { isValid, checking, accepted });
+      return;
+    }
 
     // Check if user is authenticated
     if (!userId) {
@@ -319,17 +322,22 @@ export default function UsernameScreen() {
 
         {/* Legal acceptance */}
         <View style={styles.legalBox}>
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setAccepted(!accepted)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: accepted }}
-            accessibilityLabel="Accept terms and privacy policy"
-          >
-            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+          <View style={styles.checkboxRow}>
+            <TouchableOpacity
+              onPress={() => setAccepted(!accepted)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: accepted }}
+              accessibilityLabel="Accept terms and privacy policy"
+              style={styles.checkboxButton}
+            >
+              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+            </TouchableOpacity>
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('terms')}
+              onPress={(e) => {
+                e.stopPropagation();
+                setLegalModal('terms');
+              }}
               accessibilityRole="link"
               accessibilityLabel="View Terms of Service"
             >
@@ -337,13 +345,16 @@ export default function UsernameScreen() {
             </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('privacy')}
+              onPress={(e) => {
+                e.stopPropagation();
+                setLegalModal('privacy');
+              }}
               accessibilityRole="link"
               accessibilityLabel="View Privacy Policy"
             >
               <Text style={styles.linkText}> Privacy Policy</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Next Button */}
@@ -428,6 +439,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  checkboxButton: {
+    marginRight: 4,
   },
   legalText: {
     color: 'rgba(255,255,255,0.85)',
