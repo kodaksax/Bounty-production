@@ -114,8 +114,18 @@ export const storageService = {
 
     let contentType = 'application/octet-stream'
 
+    // Helper: Wraps a promise with a timeout to prevent indefinite hangs
+    function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        ),
+      ])
+    }
+
     // Helper: convert a URI to an ArrayBuffer for upload
-    // OPTIMIZED: Use Promise.race to try multiple methods in parallel for faster conversion
+    // OPTIMIZED: Use Promise.race with timeout to try multiple methods in parallel for faster conversion
     async function uriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
       // Data URI case - handle directly
       if (uri.startsWith('data:')) {
@@ -127,49 +137,78 @@ export const storageService = {
         return decode(base64Data)
       }
 
-      // OPTIMIZATION: Try fetch and base64 methods in parallel, use whichever succeeds first
-      // This eliminates sequential fallback delays
+      // OPTIMIZATION: Try fetch and base64 methods in parallel with timeout protection
+      // This eliminates sequential fallback delays and prevents indefinite hangs
       const methods = [
         // Method 1: Try fetch -> arrayBuffer (fastest if supported)
-        (async () => {
-          const res = await fetch(uri)
-          if (typeof (res as any).arrayBuffer === 'function') {
-            const ab = await (res as any).arrayBuffer()
-            if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
-          }
-          throw new Error('arrayBuffer not available')
-        })(),
-        
-        // Method 2: Try fetch -> blob -> arrayBuffer (fallback for some RN versions)
-        (async () => {
-          const res = await fetch(uri)
-          if (typeof (res as any).blob === 'function') {
-            const blob = await (res as any).blob()
-            if (blob && typeof (blob as any).arrayBuffer === 'function') {
-              const ab = await (blob as any).arrayBuffer()
+        withTimeout(
+          (async () => {
+            const res = await fetch(uri)
+            if (typeof (res as any).arrayBuffer === 'function') {
+              const ab = await (res as any).arrayBuffer()
               if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
             }
-          }
-          throw new Error('blob->arrayBuffer not available')
-        })(),
+            throw new Error('arrayBuffer not available')
+          })(),
+          10000, // 10 second timeout
+          'fetch->arrayBuffer timeout'
+        ),
+        
+        // Method 2: Try fetch -> blob -> arrayBuffer (fallback for some RN versions)
+        withTimeout(
+          (async () => {
+            const res = await fetch(uri)
+            if (typeof (res as any).blob === 'function') {
+              const blob = await (res as any).blob()
+              if (blob && typeof (blob as any).arrayBuffer === 'function') {
+                const ab = await (blob as any).arrayBuffer()
+                if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
+              }
+            }
+            throw new Error('blob->arrayBuffer not available')
+          })(),
+          10000, // 10 second timeout
+          'fetch->blob->arrayBuffer timeout'
+        ),
         
         // Method 3: Read as base64 and decode (slowest but most compatible)
-        (async () => {
-          const base64 = await readAsBase64(uri)
-          return decode(base64)
-        })(),
+        withTimeout(
+          (async () => {
+            const base64 = await readAsBase64(uri)
+            return decode(base64)
+          })(),
+          15000, // 15 second timeout (slightly longer for slower method)
+          'readAsBase64 timeout'
+        ),
       ]
 
       // Race all methods - first successful one wins
-      // Use Promise.any to get the first successful result, ignore failures
+      // Use Promise.any if available, otherwise use Promise.race with error handling
       try {
-        return await Promise.any(methods)
+        // Check if Promise.any is available (ES2021+)
+        if (typeof Promise.any === 'function') {
+          return await Promise.any(methods)
+        } else {
+          // Fallback to Promise.race with manual handling
+          return await Promise.race(methods.map(p => p.catch(e => {
+            console.warn('[StorageService] Method failed:', e.message)
+            return Promise.reject(e)
+          })))
+        }
       } catch (e) {
-        // All methods failed - this shouldn't happen but handle gracefully
-        console.error('[StorageService] All URI conversion methods failed:', e)
-        // Final fallback to base64
-        const base64 = await readAsBase64(uri)
-        return decode(base64)
+        // All methods failed or timed out - try one more time with just base64
+        console.error('[StorageService] All URI conversion methods failed, trying final base64 fallback:', e)
+        try {
+          const base64 = await withTimeout(
+            readAsBase64(uri),
+            20000, // 20 second final timeout
+            'Final base64 read timeout'
+          )
+          return decode(base64)
+        } catch (finalError) {
+          console.error('[StorageService] Final base64 fallback also failed:', finalError)
+          throw new Error(`Failed to convert URI to ArrayBuffer after all attempts: ${finalError instanceof Error ? finalError.message : 'Unknown error'}`)
+        }
       }
     }
 
@@ -195,33 +234,50 @@ export const storageService = {
 
     onProgress?.(0.3)
 
-    const arrayBuffer = await uriToArrayBuffer(fileUri)
-
-    // Upload to Supabase Storage (ArrayBuffer upload)
-    const { data, error } = await supabaseClient.storage
-      .from(bucket)
-      .upload(path, arrayBuffer as any, {
-        contentType,
-        upsert: true,
-      })
-
-    onProgress?.(0.9)
-
-    if (error) {
-      throw new Error(`Supabase upload failed: ${error.message}`)
+    let arrayBuffer: ArrayBuffer
+    try {
+      arrayBuffer = await uriToArrayBuffer(fileUri)
+      // Update progress after successful conversion
+      onProgress?.(0.5)
+    } catch (conversionError) {
+      console.error('[StorageService] URI conversion failed:', conversionError)
+      throw new Error(`Failed to prepare file for upload: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`)
     }
 
-    // Get public URL
-    const publicUrl = this.getPublicUrl(bucket, path)
-    if (!publicUrl) {
-      throw new Error('Failed to get public URL')
-    }
+    // Upload to Supabase Storage (ArrayBuffer upload) with timeout protection
+    try {
+      const { data, error } = await withTimeout(
+        supabaseClient.storage
+          .from(bucket)
+          .upload(path, arrayBuffer as any, {
+            contentType,
+            upsert: true,
+          }),
+        30000, // 30 second timeout for upload
+        'Supabase upload timeout'
+      )
 
-    onProgress?.(1.0)
+      onProgress?.(0.9)
 
-    return {
-      success: true,
-      url: publicUrl,
+      if (error) {
+        throw error
+      }
+
+      // Get public URL
+      const publicUrl = this.getPublicUrl(bucket, path)
+      if (!publicUrl) {
+        throw new Error('Failed to get public URL')
+      }
+
+      onProgress?.(1.0)
+
+      return {
+        success: true,
+        url: publicUrl,
+      }
+    } catch (uploadError) {
+      console.error('[StorageService] Supabase upload failed:', uploadError)
+      throw new Error(`Upload to Supabase failed: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`)
     }
   },
 

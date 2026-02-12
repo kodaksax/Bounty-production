@@ -286,8 +286,17 @@ export function EditProfileScreen({
         setIsUploadingAvatar(false);
         setAvatar(processedUri);
         setPendingAvatarRemoteUri(undefined);
-        setUploadMessage('Upload failed - using local image');
-        setTimeout(() => setUploadMessage(null), 3000);
+        
+        // Provide more specific error message based on error type
+        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+        if (errorMessage.includes('timeout')) {
+          setUploadMessage('Upload timeout - check your connection and try again');
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          setUploadMessage('Network error - using local image for now');
+        } else {
+          setUploadMessage('Upload failed - using local image');
+        }
+        setTimeout(() => setUploadMessage(null), 4000);
       }
     } catch (error) {
       console.error('Error picking image:', error);
