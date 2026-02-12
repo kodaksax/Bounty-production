@@ -8,7 +8,6 @@ import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-n
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
-import { clearRememberMePreference } from "../lib/auth-session-storage"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
@@ -183,70 +182,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="Confirm Log Out"
           onPrimary={async () => {
             try {
-              // Lazy imports to avoid bundling server-only code
-              // Use the shared supabase client
+              // Delegate the logout work to a shared helper so it can be unit-tested
+              // and keeps the component thin.
               // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { supabase } = require('../lib/supabase');
-              // SecureStore to clear tokens
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const SecureStore = require('expo-secure-store');
-              // Auth profile service to clear drafts
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { authProfileService } = require('../lib/services/auth-profile-service');
+              const { performLogout } = require('../lib/services/logout-service');
 
-              // Get current user ID before signing out
-              const currentUserId = authProfile?.id;
-
-              // Mark this as an intentional sign-out to prevent "Session Expired" alert
-              markIntentionalSignOut();
-
-              // OPTIMIZATION: Sign out locally first for immediate response
-              // Server sign-out will be attempted in background
-              await supabase.auth.signOut({ scope: 'local' });
-
-              // OPTIMIZATION: Navigate immediately after local sign-out for perceived speed
-              // Navigation itself provides sufficient feedback to the user
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { router } = require('expo-router');
-                if (router && typeof router.replace === 'function') {
-                  router.replace('/auth/sign-in-form');
-                }
-              } catch (e) {
-                console.error('[Logout] Router navigation failed', e);
-              }
-
-              // OPTIMIZATION: Run cleanup operations in background (non-blocking)
-              // These operations don't need to block the user experience
-              // Using void to explicitly indicate fire-and-forget behavior
-              void Promise.all([
-                // Clear remember me preference
-                clearRememberMePreference().catch((e: any) => 
-                  console.error('[Logout] Failed to clear remember me preference', e)
-                ),
-                // Clear user-specific draft data
-                currentUserId ? authProfileService.clearUserDraftData(currentUserId).catch((e: any) =>
-                  console.error('[Logout] Draft cleanup failed', e)
-                ) : Promise.resolve(),
-                // Clear stored tokens (best-effort)
-                Promise.all([
-                  SecureStore.deleteItemAsync('sb-access-token').catch((e: any) => 
-                    console.error('[Logout] Failed to delete sb-access-token', e)
-                  ),
-                  SecureStore.deleteItemAsync('sb-refresh-token').catch((e: any) =>
-                    console.error('[Logout] Failed to delete sb-refresh-token', e)
-                  )
-                ]),
-                // Attempt server sign-out in background (best-effort)
-                // Note: This calls signOut() without scope, which will attempt both local and server.
-                // Since local is already cleared, this effectively only does server-side cleanup.
-                supabase.auth.signOut().catch((e: any) => 
-                  console.error('[Logout] Background server signout failed (non-critical)', e)
-                )
-              ]).catch(e => {
-                // Log but don't show error - user is already logged out
-                console.error('[Logout] Background cleanup errors (non-critical)', e);
-              });
+              await performLogout({ currentUserId: authProfile?.id, router: require('expo-router').router });
             } catch (e) {
               console.error('[Logout] Error:', e);
               Alert.alert('Error', 'Failed to log out properly.');
