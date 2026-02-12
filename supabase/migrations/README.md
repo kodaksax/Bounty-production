@@ -149,6 +149,56 @@ This migration supports the bounty acceptance flow:
 
 ---
 
+## Migration: 20260212_fix_bounty_requests_rls_policy.sql
+
+**CRITICAL FIX**: This migration fixes a bug that prevented posters from accepting/rejecting bounty requests.
+
+### Problem
+
+The RLS policies for `bounty_requests` were checking `bounties.poster_id`, but the production bounties table uses `user_id` instead. This caused all request acceptance attempts to fail with RLS policy violations, showing the error "Accept Failed - Failed to accept the request on the server."
+
+### Changes
+
+Updates all three RLS policies to use `COALESCE(bounties.poster_id, bounties.user_id)` instead of just `bounties.poster_id`:
+
+- "Posters can view requests for their bounties"
+- "Posters can update requests for their bounties"  
+- "Posters can delete requests for their bounties"
+
+This ensures compatibility with both schema versions (legacy `user_id` and new `poster_id`).
+
+### Running This Migration
+
+**Important**: This is a critical bug fix that should be applied immediately to production.
+
+```bash
+# Option 1: Supabase CLI
+supabase db push
+
+# Option 2: Supabase Dashboard SQL Editor
+# Copy contents of 20260212_fix_bounty_requests_rls_policy.sql and execute
+
+# Option 3: Direct psql
+psql -h your-db-host -U postgres -d postgres \
+  -f supabase/migrations/20260212_fix_bounty_requests_rls_policy.sql
+```
+
+### Verification
+
+After running:
+1. Log in as a bounty poster
+2. Navigate to Requests tab
+3. Try accepting a request
+4. Should succeed without "Accept Failed" error
+
+### Related Files
+
+- `REQUEST_ACCEPTANCE_FIX.md` - Detailed fix documentation and prevention strategies
+- `lib/services/database.types.ts` - Updated BountyRequest type with poster_id
+- `lib/services/bounty-request-service.ts` - Improved error logging for debugging
+
+---
+
 ## Migration: 20251126_add_age_verification_columns.sql
 
 This migration adds age verification columns to support 18+ compliance requirements.
