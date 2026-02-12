@@ -340,8 +340,8 @@ export async function processImage(
         // Size too large, try lower quality
         highQuality = midQuality;
         
-        // Keep this result if it's better than current best
-        if (size < estimateFileSizeFromBase64(bestResult.base64 || '')) {
+        // Keep this result if it's better than current best (and both have base64)
+        if (bestResult.base64 && size < estimateFileSizeFromBase64(bestResult.base64)) {
           bestResult = compressed;
         }
       }

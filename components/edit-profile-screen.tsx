@@ -254,7 +254,7 @@ export function EditProfileScreen({
         setUploadProgress(0.05);
         const processed = await processAvatarImage(selected.uri, 400);
         processedUri = processed.uri;
-        setUploadProgress(0.4); // Image processing now faster, allocate more time to upload
+        setUploadProgress(0.4); // Processing faster now, takes less progress bar space
         setUploadMessage('Uploading…');
       } catch (processError) {
         console.error('Avatar processing failed, using original:', processError);
