@@ -114,10 +114,10 @@ export const storageService = {
 
     let contentType = 'application/octet-stream'
 
-    // Helper: convert a URI to an ArrayBuffer for upload. Prefer fetch->arrayBuffer,
-    // fall back to fetch->blob->arrayBuffer, then to readAsBase64 decode as last resort.
+    // Helper: convert a URI to an ArrayBuffer for upload
+    // OPTIMIZED: Use Promise.race to try multiple methods in parallel for faster conversion
     async function uriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
-      // Data URI case
+      // Data URI case - handle directly
       if (uri.startsWith('data:')) {
         const matches = uri.match(/^data:([^;]+);base64,(.+)$/)
         if (!matches) throw new Error('Invalid data URI')
@@ -127,33 +127,50 @@ export const storageService = {
         return decode(base64Data)
       }
 
-      // Try fetch -> arrayBuffer
-      try {
-        const res = await fetch(uri)
-        if (typeof (res as any).arrayBuffer === 'function') {
-          const ab = await (res as any).arrayBuffer()
-          if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
-        }
-
-        // Try blob -> arrayBuffer
-        if (typeof (res as any).blob === 'function') {
-          try {
+      // OPTIMIZATION: Try fetch and base64 methods in parallel, use whichever succeeds first
+      // This eliminates sequential fallback delays
+      const methods = [
+        // Method 1: Try fetch -> arrayBuffer (fastest if supported)
+        (async () => {
+          const res = await fetch(uri)
+          if (typeof (res as any).arrayBuffer === 'function') {
+            const ab = await (res as any).arrayBuffer()
+            if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
+          }
+          throw new Error('arrayBuffer not available')
+        })(),
+        
+        // Method 2: Try fetch -> blob -> arrayBuffer (fallback for some RN versions)
+        (async () => {
+          const res = await fetch(uri)
+          if (typeof (res as any).blob === 'function') {
             const blob = await (res as any).blob()
             if (blob && typeof (blob as any).arrayBuffer === 'function') {
               const ab = await (blob as any).arrayBuffer()
               if (ab && (ab as ArrayBuffer).byteLength > 0) return ab as ArrayBuffer
             }
-          } catch (e) {
-            console.error('[StorageService] fetch->blob->arrayBuffer failed:', e)
           }
-        }
-      } catch (e) {
-        console.error('[StorageService] fetch->arrayBuffer failed, falling back to base64:', e)
-      }
+          throw new Error('blob->arrayBuffer not available')
+        })(),
+        
+        // Method 3: Read as base64 and decode (slowest but most compatible)
+        (async () => {
+          const base64 = await readAsBase64(uri)
+          return decode(base64)
+        })(),
+      ]
 
-      // Fallback: read as base64 and construct ArrayBuffer
-      const base64 = await readAsBase64(uri)
-      return decode(base64)
+      // Race all methods - first successful one wins
+      // Use Promise.any to get the first successful result, ignore failures
+      try {
+        return await Promise.any(methods)
+      } catch (e) {
+        // All methods failed - this shouldn't happen but handle gracefully
+        console.error('[StorageService] All URI conversion methods failed:', e)
+        // Final fallback to base64
+        const base64 = await readAsBase64(uri)
+        return decode(base64)
+      }
     }
 
     // Detect content type from file extension for non-data URIs

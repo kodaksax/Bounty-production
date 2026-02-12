@@ -152,7 +152,8 @@ export function EditProfileScreen({
     setIsSaving(true)
     
     try {
-      // Update Supabase profile via auth profile service (primary source of truth)
+      // OPTIMIZATION: Parallelize profile updates for faster save
+      // Update primary auth profile first, then run other updates concurrently
       const updatedProfile = await updateAuthProfile({
         username: name.trim(),
         about: (bio || '').trim(),
@@ -166,43 +167,36 @@ export function EditProfileScreen({
         return
       }
       
-      // Also update local profile service for backward compatibility
+      // OPTIMIZATION: Run secondary updates and cleanup concurrently
+      // These are non-critical and can happen in parallel
       const updates = { 
         displayName: name.trim(), 
         avatar: (pendingAvatarRemoteUri || avatar)?.trim(),
-        // Store additional fields in local profile service if supported
         location: location.trim() || undefined,
       } as any
       
-      await updateProfile(updates).catch(e => {
-        console.error('[EditProfile] local profile update failed (non-critical):', e)
-      })
-
-      // Update the profile used by Profile screen (name/title/location/portfolio/bio/avatar)
-      try {
-        await updateUserProfile({
-          name: name.trim(),
-          title: title.trim() || undefined,
-          location: location.trim() || undefined,
-          portfolio: portfolio.trim() || undefined,
-          bio: (bio || '').trim(),
-          avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
-        })
-      } catch (e) {
-        console.error('[EditProfile] useProfile update failed (non-critical):', e)
+      const userProfileUpdate = {
+        name: name.trim(),
+        title: title.trim() || undefined,
+        location: location.trim() || undefined,
+        portfolio: portfolio.trim() || undefined,
+        bio: (bio || '').trim(),
+        avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
       }
+      
+      // Execute all secondary operations in parallel
+      await Promise.allSettled([
+        updateProfile(updates),
+        updateUserProfile(userProfileUpdate),
+        refreshNormalized?.(),
+        AsyncStorage.removeItem(DRAFT_KEY),
+      ])
       
       // Notify parent legacy state if provided
       onSave({ name: name.trim(), about: (bio || '').trim(), phone: '', avatar })
       
       setUploadMessage('✓ Profile updated successfully!')
       setTimeout(() => setUploadMessage(null), 1200)
-      
-  // Refresh normalized profile cache
-  try { await refreshNormalized?.() } catch {}
-
-  // Clear draft after successful save
-  try { await AsyncStorage.removeItem(DRAFT_KEY) } catch {}
       
       // Return to previous screen after a short delay
       setTimeout(() => {
@@ -253,14 +247,18 @@ export function EditProfileScreen({
       setUploadProgress(0);
       setUploadMessage('Processing image…');
 
-      // Process the avatar image (crop to square and compress)
+      // OPTIMIZATION: Process the avatar image with optimized pipeline
+      // The new processAvatarImage combines crop+resize+compression into fewer operations
       let processedUri = selected.uri;
       try {
+        setUploadProgress(0.05);
         const processed = await processAvatarImage(selected.uri, 400);
         processedUri = processed.uri;
-        setUploadProgress(0.3);
+        setUploadProgress(0.4); // Image processing now faster, allocate more time to upload
+        setUploadMessage('Uploading…');
       } catch (processError) {
         console.error('Avatar processing failed, using original:', processError);
+        setUploadMessage('Processing failed, uploading original…');
       }
 
       const attachment = {
@@ -273,17 +271,16 @@ export function EditProfileScreen({
         progress: 0,
       };
 
-      setUploadMessage('Uploading…');
       try {
         const uploaded = await attachmentService.upload(attachment, {
-          onProgress: (p) => setUploadProgress(0.3 + p * 0.7),
+          onProgress: (p) => setUploadProgress(0.4 + p * 0.6),
         });
         // Use processed URI for immediate preview; store remote for persistence
         setAvatar(processedUri);
         setPendingAvatarRemoteUri(uploaded.remoteUri);
         setIsUploadingAvatar(false);
-        setUploadMessage('Profile picture uploaded successfully!');
-        setTimeout(() => setUploadMessage(null), 3000);
+        setUploadMessage('✓ Profile picture uploaded!');
+        setTimeout(() => setUploadMessage(null), 2500);
       } catch (uploadError) {
         console.error('Failed to upload avatar:', uploadError);
         setIsUploadingAvatar(false);
