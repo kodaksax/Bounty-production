@@ -393,7 +393,7 @@ describe('image-utils - Upload Optimizations', () => {
         width: 400,
         height: 400,
         base64: 'compressed-data',
-      });
+      } as any);
 
       const result = await compressImage('file://source.jpg', 0.5, 'jpeg');
 
@@ -407,6 +407,7 @@ describe('image-utils - Upload Optimizations', () => {
         }
       );
       expect(result.base64).toBe('compressed-data');
+      expect(result.uri).toBe('file://compressed.jpg');
     });
 
     it('should support PNG format', async () => {
@@ -415,7 +416,7 @@ describe('image-utils - Upload Optimizations', () => {
         width: 400,
         height: 400,
         base64: 'png-data',
-      });
+      } as any);
 
       await compressImage('file://source.jpg', 0.8, 'png');
 
@@ -436,7 +437,7 @@ describe('image-utils - Upload Optimizations', () => {
         width: 400,
         height: 400,
         base64: 'webp-data',
-      });
+      } as any);
 
       await compressImage('file://source.jpg', 0.8, 'webp');
 
