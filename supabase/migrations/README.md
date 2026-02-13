@@ -151,51 +151,72 @@ This migration supports the bounty acceptance flow:
 
 ## Migration: 20260212_fix_bounty_requests_rls_policy.sql
 
-**CRITICAL FIX**: This migration fixes a bug that prevented posters from accepting/rejecting bounty requests.
+**DIAGNOSTIC MIGRATION**: This migration helps diagnose why bounty request acceptance is failing.
 
 ### Problem
 
-The RLS policies for `bounty_requests` were checking `bounties.poster_id`, but the production bounties table uses `user_id` instead. This caused all request acceptance attempts to fail with RLS policy violations, showing the error "Accept Failed - Failed to accept the request on the server."
+Bounty request acceptance fails with "Accept Failed" error. Initial investigation suggested RLS policy issues, but the policies are actually correct (they use `bounties.poster_id` as intended for production).
 
-### Changes
+### Root Cause (CORRECTED)
 
-Updates all three RLS policies to use `COALESCE(bounties.poster_id, bounties.user_id)` instead of just `bounties.poster_id`:
+The most likely issue is **NULL `poster_id` values** in the bounties table:
+- RLS policy checks: `WHERE bounties.poster_id = auth.uid()`
+- If `poster_id IS NULL`, the comparison `NULL = auth.uid()` returns FALSE
+- Result: Policy denies access even to the bounty owner
 
-- "Posters can view requests for their bounties"
-- "Posters can update requests for their bounties"  
-- "Posters can delete requests for their bounties"
+### What This Migration Does
 
-This ensures compatibility with both schema versions (legacy `user_id` and new `poster_id`).
+1. **Diagnoses**: Checks for bounties with NULL poster_id and reports count
+2. **Maintains**: Ensures RLS policies use `bounties.poster_id` (correct for production)
+3. **Guides**: Provides SQL queries to fix any NULL values found
 
 ### Running This Migration
 
-**Important**: This is a critical bug fix that should be applied immediately to production.
-
 ```bash
-# Option 1: Supabase CLI
+# Option 1: Supabase CLI (shows output messages)
 supabase db push
 
 # Option 2: Supabase Dashboard SQL Editor
 # Copy contents of 20260212_fix_bounty_requests_rls_policy.sql and execute
+# Check the Messages tab for NOTICE/WARNING output
+```
 
-# Option 3: Direct psql
-psql -h your-db-host -U postgres -d postgres \
-  -f supabase/migrations/20260212_fix_bounty_requests_rls_policy.sql
+**Watch for output like:**
+```
+NOTICE: Bounties with NULL poster_id: 5 out of 100
+WARNING: Found 5 bounties with NULL poster_id...
+```
+
+### If NULL Values Found
+
+Use the queries in the migration comments to fix them:
+
+```sql
+-- Check which bounties are affected
+SELECT id, title, created_at FROM bounties WHERE poster_id IS NULL;
+
+-- If you have user_id column, backfill from it:
+UPDATE bounties SET poster_id = user_id 
+WHERE poster_id IS NULL AND user_id IS NOT NULL;
+
+-- Then make poster_id NOT NULL to prevent future issues:
+ALTER TABLE bounties ALTER COLUMN poster_id SET NOT NULL;
 ```
 
 ### Verification
 
-After running:
-1. Log in as a bounty poster
-2. Navigate to Requests tab
-3. Try accepting a request
-4. Should succeed without "Accept Failed" error
+After fixing NULL values:
+1. Run: `SELECT COUNT(*) FROM bounties WHERE poster_id IS NULL;` (should be 0)
+2. Log in as a bounty poster in the app
+3. Navigate to Requests tab
+4. Try accepting a request
+5. Should succeed without error ✅
 
 ### Related Files
 
-- `REQUEST_ACCEPTANCE_FIX.md` - Detailed fix documentation and prevention strategies
-- `lib/services/database.types.ts` - Updated BountyRequest type with poster_id
-- `lib/services/bounty-request-service.ts` - Improved error logging for debugging
+- `REQUEST_ACCEPTANCE_FIX.md` - Detailed diagnostic guide and solutions
+- `lib/services/database.types.ts` - Updated BountyRequest type
+- `lib/services/bounty-request-service.ts` - Enhanced error logging
 
 ---
 
