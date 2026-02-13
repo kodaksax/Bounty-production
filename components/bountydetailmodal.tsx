@@ -92,6 +92,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   
+  // Track mounted state to prevent showing alerts after unmount
+  const isMountedRef = useRef(true)
+  // Store timeout IDs for cleanup
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
 
   useEffect(() => {
     // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Anonymous'
@@ -191,6 +196,17 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     return () => { mounted = false }
   }, [detailBounty, initialBounty])
+
+  // Cleanup effect: clear timeouts and mark as unmounted
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current)
+        alertTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   // Sample description if not provided
   const description =
@@ -362,7 +378,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         setIsApplying(false)
         
         // Defer Alert to allow React to process state updates and re-render
-        setTimeout(() => {
+        // Only show alert if component is still mounted
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
+          
           Alert.alert(
             'Application Submitted',
             'Your application has been submitted. The bounty poster will review it soon.',
@@ -370,8 +389,12 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               {
                 text: 'View In Progress',
                 onPress: () => {
-                  handleClose()
+                  // Navigate first, then close modal to ensure navigation completes
                   router.push(`/in-progress/${bounty.id}/hunter`)
+                  // Small delay to let navigation start before closing modal
+                  setTimeout(() => {
+                    handleClose()
+                  }, 50)
                 },
               },
               { text: 'OK' },
@@ -381,7 +404,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       } else {
         setIsApplying(false)
         // Defer Alert to allow React to process state updates
-        setTimeout(() => {
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
           Alert.alert('Error', 'Failed to submit application. Please try again.')
         }, ALERT_DEFER_DELAY)
       }
@@ -389,7 +413,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       console.error('Error applying for bounty:', error)
       setIsApplying(false)
       // Defer Alert to allow React to process state updates
-      setTimeout(() => {
+      alertTimeoutRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return
         Alert.alert('Error', 'An error occurred while submitting your application.')
       }, ALERT_DEFER_DELAY)
     }
