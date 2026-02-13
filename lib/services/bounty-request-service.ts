@@ -309,8 +309,25 @@ export const bountyRequestService = {
           .eq('id', String(id))
           .select('*')
           .single()
-        if (error) throw error
-        return (data as unknown as BountyRequest) ?? null
+        if (error) {
+          // Log detailed Supabase error
+          logger.error("Supabase error updating bounty request", { 
+            id, 
+            updates, 
+            error: {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code
+            }
+          })
+          throw error
+        }
+        if (!data) {
+          logger.error("No data returned after updating bounty request", { id, updates })
+          return null
+        }
+        return (data as unknown as BountyRequest)
       }
       const response = await fetch(`${API_BASE_URL}/api/bounty-requests/${id}`, {
         method: "PATCH",

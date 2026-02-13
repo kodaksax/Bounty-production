@@ -149,6 +149,77 @@ This migration supports the bounty acceptance flow:
 
 ---
 
+## Migration: 20260212_fix_bounty_requests_rls_policy.sql
+
+**DIAGNOSTIC MIGRATION**: This migration helps diagnose why bounty request acceptance is failing.
+
+### Problem
+
+Bounty request acceptance fails with "Accept Failed" error. Initial investigation suggested RLS policy issues, but the policies are actually correct (they use `bounties.poster_id` as intended for production).
+
+### Root Cause (CORRECTED)
+
+The most likely issue is **NULL `poster_id` values** in the bounties table:
+- RLS policy checks: `WHERE bounties.poster_id = auth.uid()`
+- If `poster_id IS NULL`, the comparison `NULL = auth.uid()` returns FALSE
+- Result: Policy denies access even to the bounty owner
+
+### What This Migration Does
+
+1. **Diagnoses**: Checks for bounties with NULL poster_id and reports count
+2. **Maintains**: Ensures RLS policies use `bounties.poster_id` (correct for production)
+3. **Guides**: Provides SQL queries to fix any NULL values found
+
+### Running This Migration
+
+```bash
+# Option 1: Supabase CLI (shows output messages)
+supabase db push
+
+# Option 2: Supabase Dashboard SQL Editor
+# Copy contents of 20260212_fix_bounty_requests_rls_policy.sql and execute
+# Check the Messages tab for NOTICE/WARNING output
+```
+
+**Watch for output like:**
+```
+NOTICE: Bounties with NULL poster_id: 5 out of 100
+WARNING: Found 5 bounties with NULL poster_id...
+```
+
+### If NULL Values Found
+
+Use the queries in the migration comments to fix them:
+
+```sql
+-- Check which bounties are affected
+SELECT id, title, created_at FROM bounties WHERE poster_id IS NULL;
+
+-- If you have user_id column, backfill from it:
+UPDATE bounties SET poster_id = user_id 
+WHERE poster_id IS NULL AND user_id IS NOT NULL;
+
+-- Then make poster_id NOT NULL to prevent future issues:
+ALTER TABLE bounties ALTER COLUMN poster_id SET NOT NULL;
+```
+
+### Verification
+
+After fixing NULL values:
+1. Run: `SELECT COUNT(*) FROM bounties WHERE poster_id IS NULL;` (should be 0)
+2. Log in as a bounty poster in the app
+3. Navigate to Requests tab
+4. Try accepting a request
+5. Should succeed without error ✅
+
+### Related Files
+
+- `REQUEST_ACCEPTANCE_FIX.md` - Detailed diagnostic guide and solutions
+- `lib/services/database.types.ts` - Updated BountyRequest type
+- `lib/services/bounty-request-service.ts` - Enhanced error logging
+
+---
+
 ## Migration: 20251126_add_age_verification_columns.sql
 
 This migration adds age verification columns to support 18+ compliance requirements.
