@@ -29,6 +29,9 @@ import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
+// Alert defer delay to allow React to process state updates before showing alert
+const ALERT_DEFER_DELAY = 100;
+
 // Type for detail rows in Additional Details section
 interface DetailRow {
   icon: 'schedule' | 'build' | 'place' | 'access-time';
@@ -88,6 +91,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
+  
+  // Track mounted state to prevent showing alerts after unmount
+  const isMountedRef = useRef(true)
+  // Store timeout IDs for cleanup
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
 
   useEffect(() => {
@@ -188,6 +196,17 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     return () => { mounted = false }
   }, [detailBounty, initialBounty])
+
+  // Cleanup effect: clear timeouts and mark as unmounted
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current)
+        alertTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   // Sample description if not provided
   const description =
@@ -355,28 +374,49 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           // Don't block the flow if notification fails
         }
         
-        Alert.alert(
-          'Application Submitted',
-          'Your application has been submitted. The bounty poster will review it soon.',
-          [
-            {
-              text: 'View In Progress',
-              onPress: () => {
-                handleClose()
-                router.push(`/in-progress/${bounty.id}/hunter`)
+        // Set loading state to false after all async operations complete
+        setIsApplying(false)
+        
+        // Defer Alert to allow React to process state updates and re-render
+        // Only show alert if component is still mounted
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
+          
+          Alert.alert(
+            'Application Submitted',
+            'Your application has been submitted. The bounty poster will review it soon.',
+            [
+              {
+                text: 'View In Progress',
+                onPress: () => {
+                  // Navigate first, then close modal to ensure navigation completes
+                  router.push(`/in-progress/${bounty.id}/hunter`)
+                  // Small delay to let navigation start before closing modal
+                  setTimeout(() => {
+                    handleClose()
+                  }, 50)
+                },
               },
-            },
-            { text: 'OK' },
-          ]
-        )
+              { text: 'OK' },
+            ]
+          )
+        }, ALERT_DEFER_DELAY)
       } else {
-        Alert.alert('Error', 'Failed to submit application. Please try again.')
+        setIsApplying(false)
+        // Defer Alert to allow React to process state updates
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
+          Alert.alert('Error', 'Failed to submit application. Please try again.')
+        }, ALERT_DEFER_DELAY)
       }
     } catch (error) {
       console.error('Error applying for bounty:', error)
-      Alert.alert('Error', 'An error occurred while submitting your application.')
-    } finally {
       setIsApplying(false)
+      // Defer Alert to allow React to process state updates
+      alertTimeoutRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return
+        Alert.alert('Error', 'An error occurred while submitting your application.')
+      }, ALERT_DEFER_DELAY)
     }
   }
 
