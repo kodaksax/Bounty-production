@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
-import React, { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
@@ -95,7 +95,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   // Track mounted state to prevent showing alerts after unmount
   const isMountedRef = useRef(true)
   // Store timeout IDs for cleanup
-  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
 
   useEffect(() => {

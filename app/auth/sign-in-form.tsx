@@ -1,7 +1,7 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { ResponseType } from 'expo-auth-session'
+import { ResponseType, makeRedirectUri } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
@@ -20,7 +20,6 @@ import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
-import getAuthRedirectUri from './getAuthRedirectUri'
 
 WebBrowser.maybeCompleteAuthSession()
 
