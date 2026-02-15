@@ -20,7 +20,7 @@ import { StripeProvider } from '../lib/stripe-context';
 import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
-import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
@@ -103,7 +103,7 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
 function RootLayout({ children }: { children: React.ReactNode }) {
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
-  const BRANDED_MIN_MS = 800; // Reduced from 1500ms for faster session restoration
+  const BRANDED_MIN_MS = 800; // kept for compatibility but branded splash disabled
 
   // Load any custom fonts (add family names if you have them)
   const [fontsLoaded] = useFonts({
@@ -159,17 +159,10 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         console.error('[Splash] preparation error', e);
       } finally {
         if (!cancelled) {
-          setPhase('brand'); // immediately move to branded React splash
-          // Ensure native splash is hidden now that branded phase is active
-          hideNativeSplashSafely();
-          // Enforce minimum branded duration
-          const elapsed = Date.now() - start;
-          const remaining = BRANDED_MIN_MS - elapsed;
-          if (remaining > 0) {
-            setTimeout(() => setPhase(p => p === 'brand' ? 'app' : p), remaining);
-          } else {
-            setPhase('app');
-          }
+          // Skip the React "branded" splash and go straight to the app.
+          // Hide the native splash now that preparation is complete.
+          try { hideNativeSplashSafely(); } catch {}
+          setPhase('app');
         }
       }
     })();
@@ -184,17 +177,15 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(safety);
   }, [phase]);
 
-  const showBranded = phase === 'brand' || (phase !== 'app' && !fontsLoaded);
+  // Branded splash was removed — always show app content once phase moves to 'app'
+  const showBranded = false;
 
   const LayoutContent = () => {
     const { color } = useBackgroundColor();
 
     return (
       <RootFrame bgColor={color}>
-        {showBranded ? (
-          <BrandedSplash />
-        ) : (
-          <AuthProvider>
+        <AuthProvider>
             <SessionMonitorGate />
             <AdminProvider>
               <StripeProvider>
@@ -232,7 +223,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
               </StripeProvider>
             </AdminProvider>
           </AuthProvider>
-        )}
       </RootFrame>
     );
   };
