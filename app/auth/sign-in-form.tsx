@@ -20,6 +20,7 @@ import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -180,6 +181,7 @@ export function SignInForm() {
               if (profileError.code === 'PGRST116') {
                 console.log('[sign-in] No profile found, redirecting to onboarding', { correlationId })
                 router.replace('/onboarding')
+                try { markInitialNavigationDone(); } catch {}
                 return
               }
               // For other errors, proceed to app - AuthProvider will handle sync
@@ -193,7 +195,7 @@ export function SignInForm() {
             // 1. No profile exists
             // 2. Profile exists but has no username (incomplete)
             // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
-            if (!profile || !profile.username || profile.onboarding_completed !== true) {
+              if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // User needs to complete onboarding
               console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
                 correlationId,
@@ -201,10 +203,12 @@ export function SignInForm() {
                 onboardingCompleted: profile?.onboarding_completed
               })
               router.replace('/onboarding')
+              try { markInitialNavigationDone(); } catch {}
             } else {
               // User has completed onboarding, go to app
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+              try { markInitialNavigationDone(); } catch {}
             }
           } catch {
             // On error, proceed to app and let AuthProvider handle it
@@ -374,15 +378,18 @@ export function SignInForm() {
                 hasUsername: !!profile?.username,
                 onboardingCompleted: profile?.onboarding_completed
               })
-              router.replace('/onboarding')
+                router.replace('/onboarding')
+                try { markInitialNavigationDone(); } catch {}
             } else {
               // User has completed onboarding, go to app
-              router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                try { markInitialNavigationDone(); } catch {}
             }
           } catch {
             console.log('[google] Profile check failed, proceeding to app. AuthProvider will sync.')
             // On error, proceed to app - AuthProvider will handle profile sync
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            try { markInitialNavigationDone(); } catch {}
           }
         } else {
           setSocialAuthError('No session returned after Google sign-in.')
@@ -572,13 +579,16 @@ export function SignInForm() {
                                 onboardingCompleted: profile?.onboarding_completed
                               })
                               router.replace('/onboarding')
+                              try { markInitialNavigationDone(); } catch {}
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                              try { markInitialNavigationDone(); } catch {}
                             }
                           } catch {
                             console.log('[apple] Profile check failed, proceeding to app. AuthProvider will sync.')
                             // On error, proceed to app - AuthProvider will handle profile sync
                             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                            try { markInitialNavigationDone(); } catch {}
                           }
                         }
                       } catch (e: any) {

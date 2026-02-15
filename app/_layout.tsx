@@ -21,6 +21,7 @@ import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+import { isInitialNavigationDone, onInitialNavigationDone } from './initial-navigation/initialNavigation';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
@@ -159,8 +160,31 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         console.error('[Splash] preparation error', e);
       } finally {
         if (!cancelled) {
-          // Skip the React "branded" splash and go straight to the app.
-          // Hide the native splash now that preparation is complete.
+          // Wait briefly for the app's initial navigation to complete so we
+          // don't reveal the main UI while a redirect to onboarding is in-flight.
+          const MAX_WAIT_MS = 3000;
+          try {
+            if (!isInitialNavigationDone()) {
+              let unsub: (() => void) | undefined;
+              await new Promise<void>((resolve) => {
+                const timer = setTimeout(() => {
+                  if (unsub) {
+                    unsub();
+                  }
+                  resolve();
+                }, MAX_WAIT_MS);
+
+                unsub = onInitialNavigationDone(() => {
+                  clearTimeout(timer);
+                  resolve();
+                });
+              });
+            }
+          } catch (_e) {
+            // ignore waiting errors and proceed to show app
+          }
+
+          // Hide the native splash now that either navigation completed or timeout elapsed
           try { hideNativeSplashSafely(); } catch {}
           setPhase('app');
         }

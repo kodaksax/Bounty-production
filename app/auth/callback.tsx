@@ -7,19 +7,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState, useCallback } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { supabase } from '../../lib/supabase';
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 type CallbackStatus = 'loading' | 'success' | 'error' | 'expired';
 
@@ -71,6 +72,7 @@ export default function AuthCallbackScreen() {
           // Wait a moment to show success, then redirect
           setTimeout(() => {
             router.replace('/tabs/bounty-app' as Href);
+            try { markInitialNavigationDone(); } catch {}
           }, 2000);
           return;
         }
@@ -83,6 +85,7 @@ export default function AuthCallbackScreen() {
           // Navigate to update password screen with token
           setTimeout(() => {
             router.replace('/auth/update-password' as Href);
+            try { markInitialNavigationDone(); } catch {}
           }, 1500);
           return;
         }
@@ -107,6 +110,7 @@ export default function AuthCallbackScreen() {
           
           setTimeout(() => {
             router.replace('/tabs/bounty-app' as Href);
+            try { markInitialNavigationDone(); } catch {}
           }, 2000);
           return;
         }
@@ -132,6 +136,7 @@ export default function AuthCallbackScreen() {
 
   const handleGoToSignIn = () => {
     router.replace('/auth/sign-in-form' as Href);
+    try { markInitialNavigationDone(); } catch {}
   };
 
   const handleOpenEmail = async () => {

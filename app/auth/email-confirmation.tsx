@@ -8,15 +8,16 @@ import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 export default function EmailConfirmationScreen() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function EmailConfirmationScreen() {
 
   const handleGoToSignIn = () => {
     router.replace('/auth/sign-in-form' as Href);
+    try { markInitialNavigationDone(); } catch {}
   };
 
   return (

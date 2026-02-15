@@ -2,14 +2,15 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { parseAuthError, generateCorrelationId } from '../../lib/utils/auth-errors'
+import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
 import { validateEmail } from '../../lib/utils/auth-validation'
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 export default function SignUpRoute() {
   return <SignUpForm />
@@ -128,6 +129,7 @@ export function SignUpForm() {
               // Profile doesn't exist yet (expected for new users) - proceed to onboarding
               console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
               router.replace('/onboarding' as Href)
+              try { markInitialNavigationDone(); } catch {}
               return
             }
             // For other errors, throw to be caught by catch block
@@ -144,20 +146,24 @@ export function SignUpForm() {
               onboardingCompleted: profile.onboarding_completed
             })
             router.replace('/onboarding' as Href)
+            try { markInitialNavigationDone(); } catch {}
           } else {
             // User has completed onboarding (edge case) - go to app
             console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
             router.replace('/tabs/bounty-app' as Href)
+            try { markInitialNavigationDone(); } catch {}
           }
         } catch (err) {
           // On error, proceed to onboarding to be safe
           console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
           router.replace('/onboarding' as Href)
+          try { markInitialNavigationDone(); } catch {}
         }
       } else {
         // No session was created (shouldn't happen, but handle gracefully)
         console.warn('[sign-up] No session created after sign-up, showing email confirmation', { correlationId })
         router.replace('/auth/email-confirmation' as Href)
+        try { markInitialNavigationDone(); } catch {}
       }
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e, { correlationId })

@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router"
-import React, { useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
 import { SignInForm } from "./auth/sign-in-form"
+import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 
 
 /**
@@ -81,12 +82,26 @@ export default function Index() {
           }
           hasNavigatedRef.current = true
           router.replace('/onboarding')
+          try {
+            markInitialNavigationDone()
+          } catch (error) {
+            if (__DEV__) {
+              console.warn('[index] markInitialNavigationDone failed after onboarding navigation:', error)
+            }
+          }
         } else {
           if (__DEV__) {
             console.log('[index] Authenticated with complete profile, redirecting to main app')
           }
           hasNavigatedRef.current = true
           router.replace(ROUTES.TABS.BOUNTY_APP)
+          try {
+            markInitialNavigationDone()
+          } catch (error) {
+            if (__DEV__) {
+              console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
+            }
+          }
         }
       } catch (navError) {
         console.error('[index] Navigation error:', navError)
