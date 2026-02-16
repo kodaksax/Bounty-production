@@ -13,14 +13,14 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
 import {
-    asyncHandler,
-    AuthorizationError,
-    NotFoundError,
-    ValidationError
+  asyncHandler,
+  AuthorizationError,
+  NotFoundError,
+  ValidationError
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
+import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
 import { toJsonSchema } from '../utils/zod-json';
-import redisService, { CacheKeyPrefix, cacheInvalidation } from '../services/redis-service';
 
 /**
  * Validation schemas using Zod
@@ -449,19 +449,17 @@ export async function registerConsolidatedProfileRoutes(
           });
         }
 
-        // Prepare update data
-        const updateData: any = {
-          updated_at: new Date().toISOString(),
-        };
+        // Prepare update data - don't set `updated_at` here; DB trigger manages timestamps
+        const updateData: any = {};
 
-        updateData.username = body.username;
+        if (body.username !== undefined) updateData.username = body.username;
         if (body.avatar_url !== undefined) updateData.avatar = body.avatar_url;
         if (body.bio !== undefined) updateData.bio = body.bio;
         if (body.about !== undefined) updateData.about = body.about;
         if (body.phone !== undefined) updateData.phone = body.phone;
         if (body.email !== undefined) updateData.email = body.email;
 
-        // Use upsert to create or update
+        // Use upsert to create or update; leave timestamp management to DB triggers
         const { data: profile, error } = await supabase
           .from('profiles')
           .upsert(
@@ -600,10 +598,8 @@ export async function registerConsolidatedProfileRoutes(
           }
         }
 
-        // Prepare update data
-        const updateData: any = {
-          updated_at: new Date().toISOString(),
-        };
+        // Prepare update data - let DB triggers manage `updated_at`
+        const updateData: any = {};
 
         if (body.username !== undefined) updateData.username = body.username;
         if (body.avatar_url !== undefined) updateData.avatar = body.avatar_url;
