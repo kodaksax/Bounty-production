@@ -7,7 +7,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated,
     StyleSheet,
     Text,
@@ -19,6 +19,7 @@ import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { supabase } from '../../lib/supabase';
 
@@ -45,6 +46,9 @@ export default function DoneScreen() {
   
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
+  
+  // Use ref to ensure markComplete runs only once per screen mount
+  const hasMarkedComplete = useRef(false);
 
   useEffect(() => {
     // Animate check mark
@@ -62,25 +66,65 @@ export default function DoneScreen() {
       }),
     ]).start();
     
-    // Mark onboarding as complete
+    // Mark onboarding as complete and sync all profile data
+    // Use ref guard to prevent duplicate saves if component re-renders
     const markComplete = async () => {
+      // Skip if already marked complete
+      if (hasMarkedComplete.current) return;
+      hasMarkedComplete.current = true;
+      
       try {
         // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
         
-        // IMPORTANT: Update the Supabase profile to mark onboarding as complete
-        // This is the source of truth for determining if a user should see onboarding
+        // IMPORTANT: Update the Supabase profile with ALL onboarding data
+        // This ensures profile data persists and is available across all screens
         if (userId) {
+          // Prepare profile update with all fields from onboarding context
+          const profileUpdate: Partial<Profile> = {
+            onboarding_completed: true,
+          };
+          
+          // Add username if available
+          if (onboardingData.username) {
+            profileUpdate.username = onboardingData.username;
+          }
+          
+          // Add optional fields from onboarding
+          if (onboardingData.displayName) {
+            profileUpdate.display_name = onboardingData.displayName;
+          }
+          if (onboardingData.title) {
+            profileUpdate.title = onboardingData.title;
+          }
+          if (onboardingData.bio) {
+            profileUpdate.about = onboardingData.bio;
+          }
+          if (onboardingData.location) {
+            profileUpdate.location = onboardingData.location;
+          }
+          if (onboardingData.skills && onboardingData.skills.length > 0) {
+            profileUpdate.skills = onboardingData.skills;
+          }
+          // Only persist avatar_url when we have a confirmed remote URI,
+          // not a local file:// path that would break on other devices.
+          if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
+            profileUpdate.avatar_url = onboardingData.avatarUri;
+          }
+          if (onboardingData.phone) {
+            profileUpdate.phone = onboardingData.phone;
+          }
+          
           const { error } = await supabase
             .from('profiles')
-            .update({ onboarding_completed: true })
+            .update(profileUpdate)
             .eq('id', userId);
             
           if (error) {
-            console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
+            console.error('[Onboarding] Error saving profile data to Supabase:', error);
             // Don't throw - we still want to proceed
           } else {
-            console.log('[Onboarding] Successfully marked onboarding as complete in database');
+            console.log('[Onboarding] Successfully saved all profile data to database');
           }
         }
         
@@ -109,7 +153,9 @@ export default function DoneScreen() {
     };
     
     markComplete();
-  }, [scaleAnim, fadeAnim, userId]);
+  }, [scaleAnim, fadeAnim, userId, onboardingData]); 
+  // Note: onboardingData is intentionally in deps to use latest values.
+  // The hasMarkedComplete ref guard prevents duplicate execution on re-renders.
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile
