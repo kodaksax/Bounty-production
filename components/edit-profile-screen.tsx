@@ -6,7 +6,7 @@ import { AvatarFallback } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from "react"
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -69,17 +69,60 @@ export function EditProfileScreen({
   const userId = authProfile?.id || 'anon';
   const DRAFT_KEY = `editProfile:draft:${userId}`;
 
+  // Track whether form has been modified
+  const [hasChanges, setHasChanges] = React.useState(false);
+
+  // Track initial values to compare against
+  const [initialValues, setInitialValues] = React.useState({
+    name: '',
+    title: '',
+    location: '',
+    portfolio: '',
+    bio: '',
+    avatar: '',
+  });
+
   // Reset form data when userId changes to prevent data leaks between users
   React.useEffect(() => {
     // Clear form state to prevent showing previous user's data
-    setName(authProfile?.username || normalized?.name || localProfile?.displayName || initialName);
-    setTitle(normalized?.title || "");
-    setLocation((normalized as any)?.location || "");
-    setPortfolio((normalized as any)?.portfolio || "");
-    setBio(authProfile?.about || normalized?.bio || localProfile?.location || "");
-    setAvatar(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar);
+    const newName = authProfile?.username || normalized?.name || localProfile?.displayName || initialName;
+    const newTitle = normalized?.title || "";
+    const newLocation = (normalized as any)?.location || "";
+    const newPortfolio = (normalized as any)?.portfolio || "";
+    const newBio = authProfile?.about || normalized?.bio || localProfile?.location || "";
+    const newAvatar = authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar;
+    
+    setName(newName);
+    setTitle(newTitle);
+    setLocation(newLocation);
+    setPortfolio(newPortfolio);
+    setBio(newBio);
+    setAvatar(newAvatar);
     setPendingAvatarRemoteUri(undefined);
+    setHasChanges(false);
+    
+    // Update initial values
+    setInitialValues({
+      name: newName,
+      title: newTitle,
+      location: newLocation,
+      portfolio: newPortfolio,
+      bio: newBio,
+      avatar: newAvatar,
+    });
   }, [userId]); // Reset when userId changes
+
+  // Check if any field has changed from initial values
+  React.useEffect(() => {
+    const changed = 
+      name !== initialValues.name ||
+      title !== initialValues.title ||
+      location !== initialValues.location ||
+      portfolio !== initialValues.portfolio ||
+      bio !== initialValues.bio ||
+      avatar !== initialValues.avatar;
+    setHasChanges(changed);
+  }, [name, title, location, portfolio, bio, avatar, initialValues]);
 
   // Hydrate draft on mount (only if userId hasn't changed)
   React.useEffect(() => {
@@ -321,8 +364,41 @@ export function EditProfileScreen({
   }
 
   const handleBack = () => {
-    // Just navigate back; draft is persisted automatically
-    if (onBack) onBack()
+    // Check if user has unsaved changes
+    if (hasChanges) {
+      // Show warning dialog
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Are you sure you want to leave without saving?',
+        [
+          {
+            text: 'Keep Editing',
+            style: 'cancel',
+          },
+          {
+            text: 'Discard Changes',
+            style: 'destructive',
+            onPress: () => {
+              // Reset form to initial values
+              setName(initialValues.name);
+              setTitle(initialValues.title);
+              setLocation(initialValues.location);
+              setPortfolio(initialValues.portfolio);
+              setBio(initialValues.bio);
+              setAvatar(initialValues.avatar);
+              setPendingAvatarRemoteUri(undefined);
+              setHasChanges(false);
+              
+              // Navigate back
+              if (onBack) onBack();
+            },
+          },
+        ]
+      );
+    } else {
+      // No changes, navigate back immediately
+      if (onBack) onBack();
+    }
   }
 
   // Show loading spinner if profiles are loading
@@ -379,7 +455,7 @@ export function EditProfileScreen({
       )}
       {/* Header - Twitter-like modal style */}
       <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
-        <TouchableOpacity onPress={onBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
+        <TouchableOpacity onPress={handleBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
           <MaterialIcons name="close" size={22} color="#ffffff" />
         </TouchableOpacity>
         <Text className="text-white font-extrabold text-base tracking-widest">Edit Profile</Text>

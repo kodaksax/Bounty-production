@@ -58,16 +58,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
   // Panel routing
   if (panel === 'editProfile') {
-    return (
-      <EditProfileScreen
-        onBack={() => setPanel('root')}
-        initialName={profileData.name}
-        initialAbout={profileData.about}
-        initialPhone={profileData.phone}
-        initialAvatar={profileData.avatar}
-        onSave={handleProfileSave}
-      />
-    )
+    // Navigate to the dedicated Edit Profile screen instead of using deprecated component
+    router.push('/profile/edit')
+    // Reset to root panel after navigation
+    setPanel('root')
+    return null
   }
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />

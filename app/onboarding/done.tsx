@@ -62,25 +62,58 @@ export default function DoneScreen() {
       }),
     ]).start();
     
-    // Mark onboarding as complete
+    // Mark onboarding as complete and sync all profile data
     const markComplete = async () => {
       try {
         // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
         
-        // IMPORTANT: Update the Supabase profile to mark onboarding as complete
-        // This is the source of truth for determining if a user should see onboarding
+        // IMPORTANT: Update the Supabase profile with ALL onboarding data
+        // This ensures profile data persists and is available across all screens
         if (userId) {
+          // Prepare profile update with all fields from onboarding context
+          const profileUpdate: any = {
+            onboarding_completed: true,
+          };
+          
+          // Add username if available
+          if (onboardingData.username) {
+            profileUpdate.username = onboardingData.username;
+          }
+          
+          // Add optional fields from onboarding
+          if (onboardingData.displayName) {
+            profileUpdate.display_name = onboardingData.displayName;
+          }
+          if (onboardingData.title) {
+            profileUpdate.title = onboardingData.title;
+          }
+          if (onboardingData.bio) {
+            profileUpdate.about = onboardingData.bio;
+          }
+          if (onboardingData.location) {
+            profileUpdate.location = onboardingData.location;
+          }
+          if (onboardingData.skills && onboardingData.skills.length > 0) {
+            profileUpdate.skills = onboardingData.skills;
+          }
+          if (onboardingData.avatarUri) {
+            profileUpdate.avatar = onboardingData.avatarUri;
+          }
+          if (onboardingData.phone) {
+            profileUpdate.phone = onboardingData.phone;
+          }
+          
           const { error } = await supabase
             .from('profiles')
-            .update({ onboarding_completed: true })
+            .update(profileUpdate)
             .eq('id', userId);
             
           if (error) {
-            console.error('[Onboarding] Error marking onboarding as complete in Supabase:', error);
+            console.error('[Onboarding] Error saving profile data to Supabase:', error);
             // Don't throw - we still want to proceed
           } else {
-            console.log('[Onboarding] Successfully marked onboarding as complete in database');
+            console.log('[Onboarding] Successfully saved all profile data to database');
           }
         }
         
@@ -109,7 +142,7 @@ export default function DoneScreen() {
     };
     
     markComplete();
-  }, [scaleAnim, fadeAnim, userId]);
+  }, [scaleAnim, fadeAnim, userId, onboardingData]);
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile
