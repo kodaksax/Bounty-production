@@ -87,8 +87,8 @@ export function EditProfileScreen({
     // Clear form state to prevent showing previous user's data
     const newName = authProfile?.username || normalized?.name || localProfile?.displayName || initialName;
     const newTitle = normalized?.title || "";
-    const newLocation = (normalized as any)?.location || "";
-    const newPortfolio = (normalized as any)?.portfolio || "";
+    const newLocation = normalized?.location || "";
+    const newPortfolio = normalized?.portfolio || "";
     const newBio = authProfile?.about || normalized?.bio || localProfile?.location || "";
     const newAvatar = authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar;
     

@@ -7,7 +7,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated,
     StyleSheet,
     Text,
@@ -46,6 +46,9 @@ export default function DoneScreen() {
   
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
+  
+  // Use ref to ensure markComplete runs only once per screen mount
+  const hasMarkedComplete = useRef(false);
 
   useEffect(() => {
     // Animate check mark
@@ -64,7 +67,12 @@ export default function DoneScreen() {
     ]).start();
     
     // Mark onboarding as complete and sync all profile data
+    // Use ref guard to prevent duplicate saves if component re-renders
     const markComplete = async () => {
+      // Skip if already marked complete
+      if (hasMarkedComplete.current) return;
+      hasMarkedComplete.current = true;
+      
       try {
         // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
@@ -98,7 +106,9 @@ export default function DoneScreen() {
           if (onboardingData.skills && onboardingData.skills.length > 0) {
             profileUpdate.skills = onboardingData.skills;
           }
-          if (onboardingData.avatarUri) {
+          // Only persist avatar_url when we have a confirmed remote URI,
+          // not a local file:// path that would break on other devices.
+          if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
             profileUpdate.avatar_url = onboardingData.avatarUri;
           }
           if (onboardingData.phone) {
@@ -143,7 +153,8 @@ export default function DoneScreen() {
     };
     
     markComplete();
-  }, [scaleAnim, fadeAnim, userId, onboardingData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scaleAnim, fadeAnim, userId]); // Removed onboardingData to prevent re-runs on context updates
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile

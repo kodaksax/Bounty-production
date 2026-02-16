@@ -198,7 +198,9 @@ export default function DetailsScreen() {
       if (skills.length > 0) {
         profileUpdate.skills = skills;
       }
-      if (avatarUri) {
+      // Only persist avatar_url when we have a confirmed remote URI,
+      // not a local file:// path that would break on other devices.
+      if (avatarUri && !avatarUri.startsWith('file://')) {
         profileUpdate.avatar_url = avatarUri;
       }
       

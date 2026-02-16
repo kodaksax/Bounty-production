@@ -3,13 +3,12 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { router } from 'expo-router'
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
-import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
@@ -50,20 +49,16 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     )
   }
 
-  const handleProfileSave = (data: { name: string; about: string; phone: string; avatar?: string }) => {
-    // Profile updates are handled by authProfileService subscribers
-    // Just return to root panel - the profile will update automatically
-    setPanel('root')
-  }
+  // Navigate to edit profile screen when panel changes to 'editProfile'
+  useEffect(() => {
+    if (panel === 'editProfile') {
+      router.push('/profile/edit')
+      // Reset to root panel after navigation is initiated
+      setPanel('root')
+    }
+  }, [panel])
 
   // Panel routing
-  if (panel === 'editProfile') {
-    // Navigate to the dedicated Edit Profile screen instead of using deprecated component
-    router.push('/profile/edit')
-    // Reset to root panel after navigation
-    setPanel('root')
-    return null
-  }
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
   if (panel === 'location') return <LocationSettingsScreen onBack={() => setPanel('root')} />
