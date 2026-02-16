@@ -153,8 +153,7 @@ export default function DoneScreen() {
     };
     
     markComplete();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scaleAnim, fadeAnim, userId]); // Removed onboardingData to prevent re-runs on context updates
+  }, [scaleAnim, fadeAnim, userId, onboardingData]); // Keep onboardingData to use latest values; ref prevents duplicates
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile

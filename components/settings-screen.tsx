@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { router } from 'expo-router'
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
@@ -49,14 +49,9 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     )
   }
 
-  // Navigate to edit profile screen when panel changes to 'editProfile'
-  useEffect(() => {
-    if (panel === 'editProfile') {
-      router.push('/profile/edit')
-      // Reset to root panel after navigation is initiated
-      setPanel('root')
-    }
-  }, [panel])
+  const handleEditProfile = () => {
+    router.push('/profile/edit')
+  }
 
   // Panel routing
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
@@ -87,8 +82,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           description="Allows users to modify their personal information such as name, profile picture, contact details, and update their role preferences. It provides"
           primaryLabel="Save Changes"
           secondaryLabel="View My Profile"
-          onPrimary={() => setPanel('editProfile')}
-          onSecondary={() => setPanel('editProfile')}
+          onPrimary={handleEditProfile}
+          onSecondary={handleEditProfile}
           icon="person"
         />
         <SettingsCard
