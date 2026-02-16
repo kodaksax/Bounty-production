@@ -227,7 +227,8 @@ export default function DetailsScreen() {
       if (!success) {
         setSaving(false);
         
-        const retryWithAlert = async () => {
+        // Handle retry attempts with user feedback - allows up to 3 total attempts
+        const handleRetryAttempts = async () => {
           setSaving(true);
           const retrySuccess = await saveToSupabase();
           if (retrySuccess) {
@@ -235,7 +236,7 @@ export default function DetailsScreen() {
             router.push('/onboarding/phone');
           } else {
             setSaving(false);
-            // Show option to skip after failed retry - final attempt
+            // Show option to skip after second failed attempt
             Alert.alert(
               'Still Unable to Save',
               'We could not save your profile. You can skip this step and update your profile later.',
@@ -268,7 +269,7 @@ export default function DetailsScreen() {
           [
             {
               text: 'Retry',
-              onPress: retryWithAlert,
+              onPress: handleRetryAttempts,
             },
             {
               text: 'Skip for now',
