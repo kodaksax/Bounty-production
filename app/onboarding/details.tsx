@@ -27,6 +27,7 @@ import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { attachmentService } from '../../lib/services/attachment-service';
+import { Profile } from '../../lib/services/database.types';
 import { supabase } from '../../lib/supabase';
 
 const COMMON_SKILLS = [
@@ -177,59 +178,88 @@ export default function DetailsScreen() {
     // Sync all fields to Supabase via direct update
     // This ensures profile data persists to the database and is available across devices
     // We update the profiles table directly to ensure all fields are saved
+    const saveToSupabase = async () => {
+      if (!userId) return false;
+      
+      const profileUpdate: Partial<Profile> = {};
+      
+      if (displayName.trim()) {
+        profileUpdate.display_name = displayName.trim();
+      }
+      if (title.trim()) {
+        profileUpdate.title = title.trim();
+      }
+      if (bio.trim()) {
+        profileUpdate.about = bio.trim();
+      }
+      if (location.trim()) {
+        profileUpdate.location = location.trim();
+      }
+      if (skills.length > 0) {
+        profileUpdate.skills = skills;
+      }
+      if (avatarUri) {
+        profileUpdate.avatar_url = avatarUri;
+      }
+      
+      // Only update if we have fields to save
+      if (Object.keys(profileUpdate).length === 0) {
+        return true;
+      }
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', userId);
+      
+      if (error) {
+        console.error('[Onboarding Details] Error saving to Supabase:', error);
+        return false;
+      }
+      
+      console.log('[Onboarding Details] Successfully saved profile data to database');
+      return true;
+    };
+    
     try {
-      if (userId) {
-        const profileUpdate: any = {};
-        
-        if (displayName.trim()) {
-          profileUpdate.display_name = displayName.trim();
-        }
-        if (title.trim()) {
-          profileUpdate.title = title.trim();
-        }
-        if (bio.trim()) {
-          profileUpdate.about = bio.trim();
-        }
-        if (location.trim()) {
-          profileUpdate.location = location.trim();
-        }
-        if (skills.length > 0) {
-          profileUpdate.skills = skills;
-        }
-        if (avatarUri) {
-          profileUpdate.avatar = avatarUri;
-        }
-        
-        // Only update if we have fields to save
-        if (Object.keys(profileUpdate).length > 0) {
-          const { error } = await supabase
-            .from('profiles')
-            .update(profileUpdate)
-            .eq('id', userId);
-          
-          if (error) {
-            console.error('[Onboarding Details] Error saving to Supabase:', error);
-            setSaving(false);
-            Alert.alert(
-              'Connection Error',
-              'Failed to save your profile. Please check your internet connection and try again.',
-              [
-                {
-                  text: 'Retry',
-                  onPress: () => handleNext(),
-                },
-                {
-                  text: 'Skip for now',
-                  style: 'cancel',
-                  onPress: () => router.push('/onboarding/phone'),
-                },
-              ]
-            );
-            return;
-          }
-          
-          console.log('[Onboarding Details] Successfully saved profile data to database');
-        }
+      const success = await saveToSupabase();
+      
+      if (!success) {
+        setSaving(false);
+        Alert.alert(
+          'Connection Error',
+          'Failed to save your profile. Please check your internet connection and try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: async () => {
+                setSaving(true);
+                const retrySuccess = await saveToSupabase();
+                if (retrySuccess) {
+                  setSaving(false);
+                  router.push('/onboarding/phone');
+                } else {
+                  setSaving(false);
+                  // Show option to skip after failed retry
+                  Alert.alert(
+                    'Still Unable to Save',
+                    'We could not save your profile. You can skip this step and update your profile later.',
+                    [
+                      { text: 'Try Again', onPress: handleNext },
+                      { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/phone') }
+                    ]
+                  );
+                }
+              },
+            },
+            {
+              text: 'Skip for now',
+              style: 'cancel',
+              onPress: () => router.push('/onboarding/phone'),
+            },
+          ]
+        );
+        return;
       }
     } catch (error) {
       console.error('[Onboarding Details] Exception saving to Supabase:', error);
@@ -240,7 +270,7 @@ export default function DetailsScreen() {
         [
           {
             text: 'Retry',
-            onPress: () => handleNext(),
+            onPress: handleNext,
           },
           {
             text: 'Skip for now',

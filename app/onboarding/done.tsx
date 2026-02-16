@@ -19,6 +19,7 @@ import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { supabase } from '../../lib/supabase';
 
@@ -72,7 +73,7 @@ export default function DoneScreen() {
         // This ensures profile data persists and is available across all screens
         if (userId) {
           // Prepare profile update with all fields from onboarding context
-          const profileUpdate: any = {
+          const profileUpdate: Partial<Profile> = {
             onboarding_completed: true,
           };
           
@@ -98,7 +99,7 @@ export default function DoneScreen() {
             profileUpdate.skills = onboardingData.skills;
           }
           if (onboardingData.avatarUri) {
-            profileUpdate.avatar = onboardingData.avatarUri;
+            profileUpdate.avatar_url = onboardingData.avatarUri;
           }
           if (onboardingData.phone) {
             profileUpdate.phone = onboardingData.phone;
