@@ -39,7 +39,7 @@ export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { profile: authProfile, userId } = useAuthProfile();
+  const { userId } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
@@ -226,31 +226,49 @@ export default function DetailsScreen() {
       
       if (!success) {
         setSaving(false);
+        
+        const retryWithAlert = async () => {
+          setSaving(true);
+          const retrySuccess = await saveToSupabase();
+          if (retrySuccess) {
+            setSaving(false);
+            router.push('/onboarding/phone');
+          } else {
+            setSaving(false);
+            // Show option to skip after failed retry - final attempt
+            Alert.alert(
+              'Still Unable to Save',
+              'We could not save your profile. You can skip this step and update your profile later.',
+              [
+                { 
+                  text: 'Try One More Time', 
+                  onPress: async () => {
+                    setSaving(true);
+                    const finalSuccess = await saveToSupabase();
+                    setSaving(false);
+                    if (finalSuccess) {
+                      router.push('/onboarding/phone');
+                    } else {
+                      // After 3 attempts, just allow skip
+                      Alert.alert('Unable to Save', 'Please skip for now and try again later from your profile settings.', [
+                        { text: 'OK', onPress: () => router.push('/onboarding/phone') }
+                      ]);
+                    }
+                  }
+                },
+                { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/phone') }
+              ]
+            );
+          }
+        };
+        
         Alert.alert(
           'Connection Error',
           'Failed to save your profile. Please check your internet connection and try again.',
           [
             {
               text: 'Retry',
-              onPress: async () => {
-                setSaving(true);
-                const retrySuccess = await saveToSupabase();
-                if (retrySuccess) {
-                  setSaving(false);
-                  router.push('/onboarding/phone');
-                } else {
-                  setSaving(false);
-                  // Show option to skip after failed retry
-                  Alert.alert(
-                    'Still Unable to Save',
-                    'We could not save your profile. You can skip this step and update your profile later.',
-                    [
-                      { text: 'Try Again', onPress: handleNext },
-                      { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/phone') }
-                    ]
-                  );
-                }
-              },
+              onPress: retryWithAlert,
             },
             {
               text: 'Skip for now',
@@ -266,12 +284,8 @@ export default function DetailsScreen() {
       setSaving(false);
       Alert.alert(
         'Connection Error',
-        'Failed to save your profile. Please check your internet connection and try again.',
+        'An unexpected error occurred. You can skip this step and update your profile later.',
         [
-          {
-            text: 'Retry',
-            onPress: handleNext,
-          },
           {
             text: 'Skip for now',
             style: 'cancel',
