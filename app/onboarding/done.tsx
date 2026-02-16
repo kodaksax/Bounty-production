@@ -153,7 +153,9 @@ export default function DoneScreen() {
     };
     
     markComplete();
-  }, [scaleAnim, fadeAnim, userId, onboardingData]); // Keep onboardingData to use latest values; ref prevents duplicates
+  }, [scaleAnim, fadeAnim, userId, onboardingData]); 
+  // Note: onboardingData is intentionally in deps to use latest values.
+  // The hasMarkedComplete ref guard prevents duplicate execution on re-renders.
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile
