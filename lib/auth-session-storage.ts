@@ -171,6 +171,9 @@ export async function clearAllSessionData(): Promise<void> {
     inMemorySessionCache.clear();
     inMemoryRememberMeCache = null;
     
+    // Clear any in-flight read operation
+    inFlightPreferenceRead = null;
+    
     // Check if it's chunked
     const val = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY);
     if (val === '__chunked__') {
