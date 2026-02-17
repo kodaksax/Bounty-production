@@ -148,6 +148,21 @@ class CachedDataService {
       await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
 
       logger.info(`Cache updated: ${key}`);
+      // Notify subscribers that this cache key was revalidated/updated
+      if (!this.events || typeof this.events.emit !== 'function') {
+        logger.warning('Revalidation event emitter is not initialized; skipping emit', {
+          key,
+          event: REVALIDATION_EVENT,
+        });
+      } else if (!REVALIDATION_EVENT) {
+        logger.warning('Revalidation event name is not defined; skipping emit', { key });
+      } else {
+        try {
+          this.events.emit(REVALIDATION_EVENT, key, data);
+        } catch (emitErr) {
+          logger.error('Failed to emit revalidation event', { key, error: emitErr });
+        }
+      }
     } catch (error) {
       logger.error('Error writing to cache', { key, error });
     }

@@ -7,15 +7,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View, } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
@@ -39,6 +41,8 @@ export default function UsernameScreen() {
   const [checking, setChecking] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [accepted, setAccepted] = useState(onboardingData.accepted);
+  const [submitTick, setSubmitTick] = useState(0);
+  const submittingRef = useRef(false);
 
   // Sync from context on mount
   useEffect(() => {
@@ -48,6 +52,13 @@ export default function UsernameScreen() {
     if (onboardingData.accepted !== accepted) {
       setAccepted(onboardingData.accepted);
     }
+    // Cleanup guard on unmount: ensure submitting ref is cleared so retries remain possible
+    return () => {
+      if (submittingRef.current) {
+        submittingRef.current = false;
+        setSubmitTick((t) => t + 1);
+      }
+    };
   }, []);
 
   // Load prior acceptance
@@ -121,6 +132,11 @@ export default function UsernameScreen() {
       return;
     }
 
+    // Prevent duplicate submissions / navigation (use ref as immediate guard)
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitTick((t) => t + 1);
+
     try {
       // persist acceptance
       try { await AsyncStorage.setItem('BE:acceptedLegal', 'true'); } catch {}
@@ -136,6 +152,8 @@ export default function UsernameScreen() {
 
       if (!result.success) {
         setError(result.error || 'Failed to save username');
+        submittingRef.current = false;
+        setSubmitTick((t) => t + 1);
         return;
       }
 
@@ -160,12 +178,16 @@ export default function UsernameScreen() {
         
         if (updateError) {
           // Handle unique constraint violation (username already taken)
-          if (updateError.code === '23505') {
+            if (updateError.code === '23505') {
             setError('This username is already taken. Please choose another.');
+            submittingRef.current = false;
+            setSubmitTick((t) => t + 1);
             return;
           }
           console.error('[onboarding] Error updating profile:', updateError);
           setError('Failed to update profile. Please try again.');
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
           return;
         }
         
@@ -190,10 +212,14 @@ export default function UsernameScreen() {
           // Handle unique constraint violation (username already taken)
           if (insertError.code === '23505') {
             setError('This username is already taken. Please choose another.');
+            submittingRef.current = false;
+            setSubmitTick((t) => t + 1);
             return;
           }
           console.error('[onboarding] Error creating profile:', insertError);
           setError('Failed to save profile. Please try again.');
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
           return;
         }
 
@@ -205,10 +231,23 @@ export default function UsernameScreen() {
         }
       }
 
-      router.push('/onboarding/details');
+      // Navigate to next onboarding step and then clear submitting guard so the UI can recover
+      try {
+        router.push('/onboarding/details');
+      } catch (navError) {
+        console.error('[onboarding] Navigation error:', navError);
+        setError('Navigation failed. Please try again.');
+      } finally {
+        if (submittingRef.current) {
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
+        }
+      }
     } catch (err) {
       console.error('[onboarding] Error:', err);
       setError('Failed to save username. Please try again.');
+      submittingRef.current = false;
+      setSubmitTick((t) => t + 1);
     }
   };
 
@@ -303,16 +342,28 @@ export default function UsernameScreen() {
         </View>
 
         {/* Next Button */}
-        <TouchableOpacity
-          style={[styles.nextButton, (!isValid || checking || !accepted) && styles.nextButtonDisabled]}
-          onPress={handleNext}
-          disabled={!isValid || checking || !accepted}
-        >
-          <Text style={styles.nextButtonText}>
-            {checking ? 'Checking...' : 'Next'}
-          </Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-        </TouchableOpacity>
+        {(() => {
+          // Depend on submitTick so that updates to it trigger re-renders that reflect the latest submittingRef state
+          const submitting = submittingRef.current && submitTick >= 0;
+          return (
+            <TouchableOpacity
+              style={[
+                styles.nextButton,
+                (!isValid || checking || !accepted || submitting) && styles.nextButtonDisabled,
+              ]}
+              onPress={handleNext}
+              disabled={!isValid || checking || !accepted || submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#052e1b" style={{ marginRight: 8 }} />
+              ) : null}
+              <Text style={styles.nextButtonText}>
+                {submitting ? 'Saving...' : checking ? 'Checking...' : 'Next'}
+              </Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Progress indicator */}
         <View style={styles.progressContainer}>

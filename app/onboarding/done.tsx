@@ -7,12 +7,14 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View, } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
@@ -170,6 +172,21 @@ export default function DoneScreen() {
     } catch (refreshError) {
       console.error('[Onboarding] Error refreshing profile:', refreshError);
       // Don't block navigation
+    }
+
+    // Also refresh the cached user profile so other hooks (useUserProfile/useNormalizedProfile)
+    // immediately pick up fields like `location` saved during onboarding.
+    try {
+      const { cachedDataService, CACHE_KEYS } = await import('../../lib/services/cached-data-service');
+      const { userProfileService } = await import('../../lib/services/userProfile');
+      if (userId) {
+        const profile = await userProfileService.getProfile(userId);
+        const completeness = await userProfileService.checkCompleteness(userId);
+        await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(userId), { profile, completeness });
+        console.log('[Onboarding] Cached user profile refreshed');
+      }
+    } catch (cacheErr) {
+      console.error('[Onboarding] Error refreshing cached user profile:', cacheErr);
     }
     
     // Navigate to the Bounty app dashboard
@@ -402,7 +419,7 @@ const styles = StyleSheet.create({
   skillBadge: {
     backgroundColor: 'rgba(167,243,208,0.2)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 12,
     borderRadius: 12,
   },
   skillBadgeText: {
