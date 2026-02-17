@@ -6,17 +6,17 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
 import { getCurrentUserId } from "lib/utils/data-utils";
-import React, { useEffect, useState } from "react";
+import { shareProfile } from "lib/utils/share-utils";
+import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
@@ -29,13 +29,15 @@ import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
+import { navigationIntent } from "../../lib/services/navigation-intent";
+;
 
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
-  
+
   const { profile, loading, error } = useNormalizedProfile(userId);
   const {
     isFollowing,
@@ -113,10 +115,10 @@ export default function UserProfileScreen() {
             return;
           }
         }
-        
+
         // Generate skills from profile data
         const profileSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = [];
-        
+
         // Add actual skills from profile first
         const raw = (profile as any)?._raw || null;
         const rawSkills = profile.skills || (raw && raw.skills) || [];
@@ -124,26 +126,26 @@ export default function UserProfileScreen() {
           rawSkills.slice(0, 4).forEach((skill, index: number) => {
             // Validate skill is a string
             if (typeof skill === 'string' && skill.trim()) {
-              profileSkills.push({ 
-                id: `skill-${index}`, 
-                icon: 'star', 
+              profileSkills.push({
+                id: `skill-${index}`,
+                icon: 'star',
                 text: skill.trim()
               });
             }
           });
         }
-        
+
         // Add location if available
         const location = profile.location || (raw && raw.location);
         if (location) {
           profileSkills.push({ id: 'location', icon: 'location-on', text: `Based in ${location}` });
         }
-        
+
         // Add verified contact if phone is set
         if (raw && raw.phone) {
           profileSkills.push({ id: 'verified', icon: 'verified-user', text: 'Verified contact' });
         }
-        
+
         // Add join date
         if (profile.joinDate) {
           const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -151,7 +153,7 @@ export default function UserProfileScreen() {
         } else {
           profileSkills.push({ id: 'joined', icon: 'favorite', text: 'Member since 2024' });
         }
-        
+
         setSkills(profileSkills);
       } catch (error) {
         console.error('Error loading skills:', error);
@@ -175,15 +177,17 @@ export default function UserProfileScreen() {
     setIsCreatingChat(true);
     try {
       // Create or get existing conversation
-      await messageService.getOrCreateConversation(
+      const conversation = await messageService.getOrCreateConversation(
         [userId],
         profile?.username || 'User',
         undefined // no bounty context
       );
 
-      
-  // Navigate to messenger
-  router.push(ROUTES.TABS.MESSENGER as any);
+      // Set intent to open this conversation
+      await navigationIntent.setPendingConversationId(conversation.id);
+
+      // Navigate to messenger
+      router.push(ROUTES.TABS.MESSENGER as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
       Alert.alert('Error', 'Failed to start conversation. Please try again.');
@@ -209,17 +213,12 @@ export default function UserProfileScreen() {
   };
 
   const handleShare = async () => {
-    try {
-      const profileUrl = `https://bountyexpo.app/profile/${userId}`;
-      const message = `Check out ${profile?.name || profile?.username}'s profile on BountyExpo!\n\n${profileUrl}`;
-      
-      await Share.share({
-        title: `${profile?.name || profile?.username} on BountyExpo`,
-        message,
-      });
-    } catch (error) {
-      console.error('Error sharing profile:', error);
-    }
+    await shareProfile({
+      name: profile?.name || undefined,
+      username: profile?.username || undefined,
+      id: userId as string,
+      // about: profile?.about // 'about' does not exist on NormalizedProfile
+    });
   };
 
   const handleBlock = () => {
@@ -283,7 +282,7 @@ export default function UserProfileScreen() {
           </View>
           <View style={{ width: 40 }} />
         </View>
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         >
@@ -329,8 +328,8 @@ export default function UserProfileScreen() {
           <BrandingLogo size="small" />
         </View>
         {!isOwnProfile && (
-          <TouchableOpacity 
-            onPress={() => setShowMoreMenu(!showMoreMenu)} 
+          <TouchableOpacity
+            onPress={() => setShowMoreMenu(!showMoreMenu)}
             style={styles.moreButton}
             accessibilityRole="button"
             accessibilityLabel="More options"
@@ -372,13 +371,13 @@ export default function UserProfileScreen() {
         </View>
       )}
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
       >
         {/* Enhanced Profile Section */}
-        <EnhancedProfileSection 
-          userId={userId} 
+        <EnhancedProfileSection
+          userId={userId}
           isOwnProfile={isOwnProfile}
           showPortfolio={false}
           hideActions={true}
@@ -398,8 +397,8 @@ export default function UserProfileScreen() {
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity 
-                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]} 
+              <TouchableOpacity
+                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]}
                 onPress={handleMessage}
                 disabled={isCreatingChat}
               >

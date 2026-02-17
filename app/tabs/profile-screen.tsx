@@ -11,6 +11,7 @@ import { TrustBadges } from "components/ui/trust-badges";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
+;
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
@@ -36,7 +37,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     avatar: "/placeholder.svg?height=80&width=80",
   })
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
-  
+
   // Auth session (Supabase) provides canonical user id
   const { session } = useAuthContext();
   const authUserId = session?.user?.id;
@@ -178,10 +179,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         } else {
           // Generate skills from profiles
           const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = []
-          
+
           // Prefer auth profile data
           const profileToUse = authProfile || userProfile
-          
+
           // If we have phone or location in the raw profile, prefer those
           const raw = (profileToUse as any)?._raw || null;
           if (raw && raw.phone) {
@@ -191,14 +192,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           if (raw && raw.location) {
             defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` })
           }
-          
+
           if (authProfile?.created_at) {
             const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
           } else {
             defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
           }
-          
+
           setSkills(defaultSkills)
         }
       } catch (error) {
@@ -206,7 +207,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       }
     }
     load()
-  // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
+    // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
   }, [showSettings, userProfile?.username, authProfile?.id, authUserId])
 
   const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
@@ -245,8 +246,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
   const shareProfile = async () => {
     try {
-  const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
-  const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
+      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
+      const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
       const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
 
       await Share.share({
@@ -285,45 +286,45 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
         </View>
       )}
-  {/* Header — left: BOUNTY brand, right: back + settings */}
-  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
+      {/* Header — left: BOUNTY brand, right: back + settings */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
         <View className="flex-row items-center gap-2">
           <BrandingLogo size="medium" />
         </View>
         <View className="flex-row items-center">
-          <TouchableOpacity 
-            className="p-2" 
-            onPress={shareProfile} 
+          <TouchableOpacity
+            className="p-2"
+            onPress={shareProfile}
             accessibilityRole="button"
             accessibilityLabel="Share profile"
             accessibilityHint="Share your profile via social media or messaging apps"
           >
-            <MaterialIcons 
-              name="share" 
-              size={22} 
-              color="#ffffff" 
+            <MaterialIcons
+              name="share"
+              size={22}
+              color="#ffffff"
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
-          <TouchableOpacity 
-            className="p-2" 
-            onPress={() => setShowSettings(true)} 
+          <TouchableOpacity
+            className="p-2"
+            onPress={() => setShowSettings(true)}
             accessibilityRole="button"
             accessibilityLabel="Open settings"
             accessibilityHint="Access profile settings and preferences"
           >
-            <MaterialIcons 
-              name="settings" 
-              size={24} 
-              color="#ffffff" 
+            <MaterialIcons
+              name="settings"
+              size={24}
+              color="#ffffff"
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
-        className="flex-1 pb-40" 
+      <ScrollView
+        className="flex-1 pb-40"
         contentContainerStyle={{ paddingBottom: 220 }}
         refreshControl={
           <RefreshControl
@@ -337,9 +338,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* Profile + Stats merged card */}
         {isProfileReady ? (
           // If this is the signed-in user's profile, pass undefined so the hook resolves the "current-user" profile
-          <EnhancedProfileSection 
-            userId={isOwnProfile ? undefined : profileUuid} 
-            isOwnProfile={isOwnProfile} 
+          <EnhancedProfileSection
+            userId={isOwnProfile ? undefined : profileUuid}
+            isOwnProfile={isOwnProfile}
             key={profileUuid}
             showPortfolio={false}
             activityStats={{
