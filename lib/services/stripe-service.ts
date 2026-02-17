@@ -552,14 +552,14 @@ class StripeService {
       }
 
       // Use fetchWithTimeout with retry logic for better reliability
-      // Configured with longer timeout for payment operations
+      // Listing payment methods is a read-only operation, use DEFAULT timeout
       const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds for read operations
         retries: 2, // Retry twice on failure
       });
 
