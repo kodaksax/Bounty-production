@@ -1524,6 +1524,20 @@ class StripeService {
     
     const errorMessage = error.message || error.toString();
     
+    // Handle network and timeout errors with user-friendly messages
+    if (error.name === 'TimeoutError' || errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+      return 'Connection timed out. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'AbortError') {
+      // Don't show the generic "Aborted" message
+      return 'Connection interrupted. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'NetworkError' || errorMessage.includes('Network') || errorMessage.includes('fetch failed')) {
+      return 'Unable to connect. Please check your internet connection.';
+    }
+    
     // Detect test/live mode mismatch
     if (errorMessage.includes('No such setupintent') || errorMessage.includes('No such paymentintent')) {
       if (errorMessage.includes('live mode') && errorMessage.includes('test mode key')) {
