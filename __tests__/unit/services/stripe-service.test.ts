@@ -318,32 +318,30 @@ describe('Stripe Service', () => {
   });
 
   describe('Apple Pay Support', () => {
-    // Mock React Native Platform
-    const mockPlatform = { OS: 'ios' };
-    
+    // Access the mocked React Native Platform from jest.setup.js
+    const { Platform } = require('react-native');
+
     beforeEach(() => {
-      // Mock React Native Platform module
-      jest.doMock('react-native', () => ({
-        Platform: mockPlatform,
-      }), { virtual: true });
+      // Default to iOS before each test; individual tests can override
+      Platform.OS = 'ios';
     });
 
     describe('isApplePaySupported', () => {
       it('should return false on non-iOS platforms', async () => {
-        mockPlatform.OS = 'android';
+        Platform.OS = 'android';
         const supported = await stripeService.isApplePaySupported();
         expect(supported).toBe(false);
       });
 
       it('should return false when SDK is not available', async () => {
-        mockPlatform.OS = 'ios';
+        Platform.OS = 'ios';
         // SDK is mocked to reject during initialization in this test file
         const supported = await stripeService.isApplePaySupported();
         expect(supported).toBe(false);
       });
 
       it('should handle errors gracefully', async () => {
-        mockPlatform.OS = 'ios';
+        Platform.OS = 'ios';
         // Should not throw even if there's an error
         const supported = await stripeService.isApplePaySupported();
         expect(typeof supported).toBe('boolean');
@@ -351,7 +349,17 @@ describe('Stripe Service', () => {
     });
 
     describe('presentApplePay', () => {
+      it('should return error on non-iOS platforms', async () => {
+        Platform.OS = 'android';
+        const result = await stripeService.presentApplePay(10.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/iOS/i);
+        expect(result.errorCode).toBe('platform_not_supported');
+      });
+
       it('should return error when SDK is not available', async () => {
+        Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(10.00);
         
         expect(result.success).toBe(false);
@@ -359,38 +367,84 @@ describe('Stripe Service', () => {
         expect(result.errorCode).toBeDefined();
       });
 
-      it('should validate amount is greater than zero', async () => {
+      it('should enforce minimum amount of $0.50', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(0.49);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/at least.*0\.50/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should validate amount is not zero', async () => {
+        Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(0);
         
         expect(result.success).toBe(false);
-        expect(result.error).toMatch(/greater than zero/i);
+        expect(result.error).toMatch(/at least.*0\.50/i);
         expect(result.errorCode).toBe('invalid_amount');
       });
 
       it('should validate amount is not negative', async () => {
+        Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(-5.00);
         
         expect(result.success).toBe(false);
-        expect(result.error).toMatch(/greater than zero/i);
+        expect(result.error).toMatch(/at least.*0\.50/i);
         expect(result.errorCode).toBe('invalid_amount');
       });
 
+      it('should accept valid amount above minimum', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(1.00);
+        // Will fail due to SDK not available, but should pass amount validation
+        expect(result).toHaveProperty('success');
+        // Error should not be about amount
+        if (!result.success && result.errorCode) {
+          expect(result.errorCode).not.toBe('invalid_amount');
+        }
+      });
+
+      it('should validate cart items total matches amount', async () => {
+        Platform.OS = 'ios';
+        const customCartItems = [
+          { label: 'Item 1', amount: '10.00', type: 'final' as const },
+          { label: 'Item 2', amount: '5.00', type: 'final' as const },
+        ];
+        
+        // Amount (20.00) doesn't match cart total (15.00)
+        const result = await stripeService.presentApplePay(20.00, 'Payment', customCartItems);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/match.*cart.*total/i);
+        expect(result.errorCode).toBe('amount_mismatch');
+      });
+
+      it('should accept cart items when total matches amount', async () => {
+        Platform.OS = 'ios';
+        const customCartItems = [
+          { label: 'Item 1', amount: '10.00', type: 'final' as const },
+          { label: 'Item 2', amount: '5.00', type: 'final' as const },
+        ];
+        
+        // Amount matches cart total
+        const result = await stripeService.presentApplePay(15.00, 'Payment', customCartItems);
+        expect(result).toHaveProperty('success');
+        // Error should not be about amount mismatch
+        if (!result.success && result.errorCode) {
+          expect(result.errorCode).not.toBe('amount_mismatch');
+        }
+      });
+
       it('should use default description if not provided', async () => {
+        Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(10.00);
         // Even though it will fail (SDK not available), it should process the default description
         expect(result).toHaveProperty('success');
       });
 
-      it('should accept custom cart items', async () => {
-        const customCartItems = [
-          { label: 'Custom Item', amount: '10.00', type: 'final' as const },
-        ];
-        
-        const result = await stripeService.presentApplePay(10.00, 'Custom Payment', customCartItems);
-        expect(result).toHaveProperty('success');
-      });
-
       it('should handle errors gracefully', async () => {
+        Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(10.00);
         
         // Should always return a result object

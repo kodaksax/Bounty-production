@@ -1522,7 +1522,7 @@ class StripeService {
    * @param amount Amount in dollars (e.g., 10.50)
    * @param description Description for the payment (default: "Add Money to Wallet")
    * @param cartItems Optional custom cart items for Apple Pay sheet
-   * @returns Promise with success status and payment intent ID or error
+   * @returns Promise with success status and error details
    */
   async presentApplePay(
     amount: number,
@@ -1530,18 +1530,54 @@ class StripeService {
     cartItems?: Array<{ label: string; amount: string; type?: 'final' | 'pending' }>
   ): Promise<{
     success: boolean;
-    paymentIntentId?: string;
     error?: string;
     errorCode?: string;
   }> {
     try {
-      // Validate amount first, before any initialization
-      if (amount <= 0) {
+      // Check platform first - Apple Pay is iOS only
+      const { Platform } = await import('react-native');
+      if (Platform.OS !== 'ios') {
         return {
           success: false,
-          error: 'Amount must be greater than zero',
+          error: 'Apple Pay is only available on iOS',
+          errorCode: 'platform_not_supported',
+        };
+      }
+
+      // Validate amount - enforce Stripe's minimum charge amount
+      if (amount < 0.5) {
+        return {
+          success: false,
+          error: 'Amount must be at least $0.50',
           errorCode: 'invalid_amount',
         };
+      }
+
+      // If custom cartItems are provided, validate that their total matches the amount
+      if (cartItems && cartItems.length > 0) {
+        const totalFromCart = cartItems.reduce((sum, item) => {
+          const itemAmount = Number(item.amount);
+          return Number.isFinite(itemAmount) ? sum + itemAmount : sum;
+        }, 0);
+
+        const totalFromCartInCents = Math.round(totalFromCart * 100);
+        const amountInCents = Math.round(amount * 100);
+
+        if (
+          Number.isFinite(totalFromCartInCents) &&
+          Number.isFinite(amountInCents) &&
+          totalFromCartInCents !== amountInCents
+        ) {
+          console.warn(
+            '[StripeService] Apple Pay amount mismatch:',
+            { amount, totalFromCart }
+          );
+          return {
+            success: false,
+            error: 'Payment amount does not match cart total',
+            errorCode: 'amount_mismatch',
+          };
+        }
       }
 
       await this.initialize();
