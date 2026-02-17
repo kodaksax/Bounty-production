@@ -121,7 +121,28 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        // Try to surface a meaningful error message from the server
+        let message = `Request failed with status ${response.status}`
+        try {
+          const data: unknown = await response.json()
+          if (data && typeof data === 'object' && 'error' in data) {
+            const errorField = (data as { error?: unknown }).error
+            if (typeof errorField === 'string' && errorField.trim().length > 0) {
+              message = errorField
+            }
+          }
+        } catch {
+          try {
+            const text = await response.text()
+            if (text && text.trim().length > 0) {
+              message = text
+            }
+          } catch {
+            // Ignore body parsing errors; fall back to status-based message
+          }
+        }
+
+        throw new Error(message)
       }
 
       const { clientSecret } = await response.json()

@@ -142,7 +142,7 @@ export async function fetchWithTimeout(
         // If the external signal aborted while we were waiting, short-circuit
         // and treat this as an external cancellation (no retries).
         if (abortedByExternalSignal) {
-          const cancelError: Error & { cause?: unknown } = new Error('Request was cancelled');
+          const cancelError: Error & { cause?: unknown } = new Error('Connection interrupted. Please try again.');
           cancelError.name = 'AbortError';
           throw cancelError;
         }

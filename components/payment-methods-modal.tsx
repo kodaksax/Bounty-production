@@ -326,8 +326,12 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                       return 'Connection timed out. Please check your internet connection and try again.';
                     }
 
-                    if (stripeError.includes('Network') || stripeError.includes('interrupted')) {
+                    if (stripeError.includes('Network')) {
                       return 'Unable to connect. Please check your internet connection.';
+                    }
+
+                    if (stripeError.includes('interrupted')) {
+                      return 'Connection interrupted. Please try again.';
                     }
 
                     return stripeError;
