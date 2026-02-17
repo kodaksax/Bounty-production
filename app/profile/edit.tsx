@@ -107,6 +107,32 @@ export default function EditProfileScreen() {
     return formChanged || avatarChanged || bannerChanged;
   }, [formData, initialData, avatarUrl, bannerUrl, profile]);
 
+  // Handle back/cancel with unsaved changes check
+  const handleCancel = React.useCallback(() => {
+    if (isDirty) {
+      Alert.alert(
+        "Discard changes?",
+        "You have unsaved changes. Are you sure you want to discard them?",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          { 
+            text: "Discard", 
+            style: "destructive", 
+            onPress: () => {
+              // Reset form data to initial state
+              setFormData(initialData);
+              setAvatarUrl(profile?.avatar || null);
+              setBannerUrl(null);
+              router.back();
+            }
+          },
+        ]
+      );
+    } else {
+      router.back();
+    }
+  }, [isDirty, initialData, profile, router]);
+
   // Handle hardware back button on Android
   useBackHandler(() => {
     if (isDirty) {
@@ -197,7 +223,7 @@ export default function EditProfileScreen() {
       {/* Pinned Header: Twitter-style Cancel/Save */}
       <View style={styles.pinnedHeader}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleCancel}
           style={styles.headerButton}
           accessibilityLabel="Cancel editing"
           accessibilityRole="button"

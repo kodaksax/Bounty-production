@@ -2,10 +2,12 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { BrandingLogo } from "components/ui/branding-logo"
 import * as DocumentPicker from 'expo-document-picker'
 import { useEffect, useState } from "react"
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
-import { BrandingLogo } from "components/ui/branding-logo"
+import { useAuthProfile } from '../hooks/useAuthProfile'
+import { useUserProfile } from '../hooks/useUserProfile'
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -26,6 +28,11 @@ const ICON_LIBRARY = [
 ] as const
 
 export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: SkillsetEditScreenProps) {
+  const { profile: localProfile, updateProfile } = useUserProfile();
+  const { userId: authUserId } = useAuthProfile();
+
+  const resolvedUserId = userId || authUserId;
+
   const [skills, setSkills] = useState<Skill[]>(() => initialSkills && initialSkills.length ? initialSkills : [
     { id: "1", icon: "code", text: "Knows English, Spanish" },
     { id: "2", icon: "gps-fixed", text: "Private Investigator Certification" },
@@ -37,12 +44,25 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color="#ffffff" />
   
   // User-specific storage key to prevent data leaks between users
-  const SKILLS_STORAGE_KEY = `profileSkills:${userId || 'anon'}`;
+  const SKILLS_STORAGE_KEY = `profileSkills:${resolvedUserId || 'anon'}`;
 
   // If prop changes while open (unlikely), sync once.
   useEffect(() => {
-    if (initialSkills && initialSkills.length) setSkills(initialSkills)
-  }, [initialSkills])
+    if (initialSkills && initialSkills.length) {
+      setSkills(initialSkills)
+      return
+    }
+
+    // If no initialSkills provided, try loading from profile hook first
+    if (localProfile && localProfile.skills && localProfile.skills.length > 0) {
+      // Map string[] to Skill[] simple mapping
+      const mapped: Skill[] = localProfile.skills.map((s, i) => ({ id: String(i + 1), icon: 'globe', text: s }))
+      setSkills(mapped)
+      return
+    }
+
+    // Otherwise leave defaults or load from AsyncStorage below
+  }, [initialSkills, localProfile])
 
   const handleSkillChange = (id: string, text: string) => {
     setSkills(skills.map((skill) => (skill.id === id ? { ...skill, text } : skill)))
@@ -70,9 +90,23 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const handleSave = async () => {
     const cleaned = skills.filter((skill) => skill.text.trim() !== "")
     try {
-      await AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(cleaned))
-      setBanner('Skills saved')
-      setTimeout(()=>setBanner(null), 1500)
+      // Prefer persisting into the profile service when available so other screens (and backend) see the update
+      if (updateProfile) {
+        // extract text strings to match Profile shape
+        const skillTexts = cleaned.map(s => s.text)
+        const result = await updateProfile({ skills: skillTexts } as any)
+        if (!result.success) {
+          setBanner('Error saving skills to profile')
+          setTimeout(()=>setBanner(null), 1500)
+        } else {
+          setBanner('Skills saved')
+          setTimeout(()=>setBanner(null), 1500)
+        }
+      } else {
+        await AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(cleaned))
+        setBanner('Skills saved')
+        setTimeout(()=>setBanner(null), 1500)
+      }
     } catch {
       setBanner('Error saving skills')
     }
@@ -83,6 +117,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   // Persist on change (debounced simple approach)
   useEffect(() => {
     const t = setTimeout(() => {
+      // Keep AsyncStorage in sync as a fallback/local cache
       AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(skills)).catch(() => {})
     }, 250)
     return () => clearTimeout(t)

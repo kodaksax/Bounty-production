@@ -9,7 +9,6 @@ import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
-import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
@@ -50,25 +49,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     )
   }
 
-  const handleProfileSave = (data: { name: string; about: string; phone: string; avatar?: string }) => {
-    // Profile updates are handled by authProfileService subscribers
-    // Just return to root panel - the profile will update automatically
-    setPanel('root')
+  const handleEditProfile = () => {
+    router.push('/profile/edit')
   }
 
   // Panel routing
-  if (panel === 'editProfile') {
-    return (
-      <EditProfileScreen
-        onBack={() => setPanel('root')}
-        initialName={profileData.name}
-        initialAbout={profileData.about}
-        initialPhone={profileData.phone}
-        initialAvatar={profileData.avatar}
-        onSave={handleProfileSave}
-      />
-    )
-  }
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
   if (panel === 'location') return <LocationSettingsScreen onBack={() => setPanel('root')} />
@@ -97,8 +82,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           description="Allows users to modify their personal information such as name, profile picture, contact details, and update their role preferences. It provides"
           primaryLabel="Save Changes"
           secondaryLabel="View My Profile"
-          onPrimary={() => setPanel('editProfile')}
-          onSecondary={() => setPanel('editProfile')}
+          onPrimary={handleEditProfile}
+          onSecondary={handleEditProfile}
           icon="person"
         />
         <SettingsCard
