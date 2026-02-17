@@ -1,5 +1,5 @@
-import type { UserRating } from "lib/types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
+import type { UserRating } from "lib/types";
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 
@@ -107,7 +107,8 @@ export const ratingsService = {
       return await response.json()
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logOnce('ratings:getByUserId', 'error', 'Error fetching ratings', { userId, error })
+      // Log as a warning to avoid surfacing as a fatal error in dev overlays
+      logOnce('ratings:getByUserId', 'warn', 'Error fetching ratings', { userId, error })
       return []
     }
   },
@@ -143,7 +144,8 @@ export const ratingsService = {
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error")
-      logOnce('ratings:getAggregatedStats', 'error', 'Error getting aggregated stats', { userId, error })
+      // Non-fatal: surface as a warning instead of error to reduce dev overlay noise
+      logOnce('ratings:getAggregatedStats', 'warn', 'Error getting aggregated stats', { userId, error })
       return { averageRating: 0, ratingCount: 0 }
     }
   },
