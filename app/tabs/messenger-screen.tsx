@@ -209,6 +209,18 @@ export function MessengerScreen({
       );
     }
     
+    if (error) {
+      return (
+        <EmptyState
+          icon="cloud-off"
+          title="Unable to Load Messages"
+          description="Check your internet connection and try again"
+          actionLabel="Try Again"
+          onAction={handleRefresh}
+        />
+      );
+    }
+    
     return (
       <EmptyState
         icon="chat-bubble-outline"
@@ -218,7 +230,7 @@ export function MessengerScreen({
         onAction={() => onNavigate?.('bounty')}
       />
     );
-  }, [loading, onNavigate]);
+  }, [loading, error, onNavigate, handleRefresh]);
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)

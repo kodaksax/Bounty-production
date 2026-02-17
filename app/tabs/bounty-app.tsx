@@ -60,7 +60,8 @@ function BountyAppInner() {
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // Track whether user applications have been loaded (prevents flash of unfiltered content)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
-  // removed unused error state
+  // Track error state to show offline/error UI instead of perpetual loading
+  const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   // Trending bounties state
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
@@ -235,6 +236,7 @@ function BountyAppInner() {
   const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
     if (reset) {
       setIsLoadingBounties(true)
+      setLoadError(null) // Clear previous error on retry
     } else {
       setLoadingMore(true)
     }
@@ -248,17 +250,23 @@ function BountyAppInner() {
       }
       offsetRef.current = pageOffset + fetchedBounties.length
       setHasMore(fetchedBounties.length === PAGE_SIZE)
+      setLoadError(null) // Clear error on successful load
     } catch (error) {
       console.error('Error loading bounties:', error)
       if (reset) {
-        setBounties([])
+        // On initial load failure, show error state instead of clearing bounties
+        setLoadError(error as Error)
+        // Only clear bounties if we had none before (avoid clearing cached data)
+        if (bounties.length === 0) {
+          setBounties([])
+        }
         setHasMore(false)
       }
     } finally {
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, []) // Empty dependencies - uses ref for offset
+  }, [bounties.length]) // Track bounties.length to determine if we should keep cached data
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -407,6 +415,32 @@ function BountyAppInner() {
         <View style={{ width: '100%' }}>
           <PostingsListSkeleton count={5} />
         </View>
+      ) : loadError ? (
+        // Error state with retry button
+        <>
+          <MaterialIcons name="cloud-off" size={48} color="#ef4444" style={{ marginBottom: 16 }} />
+          <Text style={{ color: '#e5e7eb', marginBottom: 8, fontSize: 16, fontWeight: '600' }}>
+            Unable to load bounties
+          </Text>
+          <Text style={{ color: '#9ca3af', marginBottom: 16, textAlign: 'center', paddingHorizontal: 32 }}>
+            Check your internet connection and try again
+          </Text>
+          <TouchableOpacity 
+            onPress={() => loadBounties({ reset: true })} 
+            style={{ 
+              backgroundColor: '#10b981', 
+              paddingHorizontal: 24, 
+              paddingVertical: 12, 
+              borderRadius: 999,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <MaterialIcons name="refresh" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '700' }}>Try Again</Text>
+          </TouchableOpacity>
+        </>
       ) : (
         <>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
@@ -416,7 +450,7 @@ function BountyAppInner() {
         </>
       )}
     </View>
-  ), [isLoadingBounties, applicationsLoaded]);
+  ), [isLoadingBounties, applicationsLoaded, loadError, loadBounties]);
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (

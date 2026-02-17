@@ -29,7 +29,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const { balance, transactions, refreshFromApi } = useWallet();
-  const { paymentMethods, isLoading: stripeLoading } = useStripe();
+  const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
 
@@ -172,6 +172,22 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <View style={{ paddingVertical: 8 }}>
                 <PaymentMethodSkeleton />
                 <PaymentMethodSkeleton />
+              </View>
+            ) : stripeError ? (
+              <View style={styles.accountCard}>
+                <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
+                  <MaterialIcons name="cloud-off" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
+                  <Text style={styles.accountSub}>Check your connection</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={loadPaymentMethods}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                >
+                  <MaterialIcons name="refresh" size={20} color="#fff" />
+                </TouchableOpacity>
               </View>
             ) : paymentMethods.length === 0 ? (
               <TouchableOpacity 
