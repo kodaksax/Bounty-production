@@ -47,27 +47,66 @@ const inMemorySessionCache: Map<string, string> = new Map();
 // The preference is cached in memory and immediately available
 let inMemoryRememberMeCache: boolean | null = null;
 
+// Promise to track in-flight SecureStore read operation
+// This prevents multiple concurrent reads and ensures all callers get the same result
+let inFlightPreferenceRead: Promise<boolean> | null = null;
+
 /**
  * Get the current remember me preference
  * Returns false if preference is not set or any error occurs
  * 
- * IMPORTANT: Checks in-memory cache first to avoid race conditions.
- * The cache is populated immediately when setRememberMePreference() is called.
+ * IMPORTANT: Uses both in-memory cache and promise-based mutex to prevent race conditions.
+ * - If cache is populated, returns immediately
+ * - If a read is in progress, waits for it to complete instead of starting another
+ * - Only starts a new SecureStore read if cache is empty and no read is in progress
  */
 export async function getRememberMePreference(): Promise<boolean> {
   try {
-    // Check in-memory cache first (fast path, avoids race conditions)
+    // Fast path: Check in-memory cache first
     if (inMemoryRememberMeCache !== null) {
       return inMemoryRememberMeCache;
     }
     
-    // Cache miss: read from secure storage and populate cache
-    const value = await SecureStore.getItemAsync(REMEMBER_ME_KEY);
-    const preference = value === 'true';
-    inMemoryRememberMeCache = preference;
-    return preference;
+    // If another read is already in progress, wait for it to complete
+    // This prevents multiple concurrent SecureStore reads on app cold start
+    if (inFlightPreferenceRead !== null) {
+      console.log('[AuthSessionStorage] Waiting for in-flight preference read to complete');
+      return await inFlightPreferenceRead;
+    }
+    
+    // No cache and no in-flight read: start a new read from SecureStore
+    console.log('[AuthSessionStorage] Starting new preference read from SecureStore');
+    inFlightPreferenceRead = (async () => {
+      try {
+        const value = await SecureStore.getItemAsync(REMEMBER_ME_KEY);
+        const preference = value === 'true';
+        
+        // Update cache on successful read
+        inMemoryRememberMeCache = preference;
+        console.log('[AuthSessionStorage] Preference read from SecureStore:', preference);
+        
+        return preference;
+      } catch (readError) {
+        console.error('[AuthSessionStorage] Error reading from SecureStore:', readError);
+        
+        // On error, set cache to false (safe default: require re-authentication)
+        // This ensures subsequent reads don't keep retrying a failing SecureStore
+        inMemoryRememberMeCache = false;
+        
+        return false;
+      } finally {
+        // Clear the in-flight promise so future reads can try again
+        inFlightPreferenceRead = null;
+      }
+    })();
+    
+    // Return the result of the read we just started
+    return await inFlightPreferenceRead;
   } catch (e) {
-    console.error('[AuthSessionStorage] Error reading remember me preference:', e);
+    // Outer catch for any unexpected errors
+    console.error('[AuthSessionStorage] Unexpected error in getRememberMePreference:', e);
+    // Set cache to false to prevent repeated failures
+    inMemoryRememberMeCache = false;
     return false;
   }
 }
@@ -77,6 +116,7 @@ export async function getRememberMePreference(): Promise<boolean> {
  * 
  * IMPORTANT: Updates in-memory cache IMMEDIATELY before writing to secure storage.
  * This ensures subsequent reads get the correct value without waiting for async storage.
+ * Also clears any in-flight read operations to prevent stale data.
  * 
  * DESIGN DECISION: If SecureStore write fails, the cache remains updated.
  * This means:
@@ -89,6 +129,9 @@ export async function setRememberMePreference(remember: boolean): Promise<void> 
   try {
     // Update in-memory cache immediately (synchronous, no race condition)
     inMemoryRememberMeCache = remember;
+    
+    // Clear any in-flight read operation since we now have the authoritative value
+    inFlightPreferenceRead = null;
     
     // Then persist to secure storage (asynchronous, but cache already updated)
     await SecureStore.setItemAsync(REMEMBER_ME_KEY, remember ? 'true' : 'false', SECURE_OPTS);
@@ -106,6 +149,9 @@ export async function clearRememberMePreference(): Promise<void> {
   try {
     // Clear in-memory cache immediately
     inMemoryRememberMeCache = null;
+    
+    // Clear any in-flight read operation
+    inFlightPreferenceRead = null;
     
     // Then clear from secure storage
     await SecureStore.deleteItemAsync(REMEMBER_ME_KEY);
