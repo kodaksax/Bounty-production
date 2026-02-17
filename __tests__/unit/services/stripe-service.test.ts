@@ -402,6 +402,9 @@ describe('Stripe Service', () => {
           expect(result.error).toBeDefined();
         }
       });
+    });
+  });
+
   describe('parseStripeError', () => {
     it('should return default message for null error', () => {
       const result = stripeService.parseStripeError(null);
