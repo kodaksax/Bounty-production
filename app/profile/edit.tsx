@@ -4,6 +4,7 @@ import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
+import { AuthProfile } from "lib/services/auth-profile-service";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -37,23 +38,32 @@ export default function EditProfileScreen() {
   const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
   const { updateProfile: updateAuthProfile } = useAuthProfile();
 
+  // Initialize state with empty values - will be populated by useEffect when profile loads
   const [formData, setFormData] = useState({
-    name: profile?.name || "",
-    username: profile?.username || "",
-    bio: profile?.bio || "",
-    location: profile?.location || "",
-    portfolio: profile?.portfolio || "",
-    skillsets: profile?.skills?.join(", ") || "",
+    name: "",
+    username: "",
+    bio: "",
+    location: "",
+    portfolio: "",
+    skillsets: "",
   });
 
-  const [initialData, setInitialData] = useState(formData);
+  const [initialData, setInitialData] = useState({
+    name: "",
+    username: "",
+    bio: "",
+    location: "",
+    portfolio: "",
+    skillsets: "",
+  });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Avatar upload state
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // TODO: Banner functionality - backend support needed (database schema doesn't include banner field yet)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
   const avatarUpload = useAttachmentUpload({
@@ -76,6 +86,12 @@ export default function EditProfileScreen() {
     maxSizeMB: 5,
     onUploaded: (attachment) => {
       setBannerUrl(attachment.remoteUri || attachment.uri);
+      // Note: Banner will be uploaded but not saved to profile (backend support needed)
+      Alert.alert(
+        'Banner Uploaded',
+        'Your banner has been uploaded but will not be saved yet. Banner support is coming soon!',
+        [{ text: 'OK' }]
+      );
     },
     onError: (error) => {
       Alert.alert('Banner Upload Error', error.message);
@@ -162,13 +178,12 @@ export default function EditProfileScreen() {
         .filter((s) => s.length > 0);
 
       // Update auth profile (primary source of truth)
-      // Note: avatar_url may not be in the type definition, but is accepted by the API
-      const authUpdateData: any = {
+      const authUpdateData: Partial<Omit<AuthProfile, 'id' | 'created_at'>> = {
         username: formData.username,
         about: formData.bio,
       };
       if (avatarUrl) {
-        authUpdateData.avatar_url = avatarUrl;
+        authUpdateData.avatar = avatarUrl;
       }
 
       const authUpdated = await updateAuthProfile(authUpdateData);
