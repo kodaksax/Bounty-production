@@ -37,14 +37,14 @@ Presents the Apple Pay payment sheet to the user.
 - `description` (string, optional): Description for the payment. Default: "Add Money to Wallet"
 - `cartItems` (Array, optional): Custom cart items for the Apple Pay sheet
 
-**Returns:** `Promise<{ success: boolean; paymentIntentId?: string; error?: string; errorCode?: string }>`
+**Returns:** `Promise<{ success: boolean; error?: string; errorCode?: string }>`
 
 **Behavior:**
 - Validates amount is greater than zero before any SDK calls
 - Initializes Stripe SDK if not already initialized
 - Presents Apple Pay sheet with configured cart items
 - Handles user cancellation separately (errorCode: 'cancelled')
-- Returns structured result with success status and error details
+- Returns structured result with success status and optional error details
 
 **Example:**
 ```typescript
