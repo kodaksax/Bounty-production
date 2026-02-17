@@ -1,7 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
-import React from "react";
-import { Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+// 1. Update imports
+import { shareBounty } from "lib/utils/share-utils";
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -43,14 +44,12 @@ export function BountyCard({
   const isOwner = currentUserId === bounty.user_id;
 
   const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out this bounty: ${bounty.title} - $${bounty.amount}`,
-        title: bounty.title,
-      });
-    } catch (error) {
-      // User cancelled or error occurred
-    }
+    await shareBounty({
+      title: bounty.title,
+      price: bounty.amount, // bounty.amount is used in BountyCard, not price
+      id: bounty.id,
+      description: bounty.description,
+    });
   };
 
   const getStatusColor = () => {
@@ -240,8 +239,6 @@ export function BountyCard({
               <TouchableOpacity
                 style={[styles.actionButton, styles.viewButton]}
                 onPress={(e) => {
-                  e.stopPropagation();
-                  onViewCancellation();
                 }}
               >
                 <MaterialIcons name="visibility" size={16} color="#3b82f6" />
