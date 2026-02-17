@@ -142,7 +142,7 @@ export async function fetchWithTimeout(
         // If the external signal aborted while we were waiting, short-circuit
         // and treat this as an external cancellation (no retries).
         if (abortedByExternalSignal) {
-          const cancelError: Error & { cause?: unknown } = new Error('Request was cancelled');
+          const cancelError: Error & { cause?: unknown } = new Error('Connection interrupted. Please try again.');
           cancelError.name = 'AbortError';
           throw cancelError;
         }
@@ -173,15 +173,15 @@ export async function fetchWithTimeout(
       // Convert AbortError to appropriate error type based on cause
       if (error.name === 'AbortError') {
         if (abortedByExternalSignal) {
-          // External cancellation - preserve as AbortError
-          const cancelError: Error & { cause?: unknown } = new Error('Request was cancelled');
+          // External cancellation - preserve as AbortError with clear message
+          const cancelError: Error & { cause?: unknown } = new Error('Connection interrupted. Please try again.');
           cancelError.name = 'AbortError';
           cancelError.cause = error;
           lastError = cancelError;
         } else {
-          // Internal timeout - convert to TimeoutError
+          // Internal timeout - convert to TimeoutError with clear message
           const timeoutError: Error & { cause?: unknown } = new Error(
-            `Network request timed out after ${timeout}ms`
+            `Connection timed out after ${Math.round(timeout / 1000)} seconds. Please check your internet connection and try again.`
           );
           timeoutError.name = 'TimeoutError';
           timeoutError.cause = error;

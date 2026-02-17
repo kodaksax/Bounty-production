@@ -16,7 +16,10 @@ import {
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
+import { API_TIMEOUTS } from "../lib/config/network"
 import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
+import { stripeService } from "../lib/services/stripe-service"
+import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 
 interface AddBankAccountModalProps {
   onBack: () => void
@@ -141,7 +144,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       }
 
       // Create bank account on Connect account for payouts
-      const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/connect/bank-accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -153,6 +156,8 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
           accountNumber,
           accountType,
         }),
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
+        retries: 2,
       })
 
       if (!response.ok) {
@@ -189,7 +194,8 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       
     } catch (error) {
       console.error('[AddBankAccountModal] Error adding bank account:', error)
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add bank account')
+      const errorMessage = stripeService.parseStripeError(error)
+      Alert.alert('Error', errorMessage)
     } finally {
       setIsLoading(false)
     }

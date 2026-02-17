@@ -67,6 +67,9 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   // Auto-refresh methods when modal opens
   React.useEffect(() => {
     if (isOpen) {
+      // Clear any previous errors and failed state when opening
+      setLoadFailed(false)
+      clearError()
       refreshWithRetry(4) // Try 4 times total
     }
   }, [isOpen])
@@ -204,8 +207,8 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
             onSave={(cardData) => {
               // Card already added through Stripe service in AddCardModal
               setShowAddCard(false)
-              // Refresh payment methods with longer timeout
-              refreshWithRetry(3, 10000)
+              // Refresh payment methods with reasonable retry
+              refreshWithRetry(3, 1000)
             }}
           />
         ) : showAddBankAccount ? (
@@ -216,7 +219,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
               // Bank account added through backend
               setShowAddBankAccount(false)
               // Refresh payment methods
-              refreshWithRetry(3, 10000)
+              refreshWithRetry(3, 1000)
             }}
           />
         ) : (
@@ -305,42 +308,46 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
             </TouchableOpacity>
 
             {/* Payment Methods List */}
-            {isLoading ? (
+            {isLoading && !loadFailed && !stripeError ? (
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <Text style={{ color: 'white', fontSize: 16 }}>Loading payment methods...</Text>
               </View>
-            ) : selectedMethodType === 'card' && paymentMethods.length === 0 ? (
+            ) : (loadFailed || stripeError) && selectedMethodType === 'card' && paymentMethods.length === 0 ? (
               // Show error state if load ultimately failed
-              loadFailed || stripeError ? (
-                <View style={{ alignItems: 'center', padding: 20 }}>
-                  <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
-                  <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
-                    {(() => {
-                      if (!stripeError) {
-                        return 'Unable to load payment methods. Please check your connection and try again.';
-                      }
+              <View style={{ alignItems: 'center', padding: 20 }}>
+                <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
+                <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
+                  {(() => {
+                    if (!stripeError) {
+                      return 'Unable to load payment methods. Please check your connection and try again.';
+                    }
 
-                      if (stripeError.includes('timed out') || stripeError.includes('timeout')) {
-                        return 'Connection timed out. Please check your internet connection and try again.';
-                      }
+                    if (stripeError.includes('timed out') || stripeError.includes('timeout')) {
+                      return 'Connection timed out. Please check your internet connection and try again.';
+                    }
 
-                      if (stripeError.includes('Network')) {
-                        return 'Unable to connect. Please check your internet connection.';
-                      }
+                    if (stripeError.includes('Network')) {
+                      return 'Unable to connect. Please check your internet connection.';
+                    }
 
-                      return stripeError;
-                    })()}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => refreshWithRetry(3, 10000)}
-                    style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Retry loading payment methods"
-                  >
-                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retry</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
+                    if (stripeError.includes('interrupted')) {
+                      return 'Connection interrupted. Please try again.';
+                    }
+
+                    return stripeError;
+                  })()}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => refreshWithRetry(3, 1000)}
+                  style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading payment methods"
+                >
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : selectedMethodType === 'card' && paymentMethods.length === 0 ? (
+              // Empty state when no error
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="credit-card" size={56} color="rgba(255,255,255,0.4)" />
                 <Text style={{ 
@@ -353,7 +360,6 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                   No payment methods added yet.{'\n'}Add your first card to get started.
                 </Text>
               </View>
-              )
             ) : selectedMethodType === 'bank_account' ? (
               // Bank accounts - UI for listing will be added in future iteration
               <View style={{ alignItems: 'center', padding: 40 }}>
