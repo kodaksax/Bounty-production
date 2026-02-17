@@ -29,6 +29,7 @@ import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
+import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
 
 export default function UserProfileScreen() {
@@ -176,12 +177,14 @@ export default function UserProfileScreen() {
     setIsCreatingChat(true);
     try {
       // Create or get existing conversation
-      await messageService.getOrCreateConversation(
+      const conversation = await messageService.getOrCreateConversation(
         [userId],
         profile?.username || 'User',
         undefined // no bounty context
       );
 
+      // Set intent to open this conversation
+      await navigationIntent.setPendingConversationId(conversation.id);
 
       // Navigate to messenger
       router.push(ROUTES.TABS.MESSENGER as any);
