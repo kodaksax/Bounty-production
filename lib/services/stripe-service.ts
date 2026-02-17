@@ -1482,6 +1482,146 @@ class StripeService {
   }
 
   /**
+   * Check if Apple Pay is supported on this device
+   * @returns Promise<boolean> indicating whether Apple Pay is available
+   */
+  async isApplePaySupported(): Promise<boolean> {
+    try {
+      // Apple Pay is only available on iOS
+      const { Platform } = await import('react-native');
+      if (Platform.OS !== 'ios') {
+        return false;
+      }
+
+      await this.initialize();
+
+      // Check if the SDK is available and has Apple Pay support
+      if (!this.stripeSDK) {
+        return false;
+      }
+
+      // Try to access isApplePaySupported from the SDK
+      // The method might be at different locations depending on SDK version
+      const isApplePaySupportedFn = 
+        this.stripeSDK.isApplePaySupported || 
+        this.stripeSDK.ApplePay?.isApplePaySupported;
+
+      if (typeof isApplePaySupportedFn === 'function') {
+        return await isApplePaySupportedFn();
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[StripeService] Error checking Apple Pay support:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Present Apple Pay payment sheet
+   * @param amount Amount in dollars (e.g., 10.50)
+   * @param description Description for the payment (default: "Add Money to Wallet")
+   * @param cartItems Optional custom cart items for Apple Pay sheet
+   * @returns Promise with success status and payment intent ID or error
+   */
+  async presentApplePay(
+    amount: number,
+    description: string = 'Add Money to Wallet',
+    cartItems?: Array<{ label: string; amount: string; type?: 'final' | 'pending' }>
+  ): Promise<{
+    success: boolean;
+    paymentIntentId?: string;
+    error?: string;
+    errorCode?: string;
+  }> {
+    try {
+      // Validate amount first, before any initialization
+      if (amount <= 0) {
+        return {
+          success: false,
+          error: 'Amount must be greater than zero',
+          errorCode: 'invalid_amount',
+        };
+      }
+
+      await this.initialize();
+
+      if (!this.stripeSDK) {
+        return {
+          success: false,
+          error: 'Stripe SDK not available',
+          errorCode: 'sdk_unavailable',
+        };
+      }
+
+      // Get the presentApplePay function from SDK
+      const presentApplePayFn = 
+        this.stripeSDK.presentApplePay || 
+        this.stripeSDK.ApplePay?.presentApplePay;
+
+      if (typeof presentApplePayFn !== 'function') {
+        return {
+          success: false,
+          error: 'Apple Pay not available in this SDK version',
+          errorCode: 'apple_pay_unavailable',
+        };
+      }
+
+      // Prepare cart items
+      const items = cartItems || [
+        {
+          label: description,
+          amount: amount.toFixed(2),
+          type: 'final' as const,
+        },
+      ];
+
+      // Present the Apple Pay sheet
+      const { error: presentError } = await presentApplePayFn({
+        cartItems: items,
+        country: 'US',
+        currency: 'USD',
+        requiredShippingAddressFields: [],
+        requiredBillingContactFields: ['postalAddress'],
+      });
+
+      if (presentError) {
+        console.error('[StripeService] Apple Pay presentation error:', presentError);
+
+        // Handle user cancellation separately
+        const cancelCodes = ['Canceled', 'canceled', 'USER_CANCELLED', 'user_cancelled'];
+        if (presentError.code && cancelCodes.includes(presentError.code)) {
+          return {
+            success: false,
+            error: 'Payment cancelled by user',
+            errorCode: 'cancelled',
+          };
+        }
+
+        return {
+          success: false,
+          error: presentError.message || 'Failed to present Apple Pay',
+          errorCode: presentError.code,
+        };
+      }
+
+      // If we get here, the payment was presented successfully
+      // Note: The actual payment confirmation should be handled separately
+      // using confirmApplePayPayment with the client secret
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('[StripeService] Error presenting Apple Pay:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorCode: 'unknown_error',
+      };
+    }
+  }
+
+  /**
    * Get the native SDK instance for advanced use cases
    */
   getStripeSDK(): any {

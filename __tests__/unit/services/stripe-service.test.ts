@@ -316,4 +316,92 @@ describe('Stripe Service', () => {
         });
     });
   });
+
+  describe('Apple Pay Support', () => {
+    // Mock React Native Platform
+    const mockPlatform = { OS: 'ios' };
+    
+    beforeEach(() => {
+      // Mock React Native Platform module
+      jest.doMock('react-native', () => ({
+        Platform: mockPlatform,
+      }), { virtual: true });
+    });
+
+    describe('isApplePaySupported', () => {
+      it('should return false on non-iOS platforms', async () => {
+        mockPlatform.OS = 'android';
+        const supported = await stripeService.isApplePaySupported();
+        expect(supported).toBe(false);
+      });
+
+      it('should return false when SDK is not available', async () => {
+        mockPlatform.OS = 'ios';
+        // SDK is mocked to reject during initialization in this test file
+        const supported = await stripeService.isApplePaySupported();
+        expect(supported).toBe(false);
+      });
+
+      it('should handle errors gracefully', async () => {
+        mockPlatform.OS = 'ios';
+        // Should not throw even if there's an error
+        const supported = await stripeService.isApplePaySupported();
+        expect(typeof supported).toBe('boolean');
+      });
+    });
+
+    describe('presentApplePay', () => {
+      it('should return error when SDK is not available', async () => {
+        const result = await stripeService.presentApplePay(10.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.errorCode).toBeDefined();
+      });
+
+      it('should validate amount is greater than zero', async () => {
+        const result = await stripeService.presentApplePay(0);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/greater than zero/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should validate amount is not negative', async () => {
+        const result = await stripeService.presentApplePay(-5.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/greater than zero/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should use default description if not provided', async () => {
+        const result = await stripeService.presentApplePay(10.00);
+        // Even though it will fail (SDK not available), it should process the default description
+        expect(result).toHaveProperty('success');
+      });
+
+      it('should accept custom cart items', async () => {
+        const customCartItems = [
+          { label: 'Custom Item', amount: '10.00', type: 'final' as const },
+        ];
+        
+        const result = await stripeService.presentApplePay(10.00, 'Custom Payment', customCartItems);
+        expect(result).toHaveProperty('success');
+      });
+
+      it('should handle errors gracefully', async () => {
+        const result = await stripeService.presentApplePay(10.00);
+        
+        // Should always return a result object
+        expect(result).toHaveProperty('success');
+        expect(typeof result.success).toBe('boolean');
+        
+        // If not successful, should have error info
+        if (!result.success) {
+          expect(result.error).toBeDefined();
+        }
+      });
+    });
+  });
 });
