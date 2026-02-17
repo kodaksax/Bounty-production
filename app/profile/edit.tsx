@@ -62,7 +62,7 @@ export default function EditProfileScreen() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Avatar upload state
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   // TODO: Banner functionality - backend support needed (database schema doesn't include banner field yet)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
