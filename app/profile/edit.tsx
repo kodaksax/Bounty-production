@@ -4,6 +4,7 @@ import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
+import { AuthProfile } from "lib/services/auth-profile-service";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -85,6 +86,12 @@ export default function EditProfileScreen() {
     maxSizeMB: 5,
     onUploaded: (attachment) => {
       setBannerUrl(attachment.remoteUri || attachment.uri);
+      // Note: Banner will be uploaded but not saved to profile (backend support needed)
+      Alert.alert(
+        'Banner Uploaded',
+        'Your banner has been uploaded but will not be saved yet. Banner support is coming soon!',
+        [{ text: 'OK' }]
+      );
     },
     onError: (error) => {
       Alert.alert('Banner Upload Error', error.message);
@@ -171,13 +178,12 @@ export default function EditProfileScreen() {
         .filter((s) => s.length > 0);
 
       // Update auth profile (primary source of truth)
-      // Note: avatar_url may not be in the type definition, but is accepted by the API
-      const authUpdateData: any = {
+      const authUpdateData: Partial<Omit<AuthProfile, 'id' | 'created_at'>> = {
         username: formData.username,
         about: formData.bio,
       };
       if (avatarUrl) {
-        authUpdateData.avatar_url = avatarUrl;
+        authUpdateData.avatar = avatarUrl;
       }
 
       const authUpdated = await updateAuthProfile(authUpdateData);
