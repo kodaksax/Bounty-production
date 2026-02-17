@@ -552,14 +552,14 @@ class StripeService {
       }
 
       // Use fetchWithTimeout with retry logic for better reliability
-      // Configured with longer timeout for payment operations
+      // Listing payment methods is a read-only operation, use DEFAULT timeout
       const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds for read operations
         retries: 2, // Retry twice on failure
       });
 
@@ -1523,6 +1523,20 @@ class StripeService {
     if (!error) return 'An unknown error occurred';
     
     const errorMessage = error.message || error.toString();
+    
+    // Handle network and timeout errors with user-friendly messages
+    if (error.name === 'TimeoutError' || errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+      return 'Connection timed out. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'AbortError') {
+      // Don't show the generic "Aborted" message
+      return 'Connection interrupted. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'NetworkError' || errorMessage.includes('Network') || errorMessage.includes('fetch failed')) {
+      return 'Unable to connect. Please check your internet connection.';
+    }
     
     // Detect test/live mode mismatch
     if (errorMessage.includes('No such setupintent') || errorMessage.includes('No such paymentintent')) {
