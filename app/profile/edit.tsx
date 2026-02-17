@@ -37,16 +37,24 @@ export default function EditProfileScreen() {
   const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
   const { updateProfile: updateAuthProfile } = useAuthProfile();
 
+  // Initialize state with empty values - will be populated by useEffect when profile loads
   const [formData, setFormData] = useState({
-    name: profile?.name || "",
-    username: profile?.username || "",
-    bio: profile?.bio || "",
-    location: profile?.location || "",
-    portfolio: profile?.portfolio || "",
-    skillsets: profile?.skills?.join(", ") || "",
+    name: "",
+    username: "",
+    bio: "",
+    location: "",
+    portfolio: "",
+    skillsets: "",
   });
 
-  const [initialData, setInitialData] = useState(formData);
+  const [initialData, setInitialData] = useState({
+    name: "",
+    username: "",
+    bio: "",
+    location: "",
+    portfolio: "",
+    skillsets: "",
+  });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
@@ -54,6 +62,7 @@ export default function EditProfileScreen() {
 
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar || null);
+  // TODO: Banner functionality - backend support needed (database schema doesn't include banner field yet)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
   const avatarUpload = useAttachmentUpload({
@@ -350,6 +359,7 @@ export default function EditProfileScreen() {
                 onBlur={() => setFocusedField(null)}
                 placeholder="Your display name"
                 placeholderTextColor="#6b7280"
+                editable={true}
                 accessibilityLabel="Display name"
                 accessibilityHint="Enter your display name"
               />
@@ -366,6 +376,7 @@ export default function EditProfileScreen() {
                 placeholder="@username"
                 placeholderTextColor="#6b7280"
                 autoCapitalize="none"
+                editable={true}
                 accessibilityLabel="Username"
                 accessibilityHint="Enter your unique username"
               />
@@ -385,6 +396,7 @@ export default function EditProfileScreen() {
                 numberOfLines={4}
                 maxLength={maxBioLength}
                 textAlignVertical="top"
+                editable={true}
                 accessibilityLabel="Bio"
                 accessibilityHint={`Enter your bio, ${bioLength} of ${maxBioLength} characters used`}
               />
@@ -407,6 +419,7 @@ export default function EditProfileScreen() {
                 onBlur={() => setFocusedField(null)}
                 placeholder="City, Country"
                 placeholderTextColor="#6b7280"
+                editable={true}
                 accessibilityLabel="Location"
                 accessibilityHint="Enter your city and country"
               />
@@ -424,6 +437,7 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#6b7280"
                 keyboardType="url"
                 autoCapitalize="none"
+                editable={true}
                 accessibilityLabel="Website or Portfolio URL"
                 accessibilityHint="Enter your website or portfolio link"
               />
@@ -443,6 +457,7 @@ export default function EditProfileScreen() {
                 onBlur={() => setFocusedField(null)}
                 placeholder="e.g., React, Node.js, Design"
                 placeholderTextColor="#6b7280"
+                editable={true}
                 accessibilityLabel="Skillsets"
                 accessibilityHint="Enter your skills separated by commas"
               />
