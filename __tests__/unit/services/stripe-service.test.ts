@@ -316,4 +316,99 @@ describe('Stripe Service', () => {
         });
     });
   });
+
+  describe('parseStripeError', () => {
+    it('should return default message for null error', () => {
+      const result = stripeService.parseStripeError(null);
+      expect(result).toBe('An unknown error occurred');
+    });
+
+    it('should return default message for undefined error', () => {
+      const result = stripeService.parseStripeError(undefined);
+      expect(result).toBe('An unknown error occurred');
+    });
+
+    it('should handle TimeoutError by name', () => {
+      const error = new Error('Request took too long');
+      error.name = 'TimeoutError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should handle timeout by message content', () => {
+      const error = new Error('Connection timed out after 30 seconds');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should handle AbortError', () => {
+      const error = new Error('Request was aborted');
+      error.name = 'AbortError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+    });
+
+    it('should handle NetworkError by name', () => {
+      const error = new Error('Network failure');
+      error.name = 'NetworkError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should handle Network error by message', () => {
+      const error = new Error('Network request failed');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should handle fetch failed error', () => {
+      const error = new Error('fetch failed');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should detect test/live mode mismatch (live mode with test key)', () => {
+      const error = new Error('No such setupintent: si_123 in live mode but using test mode key');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+    });
+
+    it('should detect test/live mode mismatch (test mode with live key)', () => {
+      const error = new Error('No such paymentintent: pi_123 in test mode but using live mode key');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+    });
+
+    it('should return original message for unknown error types', () => {
+      const error = new Error('Custom Stripe error message');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Custom Stripe error message');
+    });
+
+    it('should handle errors without message property', () => {
+      const error = { toString: () => 'String representation of error' };
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('String representation of error');
+    });
+
+    it('should handle string errors', () => {
+      const error = 'Plain string error';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Plain string error');
+    });
+
+    it('should prioritize TimeoutError name over message', () => {
+      const error = new Error('Some random message');
+      error.name = 'TimeoutError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should prioritize AbortError name over message', () => {
+      const error = new Error('Network failed');
+      error.name = 'AbortError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+    });
+  });
 });
