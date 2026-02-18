@@ -247,6 +247,7 @@ const styles = StyleSheet.create({
     minHeight: SIZING.MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -28, // Align with raised center button
   },
   centerButton: {
     height: 68, // Slightly larger for emphasis
