@@ -16,6 +16,7 @@ export interface AttachmentUploadOptions {
   folder?: string // Folder within bucket (e.g., 'bounties', 'profiles', 'proofs')
   allowedTypes?: 'all' | 'images' | 'videos' | 'documents'
   maxSizeMB?: number
+  allowsMultiple?: boolean
   onUploaded?: (attachment: Attachment) => void
   onError?: (error: Error) => void
 }
@@ -30,6 +31,13 @@ export interface AttachmentUploadState {
 
 type PickSource = 'camera' | 'photos' | 'files'
 
+type PickResult = {
+  uri: string
+  name: string
+  mimeType?: string
+  size?: number
+}
+
 /**
  * Unified hook for attachment uploads supporting camera, photo gallery, and file picker
  */
@@ -39,6 +47,7 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
     folder = 'uploads',
     allowedTypes = 'all',
     maxSizeMB = 10,
+    allowsMultiple = false,
     onUploaded,
     onError,
   } = options
@@ -79,43 +88,49 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
         }
       }
 
-      let result: {
-        uri: string
-        name: string
-        mimeType?: string
-        size?: number
-      } | null = null
+      let results: PickResult[] | null = null
 
       switch (selectedSource) {
         case 'camera':
-          result = await pickFromCamera()
+          const camResult = await pickFromCamera()
+          results = camResult ? [camResult] : null
           break
         case 'photos':
-          result = await pickFromPhotos()
+          results = await pickFromPhotos(allowsMultiple)
           break
         case 'files':
-          result = await pickFromFiles()
+          results = await pickFromFiles(allowsMultiple)
           break
       }
 
-      if (!result) {
+      if (!results || results.length === 0) {
         if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
         return null
       }
 
-      // Validate file size
-      if (result.size && result.size > maxSizeBytes) {
-        const error = new Error(`File too large. Maximum size is ${maxSizeMB}MB`)
-        if (isMounted.current) setState((s) => ({ ...s, isPicking: false, error: error.message }))
-        onError?.(error)
-        Alert.alert('File Too Large', `Maximum file size is ${maxSizeMB}MB`)
-        return null
+      // Validate file sizes
+      for (const result of results) {
+        if (result.size && result.size > maxSizeBytes) {
+          const error = new Error(`File "${result.name}" too large. Maximum size is ${maxSizeMB}MB`)
+          if (isMounted.current) setState((s) => ({ ...s, isPicking: false, error: error.message }))
+          onError?.(error)
+          Alert.alert('File Too Large', `Maximum file size is ${maxSizeMB}MB`)
+          return null
+        }
       }
 
       if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
 
-      // Upload the attachment
-      return await uploadAttachment(result)
+      // Upload the attachments one by one
+      const uploadedAttachments: Attachment[] = []
+      for (const result of results) {
+        const uploaded = await uploadAttachment(result)
+        if (uploaded) {
+          uploadedAttachments.push(uploaded)
+        }
+      }
+
+      return uploadedAttachments.length > 0 ? uploadedAttachments : null
     } catch (error) {
       const err = error instanceof Error ? error : new Error('Failed to pick attachment')
       if (isMounted.current) setState((s) => ({ ...s, isPicking: false, isUploading: false, error: err.message }))
@@ -344,12 +359,7 @@ async function pickFromCamera(): Promise<{
 /**
  * Pick from photo library
  */
-async function pickFromPhotos(): Promise<{
-  uri: string
-  name: string
-  mimeType?: string
-  size?: number
-} | null> {
+async function pickFromPhotos(allowsMultiple: boolean = false): Promise<PickResult[] | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
   if (!permission.granted) {
     Alert.alert('Permission Required', 'Photo library permission is required.')
@@ -358,7 +368,8 @@ async function pickFromPhotos(): Promise<{
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.All,
-    allowsEditing: false,
+    allowsEditing: !allowsMultiple, // Disable editing if multiple selection is enabled
+    allowsMultipleSelection: allowsMultiple,
     quality: 0.8,
   })
 
@@ -366,61 +377,53 @@ async function pickFromPhotos(): Promise<{
     return null
   }
 
-  const asset = result.assets?.[0]
-  if (!asset) {
-    return null
-  }
+  const results: PickResult[] = []
 
-  // Get file size if possible
-  let size: number | undefined
-  try {
-    const info = await getFileInfo(asset.uri)
-    if (info && info.exists && typeof info.size === 'number') {
-      size = info.size
+  for (const asset of result.assets) {
+    // Get file size if possible
+    let size: number | undefined
+    try {
+      const info = await getFileInfo(asset.uri)
+      if (info && info.exists && typeof info.size === 'number') {
+        size = info.size
+      }
+    } catch (e) {
+      console.error('Failed to get file size:', e)
     }
-  } catch (e) {
-    console.error('Failed to get file size:', e)
+
+    // Type-safe extraction of fileName with fallback
+    const fileName = ('fileName' in asset ? (asset as any).fileName : undefined) || `media-${Date.now()}`
+    const mimeType = asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg')
+
+    results.push({
+      uri: asset.uri,
+      name: fileName,
+      mimeType,
+      size,
+    })
   }
 
-  // Type-safe extraction of fileName with fallback
-  const fileName = ('fileName' in asset ? (asset as any).fileName : undefined) || `media-${Date.now()}`
-  const mimeType = asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg')
-
-  return {
-    uri: asset.uri,
-    name: fileName,
-    mimeType,
-    size,
-  }
+  return results.length > 0 ? results : null
 }
 
 /**
  * Pick from file system
  */
-async function pickFromFiles(): Promise<{
-  uri: string
-  name: string
-  mimeType?: string
-  size?: number
-} | null> {
+async function pickFromFiles(allowsMultiple: boolean = false): Promise<PickResult[] | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: '*/*',
     copyToCacheDirectory: true,
+    multiple: allowsMultiple,
   })
 
   if (result.canceled) {
     return null
   }
 
-  const asset = result.assets?.[0]
-  if (!asset) {
-    return null
-  }
-
-  return {
+  return result.assets.map((asset) => ({
     uri: asset.uri,
     name: asset.name,
     mimeType: asset.mimeType,
     size: asset.size,
-  }
+  }))
 }

@@ -1,0 +1,61 @@
+
+> bountyexpo@1.0.0 test
+> jest __tests__/unit/hooks/use-attachment-upload.test.ts --verbose
+
+FAIL __tests__/unit/hooks/use-attachment-upload.test.ts
+  useAttachmentUpload
+    Initialization
+      ΓêÜ should initialize with default state (19 ms)
+      ΓêÜ should accept custom options (2 ms)
+    File Picker - Photos
+      ΓêÜ should pick image from photo library (7 ms)
+      ΓêÜ should handle permission denial for photo library (11 ms)
+      ΓêÜ should handle user cancellation (3 ms)
+      ΓêÜ should pick multiple images when allowsMultiple is true (2 ms)
+    File Picker - Camera
+      ΓêÜ should pick image from camera (3 ms)
+      ΓêÜ should handle permission denial for camera (1 ms)
+    File Picker - Documents
+      ΓêÜ should pick document from file system (1 ms)
+    File Validation
+      ├ù should reject files that exceed max size (3 ms)
+      ΓêÜ should accept files within size limit (3 ms)
+    Upload Retry Logic
+      ΓêÜ should retry upload 3 times with exponential backoff on failure (4 ms)
+      ΓêÜ should succeed on second retry attempt (4 ms)
+      ΓêÜ should use exponential backoff delays (1s, 2s, 4s) (2 ms)
+    Progress Tracking
+      ΓêÜ should track upload progress (1 ms)
+      ΓêÜ should reset progress after successful upload (1 ms)
+    Error Handling
+      ΓêÜ should call onError callback on upload failure (2 ms)
+      ΓêÜ should show alert on upload failure after retries (2 ms)
+      ΓêÜ should allow clearing error state (2 ms)
+    State Management
+      ΓêÜ should track isPicking state during file selection (1 ms)
+      ΓêÜ should track isUploading state during upload (2 ms)
+      ΓêÜ should store lastUploaded attachment (1 ms)
+      ΓêÜ should reset all state (1 ms)
+
+  ΓùÅ useAttachmentUpload ΓÇ║ File Validation ΓÇ║ should reject files that exceed max size
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "File too large"
+    Received string:    "File \"media-1771436437701\" too large. Maximum size is 5MB"
+
+      378 |       );
+      379 |       expect(onError).toHaveBeenCalled();
+    > 380 |       expect(result.current.error).toContain('File too large');
+          |                                    ^
+      381 |     });
+      382 |
+      383 |     it('should accept files within size limit', async () => {
+
+      at Object.<anonymous> (__tests__/unit/hooks/use-attachment-upload.test.ts:380:36)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 22 passed, 23 total
+Snapshots:   0 total
+Time:        1.085 s
+Ran all test suites matching /__tests__\\unit\\hooks\\use-attachment-upload.test.ts/i.

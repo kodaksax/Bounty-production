@@ -184,6 +184,56 @@ describe('useAttachmentUpload', () => {
       expect(result.current.isPicking).toBe(false);
       expect(result.current.isUploading).toBe(false);
     });
+
+    it('should pick multiple images when allowsMultiple is true', async () => {
+      const mockImagePicker = ImagePicker as jest.Mocked<typeof ImagePicker>;
+      mockImagePicker.requestMediaLibraryPermissionsAsync.mockResolvedValue({
+        status: 'granted',
+        granted: true,
+        canAskAgain: true,
+        expires: 'never',
+      } as any);
+
+      mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file://test1.jpg',
+            width: 800,
+            height: 600,
+            type: 'image',
+            mimeType: 'image/jpeg',
+          },
+          {
+            uri: 'file://test2.jpg',
+            width: 800,
+            height: 600,
+            type: 'image',
+            mimeType: 'image/jpeg',
+          },
+        ],
+      } as any);
+
+      (getFileInfo as jest.Mock).mockResolvedValue({
+        exists: true,
+        size: mockFile.size,
+      });
+
+      (storageService.uploadFile as jest.Mock).mockResolvedValue(mockUploadResult);
+
+      const onUploaded = jest.fn();
+      const { result } = renderHook(() =>
+        useAttachmentUpload({ allowsMultiple: true, onUploaded })
+      );
+
+      await act(async () => {
+        const attachments = await result.current.pickAttachment('photos');
+        expect(attachments).toHaveLength(2);
+      });
+
+      expect(onUploaded).toHaveBeenCalledTimes(2);
+      expect(storageService.uploadFile).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('File Picker - Camera', () => {
@@ -327,7 +377,8 @@ describe('useAttachmentUpload', () => {
         'Maximum file size is 5MB'
       );
       expect(onError).toHaveBeenCalled();
-      expect(result.current.error).toContain('File too large');
+      expect(result.current.error).toContain('too large');
+      expect(result.current.error).toContain('5MB');
     });
 
     it('should accept files within size limit', async () => {
