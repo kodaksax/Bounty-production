@@ -43,7 +43,7 @@ function BountyAppInner() {
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading } = useAuthContext()
   const currentUserId = session?.user?.id
-  
+
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
@@ -74,7 +74,7 @@ function BountyAppInner() {
   // Reduce header vertical padding to move content up ~25px while respecting safe area
   // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
   const headerTopPad = Math.max(insets.top - 50, 0)
-  
+
   // Location hook for calculating real distances
   const { location: userLocation, permission } = useLocation()
   const [distanceFilter, setDistanceFilter] = useState<number | null>(null) // Max distance in miles, null = no filter
@@ -150,12 +150,12 @@ function BountyAppInner() {
   // Filter and sort bounties by category
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
-    
+
     // Filter out bounties the user has applied to (pending, accepted, or rejected)
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
-    
+
     if (activeCategory !== "all") {
       if (activeCategory === 'forkids') {
         // For Honor chip should show bounties marked as for-honor
@@ -173,7 +173,7 @@ function BountyAppInner() {
         )
       }
     }
-    
+
     // Apply distance filter if active (only for in-person bounties)
     if (distanceFilter !== null && userLocation && permission?.granted) {
       list = list.filter((b) => {
@@ -185,7 +185,7 @@ function BountyAppInner() {
         return distance <= distanceFilter
       })
     }
-    
+
     // Sorting
     if (activeCategory === "highpaying") {
       // Highest amount first
@@ -289,8 +289,11 @@ function BountyAppInner() {
   // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === "bounty") {
-      // Refresh when returning to the bounty tab - also refresh applications and trending
-      loadBounties({ reset: true })
+      // Refresh when returning to the bounty tab
+      // NOTE: We use reset: false here so that we don't clear the list 
+      // if the user is just returning from a sub-screen like a Profile.
+      // This preserves current component state (like open BountyDetailModal).
+      loadBounties({ reset: false })
       loadUserApplications()
       loadTrendingBounties()
     }
@@ -302,7 +305,7 @@ function BountyAppInner() {
       try {
         const saved = await storage.getItem('BE:lastFilter')
         if (saved) setActiveCategory(saved as any)
-      } catch {}
+      } catch { }
     })()
   }, [])
 
@@ -311,7 +314,7 @@ function BountyAppInner() {
     (async () => {
       try {
         await storage.setItem('BE:lastFilter', String(activeCategory))
-      } catch {}
+      } catch { }
     })()
   }, [activeCategory])
 
@@ -451,7 +454,7 @@ function BountyAppInner() {
       if (!createdAt) return null;
       const date = new Date(createdAt);
       if (isNaN(date.getTime())) return null;
-      
+
       const hours = (Date.now() - date.getTime()) / (1000 * 60 * 60);
       if (hours < 24) return 'New today';
       if (hours < 48) return 'Yesterday';
@@ -510,9 +513,9 @@ function BountyAppInner() {
   const renderDashboardContent = () => (
     <View style={styles.dashboardArea}>
       {/* Collapsing Header */}
-  <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}> 
-        <View style={styles.headerRow}> 
-          <View style={styles.headerLeft}> 
+      <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
             <BrandingLogo size="medium" />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -588,10 +591,10 @@ function BountyAppInner() {
                       accessibilityHint={distanceFilter ? 'Tap to clear distance filter' : 'Tap to select distance radius'}
                       accessibilityState={{ selected: isActive, disabled: !permission?.granted }}
                     >
-                      <MaterialIcons 
-                        name={item.icon} 
-                        size={SIZING.ICON_SMALL} 
-                        color={isActive ? '#052e1b' : '#d1fae5'} 
+                      <MaterialIcons
+                        name={item.icon}
+                        size={SIZING.ICON_SMALL}
+                        color={isActive ? '#052e1b' : '#d1fae5'}
                         style={{ marginRight: SPACING.COMPACT_GAP }}
                         accessibilityElementsHidden={true}
                       />
@@ -621,7 +624,7 @@ function BountyAppInner() {
               }}
             />
 
-            
+
           </View>
 
           {/* Distance dropdown */}
@@ -638,7 +641,7 @@ function BountyAppInner() {
                 }
                 const top = distanceChipLayout.y + distanceChipLayout.height + 2
                 return (
-                  <View style={[styles.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }] }>
+                  <View style={[styles.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }]}>
                     {permission?.granted && userLocation ? (
                       DISTANCE_OPTIONS.map((m) => (
                         <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
@@ -730,15 +733,15 @@ function BountyAppInner() {
     <View style={styles.container}>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
-      
+
       {activeScreen === "bounty" ? (
         renderDashboardContent()
       ) : activeScreen === "wallet" ? (
         <WalletScreen onBack={() => setActiveScreen("bounty")} />
       ) : activeScreen === "postings" ? (
-        <PostingsScreen 
-          onBack={() => setActiveScreen("bounty")} 
-          activeScreen={activeScreen} 
+        <PostingsScreen
+          onBack={() => setActiveScreen("bounty")}
+          activeScreen={activeScreen}
           setActiveScreen={setActiveScreen}
           onBountyPosted={() => loadBounties({ reset: true })} // Refresh bounties when a new one is posted
           onBountyAccepted={() => loadBounties({ reset: true })} // Refresh bounties when a bounty is accepted
@@ -759,7 +762,7 @@ function BountyAppInner() {
 
       {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} />}
     </View>
-    )
+  )
 }
 
 export function BountyApp() {
@@ -775,15 +778,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
   dashboardArea: { flex: 1 },
   collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL, 
-    paddingBottom: SPACING.COMPACT_GAP 
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    paddingBottom: SPACING.COMPACT_GAP
   },
-  headerLeft: { 
-    flexDirection: 'row', 
+  headerLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: HEADER_LAYOUT.iconToTitleGap,
     transform: [
@@ -791,11 +794,11 @@ const styles = StyleSheet.create({
       { translateY: -1 },
     ],
   },
-  headerTitle: { 
-    fontSize: HEADER_LAYOUT.titleFontSize, 
-    fontWeight: 'bold', 
-    color: '#ffffff', 
-    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE 
+  headerTitle: {
+    fontSize: HEADER_LAYOUT.titleFontSize,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE
   },
   balanceContainer: {
     minWidth: SIZING.MIN_TOUCH_TARGET,
@@ -813,90 +816,90 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#6ee7b7',
   },
-  headerBalance: { 
-    fontSize: 14, 
-    fontWeight: 'bold', 
-    color: '#ffffff' 
+  headerBalance: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ffffff'
   },
-  searchWrapper: { 
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL, 
-    marginBottom: SPACING.COMPACT_GAP 
-  },
-  searchButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(5,46,27,0.35)', 
-    borderRadius: 999, 
-    paddingVertical: 10, 
+  searchWrapper: {
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    minHeight: SIZING.MIN_TOUCH_TARGET 
+    marginBottom: SPACING.COMPACT_GAP
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(5,46,27,0.35)',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    minHeight: SIZING.MIN_TOUCH_TARGET
   },
   searchIcon: { marginRight: SPACING.COMPACT_GAP },
-  searchText: { 
-    color: 'rgba(255,255,255,0.85)', 
-    fontSize: TYPOGRAPHY.SIZE_SMALL 
+  searchText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: TYPOGRAPHY.SIZE_SMALL
   },
   filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
   gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(5,46,27,0.2)', 
-    paddingHorizontal: 14, 
-    height: 36, 
-    borderRadius: 999, 
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(5,46,27,0.2)',
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 999,
     marginRight: SPACING.COMPACT_GAP,
-    minHeight: SIZING.MIN_TOUCH_TARGET 
+    minHeight: SIZING.MIN_TOUCH_TARGET
   },
   chipActive: { backgroundColor: '#a7f3d0' },
-  chipLabel: { 
-    color: '#d1fae5', 
-    fontSize: TYPOGRAPHY.SIZE_SMALL, 
-    fontWeight: '600' 
+  chipLabel: {
+    color: '#d1fae5',
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    fontWeight: '600'
   },
   chipLabelActive: { color: '#052e1b' },
-  distanceChip: { 
-    backgroundColor: 'rgba(5,46,27,0.2)', 
-    paddingHorizontal: SPACING.ELEMENT_GAP, 
-    height: 28, 
-    borderRadius: 14, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  distanceChip: {
+    backgroundColor: 'rgba(5,46,27,0.2)',
+    paddingHorizontal: SPACING.ELEMENT_GAP,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   distanceChipActive: { backgroundColor: '#6ee7b7' },
-  distanceChipLabel: { 
-    color: '#d1fae5', 
-    fontSize: TYPOGRAPHY.SIZE_XSMALL, 
-    fontWeight: '600' 
+  distanceChipLabel: {
+    color: '#d1fae5',
+    fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    fontWeight: '600'
   },
   distanceChipLabelActive: { color: '#052e1b' },
-  distanceClearButton: { 
-    width: SIZING.ICON_LARGE, 
-    height: SIZING.ICON_LARGE, 
-    borderRadius: SIZING.ICON_LARGE / 2, 
-    backgroundColor: 'rgba(239,68,68,0.3)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  distanceClearButton: {
+    width: SIZING.ICON_LARGE,
+    height: SIZING.ICON_LARGE,
+    borderRadius: SIZING.ICON_LARGE / 2,
+    backgroundColor: 'rgba(239,68,68,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
   disabledChip: { opacity: 0.5 },
-  distanceDropdown: { 
-    position: 'absolute', 
-    top: 48, 
-    right: SPACING.SCREEN_HORIZONTAL, 
-    backgroundColor: 'rgba(2,44,34,0.9)', 
-    padding: SPACING.COMPACT_GAP, 
-    borderRadius: SPACING.COMPACT_GAP, 
-    zIndex: 60 
+  distanceDropdown: {
+    position: 'absolute',
+    top: 48,
+    right: SPACING.SCREEN_HORIZONTAL,
+    backgroundColor: 'rgba(2,44,34,0.9)',
+    padding: SPACING.COMPACT_GAP,
+    borderRadius: SPACING.COMPACT_GAP,
+    zIndex: 60
   },
-  distanceOption: { 
-    paddingVertical: SPACING.COMPACT_GAP, 
-    paddingHorizontal: SPACING.ELEMENT_GAP 
+  distanceOption: {
+    paddingVertical: SPACING.COMPACT_GAP,
+    paddingHorizontal: SPACING.ELEMENT_GAP
   },
-  dropdownNotice: { 
-    color: '#f3fff9', 
-    padding: SPACING.COMPACT_GAP, 
-    fontSize: TYPOGRAPHY.SIZE_XSMALL 
+  dropdownNotice: {
+    color: '#f3fff9',
+    padding: SPACING.COMPACT_GAP,
+    fontSize: TYPOGRAPHY.SIZE_XSMALL
   },
   // Trending section styles
   trendingSection: {
