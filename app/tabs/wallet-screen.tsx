@@ -174,9 +174,14 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 <PaymentMethodSkeleton />
               </View>
             ) : stripeError ? (
-              <View style={styles.accountCard}>
+              <View 
+                style={styles.accountCard}
+                accessible={true}
+                accessibilityRole="alert"
+                accessibilityLabel="Unable to load payment methods. Check your connection."
+              >
                 <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
-                  <MaterialIcons name="cloud-off" size={24} color="#fff" />
+                  <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
@@ -185,8 +190,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 <TouchableOpacity 
                   onPress={loadPaymentMethods}
                   style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading payment methods"
+                  accessibilityHint="Double tap to reload payment methods"
                 >
-                  <MaterialIcons name="refresh" size={20} color="#fff" />
+                  <MaterialIcons name="refresh" size={20} color="#fff" accessibilityElementsHidden={true} />
                 </TouchableOpacity>
               </View>
             ) : paymentMethods.length === 0 ? (

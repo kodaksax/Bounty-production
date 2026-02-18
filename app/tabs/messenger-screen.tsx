@@ -57,14 +57,14 @@ export function MessengerScreen({
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
       await refresh()
     } finally {
       setIsRefreshing(false)
     }
-  }
+  }, [refresh])
 
   const handleConversationClick = async (id: string) => {
     await markConversationReadSafe(id)
