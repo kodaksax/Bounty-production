@@ -8,7 +8,8 @@ import {
   createAuthSessionStorageAdapter, 
   setRememberMePreference,
   getRememberMePreference,
-  clearRememberMePreference 
+  clearRememberMePreference,
+  clearAllSessionData
 } from '../../lib/auth-session-storage';
 
 // Mock SecureStore
@@ -33,8 +34,9 @@ describe('Remember Me - Cold Start Integration', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     
-    // Reset the in-memory cache by clearing preference
-    await clearRememberMePreference();
+    // Reset all in-memory caches to simulate cold start
+    // clearAllSessionData clears both session and preference caches
+    await clearAllSessionData();
   });
 
   describe('Scenario: User signs in with Remember Me checked', () => {
