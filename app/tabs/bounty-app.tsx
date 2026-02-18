@@ -11,6 +11,7 @@ import { storage } from '../../lib/storage'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
 import { BrandingLogo } from 'components/ui/branding-logo'
+import { EmptyState } from 'components/ui/empty-state'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
@@ -60,7 +61,8 @@ function BountyAppInner() {
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // Track whether user applications have been loaded (prevents flash of unfiltered content)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
-  // removed unused error state
+  // Track error state to show offline/error UI instead of perpetual loading
+  const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   // Trending bounties state
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
@@ -235,6 +237,7 @@ function BountyAppInner() {
   const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
     if (reset) {
       setIsLoadingBounties(true)
+      setLoadError(null) // Clear previous error on retry
     } else {
       setLoadingMore(true)
     }
@@ -248,17 +251,22 @@ function BountyAppInner() {
       }
       offsetRef.current = pageOffset + fetchedBounties.length
       setHasMore(fetchedBounties.length === PAGE_SIZE)
+      setLoadError(null) // Clear error on successful load
     } catch (error) {
       console.error('Error loading bounties:', error)
       if (reset) {
-        setBounties([])
+        // On initial load failure, show error state instead of clearing bounties
+        setLoadError(error as Error)
+        // Only clear bounties if we had none before (avoid clearing cached data)
+        // Use functional update to access current state without dependency
+        setBounties(prev => prev.length === 0 ? [] : prev)
         setHasMore(false)
       }
     } finally {
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, []) // Empty dependencies - uses ref for offset
+  }, []) // Empty dependencies - uses ref for offset and functional setState
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -404,22 +412,36 @@ function BountyAppInner() {
 
   const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, []);
 
-  const EmptyListComponent = useCallback(() => (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
-      {isLoadingBounties || !applicationsLoaded ? (
+  const EmptyListComponent = useCallback(() => {
+    if (isLoadingBounties || !applicationsLoaded) {
+      return (
         <View style={{ width: '100%' }}>
           <PostingsListSkeleton count={5} />
         </View>
-      ) : (
-        <>
-          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
-  ), [isLoadingBounties, applicationsLoaded]);
+      );
+    }
+    
+    if (loadError) {
+      return (
+        <EmptyState
+          icon="cloud-off"
+          title="Unable to load bounties"
+          description="Check your internet connection and try again"
+          actionLabel="Try Again"
+          onAction={() => loadBounties({ reset: true })}
+        />
+      );
+    }
+    
+    return (
+      <>
+        <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+        <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+          <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties]);
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
