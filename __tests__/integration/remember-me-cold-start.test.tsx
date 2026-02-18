@@ -30,11 +30,11 @@ describe('Remember Me - Cold Start Integration', () => {
     user: { id: 'user123', email: 'test@example.com' }
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     
     // Reset the in-memory cache by clearing preference
-    clearRememberMePreference();
+    await clearRememberMePreference();
   });
 
   describe('Scenario: User signs in with Remember Me checked', () => {
