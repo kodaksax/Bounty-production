@@ -108,7 +108,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             try {
               await authProfileService.setSession(null)
             } catch (e) {
-              reportError(e, '[AuthProvider] Error clearing session in profile service:')
+              // Profile service errors shouldn't block auth flow
+              // These can occur when service is unavailable or during tests
+              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
             }
           }
           return
@@ -121,7 +123,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             try {
               await authProfileService.setSession(data.session)
             } catch (e) {
-              reportError(e, '[AuthProvider] Error setting session in profile service:')
+              // Profile service errors shouldn't block auth flow
+              // These can occur when service is unavailable or during tests
+              reportWarning('[AuthProvider] Profile service unavailable during session update:', e)
             }
             
             // Schedule next refresh
@@ -134,7 +138,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             try {
               await authProfileService.setSession(null)
             } catch (e) {
-              reportError(e, '[AuthProvider] Error clearing session in profile service:')
+              // Profile service errors shouldn't block auth flow
+              // These can occur when service is unavailable or during tests
+              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
             }
           }
         }
@@ -145,7 +151,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            reportError(e, '[AuthProvider] Error clearing session in profile service:')
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
           }
         }
       } finally {
@@ -226,7 +234,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            reportError(e, '[AuthProvider] Error clearing session in profile service:')
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
           }
         } else if (session) {
           // Valid session found
@@ -241,7 +251,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             // Mark that profile fetch has completed (successfully or not)
             profileFetchCompletedRef.current = true
           } catch (e) {
-            reportError(e, '[AuthProvider] Error setting session in profile service:')
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
             // Even on error, mark as completed to avoid blocking
             profileFetchCompletedRef.current = true
           }
@@ -265,7 +277,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           try {
             await authProfileService.setSession(null)
           } catch (e) {
-            reportError(e, '[AuthProvider] Error clearing session in profile service:')
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
           }
         }
       } catch (error) {
@@ -275,7 +289,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         try {
           await authProfileService.setSession(null)
         } catch (e) {
-          reportError(e, '[AuthProvider] Error clearing session in profile service:')
+          // Profile service errors shouldn't block auth flow
+          // These can occur when service is unavailable or during tests
+          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
         }
       } finally {
         if (isMountedRef.current) {
@@ -314,7 +330,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Mark profile fetch as completed after setSession finishes
           profileFetchCompletedRef.current = true
         } catch (e) {
-          reportError(e, '[AuthProvider] Error syncing session in profile service:')
+          // Profile service errors shouldn't block auth flow
+          // These can occur when service is unavailable or during tests
+          reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
           // Mark as completed even on error to avoid blocking
           profileFetchCompletedRef.current = true
         }

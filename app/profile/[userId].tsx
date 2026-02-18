@@ -388,6 +388,7 @@ export default function UserProfileScreen() {
           userId={userId}
           isOwnProfile={isOwnProfile}
           showPortfolio={false}
+          hideActions={true}
           activityStats={{
             jobsAccepted: stats.jobsAccepted,
             bountiesPosted: stats.bountiesPosted,

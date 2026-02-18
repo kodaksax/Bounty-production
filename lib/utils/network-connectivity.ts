@@ -76,9 +76,14 @@ export function getNetworkErrorMessage(error: any): string {
     return 'Unable to connect. Please check your internet connection.';
   }
   
-  // Abort errors
+  // Abort errors - check if it's a timeout or external cancellation
   if (error.name === 'AbortError') {
-    return 'Request was cancelled. Please try again.';
+    // If the message mentions timeout, it's likely an internal timeout
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return 'Connection timed out. Please check your internet connection and try again.';
+    }
+    // Generic abort/cancellation
+    return 'Connection interrupted. Please try again.';
   }
   
   // Generic network issues

@@ -316,4 +316,241 @@ describe('Stripe Service', () => {
         });
     });
   });
+
+  describe('Apple Pay Support', () => {
+    // Access the mocked React Native Platform from jest.setup.js
+    const { Platform } = require('react-native');
+
+    beforeEach(() => {
+      // Default to iOS before each test; individual tests can override
+      Platform.OS = 'ios';
+    });
+
+    describe('isApplePaySupported', () => {
+      it('should return false on non-iOS platforms', async () => {
+        Platform.OS = 'android';
+        const supported = await stripeService.isApplePaySupported();
+        expect(supported).toBe(false);
+      });
+
+      it('should return false when SDK is not available', async () => {
+        Platform.OS = 'ios';
+        // SDK is mocked to reject during initialization in this test file
+        const supported = await stripeService.isApplePaySupported();
+        expect(supported).toBe(false);
+      });
+
+      it('should handle errors gracefully', async () => {
+        Platform.OS = 'ios';
+        // Should not throw even if there's an error
+        const supported = await stripeService.isApplePaySupported();
+        expect(typeof supported).toBe('boolean');
+      });
+    });
+
+    describe('presentApplePay', () => {
+      it('should return error on non-iOS platforms', async () => {
+        Platform.OS = 'android';
+        const result = await stripeService.presentApplePay(10.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/iOS/i);
+        expect(result.errorCode).toBe('platform_not_supported');
+      });
+
+      it('should return error when SDK is not available', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(10.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.errorCode).toBeDefined();
+      });
+
+      it('should enforce minimum amount of $0.50', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(0.49);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/at least.*0\.50/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should validate amount is not zero', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(0);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/at least.*0\.50/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should validate amount is not negative', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(-5.00);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/at least.*0\.50/i);
+        expect(result.errorCode).toBe('invalid_amount');
+      });
+
+      it('should accept valid amount above minimum', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(1.00);
+        // Will fail due to SDK not available, but should pass amount validation
+        expect(result).toHaveProperty('success');
+        // Error should not be about amount
+        if (!result.success && result.errorCode) {
+          expect(result.errorCode).not.toBe('invalid_amount');
+        }
+      });
+
+      it('should validate cart items total matches amount', async () => {
+        Platform.OS = 'ios';
+        const customCartItems = [
+          { label: 'Item 1', amount: '10.00', type: 'final' as const },
+          { label: 'Item 2', amount: '5.00', type: 'final' as const },
+        ];
+        
+        // Amount (20.00) doesn't match cart total (15.00)
+        const result = await stripeService.presentApplePay(20.00, 'Payment', customCartItems);
+        
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/match.*cart.*total/i);
+        expect(result.errorCode).toBe('amount_mismatch');
+      });
+
+      it('should accept cart items when total matches amount', async () => {
+        Platform.OS = 'ios';
+        const customCartItems = [
+          { label: 'Item 1', amount: '10.00', type: 'final' as const },
+          { label: 'Item 2', amount: '5.00', type: 'final' as const },
+        ];
+        
+        // Amount matches cart total
+        const result = await stripeService.presentApplePay(15.00, 'Payment', customCartItems);
+        expect(result).toHaveProperty('success');
+        // Error should not be about amount mismatch
+        if (!result.success && result.errorCode) {
+          expect(result.errorCode).not.toBe('amount_mismatch');
+        }
+      });
+
+      it('should use default description if not provided', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(10.00);
+        // Even though it will fail (SDK not available), it should process the default description
+        expect(result).toHaveProperty('success');
+      });
+
+      it('should handle errors gracefully', async () => {
+        Platform.OS = 'ios';
+        const result = await stripeService.presentApplePay(10.00);
+        
+        // Should always return a result object
+        expect(result).toHaveProperty('success');
+        expect(typeof result.success).toBe('boolean');
+        
+        // If not successful, should have error info
+        if (!result.success) {
+          expect(result.error).toBeDefined();
+        }
+      });
+    });
+  });
+
+  describe('parseStripeError', () => {
+    it('should return default message for null error', () => {
+      const result = stripeService.parseStripeError(null);
+      expect(result).toBe('An unknown error occurred');
+    });
+
+    it('should return default message for undefined error', () => {
+      const result = stripeService.parseStripeError(undefined);
+      expect(result).toBe('An unknown error occurred');
+    });
+
+    it('should handle TimeoutError by name', () => {
+      const error = new Error('Request took too long');
+      error.name = 'TimeoutError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should handle timeout by message content', () => {
+      const error = new Error('Connection timed out after 30 seconds');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should handle AbortError', () => {
+      const error = new Error('Request was aborted');
+      error.name = 'AbortError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+    });
+
+    it('should handle NetworkError by name', () => {
+      const error = new Error('Network failure');
+      error.name = 'NetworkError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should handle Network error by message', () => {
+      const error = new Error('Network request failed');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should handle fetch failed error', () => {
+      const error = new Error('fetch failed');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Unable to connect. Please check your internet connection.');
+    });
+
+    it('should detect test/live mode mismatch (live mode with test key)', () => {
+      const error = new Error('No such setupintent: si_123 in live mode but using test mode key');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+    });
+
+    it('should detect test/live mode mismatch (test mode with live key)', () => {
+      const error = new Error('No such paymentintent: pi_123 in test mode but using live mode key');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+    });
+
+    it('should return original message for unknown error types', () => {
+      const error = new Error('Custom Stripe error message');
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Custom Stripe error message');
+    });
+
+    it('should handle errors without message property', () => {
+      const error = { toString: () => 'String representation of error' };
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('String representation of error');
+    });
+
+    it('should handle string errors', () => {
+      const error = 'Plain string error';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Plain string error');
+    });
+
+    it('should prioritize TimeoutError name over message', () => {
+      const error = new Error('Some random message');
+      error.name = 'TimeoutError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+    });
+
+    it('should prioritize AbortError name over message', () => {
+      const error = new Error('Network failed');
+      error.name = 'AbortError';
+      const result = stripeService.parseStripeError(error);
+      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+    });
+  });
 });

@@ -6,8 +6,10 @@ import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
+import { API_TIMEOUTS } from "../lib/config/network"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
+import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -96,18 +98,6 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldUsePaymentElement, paymentElementFailed])
 
-  // Helper to timeout fetch
-  const fetchWithTimeout = async (resource: RequestInfo | URL, options: RequestInit = {}, timeoutMs = 10000) => {
-    const controller = new AbortController()
-    const id = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const response = await fetch(resource, { ...options, signal: controller.signal })
-      return response
-    } finally {
-      clearTimeout(id)
-    }
-  }
-
   const createSetupIntent = async () => {
     if (!session?.access_token) {
       Alert.alert('Error', 'Please sign in to add a payment method')
@@ -116,30 +106,45 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      let response: Response | null = null
-      let lastErr: any
-      for (let attempt = 0; attempt < 2; attempt++) {
+      // Use centralized fetchWithTimeout with retries
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          usage: 'off_session',
+        }),
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
+        retries: 2,
+      })
+
+      if (!response.ok) {
+        // Try to surface a meaningful error message from the server
+        let message = `Request failed with status ${response.status}`
         try {
-          response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              usage: 'off_session',
-            }),
-          }, 10000)
-          if (response.ok) break
-          lastErr = new Error(`HTTP ${response.status}`)
-        } catch (e) {
-          lastErr = e
+          const data: unknown = await response.json()
+          if (data && typeof data === 'object' && 'error' in data) {
+            const errorField = (data as { error?: unknown }).error
+            if (typeof errorField === 'string' && errorField.trim().length > 0) {
+              message = errorField
+            }
+          }
+        } catch {
+          try {
+            const text = await response.text()
+            if (text && text.trim().length > 0) {
+              message = text
+            }
+          } catch {
+            // Ignore body parsing errors; fall back to status-based message
+          }
         }
-        await new Promise(r => setTimeout(r, 700))
+
+        throw new Error(message)
       }
-      if (!response || !response.ok) {
-        throw lastErr || new Error('Failed to initialize payment setup')
-      }
+
       const { clientSecret } = await response.json()
       
       // Log detected key mode for debugging
