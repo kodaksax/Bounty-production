@@ -1,7 +1,7 @@
 // components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
@@ -27,15 +27,15 @@ export function ApplicantCard({
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
   const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
   const router = useRouter();
-  
+
   // Track component mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
   // Track navigation timeout for cleanup
   const navigationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // Brief loading indicator timeout for visual feedback during navigation transition
   const NAVIGATION_LOADING_TIMEOUT_MS = 400;
-  
+
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
@@ -97,150 +97,151 @@ export function ApplicantCard({
   }, [request, router]);
 
   const profileId = (request as any).hunter_id || (request as any).user_id;
-  
+
   // Get a valid avatar URL, filtering out placeholder URLs
-  const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar_url);
+  // Prefer 'avatar' field but fallback to legacy 'avatar_url'
+  const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar || request.profile?.avatar_url);
 
   return (
     <TextGuard>
       <View style={styles.card}>
-      {/* Header with avatar and applicant info - Clickable to navigate to profile */}
-      <TouchableOpacity 
-        style={styles.header} 
-        onPress={handleProfilePress} 
-        disabled={!profileId || isNavigatingToProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
-        accessibilityHint="Opens the applicant's profile page"
-      >
-        <View style={styles.avatarContainer}>
-          {isNavigatingToProfile ? (
-            <View style={[styles.avatar, styles.avatarLoading]}>
-              <ActivityIndicator size="small" color="#a7f3d0" />
-            </View>
-          ) : (
-            <Avatar style={styles.avatar}>
-              <AvatarImage 
-                src={validAvatarUrl} 
-                alt={request.profile?.username || 'Applicant'} 
+        {/* Header with avatar and applicant info - Clickable to navigate to profile */}
+        <TouchableOpacity
+          style={styles.header}
+          onPress={handleProfilePress}
+          disabled={!profileId || isNavigatingToProfile}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
+          accessibilityHint="Opens the applicant's profile page"
+        >
+          <View style={styles.avatarContainer}>
+            {isNavigatingToProfile ? (
+              <View style={[styles.avatar, styles.avatarLoading]}>
+                <ActivityIndicator size="small" color="#a7f3d0" />
+              </View>
+            ) : (
+              <Avatar style={styles.avatar}>
+                <AvatarImage
+                  src={validAvatarUrl}
+                  alt={request.profile?.username || 'Applicant'}
+                />
+                <AvatarFallback style={styles.avatarFallback}>
+                  <Text style={styles.avatarText}>
+                    {getAvatarInitials(request.profile?.username)}
+                  </Text>
+                </AvatarFallback>
+              </Avatar>
+            )}
+          </View>
+
+          <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
+            <View style={styles.nameRow}>
+              <Text style={styles.applicantName}>
+                {request.profile?.username || 'Unknown User'}
+              </Text>
+              {/* Verification Badge */}
+              <VerificationBadge
+                status={
+                  typeof (request.profile as any)?.verificationStatus === 'string'
+                    ? ((request.profile as any).verificationStatus as VerificationLevel)
+                    : 'unverified'
+                }
+                size="small"
+                showLabel={false}
+                showExplanation={true}
               />
-              <AvatarFallback style={styles.avatarFallback}>
-                <Text style={styles.avatarText}>
-                  {getAvatarInitials(request.profile?.username)}
+            </View>
+            {/* Reputation Score - prominently displayed */}
+            <View style={styles.ratingContainer}>
+              <ReputationScoreCompact
+                averageRating={request.profile?.averageRating || 0}
+                ratingCount={request.profile?.ratingCount || 0}
+              />
+              {request.profile?.ratingCount ? (
+                <Text style={styles.ratingText}>
+                  ({request.profile.ratingCount} review{request.profile.ratingCount !== 1 ? 's' : ''})
                 </Text>
-              </AvatarFallback>
-            </Avatar>
+              ) : null}
+            </View>
+          </View>{/* avoid whitespace text node */}
+
+          {profileId ? (
+            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+          ) : null}
+        </TouchableOpacity>
+
+        {/* Bounty details */}
+        <View style={styles.bountySection}>
+          <Text style={styles.sectionLabel}>Applied for:</Text>
+          <Text style={styles.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
+          {request.bounty?.amount > 0 && !request.bounty?.is_for_honor && (
+            <View style={styles.amountBadge}>
+              <Text style={styles.amountText}>${request.bounty.amount}</Text>
+            </View>
+          )}
+          {request.bounty?.is_for_honor && (
+            <View style={styles.honorBadge}>
+              <MaterialIcons name="favorite" size={14} color="#fff" />
+              <Text style={styles.honorText}>For Honor</Text>
+            </View>
           )}
         </View>
 
-        <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
-          <View style={styles.nameRow}>
-            <Text style={styles.applicantName}>
-              {request.profile?.username || 'Unknown User'}
-            </Text>
-            {/* Verification Badge */}
-            <VerificationBadge 
-              status={
-                typeof (request.profile as any)?.verificationStatus === 'string'
-                  ? ((request.profile as any).verificationStatus as VerificationLevel)
-                  : 'unverified'
-              }
-              size="small"
-              showLabel={false}
-              showExplanation={true}
-            />
-          </View>
-          {/* Reputation Score - prominently displayed */}
-          <View style={styles.ratingContainer}>
-            <ReputationScoreCompact 
-              averageRating={request.profile?.averageRating || 0}
-              ratingCount={request.profile?.ratingCount || 0}
-            />
-            {request.profile?.ratingCount ? (
-              <Text style={styles.ratingText}>
-                ({request.profile.ratingCount} review{request.profile.ratingCount !== 1 ? 's' : ''})
-              </Text>
-            ) : null}
-          </View>
-        </View>{/* avoid whitespace text node */}
-
-        {profileId ? (
-          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
-        ) : null}
-      </TouchableOpacity>
-
-      {/* Bounty details */}
-      <View style={styles.bountySection}>
-        <Text style={styles.sectionLabel}>Applied for:</Text>
-        <Text style={styles.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
-        {request.bounty?.amount > 0 && !request.bounty?.is_for_honor && (
-          <View style={styles.amountBadge}>
-            <Text style={styles.amountText}>${request.bounty.amount}</Text>
-          </View>
-        )}
-        {request.bounty?.is_for_honor && (
-          <View style={styles.honorBadge}>
-            <MaterialIcons name="favorite" size={14} color="#fff" />
-            <Text style={styles.honorText}>For Honor</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Action buttons */}
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.button, styles.rejectButton]}
-          onPress={handleReject}
-          disabled={isProcessing || request.status !== 'pending'}
-        >
-          {isProcessing && actionType === 'reject' ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialIcons name="close" size={18} color="#fff" />
-              <Text style={styles.buttonText}>Reject</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {onRequestMoreInfo && (
+        {/* Action buttons */}
+        <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.button, styles.infoButton]}
-            onPress={handleRequestInfo}
+            style={[styles.button, styles.rejectButton]}
+            onPress={handleReject}
             disabled={isProcessing || request.status !== 'pending'}
           >
-            <MaterialIcons name="chat" size={18} color="#10b981" />
-            <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
+            {isProcessing && actionType === 'reject' ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name="close" size={18} color="#fff" />
+                <Text style={styles.buttonText}>Reject</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        )}
 
-        <TouchableOpacity
-          style={[styles.button, styles.acceptButton]}
-          onPress={handleAccept}
-          disabled={isProcessing || request.status !== 'pending'}
-        >
-          {isProcessing && actionType === 'accept' ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialIcons name="check" size={18} color="#fff" />
-              <Text style={styles.buttonText}>Accept</Text>
-            </View>
+          {onRequestMoreInfo && (
+            <TouchableOpacity
+              style={[styles.button, styles.infoButton]}
+              onPress={handleRequestInfo}
+              disabled={isProcessing || request.status !== 'pending'}
+            >
+              <MaterialIcons name="chat" size={18} color="#10b981" />
+              <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
-      </View>
 
-      {/* Status badge for non-pending requests */}
-      {request.status !== 'pending' && (
-        <View style={styles.statusBadge}>
-          <Text style={[
-            styles.statusText,
-            request.status === 'accepted' ? styles.statusAccepted : styles.statusRejected
-          ]}>
-            {request.status === 'accepted' ? '✓ Accepted' : '✕ Rejected'}
-          </Text>
+          <TouchableOpacity
+            style={[styles.button, styles.acceptButton]}
+            onPress={handleAccept}
+            disabled={isProcessing || request.status !== 'pending'}
+          >
+            {isProcessing && actionType === 'accept' ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name="check" size={18} color="#fff" />
+                <Text style={styles.buttonText}>Accept</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-      )}
+
+        {/* Status badge for non-pending requests */}
+        {request.status !== 'pending' && (
+          <View style={styles.statusBadge}>
+            <Text style={[
+              styles.statusText,
+              request.status === 'accepted' ? styles.statusAccepted : styles.statusRejected
+            ]}>
+              {request.status === 'accepted' ? '✓ Accepted' : '✕ Rejected'}
+            </Text>
+          </View>
+        )}
       </View>
     </TextGuard>
   );

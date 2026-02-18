@@ -50,12 +50,13 @@ export interface AttachmentMeta {
 export type Profile = {
   id: string
   username: string
-  avatar_url: string
-  about: string
-  phone: string
+  avatar?: string
+  avatar_url?: string // Legacy field, prefer 'avatar'
+  about?: string | null
+  phone?: string | null
   balance: number
   created_at: string
-  email?: string
+  email?: string | null
   updated_at?: string
   display_name?: string
   location?: string
