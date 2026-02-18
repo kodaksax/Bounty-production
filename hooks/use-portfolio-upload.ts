@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
-import { ActionSheetIOS, Platform } from 'react-native'
+import { ActionSheetIOS, Alert, Platform } from 'react-native'
 import { attachmentService } from '../lib/services/attachment-service'
 import { generateVideoThumbnail, MAX_PORTFOLIO_ITEMS, portfolioService } from '../lib/services/portfolio-service'
 import type { PortfolioItem } from '../lib/types'
@@ -49,37 +49,63 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       setState(s => ({ ...s, isPicking: true, message: null }))
 
       // Present a native prompt (ActionSheet on iOS, simple choice on Android) to choose source
-      let choice: 'photos' | 'files' | null = null
+      let choice: 'camera' | 'photos' | 'files' | null = null
 
       if (Platform.OS === 'ios') {
         choice = await new Promise((resolve) => {
           ActionSheetIOS.showActionSheetWithOptions(
             {
-              options: ['Cancel', 'Photos or Videos', 'Files'],
+              options: ['Cancel', 'Take Photo or Video', 'Photos or Videos', 'Files'],
               cancelButtonIndex: 0,
             },
             (buttonIndex) => {
-              if (buttonIndex === 1) resolve('photos')
-              else if (buttonIndex === 2) resolve('files')
+              if (buttonIndex === 1) resolve('camera')
+              else if (buttonIndex === 2) resolve('photos')
+              else if (buttonIndex === 3) resolve('files')
               else resolve(null)
             }
           )
         })
       } else {
-        // On Android and other platforms, fall back to a simple prompt via DocumentPicker first
-        // We'll present a basic confirm via ImagePicker request - default to photos if permission exists
-        // but allow users to pick files via the document picker in a second step if they cancel.
-        // For simplicity, show a prompt using window.confirm is not available; default to showing a small
-        // two-step flow: try ImagePicker permission and open media picker; if user cancels, open DocumentPicker.
-        choice = 'photos'
+        choice = await new Promise((resolve) => {
+          Alert.alert(
+            'Add Portfolio Item',
+            'Choose a source',
+            [
+              { text: 'Take Photo/Video', onPress: () => resolve('camera') },
+              { text: 'Photos or Videos', onPress: () => resolve('photos') },
+              { text: 'Files', onPress: () => resolve('files') },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(null) }
+          );
+        })
       }
 
-  let assetUri: string | undefined
-  let mimeType: string | undefined
-  let name: string | undefined
-  let assetKind: string | undefined // 'image' | 'video' | undefined
+      let assetUri: string | undefined
+      let mimeType: string | undefined
+      let name: string | undefined
+      let assetKind: string | undefined // 'image' | 'video' | undefined
 
-  if (choice === 'photos') {
+      if (choice === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync()
+        if (!permission.granted) {
+          Alert.alert('Permission Required', 'Camera permission is required to take photos/videos.')
+        } else {
+          const pickResult = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            allowsEditing: false,
+            quality: 0.8,
+          })
+          if (!pickResult.canceled) {
+            const assets = pickResult.assets
+            assetUri = assets?.[0]?.uri
+            assetKind = (assets?.[0]?.type ?? undefined) as string | undefined
+            mimeType = (assets?.[0]?.mimeType ?? assets?.[0]?.type ?? undefined) as string | undefined
+            name = assets?.[0]?.fileName || (assetUri ? assetUri.split('/').pop() : 'camera-asset')
+          }
+        }
+      } else if (choice === 'photos') {
         // Request permissions and pick from media library
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
         if (!permission.granted) {
@@ -92,54 +118,55 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
             quality: 0.8,
           })
           // expo-image-picker v14+ uses `canceled` and `assets` array
-            if ((pickResult as any).canceled || (pickResult as any).cancelled) {
+          if ((pickResult as any).canceled || (pickResult as any).cancelled) {
             // If user cancelled media picker on Android, fall back to files
             choice = 'files'
           } else {
             // Normalize image-picker result: prefer assets[0].uri
             const assets = (pickResult as any).assets
             assetUri = assets?.[0]?.uri || (pickResult as any).uri
-              // derive mime, kind and name heuristically
-              // assets[0].type on expo-image-picker can be 'image' or 'video' (not full mime)
-              assetKind = assets?.[0]?.type || (pickResult as any).type || undefined
-              mimeType = assets?.[0]?.mimeType || assets?.[0]?.type || (pickResult as any).mimeType || (pickResult as any).type || undefined
-              name = assets?.[0]?.fileName || (pickResult as any).fileName || assetUri?.split('/').pop()
-              // Set optimistic preview so UI can show local image/video while uploading
-              if (assetUri) {
-                // On Android image-picker may return content:// URIs which some image loaders
-                // don't accept. Copy to the app cache and use file:// URI for upload preview.
-                if (assetUri.startsWith('content://')) {
-                  try {
-                    const cacheDir = cacheDirectory || ''
-                    const dest = `${cacheDir}portfolio-${Date.now()}-${name || 'asset'}`
-                    await copyTo(dest, assetUri)
-                    assetUri = dest
-                  } catch (e) {
-                    console.error('[usePortfolioUpload] failed to copy content uri:', e)
-                  }
-                }
-
-                // For immediate preview, try to create a data URI for images (fast and reliable)
-                let previewUri = assetUri
-                try {
-                  if ((assetKind && assetKind === 'image') || (mimeType && mimeType.startsWith('image/'))) {
-                    const b64 = await readAsBase64(assetUri)
-                    const mime = mimeType || 'image/jpeg'
-                    previewUri = `data:${mime};base64,${b64}`
-                  }
-                } catch (e) {
-                  // If base64 read fails, fallback to file URI
-                  console.error('[usePortfolioUpload] preview base64 failed:', e)
-                  previewUri = assetUri
-                }
-
-                setLastPicked({ id: `local-${Date.now()}`, uri: previewUri, name, kind: assetKind === 'image' ? 'image' : assetKind === 'video' ? 'video' : undefined })
-              }
+            // derive mime, kind and name heuristically
+            // assets[0].type on expo-image-picker can be 'image' or 'video' (not full mime)
+            assetKind = (assets?.[0]?.type || (pickResult as any).type || undefined) as string | undefined
+            mimeType = (assets?.[0]?.mimeType || assets?.[0]?.type || (pickResult as any).mimeType || (pickResult as any).type || undefined) as string | undefined
+            name = assets?.[0]?.fileName || (pickResult as any).fileName || assetUri?.split('/').pop()
           }
         }
       }
 
-  if (choice === 'files') {
+      if (assetUri && (choice === 'camera' || choice === 'photos')) {
+        // Set optimistic preview so UI can show local image/video while uploading
+        // On Android image-picker may return content:// URIs which some image loaders
+        // don't accept. Copy to the app cache and use file:// URI for upload preview.
+        if (assetUri.startsWith('content://')) {
+          try {
+            const cacheDir = cacheDirectory || ''
+            const dest = `${cacheDir}portfolio-${Date.now()}-${name || 'asset'}`
+            await copyTo(dest, assetUri)
+            assetUri = dest
+          } catch (e) {
+            console.error('[usePortfolioUpload] failed to copy content uri:', e)
+          }
+        }
+
+        // For immediate preview, try to create a data URI for images (fast and reliable)
+        let previewUri = assetUri
+        try {
+          if ((assetKind && assetKind === 'image') || (mimeType && mimeType.startsWith('image/'))) {
+            const b64 = await readAsBase64(assetUri)
+            const mime = mimeType || 'image/jpeg'
+            previewUri = `data:${mime};base64,${b64}`
+          }
+        } catch (e) {
+          // If base64 read fails, fallback to file URI
+          console.error('[usePortfolioUpload] preview base64 failed:', e)
+          previewUri = assetUri
+        }
+
+        setLastPicked({ id: `local-${Date.now()}`, uri: previewUri, name, kind: assetKind === 'image' ? 'image' : assetKind === 'video' ? 'video' : undefined })
+      }
+
+      if (choice === 'files') {
         const result = await DocumentPicker.getDocumentAsync({
           copyToCacheDirectory: true,
           multiple: false,
@@ -148,12 +175,12 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
         setState(s => ({ ...s, isPicking: false }))
         if (result.canceled) return
         const asset = result.assets?.[0]
-  if (!asset) throw new Error('No file selected')
-  assetUri = asset.uri
-  mimeType = asset.mimeType || undefined
-  name = asset.name || undefined
-  // Document picker won't provide assetKind; try to infer from mime or name
-  assetKind = asset.mimeType?.startsWith('image/') ? 'image' : asset.mimeType?.startsWith('video/') ? 'video' : assetKind
+        if (!asset) throw new Error('No file selected')
+        assetUri = asset.uri
+        mimeType = asset.mimeType || undefined
+        name = asset.name || undefined
+        // Document picker won't provide assetKind; try to infer from mime or name
+        assetKind = asset.mimeType?.startsWith('image/') ? 'image' : asset.mimeType?.startsWith('video/') ? 'video' : assetKind
         if (assetUri) {
           // DocumentPicker can return content URIs; ensure a cache copy for consistent preview
           if (assetUri.startsWith('content://')) {
@@ -223,8 +250,8 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       // Determine type from mime OR assetKind (expo-image-picker may set assetKind to 'image'|'video')
       const type: PortfolioItem['type'] =
         (mime && mime.startsWith('image/')) || assetKind === 'image' || (name && /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(name || '')) ? 'image'
-        : (mime && mime.startsWith('video/')) || assetKind === 'video' || (name && /\.(mp4|mov|mkv|webm|avi)$/i.test(name || '')) ? 'video'
-        : 'file'
+          : (mime && mime.startsWith('video/')) || assetKind === 'video' || (name && /\.(mp4|mov|mkv|webm|avi)$/i.test(name || '')) ? 'video'
+            : 'file'
 
       // Determine thumbnail: use video thumbnail for videos, or processed image for images
       // Priority: processed image > uploaded image > lastPicked preview
@@ -252,9 +279,9 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       }
 
       setState(s => ({ ...s, isUploading: false, message: 'Uploaded successfully', isPicking: false }))
-  onUploaded?.(item)
-  // clear optimistic preview after successful upload
-  setLastPicked(null)
+      onUploaded?.(item)
+      // clear optimistic preview after successful upload
+      setLastPicked(null)
       return item
     } catch (e: any) {
       const err = e instanceof Error ? e : new Error('Portfolio upload failed')

@@ -7,18 +7,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActionSheetIOS,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -57,8 +58,8 @@ export default function DetailsScreen() {
     onboardingData.location || ((normalized as any)?._raw && (normalized as any)._raw.location) || (localProfile as any)?.location || ''
   );
   const [skills, setSkills] = useState<string[]>(
-    onboardingData.skills.length > 0 
-      ? onboardingData.skills 
+    onboardingData.skills.length > 0
+      ? onboardingData.skills
       : ((normalized as any)?._raw && (normalized as any)._raw.skills) || (localProfile as any)?.skills || []
   );
   const [customSkill, setCustomSkill] = useState('');
@@ -96,17 +97,67 @@ export default function DetailsScreen() {
   }, [avatarUri]);
 
   const pickAvatar = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
-      return;
+    const showPicker = async () => {
+      return new Promise<'camera' | 'library' | null>((resolve) => {
+        const options = ['Take Photo', 'Choose from Library', 'Cancel'];
+        if (Platform.OS === 'ios') {
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              options,
+              cancelButtonIndex: 2,
+            },
+            (buttonIndex: number) => {
+              if (buttonIndex === 0) resolve('camera');
+              else if (buttonIndex === 1) resolve('library');
+              else resolve(null);
+            }
+          );
+        } else {
+          Alert.alert(
+            'Select Photo',
+            'Choose a source',
+            [
+              { text: 'Take Photo', onPress: () => resolve('camera') },
+              { text: 'Choose from Library', onPress: () => resolve('library') },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(null) }
+          );
+        }
+      });
+    };
+
+    const source = await showPicker();
+    if (!source) return;
+
+    let result: ImagePicker.ImagePickerResult;
+
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow camera access to take a profile picture.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
+
     if (result.canceled) return;
     const asset = result.assets?.[0];
     if (!asset) return;
@@ -158,7 +209,7 @@ export default function DetailsScreen() {
 
   const handleNext = async () => {
     setSaving(true);
-    
+
     // Save to local storage with all fields
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
@@ -180,9 +231,9 @@ export default function DetailsScreen() {
     // We update the profiles table directly to ensure all fields are saved
     const saveToSupabase = async () => {
       if (!userId) return false;
-      
+
       const profileUpdate: Partial<Profile> = {};
-      
+
       if (displayName.trim()) {
         profileUpdate.display_name = displayName.trim();
       }
@@ -203,32 +254,32 @@ export default function DetailsScreen() {
       if (avatarUri && !avatarUri.startsWith('file://')) {
         profileUpdate.avatar_url = avatarUri;
       }
-      
+
       // Only update if we have fields to save
       if (Object.keys(profileUpdate).length === 0) {
         return true;
       }
-      
+
       const { error } = await supabase
         .from('profiles')
         .update(profileUpdate)
         .eq('id', userId);
-      
+
       if (error) {
         console.error('[Onboarding Details] Error saving to Supabase:', error);
         return false;
       }
-      
+
       console.log('[Onboarding Details] Successfully saved profile data to database');
       return true;
     };
-    
+
     try {
       const success = await saveToSupabase();
-      
+
       if (!success) {
         setSaving(false);
-        
+
         // Handle retry attempts with user feedback - allows up to 3 total attempts
         const handleRetryAttempts = async () => {
           setSaving(true);
@@ -243,8 +294,8 @@ export default function DetailsScreen() {
               'Still Unable to Save',
               'We could not save your profile. You can skip this step and update your profile later.',
               [
-                { 
-                  text: 'Try One More Time', 
+                {
+                  text: 'Try One More Time',
                   onPress: async () => {
                     setSaving(true);
                     const finalSuccess = await saveToSupabase();
@@ -264,7 +315,7 @@ export default function DetailsScreen() {
             );
           }
         };
-        
+
         Alert.alert(
           'Connection Error',
           'Failed to save your profile. Please check your internet connection and try again.',
@@ -433,7 +484,7 @@ export default function DetailsScreen() {
             <Text style={styles.hintWithMargin}>
               What can you help with?
             </Text>
-            
+
             {/* Common skills as chips */}
             <View style={styles.skillsContainer}>
               {COMMON_SKILLS.map((skill) => (
