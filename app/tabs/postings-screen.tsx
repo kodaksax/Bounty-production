@@ -211,6 +211,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
+      setError(null) // Clear previous error
       const mine = await bountyService.getByUserId(currentUserId)
       // Filter out archived and deleted bounties from My Postings view
       const activeBounties = mine.filter(b => b.status !== 'archived' && b.status !== 'deleted')
@@ -236,6 +237,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
+      setError(null) // Clear previous error
       // Show bounties that the current user has applied for (pending/accepted/etc.)
       const requests = await bountyRequestService.getAllWithDetails({ userId: currentUserId })
       // Only include bounties where the user's request isn't rejected
@@ -1215,6 +1217,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       <View className="px-4 py-6">
                         <PostingsListSkeleton count={3} />
                       </View>
+                    ) : error ? (
+                      <EmptyState
+                        icon="cloud-off"
+                        title="Unable to Load"
+                        description="Check your internet connection and try again"
+                        actionLabel="Try Again"
+                        onAction={loadInProgress}
+                      />
                     ) : (
                       <EmptyState
                         icon="work-outline"
@@ -1263,6 +1273,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                           <ApplicantCardSkeleton key={i} />
                         ))}
                       </View>
+                    ) : error ? (
+                      <EmptyState
+                        icon="cloud-off"
+                        title="Unable to Load"
+                        description="Check your internet connection and try again"
+                        actionLabel="Try Again"
+                        onAction={loadRequestsForMyBounties.bind(null, myBounties)}
+                      />
                     ) : (
                       <EmptyState
                         icon="inbox"
@@ -1328,6 +1346,14 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       <View className="px-4 py-6">
                         <PostingsListSkeleton count={3} />
                       </View>
+                    ) : error ? (
+                      <EmptyState
+                        icon="cloud-off"
+                        title="Unable to Load"
+                        description="Check your internet connection and try again"
+                        actionLabel="Try Again"
+                        onAction={loadMyBounties}
+                      />
                     ) : (
                       <EmptyState
                         icon="add-box"
