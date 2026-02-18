@@ -3,7 +3,7 @@
  * Tests session restoration, token refresh, and graceful expiration
  */
 
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, act } from '@testing-library/react-native';
 import React from 'react';
 import AuthProvider from '../../providers/auth-provider';
 import { supabase } from '../../lib/supabase';
@@ -120,7 +120,9 @@ describe('Authentication State Persistence', () => {
       });
 
       // Unmount the component
-      unmount();
+      act(() => {
+        unmount();
+      });
 
       // Verify unsubscribe was called
       expect(unsubscribeMock).toHaveBeenCalled();
@@ -487,7 +489,9 @@ describe('Authentication State Persistence', () => {
 
       // Simulate signed out event
       if (authStateCallback) {
-        await authStateCallback('SIGNED_OUT', null);
+        await act(async () => {
+          await authStateCallback('SIGNED_OUT', null);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
@@ -539,7 +543,9 @@ describe('Authentication State Persistence', () => {
 
       // Simulate sign in
       if (authStateCallback) {
-        await authStateCallback('SIGNED_IN', mockSession);
+        await act(async () => {
+          await authStateCallback('SIGNED_IN', mockSession);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
@@ -588,7 +594,9 @@ describe('Authentication State Persistence', () => {
 
       // Simulate token refresh event
       if (authStateCallback) {
-        await authStateCallback('TOKEN_REFRESHED', mockRefreshedSession);
+        await act(async () => {
+          await authStateCallback('TOKEN_REFRESHED', mockRefreshedSession);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
