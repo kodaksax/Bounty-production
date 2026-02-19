@@ -76,14 +76,42 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Validation: Prevent creating auth.users without a valid email
+-- This BEFORE INSERT trigger will raise an exception and stop user creation
+-- if the email is missing or does not match a basic email pattern.
+CREATE OR REPLACE FUNCTION public.validate_new_user_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.email IS NULL OR trim(NEW.email) = '' THEN
+    RAISE EXCEPTION 'auth: email is required for account creation';
+  END IF;
+
+  -- Basic email regex: local@domain.tld (TLD 2-24 chars)
+  IF NOT (NEW.email ~* '^[A-Za-z0-9.!#$%&''*+/=?^_`{|}~-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}$') THEN
+    RAISE EXCEPTION 'auth: invalid email address';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Drop existing trigger if it exists
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+-- Drop existing validation trigger if it exists
+DROP TRIGGER IF EXISTS validate_auth_user_email ON auth.users;
 
 -- Create trigger on auth.users table
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- Create BEFORE INSERT trigger to validate email before the auth user is persisted
+CREATE TRIGGER validate_auth_user_email
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_new_user_email();
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO authenticated;

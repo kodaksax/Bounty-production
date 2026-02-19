@@ -9,7 +9,7 @@ import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
 import { userProfileService } from 'lib/services/user-profile-service'
 import type { Attachment, Conversation } from 'lib/types'
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -427,21 +427,27 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       const uploaded = await pickAttachment()
       if (!uploaded) return
 
-      const newProof = {
-        id: uploaded.id,
-        type: uploaded.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
-        name: uploaded.name,
-        size: uploaded.size,
-        remoteUri: uploaded.remoteUri,
-        uri: uploaded.uri,
-      } as any
+      // pickAttachment returns an array of Attachment items when successful.
+      const uploadedArray = Array.isArray(uploaded) ? uploaded : [uploaded]
 
-      setProofItems((prev) => [...prev, newProof])
+      // Map each uploaded attachment into our proof item shape and persist
+      const newProofs = uploadedArray.map((u) => ({
+        id: u.id,
+        type: u.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
+        name: u.name,
+        size: u.size,
+        remoteUri: u.remoteUri,
+        uri: u.uri,
+      } as any))
 
-      // Persist to bounty attachments_json
-      const success = await bountyService.addAttachmentToBounty(bounty.id, uploaded)
-      if (!success) {
-        Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
+      setProofItems((prev) => [...prev, ...newProofs])
+
+      // Persist each uploaded attachment to bounty attachments_json
+      for (const u of uploadedArray) {
+        const success = await bountyService.addAttachmentToBounty(bounty.id, u)
+        if (!success) {
+          Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
+        }
       }
       // Trigger parent refresh if provided
       if (onRefresh) onRefresh()
