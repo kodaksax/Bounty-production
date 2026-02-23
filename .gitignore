@@ -84,5 +84,8 @@ google-service-account.json
 
 # Ignore generated temporary JS bundles that may contain secrets
 tmp_bundle/
+supabase/.temp/
+.temp/
+temp/
 # Local editor/history artifacts
 .history/
