@@ -1,8 +1,12 @@
 import { Request, Response, Router } from 'express';
+import Stripe from 'stripe';
 import { CompletionReleaseRequest, completionReleaseService } from '../services/completion-release-service';
 import { checkIdempotencyKey, removeIdempotencyKey, storeIdempotencyKey } from '../services/idempotency-service';
 
 export const completionReleaseRouter = Router();
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' }) : null;
 
 /**
  * POST /api/completion-release
@@ -100,17 +104,38 @@ completionReleaseRouter.get('/:bountyId/status', async (req: Request, res: Respo
  * Handle Stripe webhook for PaymentIntent succeeded events
  */
 completionReleaseRouter.post('/webhook', async (req: Request, res: Response) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('[completion-release] STRIPE_WEBHOOK_SECRET not configured');
+    return res.status(500).json({ error: 'Webhook secret not configured' });
+  }
+
+  if (!stripe) {
+    console.error('[completion-release] STRIPE_SECRET_KEY not configured');
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+
+  if (!sig) {
+    console.warn('[completion-release] Missing stripe-signature header');
+    return res.status(400).json({ error: 'Missing stripe-signature header' });
+  }
+
+  let event: Stripe.Event;
+
   try {
-    // In a real implementation, you would:
-    // 1. Verify the webhook signature
-    // 2. Parse the Stripe event
-    // 3. Handle payment_intent.succeeded events
-    // 4. Trigger completion release
+    // req.body is a raw Buffer when express.raw() middleware is used for this route
+    const rawBody = (req as any).rawBody ?? req.body;
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+  } catch (err: any) {
+    console.error('[completion-release] Webhook signature verification failed:', err.message);
+    return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+  }
 
-    const event = req.body;
-
+  try {
     if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object;
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const { bounty_id, hunter_id } = paymentIntent.metadata || {};
 
       if (bounty_id && hunter_id) {
