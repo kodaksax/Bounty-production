@@ -1,5 +1,11 @@
 # BountyExpo Stripe Payment Server
 
+> ⚠️ **Migration Notice**: This Node.js/Express server has been superseded by
+> **Supabase Edge Functions** located in `supabase/functions/`. See the
+> [Edge Functions migration guide](#migrating-to-supabase-edge-functions) below
+> for deployment instructions. The Node server is kept for local development
+> fallback only.
+
 Minimal Node.js/Express server for handling Stripe payment operations for the BountyExpo mobile app.
 
 ## Features
@@ -8,6 +14,96 @@ Minimal Node.js/Express server for handling Stripe payment operations for the Bo
 - **Webhook Handling**: Secure webhook endpoint for Stripe events with signature verification
 - **Connect Onboarding**: Scaffold endpoints for Stripe Connect account linking (for withdrawals)
 - **Transaction Logging**: Local JSON file persistence for demo purposes
+
+## Migrating to Supabase Edge Functions
+
+All endpoints from this server are now available as Supabase Edge Functions:
+
+| Node endpoint | Edge Function |
+|---|---|
+| `POST /payments/create-payment-intent` | `supabase/functions/payments` |
+| `GET/POST/DELETE /payments/methods[/:id]` | `supabase/functions/payments` |
+| `POST /payments/confirm` | `supabase/functions/payments` |
+| `POST /webhooks/stripe` | `supabase/functions/webhooks` |
+| `POST /connect/create-account-link` | `supabase/functions/connect` |
+| `POST /connect/verify-onboarding` | `supabase/functions/connect` |
+| `POST /connect/transfer` | `supabase/functions/connect` |
+| `POST /connect/retry-transfer` | `supabase/functions/connect` |
+| `GET /wallet/balance` | `supabase/functions/wallet` |
+| `GET /wallet/transactions` | `supabase/functions/wallet` |
+| `DELETE /auth/delete-account` | `supabase/functions/auth` |
+| `POST /apple-pay/payment-intent` | `supabase/functions/apple-pay` |
+| `POST /apple-pay/confirm` | `supabase/functions/apple-pay` |
+
+### Deployment steps
+
+1. **Install Supabase CLI** (if not already installed):
+   ```bash
+   npm install -g supabase
+   ```
+
+2. **Link your project**:
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   ```
+
+3. **Set required secrets**:
+   ```bash
+   supabase secrets set \
+     STRIPE_SECRET_KEY=sk_live_... \
+     STRIPE_WEBHOOK_SECRET=whsec_... \
+     SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
+     APP_URL=https://your-app.example.com
+   ```
+   See `supabase/functions/.env.example` for the full list.
+
+4. **Deploy all functions**:
+   ```bash
+   supabase functions deploy payments
+   supabase functions deploy webhooks
+   supabase functions deploy connect
+   supabase functions deploy wallet
+   supabase functions deploy auth
+   supabase functions deploy apple-pay
+   ```
+
+5. **Update the mobile app** — set `EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL` in your
+   `.env` to `https://<project-ref>.supabase.co/functions/v1`. The app will
+   automatically route all API calls through Edge Functions.
+
+6. **Update the Stripe webhook URL** in the Stripe Dashboard to:
+   ```
+   https://<project-ref>.supabase.co/functions/v1/webhooks
+   ```
+
+### Webhook configuration inspection
+
+To inspect your current Stripe webhook configuration:
+
+```bash
+# List all webhook endpoints registered with Stripe
+stripe webhook_endpoints list
+
+# View details of a specific endpoint
+stripe webhook_endpoints retrieve we_...
+
+# Test the Edge Function webhook locally with Stripe CLI
+stripe listen --forward-to https://<project-ref>.supabase.co/functions/v1/webhooks
+
+# Verify signature verification is working
+stripe trigger payment_intent.succeeded
+```
+
+For local Edge Function development:
+```bash
+# Start Supabase locally
+supabase start
+
+# Forward Stripe events to local function
+stripe listen --forward-to http://localhost:54321/functions/v1/webhooks
+```
+
+---
 
 ## Prerequisites
 
