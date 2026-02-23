@@ -6,7 +6,7 @@ import { checkIdempotencyKey, removeIdempotencyKey, storeIdempotencyKey } from '
 export const completionReleaseRouter = Router();
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' }) : null;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-01-28.clover' }) : null;
 
 /**
  * POST /api/completion-release
@@ -117,9 +117,9 @@ completionReleaseRouter.post('/webhook', async (req: Request, res: Response) => 
     return res.status(500).json({ error: 'Stripe not configured' });
   }
 
-  if (!sig) {
-    console.warn('[completion-release] Missing stripe-signature header');
-    return res.status(400).json({ error: 'Missing stripe-signature header' });
+  if (!sig || typeof sig !== 'string') {
+    console.warn('[completion-release] Missing or invalid stripe-signature header');
+    return res.status(400).json({ error: 'Missing or invalid stripe-signature header' });
   }
 
   let event: Stripe.Event;
@@ -127,10 +127,19 @@ completionReleaseRouter.post('/webhook', async (req: Request, res: Response) => 
   try {
     // req.body is a raw Buffer when express.raw() middleware is used for this route
     const rawBody = (req as any).rawBody ?? req.body;
+
+    if (!(typeof rawBody === 'string' || Buffer.isBuffer(rawBody))) {
+      console.error(
+        '[completion-release] Webhook raw body is not available as string/Buffer. ' +
+          'Ensure express.raw({ type: "application/json" }) is configured for this route.',
+      );
+      return res.status(500).json({ error: 'Webhook body is not in a valid raw format for signature verification' });
+    }
+
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err: any) {
     console.error('[completion-release] Webhook signature verification failed:', err.message);
-    return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+    return res.status(400).json({ error: 'Webhook signature verification failed' });
   }
 
   try {
