@@ -29,6 +29,14 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
+  // Only handle the /stripe sub-path; reject anything else
+  const url = new URL(req.url)
+  const pathParts = url.pathname.split('/webhooks')
+  const subPath = pathParts.length > 1 ? pathParts[1] : '/'
+  if (subPath !== '/stripe') {
+    return jsonResponse({ error: 'Not found' }, 404)
+  }
+
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
   if (!stripeKey || !webhookSecret) {
@@ -76,13 +84,16 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ received: true, alreadyProcessed: true })
     }
 
-    // Log event for tracking
-    await supabase.from('stripe_events').upsert({
-      stripe_event_id: event.id,
-      event_type: event.type,
-      event_data: event.data.object,
-      processed: false,
-    })
+    // Log event for tracking — upsert on stripe_event_id to safely handle retries
+    await supabase.from('stripe_events').upsert(
+      {
+        stripe_event_id: event.id,
+        event_type: event.type,
+        event_data: event.data.object,
+        processed: false,
+      },
+      { onConflict: 'stripe_event_id' },
+    )
 
     switch (event.type) {
       case 'payment_intent.succeeded': {
@@ -113,32 +124,25 @@ Deno.serve(async (req: Request) => {
           throw txError
         }
 
-        const { error: balanceError } = await supabase.rpc('increment_balance', {
+        const { error: balanceError } = await supabase.rpc('update_balance', {
           p_user_id: userId,
           p_amount: paymentIntent.amount / 100,
         })
 
         if (balanceError) {
           // Retry once
-          const { error: retryError } = await supabase.rpc('increment_balance', {
+          const { error: retryError } = await supabase.rpc('update_balance', {
             p_user_id: userId,
             p_amount: paymentIntent.amount / 100,
           })
           if (retryError) {
-            console.error('[webhooks] Atomic balance update failed after retry, using fallback', {
+            console.error('[webhooks] Atomic balance update failed after retry — letting Stripe retry', {
               user_id: userId,
               amount: paymentIntent.amount / 100,
+              error: retryError,
             })
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('balance')
-              .eq('id', userId)
-              .single()
-            const currentBalance = (profile as Profile | null)?.balance ?? 0
-            await supabase
-              .from('profiles')
-              .update({ balance: currentBalance + paymentIntent.amount / 100 })
-              .eq('id', userId)
+            // Throw so the webhook returns 500 and Stripe will retry delivery
+            throw retryError
           }
         }
 
@@ -197,28 +201,19 @@ Deno.serve(async (req: Request) => {
             metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
           })
 
-          const { error: rpcError } = await supabase.rpc('decrement_balance', {
+          const { error: rpcError } = await supabase.rpc('update_balance', {
             p_user_id: origTx.user_id,
-            p_amount: charge.amount_refunded / 100,
+            p_amount: -(charge.amount_refunded / 100),
           })
 
           if (rpcError) {
-            const { error: retryError } = await supabase.rpc('decrement_balance', {
+            const { error: retryError } = await supabase.rpc('update_balance', {
               p_user_id: origTx.user_id,
-              p_amount: charge.amount_refunded / 100,
+              p_amount: -(charge.amount_refunded / 100),
             })
             if (retryError) {
-              console.error('[webhooks] Atomic balance decrement for refund failed, using fallback')
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', origTx.user_id)
-                .single()
-              const currentBalance = (profile as Profile | null)?.balance ?? 0
-              await supabase
-                .from('profiles')
-                .update({ balance: Math.max(0, currentBalance - charge.amount_refunded / 100) })
-                .eq('id', origTx.user_id)
+              console.error('[webhooks] Atomic balance decrement for refund failed — letting Stripe retry')
+              throw retryError
             }
           }
 
@@ -284,27 +279,18 @@ Deno.serve(async (req: Request) => {
           const txRow = tx as WalletTransaction
           const refundAmount = Math.abs(txRow.amount)
           const txUserId = txRow.user_id
-          const { error: rpcError } = await supabase.rpc('increment_balance', {
+          const { error: rpcError } = await supabase.rpc('update_balance', {
             p_user_id: txUserId,
             p_amount: refundAmount,
           })
           if (rpcError) {
-            const { error: retryError } = await supabase.rpc('increment_balance', {
+            const { error: retryError } = await supabase.rpc('update_balance', {
               p_user_id: txUserId,
               p_amount: refundAmount,
             })
             if (retryError) {
-              console.error('[webhooks] Atomic balance update for transfer refund failed, using fallback')
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', txUserId)
-                .single()
-              const currentBalance = (profile as Profile | null)?.balance ?? 0
-              await supabase
-                .from('profiles')
-                .update({ balance: currentBalance + refundAmount })
-                .eq('id', txUserId)
+              console.error('[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry')
+              throw retryError
             }
           }
           console.log(`[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer`)

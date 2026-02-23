@@ -111,7 +111,13 @@ Deno.serve(async (req: Request) => {
       const sanitizedId = sanitizeText(paymentIntentId)
       const paymentIntent = await stripe.paymentIntents.retrieve(sanitizedId)
 
-      if (paymentIntent?.status === 'succeeded') {
+      // Verify the PaymentIntent belongs to the authenticated user
+      const ownerUserId = (paymentIntent.metadata as { user_id?: string } | null | undefined)?.user_id
+      if (!ownerUserId || ownerUserId !== user.id) {
+        return jsonResponse({ error: 'Forbidden' }, 403)
+      }
+
+      if (paymentIntent.status === 'succeeded') {
         return jsonResponse({
           success: true,
           status: paymentIntent.status,

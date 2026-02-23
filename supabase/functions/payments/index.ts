@@ -86,6 +86,15 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Invalid amount. Must be a positive number in cents.' }, 400)
       }
 
+      // Stripe requires an integer number of the smallest currency unit (e.g. cents).
+      // Enforce a minimum of 50 cents to avoid Stripe validation errors.
+      if (!Number.isInteger(validatedAmount) || validatedAmount < 50) {
+        return jsonResponse(
+          { error: 'Invalid amount. Must be an integer number of cents and at least 50 cents.' },
+          400,
+        )
+      }
+
       const validatedCurrency = sanitizeText(currency).toLowerCase()
       if (!['usd', 'eur', 'gbp'].includes(validatedCurrency)) {
         return jsonResponse({ error: 'Invalid currency. Supported: usd, eur, gbp.' }, 400)

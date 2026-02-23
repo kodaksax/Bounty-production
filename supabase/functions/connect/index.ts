@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
     if (subPath === '/verify-onboarding') {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id')
+        .select('stripe_connect_account_id, stripe_connect_onboarded_at')
         .eq('id', userId)
         .single()
 
@@ -142,9 +142,10 @@ Deno.serve(async (req: Request) => {
     // POST /connect/transfer
     if (subPath === '/transfer') {
       const body = await req.json()
-      const { amount, currency = 'usd' } = body
+      const { currency = 'usd' } = body
+      const amount = Number(body.amount)
 
-      if (!amount || amount <= 0) {
+      if (!Number.isFinite(amount) || amount <= 0) {
         return jsonResponse({ error: 'Invalid amount' }, 400)
       }
 
@@ -167,12 +168,34 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Insufficient balance' }, 400)
       }
 
-      const transfer = await stripe.transfers.create({
-        amount: Math.round(amount * 100),
-        currency,
-        destination: p.stripe_connect_account_id,
-        metadata: { user_id: userId },
+      // Deduct balance atomically BEFORE creating the Stripe transfer to avoid
+      // paying out funds without a corresponding balance deduction.
+      const { error: balanceError } = await supabase.rpc('update_balance', {
+        p_user_id: userId,
+        p_amount: -amount,
       })
+
+      if (balanceError) {
+        console.error('[connect] Error deducting balance before transfer:', balanceError)
+        return jsonResponse({ error: 'Failed to reserve balance' }, 500)
+      }
+
+      let transfer: Stripe.Transfer
+      try {
+        transfer = await stripe.transfers.create({
+          amount: Math.round(amount * 100),
+          currency,
+          destination: p.stripe_connect_account_id,
+          metadata: { user_id: userId },
+        })
+      } catch (stripeError) {
+        // Refund the deducted balance if Stripe transfer creation fails
+        console.error('[connect] Transfer creation failed, refunding balance:', stripeError)
+        await supabase
+          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
+          .catch((rpcErr: unknown) => console.error('[connect] Balance refund after failed transfer also failed:', rpcErr))
+        throw stripeError
+      }
 
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
@@ -192,16 +215,6 @@ Deno.serve(async (req: Request) => {
       if (txError) {
         console.error('[connect] Error creating transaction:', txError)
         throw txError
-      }
-
-      const { error: balanceError } = await supabase.rpc('update_balance', {
-        p_user_id: userId,
-        p_amount: -amount,
-      })
-
-      if (balanceError) {
-        console.error('[connect] Error updating balance:', balanceError)
-        throw new Error('Failed to update balance')
       }
 
       return jsonResponse({
@@ -263,15 +276,15 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Insufficient balance for retry' }, 400)
       }
 
-      const { error: rpcError } = await supabase.rpc('decrement_balance', {
+      const { error: rpcError } = await supabase.rpc('update_balance', {
         p_user_id: userId,
-        p_amount: amount,
+        p_amount: -amount,
       })
 
       let balanceDeducted = !rpcError
 
       if (rpcError) {
-        console.warn('[connect] RPC not available, using optimistic locking for transfer retry')
+        console.warn('[connect] update_balance RPC failed, using optimistic locking for transfer retry')
         const { data: updatedProfile, error: updateError } = await supabase
           .from('profiles')
           .update({ balance: (p.balance ?? 0) - amount })
@@ -303,9 +316,9 @@ Deno.serve(async (req: Request) => {
         })
       } catch (stripeError) {
         console.error('[connect] Transfer creation failed, refunding balance:', stripeError)
-        await supabase.rpc('increment_balance', { p_user_id: userId, p_amount: amount }).catch(async () => {
-          await supabase.from('profiles').update({ balance: p.balance }).eq('id', userId)
-        })
+        await supabase
+          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
+          .catch((rpcErr: unknown) => console.error('[connect] Balance refund after failed retry transfer also failed:', rpcErr))
         throw stripeError
       }
 

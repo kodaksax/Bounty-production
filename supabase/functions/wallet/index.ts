@@ -70,8 +70,10 @@ Deno.serve(async (req: Request) => {
 
     // GET /wallet/transactions
     if (subPath === '/transactions') {
-      const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50'), 100)
-      const offset = parseInt(url.searchParams.get('offset') ?? '0')
+      const limitParam = parseInt(url.searchParams.get('limit') ?? '50', 10)
+      const limit = Math.min(Number.isNaN(limitParam) ? 50 : limitParam, 100)
+      const offsetParam = parseInt(url.searchParams.get('offset') ?? '0', 10)
+      const offset = Math.max(Number.isNaN(offsetParam) ? 0 : offsetParam, 0)
 
       const { data: transactions, error } = await supabase
         .from('wallet_transactions')
