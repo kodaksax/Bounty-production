@@ -1,0 +1,9 @@
+[project]
+# Your Supabase project reference ID — find it at:
+# https://supabase.com/dashboard/project/_/settings/general
+#
+# ⚠️  Replace "your-project-ref" with your actual project reference before
+#     running any `supabase` CLI commands (link, deploy, secrets set, etc.).
+#
+# Example:  id = "abcdefghijklmnopqrst"
+id = "your-project-ref"
