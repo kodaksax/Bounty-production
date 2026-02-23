@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
         type: 'card',
       })
 
-      const methods = paymentMethods.data.map((pm) => ({
+      const methods = paymentMethods.data.map((pm: Stripe.PaymentMethod) => ({
         id: pm.id,
         type: 'card',
         card: {

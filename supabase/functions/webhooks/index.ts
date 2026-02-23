@@ -5,7 +5,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14?target=deno&no-check'
-import type { Profile, WalletTransaction } from '../_shared/types.ts'
+import type { WalletTransaction } from '../_shared/types.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,7 +24,6 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
-
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
@@ -56,34 +55,81 @@ Deno.serve(async (req: Request) => {
   const rawBody = await req.text()
   const sig = req.headers.get('stripe-signature')
 
-  if (!sig) {
-    return jsonResponse({ error: 'Missing stripe-signature header' }, 400)
-  }
-
   let event: Stripe.Event
-  try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret)
-  } catch (err: unknown) {
-    const e = err as { message?: string }
-    console.error('[webhooks] Signature verification failed:', e.message)
-    return jsonResponse({ error: `Webhook signature verification failed: ${e.message}` }, 400)
+
+  function hex(buffer: ArrayBuffer) {
+    const bytes = new Uint8Array(buffer)
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
   }
 
-  console.log(`[webhooks] Received event: ${event.type} (${event.id})`)
+  async function computeHmacSha256(key: string, data: string) {
+    const enc = new TextEncoder()
+    const keyData = enc.encode(key)
+    const msgData = enc.encode(data)
+    const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData)
+    return hex(sig)
+  }
+
+  function safeCompare(a: string, b: string) {
+    if (a.length !== b.length) return false
+    let res = 0
+    for (let i = 0; i < a.length; i++) {
+      res |= a.charCodeAt(i) ^ b.charCodeAt(i)
+    }
+    return res === 0
+  }
+
+  async function verifyStripeSignature(payload: string, header: string | null, secret: string) {
+    if (!header) return false
+    // header like: t=timestamp,v1=signature[,v1=...]
+    const headerParts = header.split(',').map(part => part.trim())
+    const headerKeyValues: Record<string, string[]> = {}
+    for (const part of headerParts) {
+      const [key, value] = part.split('=')
+      if (!headerKeyValues[key]) headerKeyValues[key] = []
+      headerKeyValues[key].push(value)
+    }
+    const t = headerKeyValues['t']?.[0]
+    const signatures = headerKeyValues['v1'] ?? []
+    if (!t || signatures.length === 0) return false
+
+    const signedPayload = `${t}.${payload}`
+    const expected = await computeHmacSha256(secret, signedPayload)
+
+    for (const s of signatures) {
+      if (safeCompare(s, expected)) {
+        // optional: validate timestamp skew (5 minutes)
+        const ts = Number(t)
+        if (Number.isFinite(ts)) {
+          const now = Math.floor(Date.now() / 1000)
+          if (Math.abs(now - ts) > 5 * 60) return false
+        }
+        return true
+      }
+    }
+    return false
+  }
 
   try {
-    // Idempotency check
-    const { data: existingEvent } = await supabase
-      .from('stripe_events')
-      .select('id, processed')
-      .eq('stripe_event_id', event.id)
-      .single()
-
-    if (existingEvent?.processed) {
-      console.log(`[webhooks] Event ${event.id} already processed`)
-      return jsonResponse({ received: true, alreadyProcessed: true })
+    const verified = await verifyStripeSignature(rawBody, sig, webhookSecret)
+    if (!verified) {
+      console.error('[webhooks] Signature verification failed (manual):', {
+        timestamp: new Date().toISOString(),
+        rawBodyLength: typeof rawBody === 'string' ? rawBody.length : undefined,
+      })
+      return jsonResponse({ error: `Webhook signature verification failed` }, 400)
     }
 
+    // signature verified — parse event
+    event = JSON.parse(rawBody) as Stripe.Event
+  } catch (err: unknown) {
+    const e = err as { message?: string }
+    console.error('[webhooks] Error parsing/verification:', e?.message ?? err)
+    return jsonResponse({ error: 'Webhook verification/parsing failed' }, 400)
+  }
+
+  try {
     // Log event for tracking — upsert on stripe_event_id to safely handle retries
     await supabase.from('stripe_events').upsert(
       {
@@ -343,4 +389,6 @@ Deno.serve(async (req: Request) => {
     console.error('[webhooks] Error processing event:', err)
     return jsonResponse({ error: 'Webhook processing failed' }, 500)
   }
+
 })
+
