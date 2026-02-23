@@ -2,6 +2,7 @@
 // Handles all /payments/* routes previously served by the Node/Express server.
 // Routes:
 //   POST   /payments/create-payment-intent
+//   POST   /payments/create-setup-intent
 //   GET    /payments/methods
 //   POST   /payments/methods
 //   DELETE /payments/methods/:id
@@ -129,6 +130,37 @@ Deno.serve(async (req: Request) => {
       })
 
       return jsonResponse({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
+    }
+
+    // POST /payments/create-setup-intent
+    if (req.method === 'POST' && subPath === '/create-setup-intent') {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('stripe_customer_id, email')
+        .eq('id', userId)
+        .single()
+
+      let customerId = profile?.stripe_customer_id
+      if (!customerId && profile?.email) {
+        const customer = await stripe.customers.create({
+          email: profile.email,
+          metadata: { user_id: userId },
+        })
+        customerId = customer.id
+        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId)
+      }
+
+      if (!customerId) {
+        return jsonResponse({ error: 'Unable to create customer profile' }, 400)
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        usage: 'off_session',
+        metadata: { user_id: userId },
+      })
+
+      return jsonResponse({ clientSecret: setupIntent.client_secret, setupIntentId: setupIntent.id })
     }
 
     // GET /payments/methods

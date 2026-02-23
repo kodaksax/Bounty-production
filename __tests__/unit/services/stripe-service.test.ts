@@ -290,7 +290,7 @@ describe('Stripe Service', () => {
       (fetchWithTimeout as jest.Mock).mockResolvedValue({
         ok: false,
         status: 401,
-        text: async () => 'Unauthorized'
+        text: async () => JSON.stringify({ error: 'Unauthorized' })
       });
 
       const authToken = 'invalid_token';
@@ -298,7 +298,23 @@ describe('Stripe Service', () => {
       await expect(stripeService.listPaymentMethods(authToken))
         .rejects
         .toMatchObject({
-          message: expect.stringMatching(/Failed to fetch payment methods|fetch|payment/i)
+          message: expect.stringMatching(/payment methods request failed|401|unauthorized/i)
+        });
+    });
+
+    it('should surface 405 Method Not Allowed as a meaningful message', async () => {
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 405,
+        text: async () => JSON.stringify({ error: 'Method not allowed' })
+      });
+
+      const authToken = 'test_token';
+
+      await expect(stripeService.listPaymentMethods(authToken))
+        .rejects
+        .toMatchObject({
+          message: expect.stringMatching(/405|method not allowed/i)
         });
     });
 
@@ -314,6 +330,57 @@ describe('Stripe Service', () => {
         .toMatchObject({
           message: expect.stringMatching(/Unable to connect|connect|network/i)
         });
+    });
+  });
+
+  describe('attachPaymentMethod', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should attach a payment method successfully', async () => {
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          paymentMethod: {
+            id: 'pm_attach123',
+            type: 'card',
+            card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2026 },
+            created: 1234567890,
+          },
+        }),
+      });
+
+      const authToken = 'test_token';
+      const result = await stripeService.attachPaymentMethod('pm_attach123', authToken);
+
+      expect(result.id).toBe('pm_attach123');
+      expect(result.card.brand).toBe('visa');
+      expect(result.card.last4).toBe('4242');
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/payments/methods'),
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('should require an auth token', async () => {
+      await expect(stripeService.attachPaymentMethod('pm_test123'))
+        .rejects
+        .toMatchObject({ message: expect.stringMatching(/auth|required/i) });
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it('should surface API errors from attachPaymentMethod', async () => {
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: 'Payment method ID is required' }),
+      });
+
+      await expect(stripeService.attachPaymentMethod('', 'test_token'))
+        .rejects
+        .toMatchObject({ message: expect.stringMatching(/400|payment method/i) });
     });
   });
 

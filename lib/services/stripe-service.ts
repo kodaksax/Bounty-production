@@ -567,7 +567,19 @@ class StripeService {
         // Treat non-OK responses as errors so callers can distinguish
         // between an empty list and an API failure.
         const text = await response.text().catch(() => null);
-        const message = text ? `Failed to fetch payment methods: ${text}` : `Failed to fetch payment methods (status ${response.status})`;
+        let errorBody: string | null = null;
+        // Try to extract a human-readable message from the JSON body
+        if (text) {
+          try {
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
+          } catch {
+            errorBody = text;
+          }
+        }
+        const message = errorBody
+          ? `Payment methods request failed (${response.status}): ${errorBody}`
+          : `Payment methods request failed with status ${response.status}`;
         throw { type: 'api_error', code: response.status.toString(), message };
       }
 
@@ -593,33 +605,47 @@ class StripeService {
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
       
-      // Enhance error message for network-related issues while preserving structured fields
-      const errorMessage = getNetworkErrorMessage(error);
-      
       // Use proper typing for enhanced error with dynamic properties
       type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
-      
-      // If error is already an Error, reuse it; otherwise create new Error
-      const enhancedError: EnhancedError = error instanceof Error 
-        ? error as EnhancedError
-        : new Error(errorMessage) as EnhancedError;
-      
-      // Update message if it's a network error
-      if (errorMessage && enhancedError.message !== errorMessage) {
-        enhancedError.message = errorMessage;
-      }
-      
-      // Preserve structured fields (type, code) from non-Error throws for handleStripeError
-      if (error && typeof error === 'object' && !(error instanceof Error)) {
+
+      // For structured API errors (e.g. 4xx/5xx from Edge Function), preserve the
+      // original message so callers see the actual status code rather than a generic
+      // "Connection failed" string produced by getNetworkErrorMessage.
+      const isStructuredApiError = error && typeof error === 'object' && !Array.isArray(error) &&
+        (error as Record<string, unknown>).type === 'api_error' &&
+        (error as Record<string, unknown>).code;
+
+      let enhancedError: EnhancedError;
+      if (isStructuredApiError) {
+        // Keep the original message; only wrap in an Error if needed
         const originalError = error as Record<string, unknown>;
-        const { message, name, stack, ...structuredFields } = originalError;
-        for (const [key, value] of Object.entries(structuredFields)) {
+        enhancedError = (error instanceof Error ? error : new Error(String(originalError.message))) as EnhancedError;
+        // Copy structured fields so handleStripeError can read type/code
+        for (const [key, value] of Object.entries(originalError)) {
           if (!(key in enhancedError)) {
             enhancedError[key] = value;
           }
         }
+      } else {
+        // For network-level errors, enhance with a user-friendly message
+        const errorMessage = getNetworkErrorMessage(error);
+        enhancedError = error instanceof Error
+          ? error as EnhancedError
+          : new Error(errorMessage) as EnhancedError;
+        if (errorMessage && enhancedError.message !== errorMessage) {
+          enhancedError.message = errorMessage;
+        }
+        // Preserve structured fields (type, code) from non-Error throws for handleStripeError
+        if (error && typeof error === 'object' && !(error instanceof Error)) {
+          const originalError = error as Record<string, unknown>;
+          for (const [key, value] of Object.entries(originalError)) {
+            if (key !== 'message' && key !== 'name' && key !== 'stack' && !(key in enhancedError)) {
+              enhancedError[key] = value;
+            }
+          }
+        }
       }
-      
+
       if (!enhancedError.name) {
         enhancedError.name = error instanceof Error ? error.name : 'Error';
       }
@@ -667,6 +693,65 @@ class StripeService {
       }
     } catch (error) {
       console.error('[StripeService] Error detaching payment method:', error);
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Attach (save) an existing payment method to the current user's Stripe customer
+   * Calls POST /payments/methods on the backend to persist the payment method.
+   */
+  async attachPaymentMethod(paymentMethodId: string, authToken?: string): Promise<StripePaymentMethod> {
+    try {
+      await this.initialize();
+
+      if (!authToken) {
+        throw new Error('Authentication required to save payment method');
+      }
+
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ paymentMethodId }),
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 1,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => null);
+        let errorBody: string | null = null;
+        if (text) {
+          try {
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
+          } catch {
+            errorBody = text;
+          }
+        }
+        const message = errorBody
+          ? `Payment method save failed (${response.status}): ${errorBody}`
+          : `Payment method save failed with status ${response.status}`;
+        throw { type: 'api_error', code: response.status.toString(), message };
+      }
+
+      const { paymentMethod: pm } = await response.json() as { paymentMethod: Record<string, unknown> };
+      const cardData = (pm.card || {}) as Record<string, unknown>;
+      return {
+        id: (pm.id as string) || '',
+        type: 'card' as const,
+        card: {
+          brand: (cardData.brand || 'unknown') as string,
+          last4: (cardData.last4 || '****') as string,
+          exp_month: (cardData.exp_month || 0) as number,
+          exp_year: (cardData.exp_year || 0) as number,
+        },
+        created: (pm.created as number) || Math.floor(Date.now() / 1000),
+      };
+    } catch (error) {
+      console.error('[StripeService] Error attaching payment method:', error);
       throw this.handleStripeError(error);
     }
   }
@@ -1159,8 +1244,16 @@ class StripeService {
     }
 
     if (error?.type === 'api_error' || error?.type === 'StripeAPIError') {
-      const stripeError = new Error('Payment service temporarily unavailable. Please try again.') as Error & { type?: string };
+      // Preserve the original message when it contains specific API error details
+      // (e.g. "Payment methods request failed (405): Method not allowed") so callers
+      // can surface a meaningful message rather than a generic fallback.
+      const defaultMessage = 'Payment service temporarily unavailable. Please try again.';
+      const message = error.message && error.message !== defaultMessage
+        ? error.message
+        : defaultMessage;
+      const stripeError = new Error(message) as Error & { type?: string; code?: string };
       stripeError.type = 'api_error';
+      stripeError.code = error.code;
       return stripeError;
     }
 
