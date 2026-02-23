@@ -42,7 +42,7 @@ function BountyAppInner() {
   const { screen } = useLocalSearchParams<{ screen?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
-  const { session, isLoading } = useAuthContext()
+  const { session, isLoading, profile } = useAuthContext()
   const currentUserId = session?.user?.id
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
@@ -749,6 +749,16 @@ function BountyAppInner() {
       console.log('[bounty-app] Not authenticated, redirecting to index')
     }
     return <Redirect href="/" />
+  }
+
+  // Guard: redirect users who haven't completed onboarding to the onboarding flow.
+  // This catches edge cases where a user navigates directly to this screen (e.g. via
+  // deep-link or browser back) without a complete profile, bypassing app/index.tsx.
+  if (!isLoading && (profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
+    if (__DEV__) {
+      console.log('[bounty-app] Profile incomplete or onboarding not done, redirecting to onboarding')
+    }
+    return <Redirect href="/onboarding" />
   }
 
   return (
