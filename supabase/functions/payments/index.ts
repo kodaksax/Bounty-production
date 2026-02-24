@@ -193,28 +193,64 @@ Deno.serve(async (req: Request) => {
         .eq('id', userId)
         .single()
 
+      // If we don't have a customer yet, just return an empty list.
       if (!profile?.stripe_customer_id) {
         return jsonResponse({ paymentMethods: [] })
       }
 
-      const paymentMethods = await stripe.paymentMethods.list({
-        customer: profile.stripe_customer_id,
-        type: 'card',
-      })
+      try {
+        const paymentMethods = await stripe.paymentMethods.list({
+          customer: profile.stripe_customer_id,
+          type: 'card',
+        })
 
-      const methods = paymentMethods.data.map((pm: Stripe.PaymentMethod) => ({
-        id: pm.id,
-        type: 'card',
-        card: {
-          brand: pm.card?.brand ?? 'unknown',
-          last4: pm.card?.last4 ?? '****',
-          exp_month: pm.card?.exp_month ?? 0,
-          exp_year: pm.card?.exp_year ?? 0,
-        },
-        created: pm.created,
-      }))
+        const methods = paymentMethods.data.map((pm: Stripe.PaymentMethod) => ({
+          id: pm.id,
+          type: 'card',
+          card: {
+            brand: pm.card?.brand ?? 'unknown',
+            last4: pm.card?.last4 ?? '****',
+            exp_month: pm.card?.exp_month ?? 0,
+            exp_year: pm.card?.exp_year ?? 0,
+          },
+          created: pm.created,
+        }))
 
-      return jsonResponse({ paymentMethods: methods })
+        return jsonResponse({ paymentMethods: methods })
+      } catch (err: any) {
+        // If Stripe says the customer or its payment methods don't exist
+        // (common when switching between test/live keys), treat this as
+        // "no payment methods" for the current user instead of a hard error.
+        const errorCode = (err && typeof err === 'object' && 'code' in err)
+          ? (err as { code?: string }).code
+          : undefined
+
+        if (errorCode === 'resource_missing') {
+          console.warn('[payments] Stripe customer missing for /payments/methods; clearing stripe_customer_id', {
+            userId,
+            stripeCustomerId: profile.stripe_customer_id,
+            error: err,
+          })
+
+          try {
+            const { error: updateError } = await supabaseAdmin
+              .from('profiles')
+              .update({ stripe_customer_id: null })
+              .eq('id', userId)
+
+            if (updateError) {
+              console.error('[payments] Failed to clear stale stripe_customer_id', { userId, updateError })
+            }
+          } catch (updateErr) {
+            console.error('[payments] Exception while clearing stale stripe_customer_id', { userId, updateErr })
+          }
+
+          return jsonResponse({ paymentMethods: [] })
+        }
+
+        // Re-throw so the outer handler can surface unexpected errors
+        throw err
+      }
     }
 
     // POST /payments/methods
