@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { MfaCodeModal } from 'components/ui/mfa-code-modal';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
@@ -37,6 +38,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  // Modal state for cross-platform TOTP code entry (replaces Alert.prompt)
+  const [mfaModalVisible, setMfaModalVisible] = useState(false);
+  const [mfaModalFactorId, setMfaModalFactorId] = useState<string | null>(null);
+  const [mfaModalError, setMfaModalError] = useState<string | null>(null);
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -236,71 +242,42 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   const promptForVerificationCode = (factorId: string) => {
-    // TODO (Post-Launch): Replace Alert.prompt with a proper modal/screen for better accessibility
-    // Alert.prompt is not accessible to screen readers and doesn't work on Android
-    // Consider creating a dedicated 2FA verification modal component
-    Alert.prompt(
-      'Enter Verification Code',
-      'Enter the 6-digit code from your authenticator app',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: async () => {
-            await supabase.auth.mfa.unenroll({ factorId });
-            setIsEnabling2FA(false);
-          },
-        },
-        {
-          text: 'Verify',
-          onPress: async (code?: string) => {
-            if (!code) {
-              setIsEnabling2FA(false);
-              return;
-            }
-            await verifyAndEnable2FA(factorId, code);
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setMfaModalFactorId(factorId);
+    setMfaModalError(null);
+    setMfaModalVisible(true);
   };
 
-  const verifyAndEnable2FA = async (factorId: string, code: string) => {
+  const handleMfaModalVerify = async (code: string) => {
+    if (!mfaModalFactorId) return;
+    setMfaVerifying(true);
+    setMfaModalError(null);
     try {
       const { data, error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId,
+        factorId: mfaModalFactorId,
         code,
       });
-
       if (error) throw error;
-
       if (data) {
         setTwoFactorEnabled(true);
+        setMfaModalVisible(false);
         Alert.alert('Success', 'Two-factor authentication has been enabled!');
       }
     } catch (error: any) {
       console.error('[privacy-security] Error verifying 2FA:', error);
-      Alert.alert(
-        'Verification Failed',
-        'Invalid code. Please try again or contact support.',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => promptForVerificationCode(factorId),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: async () => {
-              await supabase.auth.mfa.unenroll({ factorId });
-            },
-          },
-        ]
-      );
+      setMfaModalError('Invalid code. Please try again.');
     } finally {
+      setMfaVerifying(false);
       setIsEnabling2FA(false);
     }
+  };
+
+  const handleMfaModalCancel = async () => {
+    setMfaModalVisible(false);
+    if (mfaModalFactorId) {
+      await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
+    }
+    setMfaModalFactorId(null);
+    setIsEnabling2FA(false);
   };
 
   const handleDisable2FA = async () => {
@@ -337,6 +314,13 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
   return (
     <View className="flex-1 bg-emerald-600">
+      <MfaCodeModal
+        visible={mfaModalVisible}
+        isLoading={mfaVerifying}
+        error={mfaModalError}
+        onVerify={handleMfaModalVerify}
+        onCancel={handleMfaModalCancel}
+      />
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <BrandingLogo size="small" />

@@ -7,6 +7,7 @@ export const ROUTES = {
   AUTH: {
     SIGN_IN: '/auth/sign-in',
     SIGN_UP: '/auth/sign-up-form',
+    MFA_CHALLENGE: '/auth/mfa-challenge',
   },
   // Tabs / main app surfaces
   TABS: {

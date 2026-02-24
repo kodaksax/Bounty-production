@@ -163,6 +163,21 @@ export function SignInForm() {
             // swallow analytics errors
           }
 
+          // MFA CHECK: If the user has 2FA enrolled, they must complete a TOTP challenge
+          // before accessing the app (elevating from AAL1 to AAL2).
+          try {
+            const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+            if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+              console.log('[sign-in] MFA challenge required, redirecting to MFA screen', { correlationId })
+              router.replace(ROUTES.AUTH.MFA_CHALLENGE)
+              try { markInitialNavigationDone(); } catch {}
+              return
+            }
+          } catch {
+            // If we cannot determine MFA level, proceed normally
+            console.log('[sign-in] Could not determine MFA level, proceeding', { correlationId })
+          }
+
           // OPTIMIZED: Quick profile check with fast timeout and immediate navigation
           // The AuthProvider will handle full profile sync in the background
           console.log('[sign-in] Performing quick profile check for:', data.session.user.id, { correlationId })
