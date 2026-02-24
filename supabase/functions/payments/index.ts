@@ -142,12 +142,34 @@ Deno.serve(async (req: Request) => {
 
       let customerId = profile?.stripe_customer_id
       if (!customerId && profile?.email) {
-        const customer = await stripe.customers.create({
-          email: profile.email,
-          metadata: { user_id: userId },
-        })
-        customerId = customer.id
-        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId)
+        // Basic email format validation before passing to Stripe
+        const emailValue = sanitizeText(profile.email)
+        // Validates that the email has exactly one @, a non-empty local part,
+        // and a domain with at least one dot followed by a 2+ char TLD.
+        const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/
+        if (!emailRegex.test(emailValue)) {
+          return jsonResponse({ error: 'Invalid email address on profile' }, 400)
+        }
+
+        try {
+          const customer = await stripe.customers.create({
+            email: emailValue,
+            metadata: { user_id: userId },
+          })
+          customerId = customer.id
+
+          const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', userId)
+
+          if (updateError) {
+            console.error('[payments] Failed to save stripe_customer_id', { userId, updateError })
+          }
+        } catch (err) {
+          console.error('[payments] Error creating Stripe customer for setup intent', { userId, err })
+          return jsonResponse({ error: 'Failed to create customer profile' }, 502)
+        }
       }
 
       if (!customerId) {

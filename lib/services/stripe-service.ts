@@ -737,22 +737,77 @@ class StripeService {
         throw { type: 'api_error', code: response.status.toString(), message };
       }
 
-      const { paymentMethod: pm } = await response.json() as { paymentMethod: Record<string, unknown> };
-      const cardData = (pm.card || {}) as Record<string, unknown>;
+      const rawJson = await response.json().catch((parseErr: unknown) => {
+        console.error('[StripeService] Failed to parse attachPaymentMethod response body:', parseErr);
+        return null;
+      }) as Record<string, unknown> | null;
+      if (!rawJson || typeof rawJson !== 'object') {
+        throw {
+          type: 'api_error',
+          code: 'invalid_response',
+          message: 'Payment method save failed: invalid response format from server',
+        };
+      }
+
+      const pmValue = rawJson.paymentMethod;
+      if (!pmValue || typeof pmValue !== 'object') {
+        throw {
+          type: 'api_error',
+          code: 'invalid_response',
+          message: 'Payment method save failed: missing payment method in server response',
+        };
+      }
+
+      const pm = pmValue as Record<string, unknown>;
+      const rawCard = pm.card;
+      const cardData = (rawCard && typeof rawCard === 'object' ? rawCard : {}) as Record<string, unknown>;
       return {
-        id: (pm.id as string) || '',
+        id: (typeof pm.id === 'string' ? pm.id : '') || '',
         type: 'card' as const,
         card: {
-          brand: (cardData.brand || 'unknown') as string,
-          last4: (cardData.last4 || '****') as string,
-          exp_month: (cardData.exp_month || 0) as number,
-          exp_year: (cardData.exp_year || 0) as number,
+          brand: (typeof cardData.brand === 'string' ? cardData.brand : 'unknown'),
+          last4: (typeof cardData.last4 === 'string' ? cardData.last4 : '****'),
+          exp_month: (typeof cardData.exp_month === 'number' ? cardData.exp_month : 0),
+          exp_year: (typeof cardData.exp_year === 'number' ? cardData.exp_year : 0),
         },
-        created: (pm.created as number) || Math.floor(Date.now() / 1000),
+        created: (typeof pm.created === 'number' ? pm.created : Math.floor(Date.now() / 1000)),
       };
     } catch (error) {
       console.error('[StripeService] Error attaching payment method:', error);
-      throw this.handleStripeError(error);
+
+      // Use proper typing for enhanced error with known Stripe error fields
+      type EnhancedError = Error & { type?: string; code?: string; cause?: unknown };
+
+      // For structured API errors (e.g. 4xx/5xx from Edge Function), preserve the
+      // original message so the status code surfaces to the caller.
+      const isStructuredApiError = error && typeof error === 'object' && !Array.isArray(error) &&
+        (error as Record<string, unknown>).type === 'api_error' &&
+        (error as Record<string, unknown>).code;
+
+      let enhancedError: EnhancedError;
+      if (isStructuredApiError) {
+        const originalError = error as Record<string, string | undefined>;
+        enhancedError = (error instanceof Error ? error : new Error(String(originalError.message))) as EnhancedError;
+        if (!enhancedError.type) enhancedError.type = originalError.type;
+        if (!enhancedError.code) enhancedError.code = originalError.code;
+      } else {
+        const errorMessage = getNetworkErrorMessage(error);
+        enhancedError = error instanceof Error
+          ? error as EnhancedError
+          : new Error(errorMessage) as EnhancedError;
+        if (errorMessage && enhancedError.message !== errorMessage) {
+          enhancedError.message = errorMessage;
+        }
+      }
+
+      if (!enhancedError.name) {
+        enhancedError.name = error instanceof Error ? error.name : 'Error';
+      }
+      if (!enhancedError.cause) {
+        enhancedError.cause = error;
+      }
+
+      throw this.handleStripeError(enhancedError);
     }
   }
 
