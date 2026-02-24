@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
+import { CaptchaChallenge } from '../../components/ui/captcha-challenge'
 import { Checkbox } from '../../components/ui/checkbox'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
 import { setRememberMePreference } from '../../lib/auth-session-storage'
@@ -38,7 +39,12 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [captchaVerified, setCaptchaVerified] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+
+  // Show CAPTCHA after this many consecutive failed attempts
+  const CAPTCHA_THRESHOLD = 3
+  const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !lockoutUntil
   const [socialAuthLoading, setSocialAuthLoading] = useState(false)
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null)
 
@@ -69,6 +75,11 @@ export function SignInForm() {
       if (lockoutUntil && Date.now() < lockoutUntil) {
         const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
+      }
+
+      // Require CAPTCHA to be solved after the threshold
+      if (captchaRequired && !captchaVerified) {
+        throw new Error('Please complete the security check before signing in.')
       }
 
       if (!validateForm()) {
@@ -126,6 +137,7 @@ export function SignInForm() {
           if (newAttempts >= 5) {
             const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
             setLockoutUntil(lockout)
+            setCaptchaVerified(false)
             throw new Error('Too many failed attempts. Please try again in 5 minutes.')
           }
 
@@ -136,6 +148,7 @@ export function SignInForm() {
         // Reset login attempts on success
         setLoginAttempts(0)
         setLockoutUntil(null)
+        setCaptchaVerified(false)
 
         console.log('[sign-in] Authentication successful', { correlationId })
 
@@ -508,6 +521,13 @@ export function SignInForm() {
                   <Text className="text-white/80 text-sm ml-2">Remember me</Text>
                 </TouchableOpacity>
               </View>
+
+              {captchaRequired && (
+                <CaptchaChallenge
+                  onVerified={() => setCaptchaVerified(true)}
+                  onReset={() => setCaptchaVerified(false)}
+                />
+              )}
 
               <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
                 {isSubmitting ? (
