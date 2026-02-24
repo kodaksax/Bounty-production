@@ -244,10 +244,20 @@ function BountyAppInner() {
     try {
       const pageOffset = reset ? 0 : offsetRef.current
       const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+
+      // Deduplicate incoming bounties by id to avoid duplicate React keys
+      const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
+        const map = new Map<string, Bounty>()
+        existing.concat(incoming).forEach(b => {
+          map.set(String(b.id), b)
+        })
+        return Array.from(map.values())
+      }
+
       if (reset) {
-        setBounties(fetchedBounties)
+        setBounties(mergeUniqueById([], fetchedBounties))
       } else {
-        setBounties(prev => [...prev, ...fetchedBounties])
+        setBounties(prev => mergeUniqueById(prev, fetchedBounties))
       }
       offsetRef.current = pageOffset + fetchedBounties.length
       setHasMore(fetchedBounties.length === PAGE_SIZE)
@@ -273,7 +283,9 @@ function BountyAppInner() {
     setIsLoadingTrending(true)
     try {
       const trending = await searchService.getTrendingBounties(5)
-      setTrendingBounties(trending)
+      // Ensure trending list contains unique ids
+      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values())
+      setTrendingBounties(unique)
     } catch (error) {
       console.error('Error loading trending bounties:', error)
     } finally {
