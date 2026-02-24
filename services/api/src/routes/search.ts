@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logErrorWithContext, getRequestContext } from '../middleware/request-context';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { authMiddleware } from '../middleware/auth';
-import { db } from '../db/connection';
+import { dbRead } from '../db/connection';
 import { bounties, users } from '../db/schema';
 import { eq, and, or, gte, lte, ilike, sql, desc, asc } from 'drizzle-orm';
 
@@ -97,7 +97,7 @@ export async function registerSearchRoutes(fastify: FastifyInstance) {
       }
 
       // Build the query
-      let query = db
+      let query = dbRead
         .select({
           id: bounties.id,
           creator_id: bounties.creator_id,
@@ -197,7 +197,7 @@ export async function registerSearchRoutes(fastify: FastifyInstance) {
       }
 
       // Build the query
-      let query = db
+      let query = dbRead
         .select({
           id: users.id,
           handle: users.handle,
@@ -261,7 +261,7 @@ export async function registerSearchRoutes(fastify: FastifyInstance) {
       }
 
       if (type === 'bounty') {
-        const results = await db
+        const results = await dbRead
           .select({
             id: bounties.id,
             title: bounties.title,
@@ -287,7 +287,7 @@ export async function registerSearchRoutes(fastify: FastifyInstance) {
           })),
         };
       } else {
-        const results = await db
+        const results = await dbRead
           .select({
             id: users.id,
             handle: users.handle,

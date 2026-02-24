@@ -40,16 +40,34 @@ const connectionString: string = (() => {
   return `postgresql://${host}:${port}/${dbName}`;
 })();
 
-console.log(`[db] Using connection string: ${connectionString ? '(built from env)' : '(none)'}`);
+// Read replica connection string: prefer DATABASE_READ_URL, fall back to primary
+const readConnectionString: string = sanitizeEnv(process.env.DATABASE_READ_URL) || connectionString;
 
-// Create PostgreSQL connection pool
+const isReadReplica = readConnectionString !== connectionString;
+
+console.log(`[db] Using connection string: ${connectionString ? '(built from env)' : '(none)'}`);
+console.log(`[db] Read replica: ${isReadReplica ? '(separate DATABASE_READ_URL configured)' : '(same as primary)'}`);
+
+// Create primary PostgreSQL connection pool (used for writes and transactions)
 const pool = new Pool({
   connectionString,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// Create Drizzle database instance
+// Create read replica connection pool (used for read-heavy SELECT queries)
+// Falls back to the primary pool when DATABASE_READ_URL is not set
+const readPool = isReadReplica
+  ? new Pool({
+      connectionString: readConnectionString,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    })
+  : pool;
+
+// Create Drizzle database instance for writes/transactions
 export const db = drizzle(pool, { schema });
 
-// Export pool for raw queries if needed
-export { pool };
+// Create Drizzle database instance for read-heavy queries (points to replica when configured)
+export const dbRead = drizzle(readPool, { schema });
+
+// Export pools for raw queries if needed
+export { pool, readPool, isReadReplica };
