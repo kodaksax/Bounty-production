@@ -46,8 +46,12 @@ export class StorageService {
                 .from(bucket)
                 .getPublicUrl(data.path);
 
+            const publicUrl = config.storage.cdnUrl
+                ? publicUrlData.publicUrl.replace(config.supabase.url, config.storage.cdnUrl)
+                : publicUrlData.publicUrl;
+
             return {
-                url: publicUrlData.publicUrl
+                url: publicUrl
             };
         } catch (error) {
             logger.error(`Storage service error: ${error instanceof Error ? error.message : String(error)}`);
