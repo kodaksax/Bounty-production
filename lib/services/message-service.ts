@@ -7,6 +7,8 @@ import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
 import * as supabaseMessaging from './supabase-messaging';
 import { analyticsService } from './analytics-service';
+import { encryptMessage, decryptMessage, type EncryptedMessage } from '../security/encryption-utils';
+import { e2eKeyService } from './e2e-key-service';
 
 export const messageService = {
   /**
@@ -25,14 +27,35 @@ export const messageService = {
   },
 
   /**
-   * Get messages for a conversation
+   * Get messages for a conversation, decrypting any E2E-encrypted messages.
    */
   getMessages: async (conversationId: string): Promise<Message[]> => {
-    return messagingService.getMessages(conversationId);
+    const messages = await messagingService.getMessages(conversationId);
+    const userId = getCurrentUserId();
+
+    // Decrypt encrypted messages in-place
+    const keys = await e2eKeyService.getOrGenerateKeyPair(userId).catch(() => null);
+
+    return Promise.all(
+      messages.map(async (msg) => {
+        if (!msg.isEncrypted) return msg;
+        try {
+          if (!keys) throw new Error('No local key pair');
+          const payload: EncryptedMessage = JSON.parse(msg.text);
+          const plaintext = await decryptMessage(payload, keys.privateKey);
+          return { ...msg, text: plaintext };
+        } catch {
+          // If decryption fails, show a placeholder rather than crashing
+          return { ...msg, text: '[Encrypted message]' };
+        }
+      })
+    );
   },
 
   /**
-   * Send a message (optimistic update with offline support)
+   * Send a message (optimistic update with offline support).
+   * For 1:1 conversations the message is E2E-encrypted if the recipient's
+   * public key is available; otherwise it falls back to plaintext.
    */
   sendMessage: async (conversationId: string, text: string, senderId: string = 'current-user'): Promise<{ message: Message; error?: string }> => {
     // Sanitize message text to prevent XSS attacks
@@ -46,47 +69,80 @@ export const messageService = {
       };
     }
 
+    // Attempt E2E encryption for 1:1 conversations
+    let finalText = sanitizedText;
+    let isEncrypted = false;
+
+    try {
+      const conversation = await messagingService.getConversation(conversationId);
+      const participantIds = conversation?.participantIds ?? [];
+      const userId = getCurrentUserId();
+      const recipientId = participantIds.find((id) => id !== userId);
+
+      if (recipientId && participantIds.length === 2) {
+        const [recipientPublicKey, senderKeys] = await Promise.all([
+          e2eKeyService.getRecipientPublicKey(recipientId),
+          e2eKeyService.getOrGenerateKeyPair(userId),
+        ]);
+
+        if (recipientPublicKey && senderKeys) {
+          const encrypted = await encryptMessage(sanitizedText, recipientPublicKey, senderKeys.privateKey);
+          finalText = JSON.stringify(encrypted);
+          isEncrypted = true;
+        }
+      }
+    } catch (encErr) {
+      // Non-fatal: fall back to plaintext
+      try { logClientError('E2E encryption failed, falling back to plaintext', { err: encErr }); } catch { /* ignore */ }
+    }
+
     // Check network connectivity
     const netState = await NetInfo.fetch();
     const isOnline = !!netState.isConnected;
 
     if (!isOnline) {
-      // Queue for later if offline
-      
-      // Create a temporary message
+      // Queue for later if offline.
+      // The tempMessage shows plaintext to the local UI so the user sees their own
+      // message immediately; the queued payload contains the encrypted finalText
+      // that will be sent once the device reconnects.
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
         conversationId,
         senderId,
-        text: sanitizedText,
+        text: sanitizedText, // show original text locally while pending
         createdAt: new Date().toISOString(),
         status: 'sending',
+        isEncrypted,
       };
       
       await offlineQueueService.enqueue('message', {
         conversationId,
-        text: sanitizedText,
+        text: finalText,
         senderId,
         tempId: tempMessage.id,
+        isEncrypted,
       });
       
       return { message: tempMessage };
     }
 
-    // Send message using persistent storage (with sanitized text)
-    const message = await messagingService.sendMessage(conversationId, sanitizedText, senderId);
+    // Send message using persistent storage
+    const message = await messagingService.sendMessage(conversationId, finalText, senderId);
 
     // Track message sent event
     await analyticsService.trackEvent('message_sent', {
       conversationId,
       messageLength: text.length,
       isOnline,
+      isEncrypted,
     });
 
     // Increment user property for messages sent
     await analyticsService.incrementUserProperty('messages_sent');
 
-    return { message };
+    // Return plaintext to the caller (the UI) while the DB stores ciphertext.
+    // The `isEncrypted` flag signals that the persisted copy is encrypted.
+    return { message: { ...message, isEncrypted, text: sanitizedText } };
   },
 
   /**

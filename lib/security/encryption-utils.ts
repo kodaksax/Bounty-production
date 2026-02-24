@@ -2,12 +2,14 @@
  * Encryption Utilities for Secure Data Handling
  * Provides client-side encryption for sensitive data and E2E encryption for messages
  * 
- * For React Native, we use expo-crypto for cryptographic operations
- * Note: This provides application-level encryption. Expo SecureStore already provides
- * OS-level encryption for stored tokens.
+ * E2E message encryption uses TweetNaCl's box construction:
+ *   X25519 key exchange + XSalsa20-Poly1305 AEAD (authenticated encryption)
+ * 
+ * Note: Expo SecureStore provides OS-level encryption for stored private keys.
  */
 
 import * as Crypto from 'expo-crypto';
+import nacl from 'tweetnacl';
 
 /**
  * Generate a random encryption key
@@ -56,19 +58,8 @@ export async function hashData(data: string): Promise<string> {
 }
 
 /**
- * Simple symmetric encryption for local data
- * Note: For production E2E messaging, consider using a dedicated library like
- * signal-protocol or olm for more robust encryption with perfect forward secrecy
- * 
- * This implementation provides basic encryption for:
- * - Locally stored sensitive data
- * - Simple message encryption
- * 
- * For a full E2E implementation, you would need:
- * 1. Key exchange protocol (e.g., Diffie-Hellman)
- * 2. Identity verification
- * 3. Perfect forward secrecy
- * 4. Key rotation
+ * Symmetric encryption helpers for local data storage.
+ * E2E message encryption uses the nacl.box functions below.
  */
 
 /**
@@ -139,64 +130,62 @@ export async function deobfuscateData(encryptedData: string, key: string): Promi
 }
 
 /**
- * E2E Message Encryption
- * 
- * ⚠️ CRITICAL WARNING: These functions are DEMO-ONLY stubs and provide NO real security.
- * They MUST NOT be used in production.
- * 
- * For production E2E encryption, use:
- * - @privacyresearch/olm (Matrix protocol)
- * - libsignal-protocol-javascript (Signal protocol)
- * 
- * These provide:
- * - Proper key exchange
- * - Perfect forward secrecy
- * - Deniability
- * - Future-proof cryptography
+ * E2E Message Encryption using TweetNaCl box
+ *
+ * nacl.box uses X25519 Diffie-Hellman key exchange combined with
+ * XSalsa20-Poly1305 authenticated encryption (AEAD).
+ *
+ * Security properties:
+ * - Confidentiality: only the intended recipient can read the message
+ * - Authenticity: the recipient can verify the message came from the sender
+ * - Integrity: any tampering is detected and decryption fails
  */
 
 export interface EncryptedMessage {
+  /** base64-encoded ciphertext (nacl.box output) */
   ciphertext: string;
-  iv: string;
-  timestamp: number;
+  /** base64-encoded 24-byte nonce */
+  nonce: string;
+  /** base64-encoded X25519 public key of the sender */
+  senderPublicKey: string;
+  /** format version */
   version: string;
 }
 
 /**
- * DEMO-ONLY: This function does NOT provide real E2E encryption.
- * It must NOT be used in production. Throws error if NODE_ENV is production.
- * 
- * @throws {Error} Always throws in production environment
+ * Encrypt a plaintext message for a specific recipient using nacl.box.
+ *
+ * @param plaintext        - The message to encrypt
+ * @param recipientPublicKey - Recipient's X25519 public key (base64)
+ * @param senderPrivateKey  - Sender's X25519 private key (base64)
+ * @returns EncryptedMessage containing ciphertext, nonce, and sender public key
  */
 export async function encryptMessage(
   plaintext: string,
-  recipientPublicKey: string
+  recipientPublicKey: string,
+  senderPrivateKey: string
 ): Promise<EncryptedMessage> {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '[Encryption] encryptMessage is a DEMO-ONLY stub and must NOT be used in production. ' +
-      'Please implement proper E2E encryption using a secure library (e.g. libsignal, olm).'
-    );
-  }
-  
-  console.error('[Encryption] Using DEMO-ONLY encryptMessage - DO NOT USE IN PRODUCTION');
-  
   try {
-    // Generate IV for this message
-    const iv = await generateIV();
-    
-    // In a real implementation, use the recipient's public key for key exchange
-    // For now, we'll use a derived key (this is NOT secure for production)
-    const derivedKey = await hashData(recipientPublicKey + iv);
-    
-    // Obfuscate the message (NOT real encryption)
-    const ciphertext = await obfuscateData(plaintext, derivedKey);
-    
+    const recipientPubBytes = base64ToUint8(recipientPublicKey);
+    const senderSecBytes = base64ToUint8(senderPrivateKey);
+
+    // Derive sender's public key from their private key
+    const senderKeyPair = nacl.box.keyPair.fromSecretKey(senderSecBytes);
+
+    // Generate a fresh nonce for every message
+    const nonce = nacl.randomBytes(nacl.box.nonceLength);
+
+    // Encode plaintext as UTF-8
+    const msgBytes = new TextEncoder().encode(plaintext);
+
+    // Encrypt: X25519 key exchange + XSalsa20-Poly1305 AEAD
+    const cipherBytes = nacl.box(msgBytes, nonce, recipientPubBytes, senderSecBytes);
+
     return {
-      ciphertext,
-      iv,
-      timestamp: Date.now(),
-      version: '1.0-demo'
+      ciphertext: uint8ToBase64(cipherBytes),
+      nonce: uint8ToBase64(nonce),
+      senderPublicKey: uint8ToBase64(senderKeyPair.publicKey),
+      version: '2.0',
     };
   } catch (error) {
     console.error('[Encryption] Failed to encrypt message:', error);
@@ -205,32 +194,30 @@ export async function encryptMessage(
 }
 
 /**
- * DEMO-ONLY: This function does NOT provide real E2E decryption.
- * It must NOT be used in production. Throws error if NODE_ENV is production.
- * 
- * @throws {Error} Always throws in production environment
+ * Decrypt a message encrypted with encryptMessage.
+ *
+ * @param encryptedMsg     - The EncryptedMessage object
+ * @param recipientPrivateKey - Recipient's X25519 private key (base64)
+ * @returns Decrypted plaintext string
  */
 export async function decryptMessage(
   encryptedMsg: EncryptedMessage,
   recipientPrivateKey: string
 ): Promise<string> {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '[Encryption] decryptMessage is a DEMO-ONLY stub and must NOT be used in production. ' +
-      'Please implement proper E2E decryption using a secure library (e.g. libsignal, olm).'
-    );
-  }
-  
-  console.error('[Encryption] Using DEMO-ONLY decryptMessage - DO NOT USE IN PRODUCTION');
-  
   try {
-    // Derive the key (same as encryption)
-    const derivedKey = await hashData(recipientPrivateKey + encryptedMsg.iv);
-    
-    // Deobfuscate the message (NOT real decryption)
-    const plaintext = await deobfuscateData(encryptedMsg.ciphertext, derivedKey);
-    
-    return plaintext;
+    const cipherBytes = base64ToUint8(encryptedMsg.ciphertext);
+    const nonce = base64ToUint8(encryptedMsg.nonce);
+    const senderPubBytes = base64ToUint8(encryptedMsg.senderPublicKey);
+    const recipientSecBytes = base64ToUint8(recipientPrivateKey);
+
+    // Decrypt: X25519 key exchange + XSalsa20-Poly1305 AEAD
+    const msgBytes = nacl.box.open(cipherBytes, nonce, senderPubBytes, recipientSecBytes);
+
+    if (!msgBytes) {
+      throw new Error('Decryption failed: authentication tag mismatch or wrong keys');
+    }
+
+    return new TextDecoder().decode(msgBytes);
   } catch (error) {
     console.error('[Encryption] Failed to decrypt message:', error);
     throw new Error('Failed to decrypt message');
@@ -238,38 +225,19 @@ export async function decryptMessage(
 }
 
 /**
- * Generate a key pair for E2E encryption
- * 
- * ⚠️ CRITICAL WARNING: This is a DEMO-ONLY stub that is cryptographically INSECURE.
- * Deriving a public key from a private key via hashing is NOT how public-key crypto works.
- * This function throws an error in production.
- * 
- * For production, use proper public-key cryptography:
- * - libsodium (via react-native-sodium)
- * - tweetnacl (via tweetnacl-react-native-randombytes)
- * - Web Crypto API when available
- * 
- * @throws {Error} Always throws in production environment
+ * Generate an X25519 key pair suitable for nacl.box encryption.
+ * Store the private key in expo-secure-store; the public key can be shared openly.
  */
 export async function generateKeyPair(): Promise<{
   publicKey: string;
   privateKey: string;
 }> {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '[Encryption] generateKeyPair is INSECURE and must NOT be used in production. ' +
-      'Use a proper crypto library (libsodium, tweetnacl) for real key pair generation.'
-    );
-  }
-  
-  console.error('[Encryption] generateKeyPair is DEMO-ONLY and cryptographically INSECURE');
-  
   try {
-    // PLACEHOLDER: Generate random keys (not actual key pair)
-    const privateKey = await generateEncryptionKey();
-    const publicKey = await hashData(privateKey); // NOT secure - placeholder only
-    
-    return { publicKey, privateKey };
+    const { publicKey, secretKey } = nacl.box.keyPair();
+    return {
+      publicKey: uint8ToBase64(publicKey),
+      privateKey: uint8ToBase64(secretKey),
+    };
   } catch (error) {
     console.error('[Encryption] Failed to generate key pair:', error);
     throw new Error('Failed to generate key pair');
@@ -286,6 +254,29 @@ function arrayBufferToBase64(buffer: ArrayBuffer | ArrayBufferLike): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+/**
+ * Helper: Convert Uint8Array to base64 string
+ */
+export function uint8ToBase64(arr: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < arr.length; i++) {
+    binary += String.fromCharCode(arr[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Helper: Convert base64 string to Uint8Array
+ */
+export function base64ToUint8(str: string): Uint8Array {
+  const binary = atob(str);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    arr[i] = binary.charCodeAt(i);
+  }
+  return arr;
 }
 
 
@@ -426,32 +417,3 @@ export function isEncryptionAvailable(): boolean {
     return false;
   }
 }
-
-/**
- * Production Recommendations:
- * 
- * For real E2E encryption in production, consider:
- * 
- * 1. Signal Protocol (via libsignal-protocol-javascript)
- *    - Perfect forward secrecy
- *    - Future secrecy
- *    - Deniable authentication
- *    - Best practices from Signal/WhatsApp
- * 
- * 2. Matrix Olm/Megolm (via @privacyresearch/olm)
- *    - Group encryption
- *    - Decentralized
- *    - Room-based encryption
- * 
- * 3. For simpler needs:
- *    - TweetNaCl.js (tweet nacl)
- *    - Noble-crypto libraries
- *    - react-native-aes-crypto
- * 
- * Security Considerations:
- * - Store private keys in expo-secure-store, never in AsyncStorage
- * - Implement key rotation
- * - Use proper key exchange (ECDH, X25519)
- * - Implement identity verification (key fingerprints)
- * - Consider using Supabase Realtime with encrypted payload instead of plaintext
- */

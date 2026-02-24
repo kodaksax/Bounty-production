@@ -54,6 +54,21 @@ jest.mock('../../../lib/utils/data-utils', () => ({
   getCurrentUserId: jest.fn().mockReturnValue('current-user-id'),
 }));
 
+// Mock E2E encryption modules so tests don't need native crypto deps
+jest.mock('../../../lib/security/encryption-utils', () => ({
+  encryptMessage: jest.fn(),
+  decryptMessage: jest.fn(),
+}));
+
+jest.mock('../../../lib/services/e2e-key-service', () => ({
+  e2eKeyService: {
+    getOrGenerateKeyPair: jest.fn().mockResolvedValue(null),
+    getRecipientPublicKey: jest.fn().mockResolvedValue(null),
+    publishPublicKey: jest.fn().mockResolvedValue(undefined),
+    clearCachedPublicKey: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { messageService } from '../../../lib/services/message-service';
 import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
 import * as localMessaging from '../../../lib/services/messaging';
