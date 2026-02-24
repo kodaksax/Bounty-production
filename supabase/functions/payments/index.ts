@@ -2,6 +2,7 @@
 // Handles all /payments/* routes previously served by the Node/Express server.
 // Routes:
 //   POST   /payments/create-payment-intent
+//   POST   /payments/create-setup-intent
 //   GET    /payments/methods
 //   POST   /payments/methods
 //   DELETE /payments/methods/:id
@@ -129,6 +130,59 @@ Deno.serve(async (req: Request) => {
       })
 
       return jsonResponse({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
+    }
+
+    // POST /payments/create-setup-intent
+    if (req.method === 'POST' && subPath === '/create-setup-intent') {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('stripe_customer_id, email')
+        .eq('id', userId)
+        .single()
+
+      let customerId = profile?.stripe_customer_id
+      if (!customerId && profile?.email) {
+        // Basic email format validation before passing to Stripe
+        const emailValue = sanitizeText(profile.email)
+        // Validates that the email has exactly one @, a non-empty local part,
+        // and a domain with at least one dot followed by a 2+ char TLD.
+        const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/
+        if (!emailRegex.test(emailValue)) {
+          return jsonResponse({ error: 'Invalid email address on profile' }, 400)
+        }
+
+        try {
+          const customer = await stripe.customers.create({
+            email: emailValue,
+            metadata: { user_id: userId },
+          })
+          customerId = customer.id
+
+          const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', userId)
+
+          if (updateError) {
+            console.error('[payments] Failed to save stripe_customer_id', { userId, updateError })
+          }
+        } catch (err) {
+          console.error('[payments] Error creating Stripe customer for setup intent', { userId, err })
+          return jsonResponse({ error: 'Failed to create customer profile' }, 502)
+        }
+      }
+
+      if (!customerId) {
+        return jsonResponse({ error: 'Unable to create customer profile' }, 400)
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        usage: 'off_session',
+        metadata: { user_id: userId },
+      })
+
+      return jsonResponse({ clientSecret: setupIntent.client_secret, setupIntentId: setupIntent.id })
     }
 
     // GET /payments/methods
