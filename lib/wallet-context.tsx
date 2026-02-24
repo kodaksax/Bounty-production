@@ -357,6 +357,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const balanceData = await balanceResponse.json();
         const apiBalance = typeof balanceData.balance === 'number' ? balanceData.balance : 0;
 
+        let resolvedBalance = apiBalance;
         setBalance(prev => {
           const previous = typeof prev === 'number' ? prev : 0;
           const now = Date.now();
@@ -364,16 +365,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             lastOptimisticDepositRef.current !== null &&
             now - lastOptimisticDepositRef.current < 60_000;
 
-          const shouldPreferLocalBalance = hasRecentOptimisticDeposit && previous > apiBalance;
-          const nextBalance = shouldPreferLocalBalance ? previous : apiBalance;
-
-          if (!shouldPreferLocalBalance) {
-            lastOptimisticDepositRef.current = null;
+          if (hasRecentOptimisticDeposit && previous > apiBalance) {
+            resolvedBalance = previous;
+            return previous;
           }
 
-          persist(nextBalance);
-          return nextBalance;
+          lastOptimisticDepositRef.current = null;
+          resolvedBalance = apiBalance;
+          return apiBalance;
         });
+
+        try {
+          await persist(resolvedBalance);
+        } catch (persistError) {
+          console.error('[wallet] Failed to persist balance', persistError);
+        }
       }
 
       // Fetch transactions from API with timeout and retry
