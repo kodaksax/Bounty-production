@@ -153,6 +153,21 @@ export const config = {
       bounty: getNumber('REDIS_TTL_BOUNTY', 180), // 3 minutes
       bountyList: getNumber('REDIS_TTL_BOUNTY_LIST', 60), // 1 minute
     },
+    cluster: {
+      enabled: getBoolean('REDIS_CLUSTER_ENABLED', false),
+      // Comma-separated list of host:port pairs, e.g. "redis-1:6379,redis-2:6380,redis-3:6381"
+      nodes: getOptional('REDIS_CLUSTER_NODES', '').split(',').filter(Boolean).map(node => {
+        const [host, portStr] = node.trim().split(':');
+        const port = parseInt(portStr || '6379', 10);
+        if (!host || isNaN(port) || port < 1 || port > 65535) {
+          throw new Error(
+            `Invalid REDIS_CLUSTER_NODES entry: "${node.trim()}". ` +
+            'Expected format is host:port (e.g. redis-1:6379).'
+          );
+        }
+        return { host, port };
+      }),
+    },
   },
 
   // Supabase Configuration

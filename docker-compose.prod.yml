@@ -1,0 +1,265 @@
+##############################################################################
+# BountyExpo – Production Docker Compose
+#
+# Redis Cluster topology
+# ┌──────────────────────────────────────┐
+# │  3 master nodes + 3 replica nodes   │
+# │                                      │
+# │  redis-cluster-1  (master, :6379)   │
+# │  redis-cluster-2  (master, :6380)   │
+# │  redis-cluster-3  (master, :6381)   │
+# │  redis-cluster-4  (replica, :6382)  │
+# │  redis-cluster-5  (replica, :6383)  │
+# │  redis-cluster-6  (replica, :6384)  │
+# └──────────────────────────────────────┘
+#
+# The `redis-cluster-init` service creates the cluster once all nodes
+# are healthy, then exits.  It will not recreate an already-initialised
+# cluster (idempotent).
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (set in .env or the host environment):
+#   REDIS_PASSWORD  – shared password for all cluster nodes (required)
+##############################################################################
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Redis Cluster nodes
+  # ──────────────────────────────────────────────────────────────────────────
+
+  redis-cluster-1:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-1
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6379
+    ports:
+      - "6379:6379"
+      - "16379:16379"
+    volumes:
+      - redis_cluster_1_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.11
+
+  redis-cluster-2:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-2
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6380
+    ports:
+      - "6380:6380"
+      - "16380:16380"
+    volumes:
+      - redis_cluster_2_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6380", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.12
+
+  redis-cluster-3:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-3
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6381
+    ports:
+      - "6381:6381"
+      - "16381:16381"
+    volumes:
+      - redis_cluster_3_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6381", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.13
+
+  redis-cluster-4:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-4
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6382
+    ports:
+      - "6382:6382"
+      - "16382:16382"
+    volumes:
+      - redis_cluster_4_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6382", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.14
+
+  redis-cluster-5:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-5
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6383
+    ports:
+      - "6383:6383"
+      - "16383:16383"
+    volumes:
+      - redis_cluster_5_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6383", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.15
+
+  redis-cluster-6:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-6
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --port 6384
+    ports:
+      - "6384:6384"
+      - "16384:16384"
+    volumes:
+      - redis_cluster_6_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6384", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      bountyexpo-cluster-network:
+        ipv4_address: 172.20.0.16
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Cluster initialisation (runs once, then exits)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  redis-cluster-init:
+    image: redis:7-alpine
+    container_name: bountyexpo-redis-cluster-init
+    depends_on:
+      redis-cluster-1:
+        condition: service_healthy
+      redis-cluster-2:
+        condition: service_healthy
+      redis-cluster-3:
+        condition: service_healthy
+      redis-cluster-4:
+        condition: service_healthy
+      redis-cluster-5:
+        condition: service_healthy
+      redis-cluster-6:
+        condition: service_healthy
+    # --cluster-replicas 1  → 1 replica per master  (3 masters + 3 replicas)
+    command: >
+      sh -c "
+        redis-cli -a ${REDIS_PASSWORD} --cluster create
+          172.20.0.11:6379
+          172.20.0.12:6380
+          172.20.0.13:6381
+          172.20.0.14:6382
+          172.20.0.15:6383
+          172.20.0.16:6384
+          --cluster-replicas 1
+          --cluster-yes
+      "
+    networks:
+      - bountyexpo-cluster-network
+    restart: "no"
+
+# ──────────────────────────────────────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────────────────────────────────────
+
+volumes:
+  redis_cluster_1_data:
+    driver: local
+  redis_cluster_2_data:
+    driver: local
+  redis_cluster_3_data:
+    driver: local
+  redis_cluster_4_data:
+    driver: local
+  redis_cluster_5_data:
+    driver: local
+  redis_cluster_6_data:
+    driver: local
+
+# ──────────────────────────────────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────────────────────────────────
+
+networks:
+  bountyexpo-cluster-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
