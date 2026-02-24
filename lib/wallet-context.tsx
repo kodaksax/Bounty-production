@@ -1,11 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
+import { bountyService } from './services/bounty-service';
+import { paymentService } from './services/payment-service';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { getSecureJSON, setSecureJSON, SecureKeys } from './utils/secure-storage';
-import { paymentService } from './services/payment-service';
-import { bountyService } from './services/bounty-service';
+import { getSecureJSON, SecureKeys, setSecureJSON } from './utils/secure-storage';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -62,6 +62,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
+  const lastOptimisticDepositRef = useRef<number | null>(null);
 
   const persist = useCallback(async (value: number) => {
     try { 
@@ -126,6 +127,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       persist(next);
       return next;
     });
+    lastOptimisticDepositRef.current = Date.now();
     await logTransaction({
       type: 'deposit',
       amount: amount, // inflow positive
@@ -353,8 +355,25 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (balanceResponse.ok) {
         const balanceData = await balanceResponse.json();
-        setBalance(balanceData.balance);
-        await persist(balanceData.balance);
+        const apiBalance = typeof balanceData.balance === 'number' ? balanceData.balance : 0;
+
+        setBalance(prev => {
+          const previous = typeof prev === 'number' ? prev : 0;
+          const now = Date.now();
+          const hasRecentOptimisticDeposit =
+            lastOptimisticDepositRef.current !== null &&
+            now - lastOptimisticDepositRef.current < 60_000;
+
+          const shouldPreferLocalBalance = hasRecentOptimisticDeposit && previous > apiBalance;
+          const nextBalance = shouldPreferLocalBalance ? previous : apiBalance;
+
+          if (!shouldPreferLocalBalance) {
+            lastOptimisticDepositRef.current = null;
+          }
+
+          persist(nextBalance);
+          return nextBalance;
+        });
       }
 
       // Fetch transactions from API with timeout and retry
