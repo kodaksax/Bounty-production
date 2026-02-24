@@ -36,14 +36,24 @@ export function MfaCodeModal({
 }: MfaCodeModalProps) {
   const [code, setCode] = useState('');
   const inputRef = useRef<TextInput>(null);
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset code when the modal becomes visible
   useEffect(() => {
     if (visible) {
       setCode('');
       // Small delay so the modal is fully rendered before focusing
-      setTimeout(() => inputRef.current?.focus(), 150);
+      focusTimeoutRef.current = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150);
     }
+
+    return () => {
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current);
+        focusTimeoutRef.current = null;
+      }
+    };
   }, [visible]);
 
   const handleVerify = () => {

@@ -174,8 +174,9 @@ export function SignInForm() {
               return
             }
           } catch {
-            // If we cannot determine MFA level, proceed normally
-            console.log('[sign-in] Could not determine MFA level, proceeding', { correlationId })
+            // Fail-closed: if we cannot determine MFA level, block sign-in to avoid bypassing 2FA
+            console.error('[sign-in] Could not determine MFA level, blocking sign-in', { correlationId })
+            throw new Error('Unable to verify multi-factor authentication status. Please try again.')
           }
 
           // OPTIMIZED: Quick profile check with fast timeout and immediate navigation

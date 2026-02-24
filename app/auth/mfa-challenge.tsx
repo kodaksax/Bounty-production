@@ -9,7 +9,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,18 +24,40 @@ import { AnimatedScreen } from '../../components/ui/animated-screen';
 import { useTwoFactorAuth } from '../../hooks/use-two-factor-auth';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
+import { supabase } from '../../lib/supabase';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 export default function MfaChallengeScreen() {
   useScreenBackground('#097959ff');
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { challengeAndVerify, isLoading: authLoading } = useTwoFactorAuth();
+  const { challengeAndVerify, isLoading: authLoading, isMfaChallengeRequired, isEnrolled } = useTwoFactorAuth();
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+  // Guard: once the hook finishes loading, redirect away if the challenge is no longer
+  // needed (already at AAL2, no enrolled factor, or no active session).
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!isMfaChallengeRequired && !isEnrolled) {
+      // No session or no factor – redirect to sign-in
+      router.replace(ROUTES.AUTH.SIGN_IN);
+      try { markInitialNavigationDone(); } catch { /* ignore */ }
+      return;
+    }
+
+    if (!isMfaChallengeRequired && isEnrolled) {
+      // Already satisfied AAL2 – go to app
+      router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
+      try { markInitialNavigationDone(); } catch { /* ignore */ }
+    }
+  // Only run when loading state changes to avoid redirect loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
   const handleVerify = async () => {
     const trimmed = code.trim();
@@ -64,6 +86,17 @@ export default function MfaChallengeScreen() {
     }
   };
 
+  const handleCancelSignIn = async () => {
+    // Sign out so the existing session is invalidated and cannot be used to bypass MFA.
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Proceed to sign-in regardless
+    }
+    router.replace(ROUTES.AUTH.SIGN_IN);
+    try { markInitialNavigationDone(); } catch { /* ignore */ }
+  };
+
   const isLoading = authLoading || isVerifying;
 
   return (
@@ -76,11 +109,11 @@ export default function MfaChallengeScreen() {
           className="flex-1 bg-emerald-700/95 px-6"
           style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
         >
-          {/* Back button */}
+          {/* Cancel sign-in — signs out so the session cannot bypass MFA */}
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleCancelSignIn}
             className="mb-8 self-start p-2"
-            accessibilityLabel="Go back"
+            accessibilityLabel="Cancel sign-in"
             accessibilityRole="button"
           >
             <MaterialIcons name="arrow-back" size={24} color="#fff" />

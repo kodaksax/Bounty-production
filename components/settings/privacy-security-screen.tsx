@@ -272,12 +272,22 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   const handleMfaModalCancel = async () => {
-    setMfaModalVisible(false);
-    if (mfaModalFactorId) {
-      await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
+    if (!mfaModalFactorId) {
+      setMfaModalVisible(false);
+      setIsEnabling2FA(false);
+      return;
     }
-    setMfaModalFactorId(null);
-    setIsEnabling2FA(false);
+
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
+      if (error) throw error;
+      setMfaModalVisible(false);
+      setMfaModalFactorId(null);
+      setIsEnabling2FA(false);
+    } catch (error: any) {
+      console.error('[privacy-security] Error cancelling 2FA setup:', error);
+      Alert.alert('Error', 'Failed to cancel 2FA setup. Please try again.');
+    }
   };
 
   const handleDisable2FA = async () => {
