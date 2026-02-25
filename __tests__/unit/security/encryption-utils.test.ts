@@ -5,17 +5,20 @@
  * verify that the key pair helpers produce compatible keys.
  */
 
-// Mock expo-crypto: use actual random bytes so key pairs are unique and valid
-jest.mock('expo-crypto', () => ({
-  getRandomBytesAsync: jest.fn(async (n: number) => {
-    const bytes = new Uint8Array(n);
-    // Node v14+ has globalThis.crypto.getRandomValues available
-    globalThis.crypto.getRandomValues(bytes);
-    return bytes;
-  }),
-  digestStringAsync: jest.fn(async (_alg: unknown, data: string) => `sha256:${data}`),
-  CryptoDigestAlgorithm: { SHA256: 'SHA256' },
-}));
+// Mock expo-crypto using Node.js built-in crypto so tests run on Node 18.x in CI
+// (globalThis.crypto / WebCrypto is only available without a flag on Node 19+)
+jest.mock('expo-crypto', () => {
+  const nodeCrypto = require('crypto');
+  return {
+    getRandomBytesAsync: jest.fn(async (n: number) => {
+      // Wrap in Uint8Array to give it a dedicated ArrayBuffer of exactly n bytes
+      // (Buffer from randomBytes may share a pool buffer with a larger byteLength)
+      return new Uint8Array(nodeCrypto.randomBytes(n));
+    }),
+    digestStringAsync: jest.fn(async (_alg: unknown, data: string) => `sha256:${data}`),
+    CryptoDigestAlgorithm: { SHA256: 'SHA256' },
+  };
+});
 
 import {
   generateKeyPair,
