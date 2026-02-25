@@ -73,7 +73,9 @@ export function SignInForm() {
         })
       }
       
-      // Check for lockout
+      // Check for lockout first — lockout takes precedence over CAPTCHA.
+      // The CAPTCHA UI is hidden while locked out (captchaRequired is false), so
+      // the CAPTCHA error below is intentionally unreachable in the lockout state.
       if (isLockoutActive) {
         const remainingSeconds = Math.ceil((lockoutUntil! - Date.now()) / 1000)
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
@@ -525,10 +527,15 @@ export function SignInForm() {
               </View>
 
               {captchaRequired && (
-                <CaptchaChallenge
-                  onVerified={() => setCaptchaVerified(true)}
-                  onReset={() => setCaptchaVerified(false)}
-                />
+                <View className="mt-4">
+                  <Text className="text-xs text-white/80 mb-2">
+                    Please complete the security check below to continue signing in.
+                  </Text>
+                  <CaptchaChallenge
+                    onVerified={() => setCaptchaVerified(true)}
+                    onReset={() => setCaptchaVerified(false)}
+                  />
+                </View>
               )}
 
               <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">

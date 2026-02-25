@@ -29,8 +29,11 @@ interface CaptchaChallengeProps {
 
 /**
  * A lightweight, native math-based CAPTCHA challenge suitable for mobile.
- * Shows an arithmetic question and requires the correct numeric answer before
- * the parent form can be submitted.
+ * Provides a verification UI (arithmetic question + answer input) and calls:
+ *   - `onVerified` once the user enters the correct answer
+ *   - `onReset` when a new challenge is generated via the refresh button
+ * The parent form is responsible for blocking submission until `onVerified`
+ * has been called.
  *
  * @internal `generateChallenge` is exported for testing purposes only.
  */
@@ -42,8 +45,12 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
   const [verified, setVerified] = useState(false)
   const [wrong, setWrong] = useState(false)
   const inputRef = useRef<TextInput>(null)
+  // Track whether a challenge change was triggered by an explicit user refresh
+  // so we only steal keyboard focus after the refresh button is pressed.
+  const refreshTriggered = useRef(false)
 
   const refresh = () => {
+    refreshTriggered.current = true
     setChallenge(generateChallenge())
     setInput('')
     setVerified(false)
@@ -51,9 +58,10 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
     onReset?.()
   }
 
-  // Re-focus when refreshed
+  // Auto-focus only after an explicit refresh, not on initial mount.
   useEffect(() => {
-    if (!verified) {
+    if (!verified && refreshTriggered.current) {
+      refreshTriggered.current = false
       inputRef.current?.focus()
     }
   }, [challenge, verified])
