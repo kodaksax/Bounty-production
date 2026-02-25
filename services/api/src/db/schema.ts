@@ -25,6 +25,8 @@ export const users = pgTable('profiles', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // Soft delete timestamp (if present)
   balance: text('balance').default('0.00').notNull(), // Numeric in DB, using text for precision or number if scaled
+  // X25519 public key for E2E encrypted messaging (private key stays on device)
+  e2e_public_key: text('e2e_public_key'),
 });
 
 // Bounties table as specified in requirements
