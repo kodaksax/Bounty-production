@@ -460,7 +460,24 @@ export class AuthProfileService {
         .single();
 
       if (error) {
-        // Don't throw, just log - we already have cached data displayed
+        // If the profile no longer exists in the database, clear the stale
+        // cache and notify listeners so the app can redirect to onboarding.
+        if (error.code === 'PGRST116') {
+          console.log('[authProfileService] Background fetch: profile not found (PGRST116), clearing stale cache');
+          await this.clearCache(userId);
+          const onboardingNeededProfile: AuthProfile = {
+            id: userId,
+            username: '',
+            email: this.currentSession?.user?.email,
+            balance: 0,
+            onboarding_completed: false,
+            needs_onboarding: true,
+          };
+          this.currentProfile = onboardingNeededProfile;
+          this.notifyListeners(onboardingNeededProfile);
+          return;
+        }
+        // Don't throw for other errors — we already have cached data displayed
         console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
         return;
       }
