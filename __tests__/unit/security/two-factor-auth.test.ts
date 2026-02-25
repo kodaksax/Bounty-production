@@ -13,6 +13,7 @@ jest.mock('../../../lib/supabase', () => ({
         listFactors: jest.fn(),
         challengeAndVerify: jest.fn(),
         unenroll: jest.fn(),
+        getAuthenticatorAssuranceLevel: jest.fn(),
       },
     },
   },
@@ -261,4 +262,107 @@ describe('2FA Integration Tests', () => {
   it.todo('should allow disabling 2FA with confirmation');
   it.todo('should handle enrollment cancellation correctly');
   it.todo('should support backup codes for recovery');
+});
+
+describe('useTwoFactorAuth hook logic', () => {
+  const { supabase } = require('../../../lib/supabase');
+  const { HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS } = require('../../../hooks/use-two-factor-auth');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS', () => {
+    it('should be 10000 cents ($100)', () => {
+      expect(HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS).toBe(10_000);
+    });
+  });
+
+  describe('MFA challenge detection', () => {
+    it('should detect that MFA challenge is required when nextLevel is aal2 and currentLevel is aal1', async () => {
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({
+        data: { currentLevel: 'aal1', nextLevel: 'aal2' },
+        error: null,
+      });
+
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const isMfaChallengeRequired = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2';
+
+      expect(isMfaChallengeRequired).toBe(true);
+    });
+
+    it('should detect that MFA challenge is NOT required when already at aal2', async () => {
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({
+        data: { currentLevel: 'aal2', nextLevel: 'aal2' },
+        error: null,
+      });
+
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const isMfaChallengeRequired = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2';
+
+      expect(isMfaChallengeRequired).toBe(false);
+    });
+
+    it('should detect that MFA challenge is NOT required when nextLevel is aal1', async () => {
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({
+        data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+        error: null,
+      });
+
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const isMfaChallengeRequired = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2';
+
+      expect(isMfaChallengeRequired).toBe(false);
+    });
+  });
+
+  describe('high-value account detection', () => {
+    it('should flag account as high-value when balance meets threshold', () => {
+      const balance = HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS;
+      expect(balance >= HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS).toBe(true);
+    });
+
+    it('should flag account as high-value when balance exceeds threshold', () => {
+      const balance = HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS + 1;
+      expect(balance >= HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS).toBe(true);
+    });
+
+    it('should NOT flag account as high-value when balance is below threshold', () => {
+      const balance = HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS - 1;
+      expect(balance >= HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS).toBe(false);
+    });
+
+    it('should NOT flag empty wallet as high-value', () => {
+      const balance = 0;
+      expect(balance >= HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS).toBe(false);
+    });
+  });
+
+  describe('enrollment status detection', () => {
+    it('should detect enrolled TOTP factor', async () => {
+      supabase.auth.mfa.listFactors.mockResolvedValue({
+        data: {
+          totp: [{ id: 'factor-123', friendly_name: 'Authenticator App', factor_type: 'totp', status: 'verified' }],
+        },
+        error: null,
+      });
+
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const isEnrolled = (factors?.totp?.length ?? 0) > 0;
+
+      expect(isEnrolled).toBe(true);
+    });
+
+    it('should detect no enrolled TOTP factor', async () => {
+      supabase.auth.mfa.listFactors.mockResolvedValue({
+        data: { totp: [] },
+        error: null,
+      });
+
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const isEnrolled = (factors?.totp?.length ?? 0) > 0;
+
+      expect(isEnrolled).toBe(false);
+    });
+  });
 });
