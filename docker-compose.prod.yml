@@ -13,9 +13,9 @@
 # │  redis-cluster-6  (replica, :6384)  │
 # └──────────────────────────────────────┘
 #
-# The `redis-cluster-init` service creates the cluster once all nodes
-# are healthy, then exits.  It will not recreate an already-initialised
-# cluster (idempotent).
+# The `redis-cluster-init` service bootstraps the cluster the first time it
+# runs, then exits.  On subsequent `docker compose up` calls it detects that
+# the cluster is already healthy and skips re-initialisation (idempotent).
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml up -d
@@ -33,6 +33,10 @@ services:
   redis-cluster-1:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-1
+    # REDIS_PASSWORD is required.  Docker Compose will abort with a clear error
+    # if it is not set in the environment or .env file.
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -46,21 +50,23 @@ services:
       --port 6379
     ports:
       - "6379:6379"
-      - "16379:16379"
     volumes:
       - redis_cluster_1_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6379", "ping"]
+      # Use REDISCLI_AUTH env var so the password is never exposed in the
+      # process argument list.
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6379", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.11
+      - bountyexpo-cluster-network
 
   redis-cluster-2:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-2
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -74,21 +80,21 @@ services:
       --port 6380
     ports:
       - "6380:6380"
-      - "16380:16380"
     volumes:
       - redis_cluster_2_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6380", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6380", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.12
+      - bountyexpo-cluster-network
 
   redis-cluster-3:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-3
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -102,21 +108,21 @@ services:
       --port 6381
     ports:
       - "6381:6381"
-      - "16381:16381"
     volumes:
       - redis_cluster_3_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6381", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6381", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.13
+      - bountyexpo-cluster-network
 
   redis-cluster-4:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-4
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -130,21 +136,21 @@ services:
       --port 6382
     ports:
       - "6382:6382"
-      - "16382:16382"
     volumes:
       - redis_cluster_4_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6382", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6382", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.14
+      - bountyexpo-cluster-network
 
   redis-cluster-5:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-5
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -158,21 +164,21 @@ services:
       --port 6383
     ports:
       - "6383:6383"
-      - "16383:16383"
     volumes:
       - redis_cluster_5_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6383", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6383", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.15
+      - bountyexpo-cluster-network
 
   redis-cluster-6:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-6
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     command: >
       redis-server
       --cluster-enabled yes
@@ -186,17 +192,15 @@ services:
       --port 6384
     ports:
       - "6384:6384"
-      - "16384:16384"
     volumes:
       - redis_cluster_6_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "-p", "6384", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-p", "6384", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      bountyexpo-cluster-network:
-        ipv4_address: 172.20.0.16
+      - bountyexpo-cluster-network
 
   # ──────────────────────────────────────────────────────────────────────────
   # Cluster initialisation (runs once, then exits)
@@ -205,6 +209,8 @@ services:
   redis-cluster-init:
     image: redis:7-alpine
     container_name: bountyexpo-redis-cluster-init
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD:?REDIS_PASSWORD environment variable is required}
     depends_on:
       redis-cluster-1:
         condition: service_healthy
@@ -219,17 +225,23 @@ services:
       redis-cluster-6:
         condition: service_healthy
     # --cluster-replicas 1  → 1 replica per master  (3 masters + 3 replicas)
+    # Idempotent: skips creation when the cluster is already in an ok state.
+    # Service names are used (Docker DNS) so no static IPs are required.
     command: >
       sh -c "
-        redis-cli -a ${REDIS_PASSWORD} --cluster create
-          172.20.0.11:6379
-          172.20.0.12:6380
-          172.20.0.13:6381
-          172.20.0.14:6382
-          172.20.0.15:6383
-          172.20.0.16:6384
-          --cluster-replicas 1
-          --cluster-yes
+        if redis-cli --no-auth-warning -h redis-cluster-1 -p 6379 CLUSTER INFO | grep -q 'cluster_state:ok'; then
+          echo 'Redis cluster already initialized, skipping cluster creation';
+        else
+          redis-cli --no-auth-warning --cluster create
+            redis-cluster-1:6379
+            redis-cluster-2:6380
+            redis-cluster-3:6381
+            redis-cluster-4:6382
+            redis-cluster-5:6383
+            redis-cluster-6:6384
+            --cluster-replicas 1
+            --cluster-yes;
+        fi
       "
     networks:
       - bountyexpo-cluster-network
@@ -260,6 +272,3 @@ volumes:
 networks:
   bountyexpo-cluster-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24

@@ -451,19 +451,22 @@ export const redisService = {
       }
 
       if (client instanceof Cluster) {
-        // Aggregate key count across all master nodes
+        // Aggregate key count across all master nodes.
+        // Note: `memory` reflects a single representative master node's usage,
+        // not the cluster-wide total, since `used_memory_human` is not
+        // straightforwardly summable (it is a human-readable byte string).
         const nodes = client.nodes('master');
         let totalKeys = 0;
-        let memory = 'unknown';
+        let memory = 'unknown (per-node)';
 
         await Promise.all(
           nodes.map(async (node: InstanceType<typeof Redis>) => {
             try {
               totalKeys += await node.dbsize();
-              if (memory === 'unknown') {
+              if (memory === 'unknown (per-node)') {
                 const info = await node.info('memory');
                 const memoryMatch = info.match(/used_memory_human:([^\r\n]+)/);
-                if (memoryMatch) memory = memoryMatch[1];
+                if (memoryMatch) memory = `${memoryMatch[1].trim()} (one node)`;
               }
             } catch {
               // Skip unreachable nodes
@@ -543,20 +546,32 @@ async function delPatternStandalone(
   const stream = client.scanStream({ match: fullPattern, count: 100 });
 
   await new Promise<void>((resolve, reject) => {
-    stream.on('data', async (keys: string[]) => {
+    stream.on('data', (keys: string[]) => {
       if (!keys || keys.length === 0) return;
+
+      // Apply backpressure: pause the stream while we process this batch so
+      // that deletion promises don't accumulate unboundedly and totalDeleted
+      // is incremented in the correct order.
+      stream.pause();
 
       const keysWithoutGlobalPrefix = keys.map((k: string) =>
         k.startsWith(config.redis.keyPrefix) ? k.slice(config.redis.keyPrefix.length) : k
       );
 
       if (keysWithoutGlobalPrefix.length > 0) {
-        try {
-          await client.del(...keysWithoutGlobalPrefix);
-          totalDeleted += keys.length;
-        } catch (err) {
-          stream.destroy(err as Error);
-        }
+        client
+          .del(...keysWithoutGlobalPrefix)
+          .then(() => {
+            totalDeleted += keys.length;
+            stream.resume();
+          })
+          .catch((err: Error) => {
+            // Destroying the stream will emit 'error' and reject the outer promise
+            stream.destroy(err);
+          });
+      } else {
+        // Nothing to delete after stripping prefixes; resume scanning
+        stream.resume();
       }
     });
 

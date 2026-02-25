@@ -158,11 +158,14 @@ export const config = {
       // Comma-separated list of host:port pairs, e.g. "redis-1:6379,redis-2:6380,redis-3:6381"
       nodes: getOptional('REDIS_CLUSTER_NODES', '').split(',').filter(Boolean).map(node => {
         const [host, portStr] = node.trim().split(':');
-        const port = parseInt(portStr || '6379', 10);
+        // portStr must be explicitly provided; defaulting silently would hide misconfigurations
+        const port = portStr !== undefined ? parseInt(portStr, 10) : NaN;
         if (!host || isNaN(port) || port < 1 || port > 65535) {
           throw new Error(
             `Invalid REDIS_CLUSTER_NODES entry: "${node.trim()}". ` +
-            'Expected format is host:port (e.g. redis-1:6379).'
+            'Expected format is host:port (e.g. redis-1:6379).\n' +
+            `Current REDIS_CLUSTER_NODES value: "${process.env.REDIS_CLUSTER_NODES ?? ''}"\n` +
+            'Example: REDIS_CLUSTER_NODES=redis-1:6379,redis-2:6380,redis-3:6381'
           );
         }
         return { host, port };
