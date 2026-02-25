@@ -31,7 +31,11 @@ interface CaptchaChallengeProps {
  * A lightweight, native math-based CAPTCHA challenge suitable for mobile.
  * Shows an arithmetic question and requires the correct numeric answer before
  * the parent form can be submitted.
+ *
+ * @internal `generateChallenge` is exported for testing purposes only.
  */
+export { generateChallenge }
+
 export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps) {
   const [challenge, setChallenge] = useState(generateChallenge)
   const [input, setInput] = useState('')
@@ -64,6 +68,9 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
       if (parsed === challenge.answer) {
         setVerified(true)
         onVerified()
+      } else if (cleaned.length >= challenge.answer.toString().length) {
+        // User has typed as many digits as the answer has and they don't match
+        setWrong(true)
       }
     }
   }
@@ -72,7 +79,6 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
     <View
       className="rounded-lg border border-white/20 bg-white/5 px-4 py-3"
       accessibilityLabel="Security verification"
-      accessibilityRole="none"
     >
       <Text className="text-xs text-white/60 mb-2 font-medium uppercase tracking-wide">
         Security Check

@@ -20,6 +20,7 @@ import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
+import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
@@ -42,9 +43,10 @@ export function SignInForm() {
   const [captchaVerified, setCaptchaVerified] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
 
-  // Show CAPTCHA after this many consecutive failed attempts
-  const CAPTCHA_THRESHOLD = 3
-  const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !lockoutUntil
+  // Derive active lockout and CAPTCHA requirement each render so expired
+  // lockout timestamps are handled correctly without an extra state update.
+  const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
+  const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive
   const [socialAuthLoading, setSocialAuthLoading] = useState(false)
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null)
 
@@ -72,8 +74,8 @@ export function SignInForm() {
       }
       
       // Check for lockout
-      if (lockoutUntil && Date.now() < lockoutUntil) {
-        const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      if (isLockoutActive) {
+        const remainingSeconds = Math.ceil((lockoutUntil! - Date.now()) / 1000)
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
       }
 

@@ -5,16 +5,17 @@
  * consecutive failed login attempts and blocks submission until it is solved.
  */
 
-// ---------------------------------------------------------------------------
-// Helpers that mirror the logic in captcha-challenge.tsx / sign-in-form.tsx
-// ---------------------------------------------------------------------------
+import { CAPTCHA_THRESHOLD } from '../../../lib/utils/captcha'
+import { generateChallenge } from '../../../components/ui/captcha-challenge'
 
-const CAPTCHA_THRESHOLD = 3
+// ---------------------------------------------------------------------------
+// Pure helper that models the submit-guard logic in sign-in-form (uses the
+// real CAPTCHA_THRESHOLD export so it stays in sync with production code).
+// ---------------------------------------------------------------------------
 
 function isCaptchaRequired(loginAttempts: number, lockoutUntil: number | null): boolean {
-  // CAPTCHA is shown once attempts reach the threshold, but not when locked out
-  // (locked-out users see the lockout message instead)
-  return loginAttempts >= CAPTCHA_THRESHOLD && !lockoutUntil
+  const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
+  return loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive
 }
 
 /** Simulate the state machine used in sign-in-form */
@@ -27,12 +28,13 @@ function signInAttemptResult(params: {
 }): { error: string | null; newAttempts: number; newLockout: number | null; newCaptchaVerified: boolean } {
   const { loginAttempts, lockoutUntil, captchaVerified, formValid, authSucceeds } = params
 
-  // Lockout check
-  if (lockoutUntil && Date.now() < lockoutUntil) {
+  // Lockout check (mirrors isLockoutActive in sign-in-form)
+  const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
+  if (isLockoutActive) {
     return { error: 'Too many failed attempts. Please wait.', newAttempts: loginAttempts, newLockout: lockoutUntil, newCaptchaVerified: captchaVerified }
   }
 
-  // CAPTCHA check
+  // CAPTCHA check (mirrors captchaRequired in sign-in-form, uses real CAPTCHA_THRESHOLD)
   if (loginAttempts >= CAPTCHA_THRESHOLD && !captchaVerified) {
     return { error: 'Please complete the security check before signing in.', newAttempts: loginAttempts, newLockout: lockoutUntil, newCaptchaVerified: captchaVerified }
   }
@@ -67,28 +69,33 @@ describe('CAPTCHA threshold logic (isCaptchaRequired)', () => {
   })
 
   it('does not require CAPTCHA below threshold', () => {
-    expect(isCaptchaRequired(1, null)).toBe(false)
-    expect(isCaptchaRequired(2, null)).toBe(false)
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD - 2, null)).toBe(false)
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD - 1, null)).toBe(false)
   })
 
-  it('requires CAPTCHA at the threshold (3 attempts)', () => {
-    expect(isCaptchaRequired(3, null)).toBe(true)
+  it('requires CAPTCHA at the threshold', () => {
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD, null)).toBe(true)
   })
 
   it('requires CAPTCHA above the threshold', () => {
-    expect(isCaptchaRequired(4, null)).toBe(true)
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD + 1, null)).toBe(true)
   })
 
-  it('does NOT require CAPTCHA when user is locked out', () => {
+  it('does NOT require CAPTCHA when user is actively locked out', () => {
     const futureTimestamp = Date.now() + 5 * 60 * 1000
-    expect(isCaptchaRequired(4, futureTimestamp)).toBe(false)
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD + 1, futureTimestamp)).toBe(false)
+  })
+
+  it('DOES require CAPTCHA when lockout timestamp has expired', () => {
+    const pastTimestamp = Date.now() - 1 // already expired
+    expect(isCaptchaRequired(CAPTCHA_THRESHOLD, pastTimestamp)).toBe(true)
   })
 })
 
 describe('Sign-in form CAPTCHA enforcement', () => {
   it('allows submission before threshold without CAPTCHA', () => {
     const result = signInAttemptResult({
-      loginAttempts: 2,
+      loginAttempts: CAPTCHA_THRESHOLD - 1,
       lockoutUntil: null,
       captchaVerified: false,
       formValid: true,
@@ -99,7 +106,7 @@ describe('Sign-in form CAPTCHA enforcement', () => {
 
   it('blocks submission at threshold when CAPTCHA not verified', () => {
     const result = signInAttemptResult({
-      loginAttempts: 3,
+      loginAttempts: CAPTCHA_THRESHOLD,
       lockoutUntil: null,
       captchaVerified: false,
       formValid: true,
@@ -110,7 +117,7 @@ describe('Sign-in form CAPTCHA enforcement', () => {
 
   it('allows submission at threshold when CAPTCHA is verified', () => {
     const result = signInAttemptResult({
-      loginAttempts: 3,
+      loginAttempts: CAPTCHA_THRESHOLD,
       lockoutUntil: null,
       captchaVerified: true,
       formValid: true,
@@ -121,7 +128,7 @@ describe('Sign-in form CAPTCHA enforcement', () => {
 
   it('resets attempts and captcha state on successful login', () => {
     const result = signInAttemptResult({
-      loginAttempts: 3,
+      loginAttempts: CAPTCHA_THRESHOLD,
       lockoutUntil: null,
       captchaVerified: true,
       formValid: true,
@@ -134,13 +141,13 @@ describe('Sign-in form CAPTCHA enforcement', () => {
 
   it('increments attempts on failed auth', () => {
     const result = signInAttemptResult({
-      loginAttempts: 2,
+      loginAttempts: CAPTCHA_THRESHOLD - 1,
       lockoutUntil: null,
       captchaVerified: false,
       formValid: true,
       authSucceeds: false,
     })
-    expect(result.newAttempts).toBe(3)
+    expect(result.newAttempts).toBe(CAPTCHA_THRESHOLD)
     expect(result.error).toBeTruthy()
   })
 
@@ -168,10 +175,52 @@ describe('Sign-in form CAPTCHA enforcement', () => {
     })
     expect(result.error).toMatch(/too many failed attempts/i)
   })
+
+  it('allows CAPTCHA-gated submission once lockout timestamp has expired', () => {
+    const expiredLockout = Date.now() - 1 // already in the past
+    const result = signInAttemptResult({
+      loginAttempts: 5,
+      lockoutUntil: expiredLockout,
+      captchaVerified: true,
+      formValid: true,
+      authSucceeds: true,
+    })
+    // Lockout expired → CAPTCHA still required but is verified → success
+    expect(result.error).toBeNull()
+  })
+})
+
+describe('generateChallenge (production function)', () => {
+  it('produces a non-negative answer', () => {
+    // Run many times; generateChallenge guarantees a >= b for subtraction
+    for (let i = 0; i < 50; i++) {
+      const c = generateChallenge()
+      expect(c.answer).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('answer equals the arithmetic result of the question', () => {
+    for (let i = 0; i < 20; i++) {
+      const c = generateChallenge()
+      const [a, op, b] = c.question.split(' ')
+      const expected = op === '+' ? parseInt(a) + parseInt(b) : parseInt(a) - parseInt(b)
+      expect(c.answer).toBe(expected)
+    }
+  })
+
+  it('operands are always between 1 and 9 inclusive', () => {
+    for (let i = 0; i < 20; i++) {
+      const c = generateChallenge()
+      const [a, , b] = c.question.split(' ')
+      expect(parseInt(a)).toBeGreaterThanOrEqual(1)
+      expect(parseInt(a)).toBeLessThanOrEqual(9)
+      expect(parseInt(b)).toBeGreaterThanOrEqual(1)
+      expect(parseInt(b)).toBeLessThanOrEqual(9)
+    }
+  })
 })
 
 describe('CAPTCHA challenge answer validation', () => {
-  /** Mirrors generateChallenge deterministically for testing */
   function makeChallenge(a: number, b: number, op: '+' | '-') {
     return { question: `${a} ${op} ${b}`, answer: op === '+' ? a + b : a - b }
   }
@@ -188,18 +237,21 @@ describe('CAPTCHA challenge answer validation', () => {
 
   it('rejects incorrect answers', () => {
     const c = makeChallenge(5, 2, '+')
-    expect(parseInt('6', 10)).not.toBe(c.answer)
-    expect(parseInt('8', 10)).not.toBe(c.answer)
-    expect(parseInt('7', 10)).toBe(c.answer) // correct one
+    expect(6).not.toBe(c.answer)
+    expect(8).not.toBe(c.answer)
+    expect(7).toBe(c.answer) // correct one
   })
 
-  it('does not produce negative answers', () => {
-    // The component always ensures a >= b for subtraction
-    for (let i = 0; i < 20; i++) {
-      const a = Math.floor(Math.random() * 9) + 1
-      const b = Math.floor(Math.random() * 9) + 1
-      const answer = a > b ? a - b : a + b
-      expect(answer).toBeGreaterThanOrEqual(0)
-    }
+  it('subtraction answers are never negative (deterministic pairs)', () => {
+    const subtractionPairs: Array<[number, number]> = [
+      [1, 1],
+      [5, 2],
+      [9, 3],
+      [9, 9],
+    ]
+    subtractionPairs.forEach(([a, b]) => {
+      const c = makeChallenge(a, b, '-')
+      expect(c.answer).toBeGreaterThanOrEqual(0)
+    })
   })
 })
