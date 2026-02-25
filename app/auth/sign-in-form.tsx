@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
+import { CaptchaChallenge } from '../../components/ui/captcha-challenge'
 import { Checkbox } from '../../components/ui/checkbox'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
 import { setRememberMePreference } from '../../lib/auth-session-storage'
@@ -19,6 +20,7 @@ import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
+import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
@@ -38,7 +40,13 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [captchaVerified, setCaptchaVerified] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+
+  // Derive active lockout and CAPTCHA requirement each render so expired
+  // lockout timestamps are handled correctly without an extra state update.
+  const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
+  const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive
   const [socialAuthLoading, setSocialAuthLoading] = useState(false)
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null)
 
@@ -65,10 +73,17 @@ export function SignInForm() {
         })
       }
       
-      // Check for lockout
-      if (lockoutUntil && Date.now() < lockoutUntil) {
-        const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      // Check for lockout first — lockout takes precedence over CAPTCHA.
+      // The CAPTCHA UI is hidden while locked out (captchaRequired is false), so
+      // the CAPTCHA error below is intentionally unreachable in the lockout state.
+      if (isLockoutActive) {
+        const remainingSeconds = Math.ceil((lockoutUntil! - Date.now()) / 1000)
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
+      }
+
+      // Require CAPTCHA to be solved after the threshold
+      if (captchaRequired && !captchaVerified) {
+        throw new Error('Please complete the security check before signing in.')
       }
 
       if (!validateForm()) {
@@ -126,6 +141,7 @@ export function SignInForm() {
           if (newAttempts >= 5) {
             const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
             setLockoutUntil(lockout)
+            setCaptchaVerified(false)
             throw new Error('Too many failed attempts. Please try again in 5 minutes.')
           }
 
@@ -136,6 +152,7 @@ export function SignInForm() {
         // Reset login attempts on success
         setLoginAttempts(0)
         setLockoutUntil(null)
+        setCaptchaVerified(false)
 
         console.log('[sign-in] Authentication successful', { correlationId })
 
@@ -524,6 +541,18 @@ export function SignInForm() {
                   <Text className="text-white/80 text-sm ml-2">Remember me</Text>
                 </TouchableOpacity>
               </View>
+
+              {captchaRequired && (
+                <View className="mt-4">
+                  <Text className="text-xs text-white/80 mb-2">
+                    Please complete the security check below to continue signing in.
+                  </Text>
+                  <CaptchaChallenge
+                    onVerified={() => setCaptchaVerified(true)}
+                    onReset={() => setCaptchaVerified(false)}
+                  />
+                </View>
+              )}
 
               <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
                 {isSubmitting ? (
