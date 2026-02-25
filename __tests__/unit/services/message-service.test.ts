@@ -66,15 +66,20 @@ jest.mock('../../../lib/services/e2e-key-service', () => ({
     getRecipientPublicKey: jest.fn().mockResolvedValue(null),
     publishPublicKey: jest.fn().mockResolvedValue(undefined),
     clearCachedPublicKey: jest.fn().mockResolvedValue(undefined),
+    deleteLocalKeyPair: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
 import { messageService } from '../../../lib/services/message-service';
 import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
 import * as localMessaging from '../../../lib/services/messaging';
+import * as encryptionUtils from '../../../lib/security/encryption-utils';
+import { e2eKeyService } from '../../../lib/services/e2e-key-service';
 
 const mockSupabaseMessaging = supabaseMessaging as jest.Mocked<typeof supabaseMessaging>;
 const mockLocalMessaging = localMessaging as jest.Mocked<typeof localMessaging>;
+const mockEncryption = encryptionUtils as jest.Mocked<typeof encryptionUtils>;
+const mockKeyService = e2eKeyService as jest.Mocked<typeof e2eKeyService>;
 
 describe('Message Service - Conversation Deduplication', () => {
   beforeEach(() => {
@@ -207,6 +212,230 @@ describe('Message Service - Conversation Deduplication', () => {
       // Supabase should not be called for group chats
       expect(mockSupabaseMessaging.getOrCreateConversation).not.toHaveBeenCalled();
       expect(result.id).toBe('group-conv-id');
+    });
+  });
+});
+
+describe('Message Service - E2E Encryption', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('sendMessage', () => {
+    it('should encrypt message when recipient public key is available', async () => {
+      const conversation = {
+        id: 'conv-1',
+        name: 'Chat',
+        isGroup: false,
+        participantIds: ['current-user-id', 'recipient-id'],
+        updatedAt: new Date().toISOString(),
+      };
+      const sentMessage = {
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderId: 'current-user-id',
+        text: '{"ciphertext":"abc","nonce":"def","senderPublicKey":"ghi","version":"2.0"}',
+        createdAt: new Date().toISOString(),
+        status: 'sent' as const,
+      };
+
+      mockLocalMessaging.getConversation.mockResolvedValue(conversation);
+      mockLocalMessaging.sendMessage.mockResolvedValue(sentMessage);
+      (mockKeyService.getRecipientPublicKey as jest.Mock).mockResolvedValue('recipient-pub-key');
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue({
+        publicKey: 'sender-pub-key',
+        privateKey: 'sender-priv-key',
+      });
+      mockEncryption.encryptMessage.mockResolvedValue({
+        ciphertext: 'abc',
+        nonce: 'def',
+        senderPublicKey: 'sender-pub-key',
+        recipientPublicKey: 'recipient-pub-key',
+        version: '2.0',
+      });
+
+      const result = await messageService.sendMessage('conv-1', 'Hello');
+
+      expect(mockEncryption.encryptMessage).toHaveBeenCalledWith(
+        'Hello',
+        'recipient-pub-key',
+        'sender-priv-key'
+      );
+      expect(result.message.isEncrypted).toBe(true);
+      // Caller receives plaintext, not ciphertext
+      expect(result.message.text).toBe('Hello');
+      expect(result.encryptionWarning).toBeUndefined();
+    });
+
+    it('should fall back to plaintext and set encryptionWarning when recipient key is missing', async () => {
+      const conversation = {
+        id: 'conv-1',
+        name: 'Chat',
+        isGroup: false,
+        participantIds: ['current-user-id', 'recipient-id'],
+        updatedAt: new Date().toISOString(),
+      };
+      const sentMessage = {
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderId: 'current-user-id',
+        text: 'Hello',
+        createdAt: new Date().toISOString(),
+        status: 'sent' as const,
+      };
+
+      mockLocalMessaging.getConversation.mockResolvedValue(conversation);
+      mockLocalMessaging.sendMessage.mockResolvedValue(sentMessage);
+      // No recipient key published yet
+      (mockKeyService.getRecipientPublicKey as jest.Mock).mockResolvedValue(null);
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue({
+        publicKey: 'sender-pub-key',
+        privateKey: 'sender-priv-key',
+      });
+
+      const result = await messageService.sendMessage('conv-1', 'Hello');
+
+      expect(mockEncryption.encryptMessage).not.toHaveBeenCalled();
+      expect(result.message.isEncrypted).toBe(false);
+      expect(result.encryptionWarning).toContain('plaintext');
+    });
+
+    it('should use getCurrentUserId() as senderId when not provided', async () => {
+      const conversation = {
+        id: 'conv-1',
+        name: 'Chat',
+        isGroup: false,
+        participantIds: ['current-user-id', 'recipient-id'],
+        updatedAt: new Date().toISOString(),
+      };
+      const sentMessage = {
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderId: 'current-user-id',
+        text: 'Hello',
+        createdAt: new Date().toISOString(),
+        status: 'sent' as const,
+      };
+
+      mockLocalMessaging.getConversation.mockResolvedValue(conversation);
+      mockLocalMessaging.sendMessage.mockResolvedValue(sentMessage);
+      (mockKeyService.getRecipientPublicKey as jest.Mock).mockResolvedValue(null);
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue(null);
+
+      await messageService.sendMessage('conv-1', 'Hello');
+
+      // sendMessage to the storage layer should be called with the current user ID
+      expect(mockLocalMessaging.sendMessage).toHaveBeenCalledWith(
+        'conv-1',
+        'Hello',
+        'current-user-id'
+      );
+    });
+  });
+
+  describe('getMessages', () => {
+    it('should decrypt encrypted messages detected by payload shape', async () => {
+      const encryptedPayload = JSON.stringify({
+        ciphertext: 'abc',
+        nonce: 'def',
+        senderPublicKey: 'sender-pub',
+        recipientPublicKey: 'my-pub',
+        version: '2.0',
+      });
+      const messages = [
+        {
+          id: 'msg-1',
+          conversationId: 'conv-1',
+          senderId: 'other-user-id',
+          text: encryptedPayload,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'msg-2',
+          conversationId: 'conv-1',
+          senderId: 'other-user-id',
+          text: 'Plain text message',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      mockLocalMessaging.getMessages.mockResolvedValue(messages as any);
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue({
+        publicKey: 'my-pub',
+        privateKey: 'my-priv',
+      });
+      mockEncryption.decryptMessage.mockResolvedValue('Decrypted text');
+
+      const result = await messageService.getMessages('conv-1');
+
+      expect(result[0].text).toBe('Decrypted text');
+      expect(result[0].isEncrypted).toBe(true);
+      // Plain message should be unchanged
+      expect(result[1].text).toBe('Plain text message');
+    });
+
+    it('should show placeholder when decryption fails', async () => {
+      const encryptedPayload = JSON.stringify({
+        ciphertext: 'bad-data',
+        nonce: 'def',
+        senderPublicKey: 'sender-pub',
+        version: '2.0',
+      });
+      const messages = [
+        {
+          id: 'msg-1',
+          conversationId: 'conv-1',
+          senderId: 'other-user-id',
+          text: encryptedPayload,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      mockLocalMessaging.getMessages.mockResolvedValue(messages as any);
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue({
+        publicKey: 'my-pub',
+        privateKey: 'my-priv',
+      });
+      mockEncryption.decryptMessage.mockRejectedValue(new Error('Decryption failed'));
+
+      const result = await messageService.getMessages('conv-1');
+
+      expect(result[0].text).toBe('[Encrypted message]');
+      expect(result[0].isEncrypted).toBe(true);
+    });
+
+    it('should use recipientPublicKey (not senderPublicKey) when decrypting own sent messages', async () => {
+      const encryptedPayload = JSON.stringify({
+        ciphertext: 'abc',
+        nonce: 'def',
+        senderPublicKey: 'my-pub',          // current user is sender
+        recipientPublicKey: 'recipient-pub', // peer key needed for own-message decryption
+        version: '2.0',
+      });
+      const messages = [
+        {
+          id: 'msg-1',
+          conversationId: 'conv-1',
+          senderId: 'current-user-id', // same as getCurrentUserId()
+          text: encryptedPayload,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      mockLocalMessaging.getMessages.mockResolvedValue(messages as any);
+      (mockKeyService.getOrGenerateKeyPair as jest.Mock).mockResolvedValue({
+        publicKey: 'my-pub',
+        privateKey: 'my-priv',
+      });
+      mockEncryption.decryptMessage.mockResolvedValue('My sent message');
+
+      await messageService.getMessages('conv-1');
+
+      // decryptMessage should be called with recipientPublicKey as senderPublicKey
+      expect(mockEncryption.decryptMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ senderPublicKey: 'recipient-pub' }),
+        'my-priv'
+      );
     });
   });
 });

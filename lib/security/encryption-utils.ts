@@ -137,7 +137,9 @@ export async function deobfuscateData(encryptedData: string, key: string): Promi
  *
  * Security properties:
  * - Confidentiality: only the intended recipient can read the message
- * - Authenticity: the recipient can verify the message came from the sender
+ * - Authenticity: the recipient can verify the message was created by the holder
+ *   of the private key corresponding to the included senderPublicKey (binding that
+ *   key to an app-level sender identity must be handled by higher-level logic)
  * - Integrity: any tampering is detected and decryption fails
  */
 
@@ -148,6 +150,13 @@ export interface EncryptedMessage {
   nonce: string;
   /** base64-encoded X25519 public key of the sender */
   senderPublicKey: string;
+  /**
+   * base64-encoded X25519 public key of the recipient.
+   * Stored so the original sender can decrypt their own sent messages
+   * (nacl.box uses the shared secret ECDH(senderPriv, recipientPub) which
+   * equals ECDH(recipientPriv, senderPub), so both parties need the peer key).
+   */
+  recipientPublicKey?: string;
   /** format version */
   version: string;
 }
@@ -155,10 +164,10 @@ export interface EncryptedMessage {
 /**
  * Encrypt a plaintext message for a specific recipient using nacl.box.
  *
- * @param plaintext        - The message to encrypt
+ * @param plaintext          - The message to encrypt
  * @param recipientPublicKey - Recipient's X25519 public key (base64)
- * @param senderPrivateKey  - Sender's X25519 private key (base64)
- * @returns EncryptedMessage containing ciphertext, nonce, and sender public key
+ * @param senderPrivateKey   - Sender's X25519 private key (base64)
+ * @returns EncryptedMessage containing ciphertext, nonce, sender and recipient public keys
  */
 export async function encryptMessage(
   plaintext: string,
@@ -172,8 +181,9 @@ export async function encryptMessage(
     // Derive sender's public key from their private key
     const senderKeyPair = nacl.box.keyPair.fromSecretKey(senderSecBytes);
 
-    // Generate a fresh nonce for every message
-    const nonce = nacl.randomBytes(nacl.box.nonceLength);
+    // Generate a fresh nonce using expo-crypto (cryptographically secure on RN)
+    const nonceRaw = await Crypto.getRandomBytesAsync(nacl.box.nonceLength);
+    const nonce = new Uint8Array(nonceRaw.buffer);
 
     // Encode plaintext as UTF-8
     const msgBytes = new TextEncoder().encode(plaintext);
@@ -185,6 +195,7 @@ export async function encryptMessage(
       ciphertext: uint8ToBase64(cipherBytes),
       nonce: uint8ToBase64(nonce),
       senderPublicKey: uint8ToBase64(senderKeyPair.publicKey),
+      recipientPublicKey,
       version: '2.0',
     };
   } catch (error) {
@@ -226,6 +237,8 @@ export async function decryptMessage(
 
 /**
  * Generate an X25519 key pair suitable for nacl.box encryption.
+ * Uses expo-crypto for the random seed to guarantee cryptographically
+ * secure randomness on React Native without requiring a separate PRNG polyfill.
  * Store the private key in expo-secure-store; the public key can be shared openly.
  */
 export async function generateKeyPair(): Promise<{
@@ -233,7 +246,12 @@ export async function generateKeyPair(): Promise<{
   privateKey: string;
 }> {
   try {
-    const { publicKey, secretKey } = nacl.box.keyPair();
+    // Use expo-crypto to generate a cryptographically secure 32-byte secret key.
+    // nacl.box.keyPair.fromSecretKey derives the X25519 public key deterministically,
+    // so the security of the key pair depends entirely on this seed's randomness.
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    const secretKey = new Uint8Array(randomBytes.buffer);
+    const { publicKey } = nacl.box.keyPair.fromSecretKey(secretKey);
     return {
       publicKey: uint8ToBase64(publicKey),
       privateKey: uint8ToBase64(secretKey),
