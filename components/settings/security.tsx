@@ -15,6 +15,7 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import { MfaCodeModal } from '../ui/mfa-code-modal';
 import { supabase } from '../../lib/supabase';
 
 interface SecuritySettingsProps {
@@ -27,6 +28,11 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  // Modal state for cross-platform TOTP code entry
+  const [mfaModalVisible, setMfaModalVisible] = useState(false);
+  const [mfaModalFactorId, setMfaModalFactorId] = useState<string | null>(null);
+  const [mfaModalError, setMfaModalError] = useState<string | null>(null);
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   useEffect(() => {
     loadSecuritySettings();
@@ -112,67 +118,51 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   };
 
   const promptForVerificationCode = (factorId: string) => {
-    Alert.prompt(
-      'Enter Verification Code',
-      'Enter the 6-digit code from your authenticator app',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: async () => {
-            await supabase.auth.mfa.unenroll({ factorId });
-            setIsEnabling2FA(false);
-          },
-        },
-        {
-          text: 'Verify',
-          onPress: async (code?: string) => {
-            if (!code) {
-              setIsEnabling2FA(false);
-              return;
-            }
-            await verifyAndEnable2FA(factorId, code);
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setMfaModalFactorId(factorId);
+    setMfaModalError(null);
+    setMfaModalVisible(true);
   };
 
-  const verifyAndEnable2FA = async (factorId: string, code: string) => {
+  const handleMfaModalVerify = async (code: string) => {
+    if (!mfaModalFactorId) return;
+    setMfaVerifying(true);
+    setMfaModalError(null);
     try {
       const { data, error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId,
+        factorId: mfaModalFactorId,
         code,
       });
-
       if (error) throw error;
-
       if (data) {
         setTwoFactorEnabled(true);
+        setMfaModalVisible(false);
         Alert.alert('Success', 'Two-factor authentication has been enabled!');
       }
     } catch (error: any) {
       console.error('[security-settings] Error verifying 2FA:', error);
-      Alert.alert(
-        'Verification Failed',
-        'Invalid code. Please try again or contact support.',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => promptForVerificationCode(factorId),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: async () => {
-              await supabase.auth.mfa.unenroll({ factorId });
-            },
-          },
-        ]
-      );
+      setMfaModalError('Invalid code. Please try again.');
     } finally {
+      setMfaVerifying(false);
       setIsEnabling2FA(false);
+    }
+  };
+
+  const handleMfaModalCancel = async () => {
+    if (!mfaModalFactorId) {
+      setMfaModalVisible(false);
+      setIsEnabling2FA(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
+      if (error) throw error;
+      setMfaModalVisible(false);
+      setMfaModalFactorId(null);
+      setIsEnabling2FA(false);
+    } catch (error: any) {
+      console.error('[security-settings] Error cancelling 2FA setup:', error);
+      Alert.alert('Error', 'Failed to cancel 2FA setup. Please try again.');
     }
   };
 
@@ -244,6 +234,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
 
   return (
     <View style={styles.container}>
+      <MfaCodeModal
+        visible={mfaModalVisible}
+        isLoading={mfaVerifying}
+        error={mfaModalError}
+        onVerify={handleMfaModalVerify}
+        onCancel={handleMfaModalCancel}
+      />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>

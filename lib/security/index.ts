@@ -40,6 +40,8 @@ export {
   encryptForStorage,
   decryptFromStorage,
   isEncryptionAvailable,
+  uint8ToBase64,
+  base64ToUint8,
   type EncryptedMessage,
   type EncryptedStorage,
 } from './encryption-utils';

@@ -7,6 +7,32 @@ import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
 import * as supabaseMessaging from './supabase-messaging';
 import { analyticsService } from './analytics-service';
+import { encryptMessage, decryptMessage, type EncryptedMessage } from '../security/encryption-utils';
+import { e2eKeyService } from './e2e-key-service';
+
+/**
+ * Attempt to parse `text` as an EncryptedMessage payload (version 2.x).
+ * Returns the parsed payload if the shape matches, or null for plaintext messages.
+ */
+function tryParseEncryptedPayload(text: string): EncryptedMessage | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      typeof parsed.ciphertext === 'string' &&
+      typeof parsed.nonce === 'string' &&
+      typeof parsed.senderPublicKey === 'string' &&
+      typeof parsed.version === 'string' &&
+      parsed.version.startsWith('2.')
+    ) {
+      return parsed as EncryptedMessage;
+    }
+  } catch {
+    // Not JSON or doesn't match the encrypted payload shape
+  }
+  return null;
+}
 
 export const messageService = {
   /**
@@ -25,25 +51,113 @@ export const messageService = {
   },
 
   /**
-   * Get messages for a conversation
+   * Get messages for a conversation, decrypting any E2E-encrypted messages.
+   * Encrypted messages are detected by their JSON payload shape (version 2.x)
+   * so this works even when the `isEncrypted` flag wasn't persisted by the
+   * storage layer.
    */
   getMessages: async (conversationId: string): Promise<Message[]> => {
-    return messagingService.getMessages(conversationId);
+    const messages = await messagingService.getMessages(conversationId);
+    const userId = getCurrentUserId();
+
+    // Lazily load key pair only when there are potentially encrypted messages
+    let keys: { publicKey: string; privateKey: string } | null = null;
+    const getKeys = async () => {
+      if (keys === null) {
+        keys = await e2eKeyService.getOrGenerateKeyPair(userId).catch(() => null);
+      }
+      return keys;
+    };
+
+    return Promise.all(
+      messages.map(async (msg) => {
+        // Detect encrypted messages by payload shape (not just the isEncrypted flag,
+        // since the flag may not be persisted by the local/Supabase storage layer).
+        const payload = tryParseEncryptedPayload(msg.text);
+        if (!payload) return msg;
+
+        try {
+          const localKeys = await getKeys();
+          if (!localKeys) throw new Error('No local key pair');
+
+          // nacl.box uses the shared secret ECDH(senderPriv, recipientPub).
+          // The sender and recipient derive the same secret but with swapped keys:
+          //   - Recipient decrypts: box.open(cipher, nonce, senderPublicKey, recipientPrivateKey)
+          //   - Sender decrypts own msg: box.open(cipher, nonce, recipientPublicKey, senderPrivateKey)
+          // We stored recipientPublicKey in the payload for exactly this case.
+          const isFromCurrentUser = msg.senderId === userId;
+          const peerPublicKey =
+            isFromCurrentUser && payload.recipientPublicKey
+              ? payload.recipientPublicKey
+              : payload.senderPublicKey;
+
+          const adjustedPayload: EncryptedMessage = { ...payload, senderPublicKey: peerPublicKey };
+          const plaintext = await decryptMessage(adjustedPayload, localKeys.privateKey);
+          return { ...msg, text: plaintext, isEncrypted: true };
+        } catch {
+          // If decryption fails, show a placeholder rather than crashing
+          return { ...msg, text: '[Encrypted message]', isEncrypted: true };
+        }
+      })
+    );
   },
 
   /**
-   * Send a message (optimistic update with offline support)
+   * Send a message (optimistic update with offline support).
+   * For 1:1 conversations the message is E2E-encrypted if the recipient's
+   * public key is available; otherwise it falls back to plaintext and the
+   * returned `encryptionWarning` field will be set.
    */
-  sendMessage: async (conversationId: string, text: string, senderId: string = 'current-user'): Promise<{ message: Message; error?: string }> => {
+  sendMessage: async (
+    conversationId: string,
+    text: string,
+    senderId?: string
+  ): Promise<{ message: Message; error?: string; encryptionWarning?: string }> => {
+    // Use the authenticated user ID if no explicit senderId was provided
+    const userId = getCurrentUserId();
+    const effectiveSenderId = senderId ?? userId;
+
     // Sanitize message text to prevent XSS attacks
     let sanitizedText: string;
     try {
       sanitizedText = sanitizeMessage(text);
     } catch (error) {
-      return { 
-        message: {} as Message, 
-        error: error instanceof Error ? error.message : 'Invalid message' 
+      return {
+        message: {} as Message,
+        error: error instanceof Error ? error.message : 'Invalid message',
       };
+    }
+
+    // Attempt E2E encryption for 1:1 conversations
+    let finalText = sanitizedText;
+    let isEncrypted = false;
+    let encryptionWarning: string | undefined;
+
+    try {
+      const conversation = await messagingService.getConversation(conversationId);
+      const participantIds = conversation?.participantIds ?? [];
+      const recipientId = participantIds.find((id) => id !== userId);
+
+      if (recipientId && participantIds.length === 2) {
+        const [recipientPublicKey, senderKeys] = await Promise.all([
+          e2eKeyService.getRecipientPublicKey(recipientId),
+          e2eKeyService.getOrGenerateKeyPair(userId),
+        ]);
+
+        if (recipientPublicKey && senderKeys) {
+          const encrypted = await encryptMessage(sanitizedText, recipientPublicKey, senderKeys.privateKey);
+          finalText = JSON.stringify(encrypted);
+          isEncrypted = true;
+        } else {
+          encryptionWarning = recipientPublicKey
+            ? 'Sender keys unavailable — message sent as plaintext'
+            : 'Recipient has no published E2E key — message sent as plaintext';
+        }
+      }
+    } catch (encErr) {
+      // Non-fatal: fall back to plaintext but surface a warning
+      encryptionWarning = 'Encryption failed — message sent as plaintext';
+      try { logClientError('E2E encryption failed, falling back to plaintext', { err: encErr }); } catch { /* ignore */ }
     }
 
     // Check network connectivity
@@ -51,42 +165,51 @@ export const messageService = {
     const isOnline = !!netState.isConnected;
 
     if (!isOnline) {
-      // Queue for later if offline
-      
-      // Create a temporary message
+      // Queue for later if offline.
+      // The tempMessage shows plaintext to the local UI so the user sees their own
+      // message immediately; the queued payload contains the encrypted finalText
+      // that will be sent once the device reconnects.
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
         conversationId,
-        senderId,
-        text: sanitizedText,
+        senderId: effectiveSenderId,
+        text: sanitizedText, // show original text locally while pending
         createdAt: new Date().toISOString(),
         status: 'sending',
+        isEncrypted,
       };
-      
+
       await offlineQueueService.enqueue('message', {
         conversationId,
-        text: sanitizedText,
-        senderId,
+        text: finalText,
+        senderId: effectiveSenderId,
         tempId: tempMessage.id,
+        isEncrypted,
       });
-      
-      return { message: tempMessage };
+
+      return { message: tempMessage, encryptionWarning };
     }
 
-    // Send message using persistent storage (with sanitized text)
-    const message = await messagingService.sendMessage(conversationId, sanitizedText, senderId);
+    // Send message using persistent storage.
+    // Note: this currently routes through the local AsyncStorage messaging layer.
+    // Encrypted ciphertext (finalText) is what gets persisted; the caller receives
+    // plaintext (sanitizedText) via the returned message object.
+    const message = await messagingService.sendMessage(conversationId, finalText, effectiveSenderId);
 
     // Track message sent event
     await analyticsService.trackEvent('message_sent', {
       conversationId,
       messageLength: text.length,
       isOnline,
+      isEncrypted,
     });
 
     // Increment user property for messages sent
     await analyticsService.incrementUserProperty('messages_sent');
 
-    return { message };
+    // Return plaintext to the caller (the UI) while the DB stores ciphertext.
+    // The `isEncrypted` flag signals that the persisted copy is encrypted.
+    return { message: { ...message, isEncrypted, text: sanitizedText }, encryptionWarning };
   },
 
   /**

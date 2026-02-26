@@ -5,8 +5,9 @@ export const ROUTES = {
   ROOT: '/' as const,
   // Auth
   AUTH: {
-    SIGN_IN: '/auth/sign-in',
+    SIGN_IN: '/auth/sign-in-form',
     SIGN_UP: '/auth/sign-up-form',
+    MFA_CHALLENGE: '/auth/mfa-challenge',
   },
   // Tabs / main app surfaces
   TABS: {
