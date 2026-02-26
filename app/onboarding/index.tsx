@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
+const ONBOARDING_DONE_KEY = '@bounty_onboarding_completed';
 
 export default function OnboardingIndex() {
   const router = useRouter();
@@ -20,6 +21,14 @@ export default function OnboardingIndex() {
 
   const checkOnboardingStatus = async () => {
     try {
+      // If the user has already finished the full onboarding flow, send them
+      // straight to the main app (handles re-entry after a failed Supabase save).
+      const hasCompletedFull = await AsyncStorage.getItem(ONBOARDING_DONE_KEY);
+      if (hasCompletedFull === 'true') {
+        router.replace('/tabs/bounty-app');
+        return;
+      }
+
       const hasSeenOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
       
       if (hasSeenOnboarding === 'true') {
