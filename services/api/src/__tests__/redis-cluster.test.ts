@@ -881,3 +881,160 @@ describe('cacheInvalidation', () => {
     await svc.cacheInvalidation.invalidateUserBounties('user-xyz');
   });
 });
+
+// ─── No-client branches (Redis disabled at runtime) ──────────────────────────
+// These tests cover the `if (!client) { return <default> }` guards in every
+// service method, hit when getRedisClient() returns null.
+
+describe('service methods when Redis client is unavailable', () => {
+  const originalEnv = { ...process.env };
+
+  /**
+   * Load a module where REDIS_ENABLED=true but the mock Redis constructor
+   * always throws so no client is ever established.  getRedisClient() will
+   * call initRedis() which will fail and return null, exercising the
+   * `if (!client)` branches in every service method.
+   */
+  async function loadDisconnectedService() {
+    jest.resetModules();
+
+    jest.doMock('ioredis', () => ({
+      __esModule: true,
+      default: jest.fn().mockImplementation(function (this: Record<string, unknown>) {
+        // Immediately fire 'error' so waitForReady rejects
+        this.on = jest.fn().mockReturnThis();
+        this.once = jest.fn().mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+          if (event === 'error') setImmediate(() => cb(new Error('ECONNREFUSED')));
+          return this;
+        });
+      }),
+      Cluster: jest.fn(),
+    }));
+
+    process.env.REDIS_ENABLED = 'true';
+    delete process.env.REDIS_CLUSTER_ENABLED;
+    delete process.env.REDIS_CLUSTER_NODES;
+
+    const svc = require('../services/redis-service');
+
+    // Allow the failed init setImmediate to fire
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await Promise.resolve();
+
+    return svc;
+  }
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    jest.resetModules();
+  });
+
+  it('get returns null when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const result = await svc.default.get('k', 'profile:');
+    expect(result).toBeNull();
+  });
+
+  it('set returns false when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const ok = await svc.default.set('k', 'v', 'profile:');
+    expect(ok).toBe(false);
+  });
+
+  it('del returns false when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const ok = await svc.default.del('k', 'profile:');
+    expect(ok).toBe(false);
+  });
+
+  it('delPattern returns 0 when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const n = await svc.default.delPattern('*', 'bounty:list:');
+    expect(n).toBe(0);
+  });
+
+  it('exists returns false when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const ok = await svc.default.exists('k', 'profile:');
+    expect(ok).toBe(false);
+  });
+
+  it('expire returns false when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const ok = await svc.default.expire('k', 'profile:', 60);
+    expect(ok).toBe(false);
+  });
+
+  it('getStats returns null when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const stats = await svc.default.getStats();
+    expect(stats).toBeNull();
+  });
+
+  it('flushAll returns false when client is null', async () => {
+    const svc = await loadDisconnectedService();
+    const ok = await svc.default.flushAll();
+    expect(ok).toBe(false);
+  });
+});
+
+// ─── redisService.close – error path ─────────────────────────────────────────
+
+describe('redisService.close – error path', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    jest.resetModules();
+  });
+
+  it('handles quit() error gracefully without throwing', async () => {
+    const { svc, mockClient } = await loadStandaloneService();
+    mockClient.quit.mockRejectedValue(new Error('Connection already closed'));
+
+    // Should not throw
+    await expect(svc.default.close()).resolves.toBeUndefined();
+  });
+});
+
+// ─── delPatternStandalone – stream.destroy error path ────────────────────────
+
+describe('redisService.delPattern – standalone stream.destroy error path', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    jest.resetModules();
+  });
+
+  it('returns 0 and does not throw when del() fails mid-stream', async () => {
+    const keys = ['bountyexpo:bounty:list:x'];
+
+    const { svc } = await loadStandaloneService({
+      // First del call rejects, triggering stream.destroy(err) which emits 'error'
+      del: jest.fn().mockRejectedValue(new Error('DEL failed')),
+      scanStream: jest.fn().mockImplementation(() => {
+        const handlers: Record<string, ((...args: any[]) => void)[]> = {};
+        const stream = {
+          pause: jest.fn(),
+          resume: jest.fn(),
+          destroy: jest.fn((err?: Error) => {
+            if (err) setImmediate(() => (handlers['error'] || []).forEach(h => h(err)));
+          }),
+          on: jest.fn().mockImplementation((event: string, cb: (...args: any[]) => void) => {
+            handlers[event] = handlers[event] || [];
+            handlers[event].push(cb);
+            return stream;
+          }),
+        };
+        setImmediate(() => {
+          (handlers['data'] || []).forEach(h => h(keys));
+        });
+        return stream;
+      }),
+    });
+
+    const count = await svc.default.delPattern('*', 'bounty:list:');
+    expect(count).toBe(0);
+  });
+});

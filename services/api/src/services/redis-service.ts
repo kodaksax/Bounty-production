@@ -455,24 +455,31 @@ export const redisService = {
         // Note: `memory` reflects a single representative master node's usage,
         // not the cluster-wide total, since `used_memory_human` is not
         // straightforwardly summable (it is a human-readable byte string).
+        //
+        // Each task returns its own count so we avoid the concurrent-+=
+        // read-modify-write hazard that arises when multiple async tasks
+        // mutate a shared variable across `await` suspension points.
         const nodes = client.nodes('master');
-        let totalKeys = 0;
         let memory = 'unknown (per-node)';
 
-        await Promise.all(
+        const keyCounts = await Promise.all(
           nodes.map(async (node: InstanceType<typeof Redis>) => {
             try {
-              totalKeys += await node.dbsize();
+              const count = await node.dbsize();
               if (memory === 'unknown (per-node)') {
                 const info = await node.info('memory');
                 const memoryMatch = info.match(/used_memory_human:([^\r\n]+)/);
                 if (memoryMatch) memory = `${memoryMatch[1].trim()} (one node)`;
               }
+              return count;
             } catch {
               // Skip unreachable nodes
+              return 0;
             }
           })
         );
+
+        const totalKeys = keyCounts.reduce((sum, n) => sum + n, 0);
 
         return { keys: totalKeys, memory, clusterEnabled: true };
       }
