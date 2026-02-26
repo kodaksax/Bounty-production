@@ -257,6 +257,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             // Even on error, mark as completed to avoid blocking
             profileFetchCompletedRef.current = true
           }
+
+          // Explicitly clear loading now that profile fetch is complete.
+          // The profile subscription fires during setSession() while
+          // profileFetchCompletedRef is still false, so it cannot clear loading
+          // on its own. Forcing it here ensures we never get stuck in a
+          // loading state waiting for a notification that won't come.
+          if (isMountedRef.current) {
+            setIsLoading(false)
+          }
           
           // Email verification gate: Check if email is verified
           // Priority: session.user?.email_confirmed_at > profile.email_verified > false
@@ -336,6 +345,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Mark as completed even on error to avoid blocking
           profileFetchCompletedRef.current = true
         }
+
+      // Explicitly clear loading now that profile fetch is complete.
+      // The profile subscription fires during setSession() while
+      // profileFetchCompletedRef is still false, so it cannot clear loading
+      // on its own. Forcing it here ensures we never get stuck in a
+      // loading state waiting for a notification that won't come.
+      if (isMountedRef.current) {
+        setIsLoading(false)
+      }
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(

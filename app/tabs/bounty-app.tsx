@@ -293,6 +293,16 @@ function BountyAppInner() {
     }
   }, [])
 
+  // Guard: if profile loads and indicates onboarding is required, redirect immediately.
+  // This covers the case where the app opened with a stale cached profile that appeared
+  // complete, routed here, and then the background fresh-fetch revealed the profile is
+  // missing or incomplete.
+  useEffect(() => {
+    if (!isLoading && session && (profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
+      router.replace('/onboarding')
+    }
+  }, [isLoading, session, profile, router])
+
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
