@@ -78,7 +78,9 @@ export const storageService = {
   },
 
   /**
-   * Get public URL for a file in storage
+   * Get public URL for a file in storage.
+   * If EXPO_PUBLIC_CDN_URL is configured the Supabase storage origin is
+   * replaced with the CDN origin so all asset URLs are served through the CDN.
    * @param bucket - Storage bucket name
    * @param path - File path in the bucket
    */
@@ -89,7 +91,28 @@ export const storageService = {
     }
 
     const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path)
-    return data.publicUrl
+    const rawUrl = data.publicUrl
+
+    // CDN config is provided via Expo public env vars and is resolved at build time.
+    // Changing these environment variables after the app is built will not affect behavior.
+    const cdnUrl: string = (process.env.EXPO_PUBLIC_CDN_URL ?? '').replace(/\/+$/, '')
+    const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''
+
+    if (cdnUrl && supabaseUrl && rawUrl.startsWith(supabaseUrl)) {
+      try {
+        const urlObj = new URL(rawUrl)
+        const cdnUrlObj = new URL(cdnUrl)
+        // Replace only the origin (protocol + host) so path/query remain unchanged
+        urlObj.protocol = cdnUrlObj.protocol
+        urlObj.host = cdnUrlObj.host
+        return urlObj.toString()
+      } catch (e) {
+        // If URL parsing fails for any reason, fall back to the original Supabase URL
+        return rawUrl
+      }
+    }
+
+    return rawUrl
   },
 
   /**

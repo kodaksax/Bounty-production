@@ -272,6 +272,9 @@ export const config = {
       'UPLOAD_ALLOWED_MIME_TYPES',
       'image/jpeg,image/png,image/gif,application/pdf,video/mp4,video/quicktime,text/plain'
     ).split(','),
+    // Optional CDN base URL. When set, uploaded asset URLs are rewritten to use
+    // this origin instead of the Supabase storage origin, e.g. https://cdn.example.com
+    cdnUrl: getOptional('STORAGE_CDN_URL', '').replace(/\/+$/, ''),
   },
 } as const;
 

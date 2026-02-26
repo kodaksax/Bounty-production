@@ -276,4 +276,103 @@ describe('storage-service - Upload Optimizations', () => {
       expect(supabase.storage.remove).toHaveBeenCalledWith(['test/file.jpg']);
     });
   });
+
+  describe('CDN URL transformation', () => {
+    const originalCdnUrl = process.env.EXPO_PUBLIC_CDN_URL;
+    const originalSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
+    afterEach(() => {
+      // Restore original env vars after each test
+      process.env.EXPO_PUBLIC_CDN_URL = originalCdnUrl;
+      process.env.EXPO_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
+    });
+
+    it('should return Supabase URL unchanged when CDN is not configured', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = '';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://abc123.supabase.co/storage/v1/object/public/avatars/user.jpg' },
+      });
+
+      const url = storageService.getPublicUrl('avatars', 'user.jpg');
+      expect(url).toBe('https://abc123.supabase.co/storage/v1/object/public/avatars/user.jpg');
+    });
+
+    it('should rewrite Supabase storage URL to CDN URL when CDN is configured', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://abc123.supabase.co/storage/v1/object/public/avatars/user.jpg' },
+      });
+
+      const url = storageService.getPublicUrl('avatars', 'user.jpg');
+      expect(url).toBe('https://cdn.example.com/storage/v1/object/public/avatars/user.jpg');
+    });
+
+    it('should not transform URL when it does not start with the Supabase URL', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://other-host.com/storage/file.jpg' },
+      });
+
+      const url = storageService.getPublicUrl('attachments', 'file.jpg');
+      expect(url).toBe('https://other-host.com/storage/file.jpg');
+    });
+
+    it('should upload and return CDN URL when CDN is configured (server upload)', async () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      const mockUpload = jest.fn().mockResolvedValue({ data: {}, error: null });
+      supabase.storage.upload = mockUpload;
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://abc123.supabase.co/storage/v1/object/public/test-bucket/test/file.jpg' },
+      });
+
+      global.fetch = jest.fn().mockResolvedValue({
+        arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      });
+
+      const result = await storageService.uploadFile('file://test.jpg', {
+        bucket: 'test-bucket',
+        path: 'test/file.jpg',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.url).toBe('https://cdn.example.com/storage/v1/object/public/test-bucket/test/file.jpg');
+    });
+    it('should strip trailing slashes from CDN URL before replacing origin', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com/';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://abc123.supabase.co/storage/v1/object/public/avatars/user.jpg' },
+      });
+
+      const url = storageService.getPublicUrl('avatars', 'user.jpg');
+      // Must not produce double slashes
+      expect(url).toBe('https://cdn.example.com/storage/v1/object/public/avatars/user.jpg');
+      expect(url).not.toContain('//storage');
+    });
+
+    it('should replace only the origin and not later occurrences of the Supabase host', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      // Filename that happens to contain the Supabase host string
+      const tricky = 'https://abc123.supabase.co/storage/v1/object/public/files/abc123.supabase.co-backup.jpg';
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: tricky },
+      });
+
+      const url = storageService.getPublicUrl('files', 'abc123.supabase.co-backup.jpg');
+      // Origin replaced, but the filename part must remain intact
+      expect(url).toMatch(/^https:\/\/cdn\.example\.com\//);
+      expect(url).toContain('abc123.supabase.co-backup.jpg');
+    });
+  });
 });

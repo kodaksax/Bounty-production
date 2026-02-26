@@ -46,8 +46,23 @@ export class StorageService {
                 .from(bucket)
                 .getPublicUrl(data.path);
 
+            const publicUrl = config.storage.cdnUrl
+                ? (() => {
+                    try {
+                        const urlObj = new URL(publicUrlData.publicUrl);
+                        const cdnUrlObj = new URL(config.storage.cdnUrl);
+                        urlObj.protocol = cdnUrlObj.protocol;
+                        urlObj.host = cdnUrlObj.host;
+                        return urlObj.toString();
+                    } catch {
+                        // If URL parsing fails for any reason, fall back to the original public URL
+                        return publicUrlData.publicUrl;
+                    }
+                })()
+                : publicUrlData.publicUrl;
+
             return {
-                url: publicUrlData.publicUrl
+                url: publicUrl
             };
         } catch (error) {
             logger.error(`Storage service error: ${error instanceof Error ? error.message : String(error)}`);
