@@ -90,14 +90,18 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
       const readCheck = await checkReadReplica();
       if (readCheck !== null) {
         checks.databaseRead = readCheck;
-        if (readCheck.status === 'down' && overallStatus === 'healthy') overallStatus = 'degraded';
+        if (readCheck.status === 'down') {
+          overallStatus = 'unhealthy';
+        } else if (readCheck.status === 'degraded' && overallStatus === 'healthy') {
+          overallStatus = 'degraded';
+        }
       }
     } catch (error) {
       checks.databaseRead = {
         status: 'down',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
-      if (overallStatus === 'healthy') overallStatus = 'degraded';
+      overallStatus = 'unhealthy';
     }
 
     // Check Supabase

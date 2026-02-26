@@ -62,7 +62,7 @@ import type { AuthenticatedRequest } from './middleware/auth';
 
 const { eq } = require('drizzle-orm');
 const Fastify = require('fastify');
-const { db, pool } = require('./db/connection');
+const { db, pool, closeDbPools } = require('./db/connection');
 // Detect Supabase mode (used to skip direct Postgres ping at startup)
 const STARTUP_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const STARTUP_SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -894,6 +894,14 @@ process.on('SIGINT', async () => {
 
   // Flush analytics events
   await backendAnalytics.flush();
+
+  // Close database connection pools (primary and replica if configured)
+  try {
+    await closeDbPools();
+    console.log('🛑 Database pools closed');
+  } catch (err) {
+    console.error('⚠️  Error closing database pools during shutdown:', err);
+  }
 
   await fastify.close();
   process.exit(0);
