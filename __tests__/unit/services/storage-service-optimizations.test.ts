@@ -345,5 +345,34 @@ describe('storage-service - Upload Optimizations', () => {
       expect(result.success).toBe(true);
       expect(result.url).toBe('https://cdn.example.com/storage/v1/object/public/test-bucket/test/file.jpg');
     });
+    it('should strip trailing slashes from CDN URL before replacing origin', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com/';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: 'https://abc123.supabase.co/storage/v1/object/public/avatars/user.jpg' },
+      });
+
+      const url = storageService.getPublicUrl('avatars', 'user.jpg');
+      // Must not produce double slashes
+      expect(url).toBe('https://cdn.example.com/storage/v1/object/public/avatars/user.jpg');
+      expect(url).not.toContain('//storage');
+    });
+
+    it('should replace only the origin and not later occurrences of the Supabase host', () => {
+      process.env.EXPO_PUBLIC_CDN_URL = 'https://cdn.example.com';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://abc123.supabase.co';
+
+      // Filename that happens to contain the Supabase host string
+      const tricky = 'https://abc123.supabase.co/storage/v1/object/public/files/abc123.supabase.co-backup.jpg';
+      supabase.storage.getPublicUrl = jest.fn().mockReturnValue({
+        data: { publicUrl: tricky },
+      });
+
+      const url = storageService.getPublicUrl('files', 'abc123.supabase.co-backup.jpg');
+      // Origin replaced, but the filename part must remain intact
+      expect(url).toMatch(/^https:\/\/cdn\.example\.com\//);
+      expect(url).toContain('abc123.supabase.co-backup.jpg');
+    });
   });
 });

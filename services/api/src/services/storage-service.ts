@@ -47,7 +47,18 @@ export class StorageService {
                 .getPublicUrl(data.path);
 
             const publicUrl = config.storage.cdnUrl
-                ? publicUrlData.publicUrl.replace(config.supabase.url, config.storage.cdnUrl)
+                ? (() => {
+                    try {
+                        const urlObj = new URL(publicUrlData.publicUrl);
+                        const cdnUrlObj = new URL(config.storage.cdnUrl);
+                        urlObj.protocol = cdnUrlObj.protocol;
+                        urlObj.host = cdnUrlObj.host;
+                        return urlObj.toString();
+                    } catch {
+                        // If URL parsing fails for any reason, fall back to the original public URL
+                        return publicUrlData.publicUrl;
+                    }
+                })()
                 : publicUrlData.publicUrl;
 
             return {
