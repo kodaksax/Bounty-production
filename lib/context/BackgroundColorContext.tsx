@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useContext, useState } from "react";
+import React, { createContext, ReactNode, useCallback, useContext, useState } from "react";
 
 type BGContext = {
   color: string; // current active color (top of stack)
@@ -15,16 +15,16 @@ const BackgroundColorContext = createContext<BGContext | undefined>(undefined);
 export const BackgroundColorProvider = ({ children }: { children: ReactNode }) => {
   const [stack, setStack] = useState<string[]>([DEFAULT]);
 
-  const pushColor = (c: string) => {
+  const pushColor = useCallback((c: string) => {
     setStack(s => {
       // if identical to current top, avoid duplicate push
       const top = s[s.length - 1];
       if (top === c) return s;
       return [...s, c];
     });
-  };
+  }, []);
 
-  const popColor = (c: string) => {
+  const popColor = useCallback((c: string) => {
     setStack(s => {
       const copy = [...s];
       const idx = copy.lastIndexOf(c);
@@ -34,9 +34,9 @@ export const BackgroundColorProvider = ({ children }: { children: ReactNode }) =
       if (copy.length === 0) return [DEFAULT];
       return copy;
     });
-  };
+  }, []);
 
-  const setColor = (c: string) => setStack([c]);
+  const setColor = useCallback((c: string) => setStack([c]), []);
 
   const color = stack[stack.length - 1] ?? DEFAULT;
 
