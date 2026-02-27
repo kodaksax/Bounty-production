@@ -21,6 +21,7 @@ import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
+import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
 import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
@@ -38,6 +39,7 @@ export function SignInForm() {
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({})
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
@@ -341,14 +343,9 @@ export function SignInForm() {
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
-    if (!identifier || identifier.trim().length === 0) {
-      errors.identifier = 'Email is required'
-    } else {
-      // Basic email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(identifier.trim())) {
-        errors.identifier = 'Please enter a valid email address'
-      }
+    const emailError = validateEmail(identifier)
+    if (emailError) {
+      errors.identifier = emailError
     }
 
     if (!password) {
@@ -484,6 +481,7 @@ export function SignInForm() {
                     if (fieldErrors.identifier) {
                       setFieldErrors(prev => ({ ...prev, identifier: '' }))
                     }
+                    setEmailSuggestion(suggestEmailCorrection(text))
                   }}
                   placeholder="you@example.com"
                   keyboardType="email-address"
@@ -497,6 +495,21 @@ export function SignInForm() {
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
                 {getFieldError('identifier') ? <ValidationMessage message={getFieldError('identifier')} /> : null}
+                {emailSuggestion && !getFieldError('identifier') ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIdentifier(emailSuggestion)
+                      setEmailSuggestion(null)
+                      setFieldErrors(prev => ({ ...prev, identifier: '' }))
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use suggested email: ${emailSuggestion}`}
+                  >
+                    <Text className="text-yellow-300 text-xs mt-1">
+                      Did you mean <Text className="underline font-medium">{emailSuggestion}</Text>?
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               <View>
