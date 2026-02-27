@@ -4,6 +4,11 @@ import type { BountyRequestWithDetails } from 'lib/services/bounty-request-servi
 import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
+import { navigationIntent } from 'lib/services/navigation-intent'
+import { logClientError, logClientInfo } from 'lib/services/monitoring'
+import { supabase } from 'lib/supabase'
+import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
+import { messageService } from 'lib/services/message-service'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
@@ -169,10 +174,6 @@ export function useAcceptRequest({
       try {
         // Use Supabase RPC to create conversation via SECURITY DEFINER function
         // This avoids RLS rejections from client-side inserts.
-        const { navigationIntent } = await import('lib/services/navigation-intent')
-        const { logClientError, logClientInfo } = await import('lib/services/monitoring')
-        const { supabase } = await import('lib/supabase')
-
         try {
           const participantIds = [currentUserId, String(hunterIdForConv)]
           const convName = request.profile?.username || (bountyObj as any)?.title || 'Conversation'
@@ -183,9 +184,7 @@ export function useAcceptRequest({
           if (convId) {
             // send initial message via supabase function or messages table
             try {
-              // Use supabase-messaging sendMessage to persist message
-              const supabaseMessaging = await import('lib/services/supabase-messaging')
-              await supabaseMessaging.sendMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+              await sendSupabaseMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
             } catch (msgErr) {
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
@@ -203,10 +202,6 @@ export function useAcceptRequest({
         // If creating the conversation in Supabase fails, fall back to the local persistent layer
         // so the user still has a conversation to coordinate in the app.
         try {
-          const { messageService } = await import('lib/services/message-service')
-          const { navigationIntent } = await import('lib/services/navigation-intent')
-          const { logClientError } = await import('lib/services/monitoring')
-
           const localConv = await messageService.getOrCreateConversation(
             [hunterIdForConv],
             request.profile?.username || 'Hunter',
@@ -227,10 +222,7 @@ export function useAcceptRequest({
           try { await navigationIntent.setPendingConversationId(localConv.id) } catch { /* best-effort */ }
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
-          try {
-            const { logClientError } = await import('lib/services/monitoring')
-            logClientError('Fallback to local conversation failed', { err: fallbackErr })
-          } catch {}
+          logClientError('Fallback to local conversation failed', { err: fallbackErr })
         }
       }
 
