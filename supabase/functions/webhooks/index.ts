@@ -28,11 +28,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
-  // Only handle the /stripe sub-path; reject anything else
-  const url = new URL(req.url)
-  const pathParts = url.pathname.split('/webhooks')
-  const subPath = pathParts.length > 1 ? pathParts[1] : '/'
-  if (subPath !== '/stripe') {
+  // Accept both /webhooks (Stripe-registered URL) and /webhooks/stripe
+  const { pathname } = new URL(req.url)
+  if (!pathname.endsWith('/webhooks') && !pathname.endsWith('/webhooks/stripe')) {
     return jsonResponse({ error: 'Not found' }, 404)
   }
 
