@@ -146,7 +146,7 @@ export function useBountyForm({
         is_time_sensitive: formData.isTimeSensitive,
         deadline: formData.isTimeSensitive ? formData.deadline : undefined,
         attachments_json: (() => {
-          const uploaded = formData.attachments.filter(a => (a as any).remoteUri || a.status === 'uploaded')
+          const uploaded = formData.attachments.filter(a => a.remoteUri || a.status === 'uploaded')
           return uploaded.length ? JSON.stringify(uploaded) : undefined
         })(),
       }

@@ -129,6 +129,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
 
   // ---- Bounty form state and handlers (extracted to useBountyForm) ----
+  // Manages form field values, validation, submission (including escrow creation),
+  // confirmation card visibility, and related UX state (loading, success, error).
   const {
     formData,
     setFormData,
