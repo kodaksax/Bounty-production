@@ -19,7 +19,7 @@ import 'react-native-get-random-values'; // must run before using tweetnacl
  * On cold start, we ensure proper initialization before allowing navigation.
  */
 export default function Index() {
-  const { session, isLoading, profile } = useAuthContext()
+  const { session, isLoading, profile, isPasswordRecovery } = useAuthContext()
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
   const hasNavigatedRef = useRef(false)
@@ -59,6 +59,16 @@ export default function Index() {
       return () => {
         isActive = false
       }
+    }
+
+    // If user is in password recovery mode, route to the update-password screen
+    // (this happens when the app receives a PASSWORD_RECOVERY event from Supabase)
+    if (isPasswordRecovery) {
+      if (!isActive || hasNavigatedRef.current) return () => { isActive = false }
+      hasNavigatedRef.current = true
+      router.replace('/auth/update-password' as any)
+      try { markInitialNavigationDone() } catch {}
+      return () => { isActive = false }
     }
 
     // If user is authenticated, check their profile status
@@ -118,7 +128,7 @@ export default function Index() {
     return () => {
       isActive = false
     }
-  }, [session, isLoading, profile, router])
+  }, [session, isLoading, profile, isPasswordRecovery, router])
 
   // Show loading spinner while checking authentication state
   // CRITICAL: This prevents any content flash before auth is determined

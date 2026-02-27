@@ -7,6 +7,7 @@ export type AuthData = {
   isLoading: boolean
   isLoggedIn: boolean
   isEmailVerified: boolean
+  isPasswordRecovery: boolean
 }
 
 export const AuthContext = createContext<AuthData>({
@@ -15,6 +16,7 @@ export const AuthContext = createContext<AuthData>({
   isLoading: true,
   isLoggedIn: false,
   isEmailVerified: false,
+  isPasswordRecovery: false,
 })
 
 export const useAuthContext = () => useContext(AuthContext)

@@ -77,12 +77,48 @@ export default function AuthCallbackScreen() {
           return;
         }
       } else if (type === 'recovery') {
-        // Password reset flow
-        if (token) {
+        // Password reset flow - must establish a session before navigating
+        if (access_token && refresh_token) {
+          // Implicit flow: Supabase sent access_token + refresh_token
+          const { error } = await supabase.auth.setSession({
+            access_token: access_token as string,
+            refresh_token: refresh_token as string,
+          });
+
+          if (error) {
+            console.error('[auth-callback] Recovery setSession error:', error);
+            setStatus('error');
+            setMessage('Password Reset Failed');
+            setErrorDetails(error.message || 'The reset link may have expired.');
+            return;
+          }
+
           setStatus('success');
           setMessage('Redirecting to Password Reset...');
-          
-          // Navigate to update password screen with token
+
+          setTimeout(() => {
+            router.replace('/auth/update-password' as Href);
+            try { markInitialNavigationDone(); } catch {}
+          }, 1500);
+          return;
+        } else if (token) {
+          // Token-hash flow: verify the OTP to establish a session
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: token as string,
+            type: 'recovery',
+          });
+
+          if (error) {
+            console.error('[auth-callback] Recovery verifyOtp error:', error);
+            setStatus('error');
+            setMessage('Password Reset Failed');
+            setErrorDetails(error.message || 'The reset link may have expired.');
+            return;
+          }
+
+          setStatus('success');
+          setMessage('Redirecting to Password Reset...');
+
           setTimeout(() => {
             router.replace('/auth/update-password' as Href);
             try { markInitialNavigationDone(); } catch {}

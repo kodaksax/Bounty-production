@@ -53,6 +53,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef<boolean>(false)
   const refreshPromiseRef = useRef<Promise<void> | null>(null) // Store in-flight promise
@@ -367,11 +368,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         if (isMountedRef.current) {
           scheduleTokenRefresh(session)
         }
+      } else if (_event === 'PASSWORD_RECOVERY') {
+        // User clicked a password reset link — flag recovery mode so the
+        // app routes them to the update-password screen instead of the main app
+        if (isMountedRef.current) {
+          setIsPasswordRecovery(true)
+        }
       } else if (_event === 'SIGNED_OUT') {
-        // Clear refresh timer on sign out
+        // Clear refresh timer and recovery mode on sign out
         if (refreshTimerRef.current) {
           clearTimeout(refreshTimerRef.current)
           refreshTimerRef.current = null
+        }
+        if (isMountedRef.current) {
+          setIsPasswordRecovery(false)
         }
       }
       
@@ -504,6 +514,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         profile,
         isLoggedIn: Boolean(session),
         isEmailVerified,
+        isPasswordRecovery,
       }}
     >
       {children}
