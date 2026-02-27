@@ -73,9 +73,9 @@ function BountyAppInner() {
   const bountyListRef = useRef<FlatList>(null)
   // Ref for pagination offset to avoid dependency in useCallback
   const offsetRef = useRef(0)
-  // Reduce header vertical padding to move content up ~25px while respecting safe area
-  // Adjusted again (additional 25px upward) so total upward shift = 50px from original safe area top
-  const headerTopPad = Math.max(insets.top - 50, 0)
+  // Header top padding is no longer dynamically calculated based on insets 
+  // because RootFrame already applies safe area insets at the top level
+  const headerTopPad = 0
 
   // Location hook for calculating real distances
   const { location: userLocation, permission } = useLocation()
@@ -442,7 +442,7 @@ function BountyAppInner() {
         </View>
       );
     }
-    
+
     if (loadError) {
       return (
         <EmptyState
@@ -454,7 +454,7 @@ function BountyAppInner() {
         />
       );
     }
-    
+
     return (
       <>
         <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>

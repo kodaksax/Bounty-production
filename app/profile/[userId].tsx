@@ -24,6 +24,7 @@ import { EnhancedProfileSection, PortfolioSection } from "../../components/enhan
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
+import { ScreenHeader } from "../../components/ui/screen-header";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
@@ -281,15 +282,11 @@ export default function UserProfileScreen() {
     return (
       <View style={styles.container}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <BrandingLogo size="small" />
-          </View>
-          <View style={{ width: 40 }} />
-        </View>
+        <ScreenHeader
+          showBack
+          onBack={handleBack}
+          centerNode={<BrandingLogo size="small" />}
+        />
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
@@ -303,12 +300,11 @@ export default function UserProfileScreen() {
   if (error || !profile) {
     return (
       <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top - 8, 6) }]}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <BrandingLogo size="small" />
-        </View>
+        <ScreenHeader
+          showBack
+          onBack={handleBack}
+          centerNode={<BrandingLogo size="small" />}
+        />
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text style={styles.errorTitle}>Profile not found</Text>
@@ -328,14 +324,11 @@ export default function UserProfileScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <BrandingLogo size="small" />
-        </View>
-        {!isOwnProfile && (
+      <ScreenHeader
+        showBack
+        onBack={handleBack}
+        centerNode={<BrandingLogo size="small" />}
+        rightNode={!isOwnProfile ? (
           <TouchableOpacity
             onPress={() => setShowMoreMenu(!showMoreMenu)}
             style={styles.moreButton}
@@ -344,9 +337,8 @@ export default function UserProfileScreen() {
           >
             <MaterialIcons name="more-vert" size={24} color="#ffffff" />
           </TouchableOpacity>
-        )}
-        {isOwnProfile && <View style={{ width: 40 }} />}
-      </View>
+        ) : null}
+      />
 
       {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
       {showMoreMenu && !isOwnProfile && (
