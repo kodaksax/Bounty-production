@@ -23,7 +23,6 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
-const ONBOARDING_DONE_KEY = '@bounty_onboarding_completed';
 
 // Workflow step configuration
 const WORKFLOW_STEP_START = 1; // Slide index for first workflow step (slide 2)
@@ -114,12 +113,7 @@ export default function OnboardingCarousel() {
   const handleConfirmSkip = async () => {
     setShowSkipModal(false);
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    const alreadyComplete = await AsyncStorage.getItem(ONBOARDING_DONE_KEY);
-    if (alreadyComplete === 'true') {
-      router.replace('/tabs/bounty-app');
-    } else {
-      router.replace('/onboarding/username');
-    }
+    router.replace('/onboarding/username');
   };
 
   const handleCancelSkip = () => {
@@ -128,12 +122,7 @@ export default function OnboardingCarousel() {
 
   const handleGetStarted = async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    const alreadyComplete = await AsyncStorage.getItem(ONBOARDING_DONE_KEY);
-    if (alreadyComplete === 'true') {
-      router.replace('/tabs/bounty-app');
-    } else {
-      router.replace('/onboarding/username');
-    }
+    router.replace('/onboarding/username');
   };
 
   const renderSlide = ({ item, index }: { item: SlideData; index: number }) => {
