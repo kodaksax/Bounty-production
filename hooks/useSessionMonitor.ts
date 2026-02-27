@@ -80,7 +80,15 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
       stopMonitoring();
       unsubscribeAuthState();
     };
-  }, [enabled, router]);
+    // router is intentionally excluded from deps: it is used only inside the
+    // onSessionExpiration callback which fires asynchronously on session expiry.
+    // Session expiry is a terminal state (the app signs the user out), so a
+    // stale router reference is acceptable — the only navigation performed is
+    // router.replace('/auth/sign-in-form'), which does not depend on current
+    // route state. Including router would restart all monitors (timers, Supabase
+    // listeners) on every render where router returns a new object reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   return sessionState;
 }

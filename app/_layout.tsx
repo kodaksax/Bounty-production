@@ -101,6 +101,58 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
   );
 };
 
+// Defined outside RootLayout so the component reference is stable across
+// RootLayout re-renders (e.g. when `phase` or `fontsLoaded` change).
+// If defined inline, React would see a new component type on every render and
+// unmount/remount the entire provider tree, causing cascading state updates
+// that trigger a "Maximum update depth exceeded" error.
+const LayoutContent = () => {
+  const { color } = useBackgroundColor();
+
+  return (
+    <RootFrame bgColor={color}>
+      <AuthProvider>
+          <SessionMonitorGate />
+          <AdminProvider>
+            <StripeProvider>
+              <WalletProvider>
+                <NotificationProvider>
+                  <WebSocketProvider>
+                    <ErrorBoundary
+                      onError={(error, errorInfo) => {
+                        // Add custom breadcrumb for additional context (do not capture exception again)
+                        try {
+                          if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+                            Sentry.addBreadcrumb({
+                              category: 'root_layout',
+                              message: 'Error caught in root layout',
+                              level: 'error',
+                              data: {
+                                componentStack: errorInfo.componentStack,
+                              },
+                            });
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                    >
+                      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                        <View style={styles.inner}>
+                          <Slot />
+                        </View>
+                      </ThemeProvider>
+                    </ErrorBoundary>
+                  </WebSocketProvider>
+                </NotificationProvider>
+              </WalletProvider>
+            </StripeProvider>
+          </AdminProvider>
+        </AuthProvider>
+    </RootFrame>
+  );
+};
+
 function RootLayout({ children }: { children: React.ReactNode }) {
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
@@ -200,56 +252,6 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     const safety = setTimeout(() => setPhase('app'), 8000);
     return () => clearTimeout(safety);
   }, [phase]);
-
-  // Branded splash was removed — always show app content once phase moves to 'app'
-  const showBranded = false;
-
-  const LayoutContent = () => {
-    const { color } = useBackgroundColor();
-
-    return (
-      <RootFrame bgColor={color}>
-        <AuthProvider>
-            <SessionMonitorGate />
-            <AdminProvider>
-              <StripeProvider>
-                <WalletProvider>
-                  <NotificationProvider>
-                    <WebSocketProvider>
-                      <ErrorBoundary
-                        onError={(error, errorInfo) => {
-                          // Add custom breadcrumb for additional context (do not capture exception again)
-                          try {
-                            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-                              Sentry.addBreadcrumb({
-                                category: 'root_layout',
-                                message: 'Error caught in root layout',
-                                level: 'error',
-                                data: {
-                                  componentStack: errorInfo.componentStack,
-                                },
-                              });
-                            }
-                          } catch {
-                            // ignore
-                          }
-                        }}
-                      >
-                        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                          <View style={styles.inner}>
-                            <Slot />
-                          </View>
-                        </ThemeProvider>
-                      </ErrorBoundary>
-                    </WebSocketProvider>
-                  </NotificationProvider>
-                </WalletProvider>
-              </StripeProvider>
-            </AdminProvider>
-          </AuthProvider>
-      </RootFrame>
-    );
-  };
 
   return (
     <SafeAreaProvider>
