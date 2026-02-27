@@ -114,23 +114,25 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const balanceData = await balanceResponse.json();
         const apiBalance = typeof balanceData.balance === 'number' ? balanceData.balance : 0;
 
-        let resolvedBalance = apiBalance;
-        setBalance(prev => {
-          const previous = typeof prev === 'number' ? prev : 0;
-          const now = Date.now();
-          const hasRecentOptimisticDeposit =
-            lastOptimisticDepositRef.current !== null &&
-            now - lastOptimisticDepositRef.current < 60_000;
+        // Compute resolvedBalance synchronously from the closure-captured balance.
+        // Mutating a local variable as a side effect inside the setBalance updater
+        // is unsafe: the updater is called asynchronously (or even twice in Strict
+        // Mode), so persist(resolvedBalance) could run before the updater executes
+        // and end up persisting the wrong value.
+        const now = Date.now();
+        const hasRecentOptimisticDeposit =
+          lastOptimisticDepositRef.current !== null &&
+          now - lastOptimisticDepositRef.current < 60_000;
 
-          if (hasRecentOptimisticDeposit && previous > apiBalance) {
-            resolvedBalance = previous;
-            return previous;
-          }
+        const resolvedBalance = hasRecentOptimisticDeposit && balance > apiBalance
+          ? balance
+          : apiBalance;
 
+        if (!hasRecentOptimisticDeposit || balance <= apiBalance) {
           lastOptimisticDepositRef.current = null;
-          resolvedBalance = apiBalance;
-          return apiBalance;
-        });
+        }
+
+        setBalance(resolvedBalance);
 
         try {
           await persist(resolvedBalance);
@@ -172,16 +174,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             },
           }));
 
-          // Merge with local transactions (API transactions take precedence)
-          const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
-          const localOnlyTx = transactions.filter(tx => !apiTxIds.has(tx.id));
-          const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
-          
-          // Sort by date descending
-          mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-          setTransactions(mergedTransactions);
-          await persistTransactions(mergedTransactions);
+          // Merge inside the setTransactions updater so the merge always runs
+          // against the latest state, not a potentially stale closed-over snapshot.
+          // This also makes refreshFromApi safe to call from the mount effect
+          // whose dependency array is [] (initial closure has transactions = []).
+          setTransactions(prev => {
+            const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+            const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
+            const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+            mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+            persistTransactions(mergedTransactions); // fire-and-forget inside updater
+            return mergedTransactions;
+          });
         }
       }
     } catch (error) {
@@ -191,7 +195,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [persist, persistTransactions, transactions]);
+  }, [persist, persistTransactions, balance]);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -263,22 +267,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const withdraw = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
     if (amount <= 0 || Number.isNaN(amount)) return false;
-    // Synchronous balance check using captured state to avoid the async closure
-    // issue where success set inside setBalance updater is checked before the
-    // updater runs (React batches state updates asynchronously).
-    if (balance < amount) return false;
+    // Keep the guard inside the updater so concurrent calls always check the
+    // latest committed balance (prev), preventing negative balances even when
+    // multiple withdrawals are scheduled before a re-render occurs.
+    // React calls the updater synchronously during dispatch, so `deducted` is
+    // set correctly before the `if (!deducted)` check below.
+    let deducted = false;
     setBalance(prev => {
+      if (prev < amount) return prev;
+      deducted = true;
       const next = prev - amount;
       persist(next);
       return next;
     });
+    if (!deducted) return false;
     await logTransaction({
       type: 'withdrawal',
       amount: -amount, // outflow negative
       details: { method: meta?.method, ...meta },
     });
     return true;
-  }, [balance, persist, logTransaction]);
+  }, [persist, logTransaction]);
 
   const clearAllTransactions = useCallback(async () => {
     setTransactions([]);
