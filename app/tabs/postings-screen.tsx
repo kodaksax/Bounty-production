@@ -11,7 +11,6 @@ import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import { CURRENT_USER_ID, getCurrentUserId } from "lib/utils/data-utils"
-import { logger } from 'lib/utils/error-logger'
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
@@ -29,9 +28,10 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import { useBountyForm } from '../../hooks/useBountyForm'
+import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
-
-// Removed unused StyleSheet (styles) to satisfy eslint no-unused-vars
 
 
 
@@ -88,25 +88,10 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
-  const [showAddBountyAmount, setShowAddBountyAmount] = useState(false)
-  const [showConfirmationCard, setShowConfirmationCard] = useState(false)
   // Always use guided multi-step flow on New tab
   const [showMultiStepFlow, setShowMultiStepFlow] = useState(true)
   const [headerHeight, setHeaderHeight] = useState(0)
   const [showShadow, setShowShadow] = useState(false)
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    location: "",
-    amount: 0,
-    timeline: "",
-    skills: "",
-    isForHonor: false,
-    workType: 'in_person' as 'online' | 'in_person',
-    isTimeSensitive: false,
-    deadline: '',
-  attachments: [] as { id: string; name: string; uri: string; mimeType?: string; size?: number; status?: 'pending' | 'uploading' | 'uploaded' | 'failed'; progress?: number; remoteUri?: string }[],
-  })
 
   // State for Supabase data
   const [myBounties, setMyBounties] = useState<Bounty[]>([])
@@ -118,24 +103,15 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     requests: true,
   })
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [postSuccess, setPostSuccess] = useState(false)
-  const postButtonRef = useRef<any>(null)
 
   const insets = useSafeAreaInsets()
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
-  const AMOUNT_PRESETS = [5, 10, 25, 50, 100]
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
-  const [showAddMoney, setShowAddMoney] = useState(false)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
   const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
-  // Animation refs
-  const lowBalanceAnim = useRef(new Animated.Value(0)).current
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
@@ -151,6 +127,39 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const itemRefs = useRef<Record<string, any>>({})
   // Pending scroll request (set when expanding an item, cleared after measuring)
   const pendingScrollRef = useRef<{ list: 'inProgress' | 'myPostings'; key: string } | null>(null)
+
+  // ---- Bounty form state and handlers (extracted to useBountyForm) ----
+  const {
+    formData,
+    setFormData,
+    showConfirmationCard,
+    setShowConfirmationCard,
+    showAddBountyAmount,
+    setShowAddBountyAmount,
+    showAddMoney,
+    setShowAddMoney,
+    isSubmitting,
+    postSuccess,
+    validationError,
+    setValidationError,
+    postButtonRef,
+    lowBalanceAnim,
+    otherSelected,
+    AMOUNT_PRESETS,
+    handleChooseAmount,
+    handleAddBountyAmount,
+    handleShowConfirmation,
+    handlePostBounty,
+  } = useBountyForm({
+    currentUserId,
+    balance,
+    createEscrow,
+    isEmailVerified,
+    onBountyPosted,
+    setActiveScreen,
+    setMyBounties,
+    onError: setError,
+  })
 
   // Scroll helper: toggle expanded state then measure the item's position and scroll to exact offset
   const handleToggleAndScroll = (list: 'inProgress' | 'myPostings', bountyId: string | number) => {
@@ -270,10 +279,6 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     }
   }, [loadMyBounties, loadInProgress])
 
-  const handleChooseAmount = (val: number) => {
-    setFormData((prev) => ({ ...prev, amount: val, isForHonor: false }))
-  }
-
   const tabs = [
     { id: "new", label: "New" },
     { id: "inProgress", label: "In Progress" },
@@ -300,488 +305,33 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [postSuccess, loadMyBounties, loadInProgress, currentUserId]) // Re-fetch after a successful post
 
   // ANNOTATION: The Supabase real-time subscriptions have been removed.
-  // To re-implement real-time updates, you would need to use a technology
-  // like WebSockets or Server-Sent Events (SSE) with your Hostinger backend.
+  // To re-implement real-time updates, use WebSockets or Server-Sent Events (SSE).
   // The component now fetches data when it loads or after a new bounty is posted.
 
-  const handleAddBountyAmount = (amount: number, isForHonor: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      amount,
-      isForHonor,
-    }))
-    setShowAddBountyAmount(false)
-  }
+  // ---- Accept/Reject request handlers (extracted to hooks) ----
+  const { handleAcceptRequest } = useAcceptRequest({
+    currentUserId,
+    balance,
+    bountyRequests,
+    myBounties,
+    setBountyRequests,
+    setMyBounties,
+    setInProgressBounties,
+    setIsLoading,
+    setError,
+    setShowAddMoney,
+    loadMyBounties,
+    loadInProgress,
+    loadRequestsForMyBounties,
+    onBountyAccepted,
+    setActiveScreen,
+  })
 
-  // Show confirmation card instead of directly posting
-  const handleShowConfirmation = () => {
-    // Email verification gate: Block posting if email is not verified
-    if (!isEmailVerified) {
-      Alert.alert(
-        'Email verification required',
-        "Please verify your email to post bounties. We've sent a verification link to your inbox.",
-        [
-          { text: 'OK', style: 'default' }
-        ]
-      )
-      return
-    }
-    setShowConfirmationCard(true)
-  }
-
-  // Handle the actual bounty posting after confirmation
-  const handlePostBounty = async () => {
-    // Email verification gate: Double-check before submitting
-    if (!isEmailVerified) {
-      Alert.alert(
-        'Email verification required',
-        "Please verify your email to post bounties. We've sent a verification link to your inbox.",
-        [
-          { text: 'OK', style: 'default' }
-        ]
-      )
-      return
-    }
-    
-    try {
-      setIsSubmitting(true)
-      setError(null)
-
-      // Validate balance BEFORE posting bounty for paid bounties
-      if (!formData.isForHonor && formData.amount > 0) {
-        if (balance < formData.amount) {
-          Alert.alert(
-            'Insufficient Balance',
-            'You do not have enough balance to post this bounty. Please add funds to your wallet.',
-            [{ text: 'OK' }]
-          )
-          setIsSubmitting(false)
-          return; // Don't post the bounty at all
-        }
-      }
-
-      // Prepare bounty data
-    const bountyData: Omit<Bounty, "id" | "created_at"> & { attachments_json?: string } = {
-  title: formData.title,
-  description: formData.description,
-  amount: formData.isForHonor ? 0 : formData.amount,
-  is_for_honor: formData.isForHonor,
-  location: formData.workType === 'in_person' ? formData.location : '',
-  timeline: formData.timeline,
-  skills_required: formData.skills,
-    poster_id: currentUserId,
-  status: "open", // Ensure this matches the expected type
-  work_type: formData.workType,
-  is_time_sensitive: formData.isTimeSensitive,
-  deadline: formData.isTimeSensitive ? formData.deadline : undefined,
-    // Persist attachments_json if any attachments have finished uploading or have a remoteUri
-    attachments_json: (() => {
-      const uploaded = formData.attachments.filter(a => (a as any).remoteUri || a.status === 'uploaded')
-      return uploaded.length ? JSON.stringify(uploaded) : undefined
-    })(),
-
-      }
-
-
-
-      // Debug: log exact payload being sent to create
-      try {
-        logger.info('[PostingsScreen] Creating bounty with payload:', { payload: bountyData })
-      } catch (e) {
-        logger.warning('[PostingsScreen] Creating bounty - could not stringify payload', { error: (e as any)?.message })
-      }
-
-      // Create the bounty using our service
-      const bounty = await bountyService.create(bountyData)
-
-      if (!bounty) {
-        throw new Error("Failed to create bounty. The server returned an empty response.")
-      }
-
-      // Create escrow for paid bounties (funds are held when bounty is posted)
-      if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
-        try {
-          await createEscrow(
-            bounty.id,
-            bounty.amount,
-            bounty.title,
-            currentUserId
-          )
-        } catch (escrowError) {
-          console.error('Error creating escrow:', escrowError)
-          // If escrow creation fails, delete the bounty to maintain consistency
-          await bountyService.delete(bounty.id)
-          Alert.alert(
-            'Escrow Failed',
-            'Failed to create escrow for this bounty. The bounty has been removed.',
-            [{ text: 'OK' }]
-          )
-          setIsSubmitting(false)
-          return; // Don't add to UI state
-        }
-      }
-
-      // Important: Update local state with the new bounty
-      if (bounty) {
-        setMyBounties((prevBounties) => [bounty, ...prevBounties])
-
-  // Set success state to trigger animations and UI updates
-  setPostSuccess(true)
-
-  // Notify parent to refresh public feed
-  onBountyPosted?.()
-
-        // Reset form
-        setFormData({
-          title: "",
-          description: "",
-          location: "",
-          amount: 0,
-          timeline: "",
-          skills: "",
-          isForHonor: false,
-          workType: 'in_person',
-          isTimeSensitive: false,
-          deadline: '',
-          attachments: [],
-        })
-
-        // Close confirmation card
-        setShowConfirmationCard(false)
-
-        // Navigate to the main bounty feed so the new bounty is visible
-        setActiveScreen?.('bounty')
-
-        // Reset success state after a delay
-        setTimeout(() => {
-          setPostSuccess(false)
-        }, 3000)
-      }
-    } catch (err: any) {
-      console.error("Error posting bounty:", err)
-      const msg = err instanceof Error ? err.message : (err?.message || 'Failed to post bounty')
-      setError(msg)
-      setShowConfirmationCard(false)
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleAcceptRequest = async (requestId: string | number) => {
-    try {
-      // Show quick-refresh UI for list transitions
-      setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
-
-      // Find the request to get bounty and profile info
-      const request = bountyRequests.find(req => String(req.id) === String(requestId))
-      if (!request) {
-        throw new Error("Request not found")
-      }
-
-      // Prepare identifiers and hunter id early for optimistic UI updates
-      const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
-      const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
-
-      // Optimistically remove all requests for this bounty so UI moves immediately
-      if (resolvedBountyId != null) {
-        setBountyRequests((prev) => prev.filter(req => String(req.bounty_id) !== String(resolvedBountyId)))
-      } else {
-        // If we don't know bounty id, at least remove the single request
-        setBountyRequests((prev) => prev.filter(req => String(req.id) !== String(requestId)))
-      }
-
-      // Optimistically update My Postings to in_progress
-      setMyBounties((prev) =>
-        prev.map((b) =>
-          String(b.id) === String(resolvedBountyId)
-            ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
-            : b
-        )
-      )
-
-      // If current user is the accepted hunter, optimistically add to In Progress list
-      if (String(hunterIdForConv) === String(currentUserId)) {
-        const newBounty = (request.bounty as Bounty) ?? ({ id: resolvedBountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
-        setInProgressBounties((prev) => {
-          if (resolvedBountyId != null && prev.some(pb => String(pb.id) === String(resolvedBountyId))) return prev
-          return [newBounty, ...prev]
-        })
-      }
-
-      // Check if poster has sufficient balance for paid bounties
-      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        if (balance < request.bounty.amount) {
-          Alert.alert(
-            'Insufficient Balance',
-            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
-            ]
-          )
-          return
-        }
-      }
-
-  // ANNOTATION: This API call should be transactional on your backend.
-  const result = await bountyRequestService.acceptRequest(requestId)
-
-      if (!result) {
-        // If accept failed server-side, inform the user and reload lists to reflect server state
-        console.error('Accept request failed for', requestId)
-        Alert.alert('Accept Failed', 'Failed to accept the request on the server. The UI may be out of sync; please refresh.')
-        // Reload lists to attempt to restore correct state
-        await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
-        return
-      }
-
-      // Update bounty status to in_progress and set accepted_by
-      // Prefer the full bounty object id, but fall back to the canonical bounty_id
-      const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
-
-      // If we don't have the full bounty object available on the request, fetch it
-      let bountyObj: Bounty | null = (request.bounty as unknown as Bounty) ?? null
-      if (!bountyObj && bountyId != null) {
-        try {
-          const fetched = await bountyService.getById(bountyId)
-          if (fetched) bountyObj = fetched
-        } catch (fetchErr) {
-          console.error('Accept: failed to fetch bounty details', fetchErr)
-          // continue: we still attempt update using bountyId, and skip escrow if bounty data missing
-        }
-      }
-  if (bountyId != null) {
-        try {
-          // Avoid passing null/undefined/NaN to the service. Pass the raw id so
-          // the service can decide whether it's a numeric or string id.
-          // (bountyService.update accepts a number in TS but handles API paths at runtime.)
-          // Use any cast to avoid TypeScript complaints while preserving runtime safety.
-          // If your backend expects numeric ids, ensure bounties are stored as numbers.
-          // We intentionally do not coerce to Number() here to avoid NaN.
-          // Only update the status on the server; the `accepted_by` column may not exist
-          // in all deployments (causes PGRST204). Keep `accepted_by` locally for UI only.
-          const updated = await (bountyService as any).update(bountyId, {
-            status: 'in_progress',
-          })
-          if (!updated) {
-            console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
-            // Diagnostic: fetch server bounty and log its current state
-            try {
-              await bountyService.getById(bountyId)
-              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}.`)
-            } catch (srvErr) {
-              console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
-              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)} and failed to fetch server state.`)
-            }
-          }
-        } catch (statusError) {
-          console.error('Error updating bounty status:', statusError)
-          // Continue with the flow even if status update fails
-        }
-      }
-
-      // Remove all competing requests for this bounty (cleanup)
-      const competingRequests = bountyRequests.filter(
-        req => String(req.bounty_id) === String(request.bounty_id) && String(req.id) !== String(requestId)
-      )
-
-      if (competingRequests.length > 0) {
-        try {
-          await Promise.all(
-            competingRequests.map(req => bountyRequestService.delete((req.id as any)))
-          )
-        } catch (cleanupError) {
-          console.error('Error cleaning up competing requests:', cleanupError)
-          // Continue even if cleanup fails
-        }
-      }
-
-      // Note: Wallet escrow was already created when the bounty was posted (funds deducted from poster's balance).
-      // The ESCROW_HOLD outbox event for Stripe PaymentIntent creation happens in acceptBounty() service.
-      // No additional escrow creation needed during request acceptance.
-
-      // Auto-create a conversation for coordination (use bountyId as context)
-        try {
-        // Use Supabase RPC to create conversation via SECURITY DEFINER function
-        // This avoids RLS rejections from client-side inserts.
-        const { navigationIntent } = await import('lib/services/navigation-intent')
-        const { logClientError, logClientInfo } = await import('lib/services/monitoring')
-        const { supabase } = await import('lib/supabase')
-
-        try {
-          const participantIds = [currentUserId, String(hunterIdForConv)]
-          const convName = request.profile?.username || (bountyObj as any)?.title || 'Conversation'
-          const { data, error } = await supabase.rpc('rpc_create_conversation', { p_participant_ids: participantIds, p_bounty_id: String(bountyId), p_name: convName })
-          if (error) throw error
-          const convId = (data as any) ?? null
-
-          if (convId) {
-            // send initial message via supabase function or messages table
-            try {
-              // Use supabase-messaging sendMessage to persist message
-              const supabaseMessaging = await import('lib/services/supabase-messaging')
-              await supabaseMessaging.sendMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
-            } catch (msgErr) {
-              logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
-            }
-
-            try { await navigationIntent.setPendingConversationId(String(convId)) } catch {}
-            logClientInfo('Supabase RPC conversation created', { convId, bountyId })
-          }
-        } catch (rpcErr: any) {
-          // If RPC failed, fallback to local conversation and log error
-          logClientError('Error creating conversation via rpc_create_conversation', { error: rpcErr })
-          throw rpcErr
-        }
-      } catch (convError) {
-        console.error('Error creating supabase conversation:', convError)
-        // If creating the conversation in Supabase fails (for example RLS denies
-        // the insert), fall back to the local persistent layer so the user still
-        // has a conversation to coordinate in the app.
-        try {
-          const { messageService } = await import('lib/services/message-service')
-          const { navigationIntent } = await import('lib/services/navigation-intent')
-          const { logClientError } = await import('lib/services/monitoring')
-
-          const localConv = await messageService.getOrCreateConversation(
-            [hunterIdForConv],
-            request.profile?.username || 'Hunter',
-            String(bountyId)
-          )
-
-          // Send initial local message (best-effort)
-          try {
-            await messageService.sendMessage(
-              localConv.id,
-              `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`,
-              currentUserId
-            )
-          } catch (localMsgErr) {
-            logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
-          }
-
-          try { await navigationIntent.setPendingConversationId(localConv.id) } catch { /* best-effort */ }
-        } catch (fallbackErr) {
-          console.error('Fallback to local conversation also failed:', fallbackErr)
-          try {
-            const { logClientError } = await import('lib/services/monitoring')
-            logClientError('Fallback to local conversation failed', { err: fallbackErr })
-          } catch {}
-        }
-      }
-
-      // Update local state - remove all requests for this bounty since it's now in progress
-      setBountyRequests((prev) => prev.filter(req => req.bounty_id !== request.bounty_id))
-
-      // Update bounty in local state (normalize ID comparison using resolved bountyId)
-      setMyBounties((prev) =>
-        prev.map((b) =>
-          String(b.id) === String(bountyId)
-            ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
-            : b
-        )
-      )
-
-      // If the current user is the accepted hunter, optimistically add the bounty to In Progress list
-      if (String(hunterIdForConv) === String(currentUserId)) {
-        // If the request includes a full bounty object, use it; otherwise insert a minimal placeholder
-        const newBounty = (request.bounty as Bounty) ?? ({ id: bountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
-        setInProgressBounties((prev) => {
-          if (prev.some(pb => String(pb.id) === String(bountyId))) return prev
-          return [newBounty, ...prev]
-        })
-      }
-
-      // Reload data to ensure consistency across tabs (quick refresh for user)
-      await Promise.allSettled([loadMyBounties(), loadInProgress()])
-
-      // Notify parent that a bounty was accepted so higher-level feeds can refresh
-      try {
-        if (typeof onBountyAccepted === 'function') {
-          onBountyAccepted(bountyId ?? request.bounty_id)
-        }
-      } catch (notifyErr) {
-        console.error('Error calling onBountyAccepted callback:', notifyErr)
-      }
-
-      // Send notification to hunter about acceptance
-      try {
-        const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
-        await fetch(`${API_BASE}/api/notifications`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: hunterIdForConv,
-            type: 'acceptance',
-            title: 'Bounty Application Accepted!',
-            body: `Your application for "${bountyObj?.title || (request.bounty as any)?.title || 'the bounty'}" has been accepted!`,
-            data: {
-              bountyId: bountyId,
-              posterId: currentUserId,
-              ...((bountyObj?.amount || (request.bounty as any)?.amount) && { amount: (bountyObj?.amount ?? (request.bounty as any)?.amount) }),
-            }
-          })
-        })
-      } catch (notifError) {
-        console.error('Failed to send acceptance notification:', notifError)
-        // Don't block the flow if notification fails
-      }
-
-      // Show escrow instructions if it's a paid bounty
-      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        Alert.alert(
-          'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.`,
-          [
-            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
-            { text: 'OK' }
-          ]
-        )
-      } else {
-        Alert.alert(
-          'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.`,
-          [
-            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
-            { text: 'OK' }
-          ]
-        )
-      }
-    } catch (err: any) {
-      console.error("Error accepting request:", err)
-      setError(err.message || "Failed to accept request")
-    }
-    finally {
-      setIsLoading((prev) => ({ ...prev, requests: false, myBounties: false, inProgress: false }))
-    }
-  }
-
-  const handleRejectRequest = async (requestId: string | number) => {
-    try {
-      // Show quick-refresh indicator for requests
-      setIsLoading((prev) => ({ ...prev, requests: true }))
-
-      // Delete the request entirely (user asked rejected requests be deleted)
-      const deleted = await bountyRequestService.delete(requestId)
-
-      if (!deleted) {
-        throw new Error("Failed to delete rejected request")
-      }
-
-      // Update local state - remove the rejected request from the list
-      setBountyRequests((prev) => prev.filter((req) => String(req.id) !== String(requestId)))
-
-      // Show confirmation toast
-      Alert.alert('Request Rejected', 'The request has been rejected and removed.', [{ text: 'OK' }])
-    } catch (err: any) {
-      console.error("Error rejecting request:", err)
-      setError(err.message || "Failed to reject request")
-    } finally {
-      setIsLoading((prev) => ({ ...prev, requests: false }))
-    }
-  }
+  const { handleRejectRequest } = useRejectRequest({
+    setBountyRequests,
+    setIsLoading,
+    setError,
+  })
 
   const handleEditBounty = React.useCallback((bounty: Bounty) => {
     setEditingBounty(bounty)
