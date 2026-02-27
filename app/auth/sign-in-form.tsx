@@ -184,12 +184,12 @@ export function SignInForm() {
           // before accessing the app (elevating from AAL1 to AAL2).
           try {
             const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-            if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-              console.log('[sign-in] MFA challenge required, redirecting to MFA screen', { correlationId })
-              router.replace(ROUTES.AUTH.MFA_CHALLENGE)
-              try { markInitialNavigationDone(); } catch {}
-              return
-            }
+          if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+            console.log('[sign-in] MFA challenge required, redirecting to MFA screen', { correlationId })
+            router.replace(ROUTES.AUTH.MFA_CHALLENGE as unknown as any)
+            try { markInitialNavigationDone(); } catch {}
+            return
+          }
           } catch {
             // Fail-closed: if we cannot determine MFA level, block sign-in to avoid bypassing 2FA
             console.error('[sign-in] Could not determine MFA level, blocking sign-in', { correlationId })

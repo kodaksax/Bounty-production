@@ -5,7 +5,7 @@ import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
 import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
-
+import 'react-native-get-random-values'; // must run before using tweetnacl
 
 /**
  * Root Index - Auth Gate

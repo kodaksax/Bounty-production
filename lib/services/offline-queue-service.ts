@@ -26,6 +26,7 @@ export interface MessageQueueData {
   text: string;
   senderId: string;
   tempId?: string; // Temporary ID for optimistic UI
+  isEncrypted?: boolean; // optional flag indicating queued payload is encrypted
 }
 
 const QUEUE_KEY = 'offline-queue-v1';
