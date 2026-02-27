@@ -3,6 +3,7 @@ import { API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
 import { bountyService } from './services/bounty-service';
 import { paymentService } from './services/payment-service';
+import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { getSecureJSON, SecureKeys, setSecureJSON } from './utils/secure-storage';
@@ -72,32 +73,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Load balance from SecureStore
-      const storedBalance = await getSecureJSON<number>(SecureKeys.WALLET_BALANCE);
-      if (storedBalance !== null) {
-        setBalance(storedBalance);
-      } else {
-        await persist(INITIAL_BALANCE);
-      }
-
-      // Load transactions from SecureStore
-      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
-      if (storedTx && Array.isArray(storedTx)) {
-        setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
-      }
-    } catch (error) {
-      console.error('[wallet] Error refreshing from storage:', error);
-    }
-    setIsLoading(false);
-  }, [persist]);
-
-  useEffect(() => { 
-    refresh(); 
-  }, []); // Only run once on mount, not on every refresh change
-
   const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
     try { 
       await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, list); 
@@ -106,236 +81,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
-    const record: WalletTransactionRecord = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-      date: tx.date || new Date(),
-      ...tx,
-    } as WalletTransactionRecord;
-    setTransactions(prev => {
-      const next = [record, ...prev];
-      persistTransactions(next);
-      return next;
-    });
-    return record;
-  }, [persistTransactions]);
-
-  const deposit = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
-    if (amount <= 0 || Number.isNaN(amount)) return;
-    setBalance(prev => {
-      const next = prev + amount;
-      persist(next);
-      return next;
-    });
-    lastOptimisticDepositRef.current = Date.now();
-    await logTransaction({
-      type: 'deposit',
-      amount: amount, // inflow positive
-      details: { method: meta?.method, ...meta },
-    });
-  }, [persist, logTransaction]);
-
-  const withdraw = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
-    if (amount <= 0 || Number.isNaN(amount)) return false;
-    let success = false;
-    setBalance(prev => {
-      if (prev >= amount) {
-        const next = prev - amount;
-        persist(next);
-        success = true;
-        return next;
-      }
-      success = false;
-      return prev;
-    });
-    if (success) {
-      await logTransaction({
-        type: 'withdrawal',
-        amount: -amount, // outflow negative
-        details: { method: meta?.method, ...meta },
-      });
-    }
-    return success;
-  }, [persist, logTransaction]);
-
-  const clearAllTransactions = useCallback(async () => {
-    setTransactions([]);
-    try { 
-      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []); 
-    } catch (error) {
-      console.error('[wallet] Error clearing transactions:', error);
+  /** Helper: return the current session access token, or null if not signed in. */
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      return sessionData.session?.access_token ?? null;
+    } catch {
+      return null;
     }
   }, []);
 
-  const updateDisputeStatus = useCallback(async (transactionId: string, status: "none" | "pending" | "resolved") => {
-    setTransactions(prev => {
-      const next = prev.map(tx => 
-        tx.id === transactionId ? { ...tx, disputeStatus: status } : tx
-      );
-      persistTransactions(next);
-      return next;
-    });
-  }, [persistTransactions]);
-
-  // Create escrow transaction when poster accepts a request
-  const createEscrow = useCallback(async (bountyId: string | number, amount: number, title: string, posterId: string) => {
-    if (amount <= 0 || Number.isNaN(amount)) {
-      throw new Error('Invalid escrow amount');
-    }
-    
-    // Check if poster has sufficient balance
-    if (balance < amount) {
-      throw new Error('Insufficient balance to create escrow');
-    }
-
-    // Deduct from balance
-    setBalance(prev => {
-      const next = prev - amount;
-      persist(next);
-      return next;
-    });
-
-    // Log escrow transaction (store bounty_id as string to avoid type mismatches)
-    const record = await logTransaction({
-      type: 'escrow',
-      amount: -amount, // outflow negative
-      details: { 
-        title,
-        bounty_id: String(bountyId),
-        status: 'pending'
-      },
-      escrowStatus: 'funded',
-    });
-
-    return record;
-  }, [balance, persist, logTransaction]);
-
-  // Release escrowed funds to hunter when bounty is completed
-  // Calls the backend API to capture PaymentIntent and transfer to hunter's Connect account
-  const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
-    try {
-      // Find the local escrow transaction for this bounty
-      const bountyIdStr = String(bountyId);
-      const escrowTx = transactions.find(
-        tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
-      );
-
-      if (!escrowTx) {
-        console.error('No funded escrow found for bounty:', bountyId);
-        return false;
-      }
-
-      // Get the bounty to retrieve the payment_intent_id (escrowId)
-      const bountyData = await bountyService.getById(bountyId);
-      
-      if (!bountyData || !bountyData.payment_intent_id) {
-        console.error('No payment_intent_id found for bounty:', bountyId);
-        return false;
-      }
-      
-      // Call the backend API to release escrow
-      // This will capture the PaymentIntent and transfer to hunter's Connect account
-      const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
-      
-      if (!releaseResult.success) {
-        console.error('Failed to release escrow:', releaseResult.error);
-        return false;
-      }
-
-      const grossAmount = Math.abs(escrowTx.amount);
-      const platformFee = releaseResult.platformFee || (grossAmount * PLATFORM_FEE_PERCENTAGE);
-      const netAmount = releaseResult.hunterAmount || (grossAmount - platformFee);
-
-      // Update local escrow transaction status
-      setTransactions(prev => {
-        const next = prev.map(tx => 
-          tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
-        ) as WalletTransactionRecord[];
-        persistTransactions(next);
-        return next;
-      });
-
-      // Log platform fee transaction (for local record keeping)
-      await logTransaction({
-        type: 'platform_fee',
-        amount: -platformFee, // negative as it's a deduction
-        details: { 
-          title: 'Platform Service Fee',
-          bounty_id: bountyIdStr,
-          fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
-          status: 'completed'
-        },
-      });
-
-      // Log release transaction with net amount (after fee deduction)
-      await logTransaction({
-        type: 'release',
-        amount: netAmount, // Net amount after fee
-        details: { 
-          title,
-          bounty_id: bountyIdStr,
-          counterparty: hunterId,
-          gross_amount: grossAmount,
-          platform_fee: platformFee,
-          status: 'completed'
-        },
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Error releasing funds:', error);
-      return false;
-    }
-  }, [transactions, logTransaction, persistTransactions]);
-
-  // Refund escrowed funds back to poster when bounty is cancelled
-  const refundEscrow = useCallback(async (bountyId: string | number, title: string, refundPercentage: number = 100) => {
-    // Find the escrow transaction for this bounty
-    const bountyIdStr = String(bountyId);
-    const escrowTx = transactions.find(
-      tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
-    );
-
-    if (!escrowTx) {
-      console.error('No funded escrow found for bounty:', bountyId);
-      return false;
-    }
-
-    const escrowAmount = Math.abs(escrowTx.amount);
-    const refundAmount = (escrowAmount * refundPercentage) / 100;
-
-    // Update escrow transaction status
-    setTransactions(prev => {
-      const next = prev.map(tx => 
-        tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'refunded' } } as WalletTransactionRecord) : tx
-      ) as WalletTransactionRecord[];
-      persistTransactions(next);
-      return next;
-    });
-
-    // Return refund amount to poster's balance
-    setBalance(prev => {
-      const next = prev + refundAmount;
-      persist(next);
-      return next;
-    });
-
-    // Log refund transaction
-    await logTransaction({
-      type: 'refund',
-      amount: refundAmount, // positive for poster receiving refund
-      details: {
-        title,
-        bounty_id: bountyIdStr,
-        status: 'completed',
-        method: `${refundPercentage}% refund`,
-      },
-    });
-
-    return true;
-  }, [transactions, persistTransactions, logTransaction, persist]);
-
   // Refresh wallet data from the API (fetches real transaction history and balance)
+  // Defined before useEffect so it can be called on mount for initial API sync.
   const refreshFromApi = useCallback(async (accessToken?: string) => {
     if (!accessToken) {
       return;
@@ -435,6 +192,351 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsLoading(false);
     }
   }, [persist, persistTransactions, transactions]);
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Load balance from SecureStore
+      const storedBalance = await getSecureJSON<number>(SecureKeys.WALLET_BALANCE);
+      if (storedBalance !== null) {
+        setBalance(storedBalance);
+      } else {
+        await persist(INITIAL_BALANCE);
+      }
+
+      // Load transactions from SecureStore
+      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
+      if (storedTx && Array.isArray(storedTx)) {
+        setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
+      }
+    } catch (error) {
+      console.error('[wallet] Error refreshing from storage:', error);
+    }
+    setIsLoading(false);
+  }, [persist]);
+
+  useEffect(() => { 
+    const init = async () => {
+      await refresh();
+      // After loading the SecureStore cache, sync from the API so the server
+      // is the authoritative source of truth for balance and transactions.
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          await refreshFromApi(token);
+        }
+      } catch (err) {
+        console.error('[wallet] Error syncing from API on mount:', err);
+      }
+    };
+    init();
+  }, []); // Only run once on mount, not on every refresh change
+
+  const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
+    const record: WalletTransactionRecord = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+      date: tx.date || new Date(),
+      ...tx,
+    } as WalletTransactionRecord;
+    setTransactions(prev => {
+      const next = [record, ...prev];
+      persistTransactions(next);
+      return next;
+    });
+    return record;
+  }, [persistTransactions]);
+
+  const deposit = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
+    if (amount <= 0 || Number.isNaN(amount)) return;
+    setBalance(prev => {
+      const next = prev + amount;
+      persist(next);
+      return next;
+    });
+    lastOptimisticDepositRef.current = Date.now();
+    await logTransaction({
+      type: 'deposit',
+      amount: amount, // inflow positive
+      details: { method: meta?.method, ...meta },
+    });
+  }, [persist, logTransaction]);
+
+  const withdraw = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
+    if (amount <= 0 || Number.isNaN(amount)) return false;
+    // Synchronous balance check using captured state to avoid the async closure
+    // issue where success set inside setBalance updater is checked before the
+    // updater runs (React batches state updates asynchronously).
+    if (balance < amount) return false;
+    setBalance(prev => {
+      const next = prev - amount;
+      persist(next);
+      return next;
+    });
+    await logTransaction({
+      type: 'withdrawal',
+      amount: -amount, // outflow negative
+      details: { method: meta?.method, ...meta },
+    });
+    return true;
+  }, [balance, persist, logTransaction]);
+
+  const clearAllTransactions = useCallback(async () => {
+    setTransactions([]);
+    try { 
+      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []); 
+    } catch (error) {
+      console.error('[wallet] Error clearing transactions:', error);
+    }
+  }, []);
+
+  const updateDisputeStatus = useCallback(async (transactionId: string, status: "none" | "pending" | "resolved") => {
+    setTransactions(prev => {
+      const next = prev.map(tx => 
+        tx.id === transactionId ? { ...tx, disputeStatus: status } : tx
+      );
+      persistTransactions(next);
+      return next;
+    });
+  }, [persistTransactions]);
+
+  // Create escrow transaction when poster accepts a request
+  const createEscrow = useCallback(async (bountyId: string | number, amount: number, title: string, posterId: string) => {
+    if (amount <= 0 || Number.isNaN(amount)) {
+      throw new Error('Invalid escrow amount');
+    }
+    
+    // Check if poster has sufficient balance
+    if (balance < amount) {
+      throw new Error('Insufficient balance to create escrow');
+    }
+
+    const bountyIdStr = String(bountyId);
+
+    // Attempt to create escrow on the server first so the server is the source
+    // of truth. Only update local state after server confirmation.
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/wallet/escrow`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ bountyId: bountyIdStr, amount, title }),
+          timeout: API_TIMEOUTS.DEFAULT,
+          retries: 0, // No retries for financial operations to prevent double-spend
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error((errData as any).error || 'Failed to create escrow on server');
+        }
+
+        const apiData = await response.json();
+        // Use server-confirmed balance as source of truth
+        const newBalance = typeof apiData.newBalance === 'number' ? apiData.newBalance : balance - amount;
+        setBalance(newBalance);
+        await persist(newBalance);
+
+        const record = await logTransaction({
+          type: 'escrow',
+          amount: -amount,
+          details: { title, bounty_id: bountyIdStr, status: 'pending' },
+          escrowStatus: 'funded',
+        });
+        return record;
+      }
+    } catch (error) {
+      // Re-throw so callers can handle the failure and roll back (e.g. delete bounty)
+      throw error;
+    }
+
+    // Fallback: no active session – update local state only (e.g. in development)
+    setBalance(prev => {
+      const next = prev - amount;
+      persist(next);
+      return next;
+    });
+
+    // Log escrow transaction (store bounty_id as string to avoid type mismatches)
+    const record = await logTransaction({
+      type: 'escrow',
+      amount: -amount, // outflow negative
+      details: { 
+        title,
+        bounty_id: bountyIdStr,
+        status: 'pending'
+      },
+      escrowStatus: 'funded',
+    });
+
+    return record;
+  }, [balance, persist, logTransaction, getAccessToken]);
+
+  // Release escrowed funds to hunter when bounty is completed
+  // Calls the backend API to capture PaymentIntent and transfer to hunter's Connect account
+  const releaseFunds = useCallback(async (bountyId: string | number, hunterId: string, title: string) => {
+    try {
+      // Find the local escrow transaction for this bounty
+      const bountyIdStr = String(bountyId);
+      const escrowTx = transactions.find(
+        tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
+      );
+
+      if (!escrowTx) {
+        console.error('No funded escrow found for bounty:', bountyId);
+        return false;
+      }
+
+      // Get the bounty to retrieve the payment_intent_id (escrowId)
+      const bountyData = await bountyService.getById(bountyId);
+      
+      if (!bountyData || !bountyData.payment_intent_id) {
+        console.error('No payment_intent_id found for bounty:', bountyId);
+        return false;
+      }
+      
+      // Call the backend API to release escrow
+      // This will capture the PaymentIntent and transfer to hunter's Connect account
+      const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
+      
+      if (!releaseResult.success) {
+        console.error('Failed to release escrow:', releaseResult.error);
+        return false;
+      }
+
+      const grossAmount = Math.abs(escrowTx.amount);
+      const platformFee = releaseResult.platformFee || (grossAmount * PLATFORM_FEE_PERCENTAGE);
+      const netAmount = releaseResult.hunterAmount || (grossAmount - platformFee);
+
+      // Update local escrow transaction status
+      setTransactions(prev => {
+        const next = prev.map(tx => 
+          tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
+        ) as WalletTransactionRecord[];
+        persistTransactions(next);
+        return next;
+      });
+
+      // Log platform fee transaction (for local record keeping)
+      await logTransaction({
+        type: 'platform_fee',
+        amount: -platformFee, // negative as it's a deduction
+        details: { 
+          title: 'Platform Service Fee',
+          bounty_id: bountyIdStr,
+          fee_percentage: PLATFORM_FEE_PERCENTAGE * 100,
+          status: 'completed'
+        },
+      });
+
+      // Log release transaction with net amount (after fee deduction)
+      await logTransaction({
+        type: 'release',
+        amount: netAmount, // Net amount after fee
+        details: { 
+          title,
+          bounty_id: bountyIdStr,
+          counterparty: hunterId,
+          gross_amount: grossAmount,
+          platform_fee: platformFee,
+          status: 'completed'
+        },
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error releasing funds:', error);
+      return false;
+    }
+  }, [transactions, logTransaction, persistTransactions]);
+
+  // Refund escrowed funds back to poster when bounty is cancelled
+  const refundEscrow = useCallback(async (bountyId: string | number, title: string, refundPercentage: number = 100) => {
+    // Find the escrow transaction for this bounty
+    const bountyIdStr = String(bountyId);
+    const escrowTx = transactions.find(
+      tx => tx.type === 'escrow' && String(tx.details.bounty_id) === bountyIdStr && tx.escrowStatus === 'funded'
+    );
+
+    if (!escrowTx) {
+      console.error('No funded escrow found for bounty:', bountyId);
+      return false;
+    }
+
+    const escrowAmount = Math.abs(escrowTx.amount);
+    const refundAmount = (escrowAmount * refundPercentage) / 100;
+
+    // Attempt server-side refund first to ensure server is the source of truth.
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/wallet/refund`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            bountyId: bountyIdStr,
+            reason: `${refundPercentage}% refund`,
+          }),
+          timeout: API_TIMEOUTS.DEFAULT,
+          retries: 0, // No retries for financial operations
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          console.error('[wallet] Server refund failed:', (errData as any).error);
+          return false;
+        }
+      }
+    } catch (error) {
+      console.error('[wallet] Error calling refund API, proceeding with local update:', error);
+      // Fall through to update local state so UI stays consistent
+    }
+
+    // Update escrow transaction status
+    setTransactions(prev => {
+      const next = prev.map(tx => 
+        tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'refunded' } } as WalletTransactionRecord) : tx
+      ) as WalletTransactionRecord[];
+      persistTransactions(next);
+      return next;
+    });
+
+    // Return refund amount to poster's balance
+    setBalance(prev => {
+      const next = prev + refundAmount;
+      persist(next);
+      return next;
+    });
+
+    // Log refund transaction
+    await logTransaction({
+      type: 'refund',
+      amount: refundAmount, // positive for poster receiving refund
+      details: {
+        title,
+        bounty_id: bountyIdStr,
+        status: 'completed',
+        method: `${refundPercentage}% refund`,
+      },
+    });
+
+    // Sync balance from API to reconcile after the refund
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        await refreshFromApi(token);
+      }
+    } catch {
+      // Non-critical: local state already updated above
+    }
+
+    return true;
+  }, [transactions, persistTransactions, logTransaction, persist, refreshFromApi, getAccessToken]);
 
   const value: WalletContextValue = {
     balance,
