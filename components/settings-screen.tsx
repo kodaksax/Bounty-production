@@ -33,7 +33,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
   const { profile: normalizedProfile } = useNormalizedProfile()
-  
+
   // Use actual profile data from auth or normalized profile
   const profileData = {
     name: authProfile?.username || normalizedProfile?.username || '@user',
@@ -72,7 +72,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   return (
     <View className="flex-1 bg-emerald-600">
       {/* Header */}
-      <View className="flex-row justify-between items-center p-4 pt-8">
+      <View className="flex-row justify-between items-center p-4">
         <View className="flex-row items-center">
           <BrandingLogo size="medium" />
         </View>
@@ -94,7 +94,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
         />
         <SettingsCard
           title="Privacy & Security Settings"
-            description="Provides users with options to manage their account's privacy and security, including password changes, two-factor authentication"
+          description="Provides users with options to manage their account's privacy and security, including password changes, two-factor authentication"
           primaryLabel="Open"
           onPrimary={() => setPanel('privacy')}
           icon="lock"
@@ -120,7 +120,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           onPrimary={() => setPanel('help')}
           icon="help-center"
         />
-        
+
         {/* Admin Tab Toggle - only visible to users with admin permissions */}
         {isAdmin && (
           <View className="bg-black/30 rounded-xl p-4 mb-4">
@@ -130,8 +130,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 <View className="ml-2 flex-1">
                   <Text className="text-white font-medium text-sm">Admin Tab</Text>
                   <Text className="text-emerald-200 text-xs leading-4 mt-1" numberOfLines={2}>
-                    {isAdminTabEnabled 
-                      ? 'Admin tab is visible, replacing the profile tab in navigation.' 
+                    {isAdminTabEnabled
+                      ? 'Admin tab is visible, replacing the profile tab in navigation.'
                       : 'Enable to show admin tab in navigation bar.'}
                   </Text>
                 </View>
@@ -183,7 +183,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           onPrimary={() => setPanel('terms')}
           icon="gavel"
         />
-        
+
         <SettingsCard
           title="Community Guidelines"
           description="Learn about our community standards for safety, trust, and respectful behavior."
@@ -193,7 +193,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           }}
           icon="security"
         />
-        
+
         {/* Log Out - placed directly after Legal */}
         <SettingsCard
           title="Log Out"
@@ -269,7 +269,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
                               // Delete user account and associated data
                               const result = await deleteUserAccount();
-                              
+
                               if (!result.success) {
                                 console.error('[DeleteAccount] Deletion failed:', result.message);
                                 Alert.alert('Deletion Failed', result.message);
