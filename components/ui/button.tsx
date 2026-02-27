@@ -1,9 +1,9 @@
-import * as React from "react"
-import { TouchableOpacity, TouchableOpacityProps, Text } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
+import { useHapticFeedback } from "lib/haptic-feedback"
+import { theme } from "lib/theme"
 import { cn } from "lib/utils"
-import { StyleSheet, ViewStyle, TextStyle } from "react-native"
-import { useHapticFeedback } from "lib/haptic-feedback";
+import * as React from "react"
+import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -36,7 +36,7 @@ export const buttonVariants = cva(
 
 export interface ButtonProps
   extends TouchableOpacityProps,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   className?: string;
   children?: React.ReactNode;
   accessibilityLabel?: string;
@@ -51,14 +51,14 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 
     const handlePress = React.useCallback((event: any) => {
       if (disabled) return;
-      
+
       // Trigger appropriate haptic feedback based on variant
       if (variant === 'destructive') {
         triggerHaptic('warning');
       } else {
         triggerHaptic('light');
       }
-      
+
       onPress?.(event);
     }, [disabled, onPress, triggerHaptic, variant]);
 
@@ -94,7 +94,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       if (disabled) return;
       setIsFocused(false);
     }, [disabled]);
-    
+
     const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
 
     return (
@@ -125,7 +125,7 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         {...props}
       >
         {typeof children === "string" ? (
-          <Text 
+          <Text
             className="text-inherit font-inherit"
             style={[
               buttonStyles.text,
@@ -153,12 +153,6 @@ const buttonStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     minHeight: 48,
-    // Enhanced sophisticated shadows for better depth
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
     // Add subtle transition feel (even though we can't animate in StyleSheet)
     transform: [{ scale: 1 }],
   },
@@ -167,11 +161,13 @@ const buttonStyles = StyleSheet.create({
     // Enhanced inner glow effect for premium feel
     borderWidth: 1,
     borderColor: 'rgba(0, 145, 44, 0.6)',
+    ...theme.shadows.emerald,
   },
   destructive: {
     backgroundColor: '#ef4444', // destructive red
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.6)',
+    ...theme.shadows.sm,
   },
   outline: {
     backgroundColor: 'transparent',
@@ -182,6 +178,7 @@ const buttonStyles = StyleSheet.create({
     backgroundColor: '#2d5240', // secondary emerald tone
     borderWidth: 1,
     borderColor: 'rgba(0, 145, 44, 0.3)',
+    ...theme.shadows.sm,
   },
   ghost: {
     backgroundColor: 'transparent',

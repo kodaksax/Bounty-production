@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { receiptService } from "lib/services/receipt-service"
+import { theme } from "lib/theme"
 import { useEffect, useRef, useState } from "react"
 import { Alert, Animated, Easing, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
@@ -96,9 +97,9 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   }
 
   return (
-    <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>      
+    <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close transaction details" />
-      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetAnim }] }]}>        
+      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetAnim }] }]}>
         <View style={styles.header}>
           <TouchableOpacity
             accessibilityRole="button"
@@ -135,11 +136,11 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
             </View>
             <View style={styles.detailRow}>
               <View style={styles.detailIcon}><MaterialIcons name="calendar-today" size={16} color="#6ee7b7" /></View>
-              <View style={styles.detailContent}><Text style={styles.detailLabel}>Date</Text><Text style={styles.detailValue}>{format(transaction.date,'MMMM d, yyyy')}</Text></View>
+              <View style={styles.detailContent}><Text style={styles.detailLabel}>Date</Text><Text style={styles.detailValue}>{format(transaction.date, 'MMMM d, yyyy')}</Text></View>
             </View>
             <View style={styles.detailRow}>
               <View style={styles.detailIcon}><MaterialIcons name="schedule" size={16} color="#6ee7b7" /></View>
-              <View style={styles.detailContent}><Text style={styles.detailLabel}>Time</Text><Text style={styles.detailValue}>{format(transaction.date,'h:mm:ss a')}</Text></View>
+              <View style={styles.detailContent}><Text style={styles.detailLabel}>Time</Text><Text style={styles.detailValue}>{format(transaction.date, 'h:mm:ss a')}</Text></View>
             </View>
             {transaction.details.status && (
               <View style={styles.detailRow}>
@@ -214,11 +215,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 12,
+    ...theme.shadows.lg,
   },
   header: {
     flexDirection: 'row',
@@ -254,7 +251,7 @@ const styles = StyleSheet.create({
   escrowTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 },
   escrowText: { color: '#d1fae5', fontSize: 12, lineHeight: 18 },
   actionsSection: { paddingHorizontal: 24, paddingTop: 10, gap: 12 },
-  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#065f46', paddingVertical: 14, borderRadius: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
+  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#065f46', paddingVertical: 14, borderRadius: 24, ...theme.shadows.emerald },
   actionPrimaryDisabled: { opacity: 0.6 },
   actionPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
   actionSecondary: { backgroundColor: '#047857', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },

@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 // 1. Update imports
+import { theme } from "lib/theme";
 import { shareBounty } from "lib/utils/share-utils";
 
 interface BountyCardProps {
@@ -282,15 +283,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(16, 185, 129, 0.2)", // emerald-500/20
-    // Elevated shadow
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...theme.shadows.md,
   },
   header: {
     flexDirection: "row",

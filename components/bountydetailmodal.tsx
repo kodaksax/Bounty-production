@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
+import { theme } from "lib/theme"
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useRef, useState } from "react"
 import {
@@ -654,14 +655,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  // Outer shadow wrapper (no overflow so shadow isn't clipped)
   cardShadow: {
     borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
+    ...theme.shadows.lg,
     backgroundColor: 'transparent',
   },
   // Inner rounded card
@@ -906,11 +902,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...theme.shadows.emerald,
   },
   acceptButtonDisabled: {
     backgroundColor: '#059669', // emerald-600 (darker)

@@ -1,7 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import React, { useState } from "react"
+import { useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { API_BASE_URL } from "../lib/config/api"
 import { API_TIMEOUTS } from "../lib/config/network"
 import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
 import { stripeService } from "../lib/services/stripe-service"
+import { theme } from "../lib/theme"
 import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 
 interface AddBankAccountModalProps {
@@ -46,13 +47,13 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
   const [accountNumberConfirm, setAccountNumberConfirm] = useState("")
   const [accountType, setAccountType] = useState<'checking' | 'savings'>('checking')
   const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<{[key: string]: string}>({})
+  const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const { session } = useAuthContext()
 
   const validateRoutingNumber = (value: string): boolean => {
     // US routing numbers are 9 digits
     if (value.length !== 9) return false
-    
+
     // ABA routing number checksum validation
     const digits = value.split('').map(Number)
     const checksum = (
@@ -60,21 +61,21 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       7 * (digits[1] + digits[4] + digits[7]) +
       (digits[2] + digits[5] + digits[8])
     ) % 10
-    
+
     return checksum === 0
   }
 
   const handleRoutingNumberChange = (value: string) => {
     const digitsOnly = value.replace(/\D/g, "").slice(0, 9)
     setRoutingNumber(digitsOnly)
-    
+
     if (errors.routingNumber) {
       setErrors(prev => {
         const { routingNumber, ...rest } = prev
         return rest
       })
     }
-    
+
     if (digitsOnly.length === 9 && !validateRoutingNumber(digitsOnly)) {
       setErrors(prev => ({ ...prev, routingNumber: 'Invalid routing number' }))
     }
@@ -83,7 +84,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
   const handleAccountNumberChange = (value: string) => {
     const digitsOnly = value.replace(/\D/g, "").slice(0, 17) // Max 17 digits for US accounts
     setAccountNumber(digitsOnly)
-    
+
     if (errors.accountNumber) {
       setErrors(prev => {
         const { accountNumber, ...rest } = prev
@@ -95,14 +96,14 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
   const handleAccountNumberConfirmChange = (value: string) => {
     const digitsOnly = value.replace(/\D/g, "").slice(0, 17)
     setAccountNumberConfirm(digitsOnly)
-    
+
     if (errors.accountNumberConfirm) {
       setErrors(prev => {
         const { accountNumberConfirm, ...rest } = prev
         return rest
       })
     }
-    
+
     if (digitsOnly.length > 0 && accountNumber !== digitsOnly) {
       setErrors(prev => ({ ...prev, accountNumberConfirm: 'Account numbers do not match' }))
     }
@@ -111,29 +112,29 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
   const handleSave = async () => {
     setIsLoading(true)
     setErrors({})
-    
+
     try {
       // Validate all fields
-      const validationErrors: {[key: string]: string} = {}
-      
+      const validationErrors: { [key: string]: string } = {}
+
       if (!accountHolderName.trim()) {
         validationErrors.accountHolderName = 'Please enter the account holder name'
       }
-      
+
       if (!routingNumber || routingNumber.length !== 9) {
         validationErrors.routingNumber = 'Please enter a valid 9-digit routing number'
       } else if (!validateRoutingNumber(routingNumber)) {
         validationErrors.routingNumber = 'Invalid routing number checksum'
       }
-      
+
       if (!accountNumber || accountNumber.length < 4) {
         validationErrors.accountNumber = 'Please enter a valid account number'
       }
-      
+
       if (accountNumber !== accountNumberConfirm) {
         validationErrors.accountNumberConfirm = 'Account numbers must match'
       }
-      
+
       if (Object.keys(validationErrors).length > 0) {
         setErrors(validationErrors)
         return
@@ -162,21 +163,21 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        
+
         // Check for common error scenarios using constants
         if (response.status === HTTP_NOT_FOUND) {
           throw new Error('Payment service unavailable. Please ensure the API server is running and configured correctly.')
         }
-        
+
         if (response.status === HTTP_NOT_IMPLEMENTED) {
           throw new Error('Payment service not configured. Please contact support.')
         }
-        
+
         // Handle Connect account requirement
         if (errorData.requiresOnboarding) {
           throw new Error('Please complete Stripe Connect onboarding before adding a bank account.')
         }
-        
+
         throw new Error(errorData.error || `Failed to add bank account (${response.status})`)
       }
 
@@ -184,14 +185,14 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
       const responseData = await response.json()
 
       // Show success message with verification info
-      const verificationMessage = responseData.bankAccount?.verified 
+      const verificationMessage = responseData.bankAccount?.verified
         ? 'Bank account added and verified!'
         : 'Bank account added successfully! Verification may take 1-2 business days.'
-      
+
       Alert.alert('Success', verificationMessage, [
         { text: 'OK', onPress: onBack }
       ])
-      
+
     } catch (error) {
       console.error('[AddBankAccountModal] Error adding bank account:', error)
       const errorMessage = stripeService.parseStripeError(error)
@@ -201,10 +202,10 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
     }
   }
 
-  const isFormValid = 
-    accountHolderName.trim() !== "" && 
-    routingNumber.length === 9 && 
-    accountNumber.length >= 4 && 
+  const isFormValid =
+    accountHolderName.trim() !== "" &&
+    routingNumber.length === 9 &&
+    accountNumber.length >= 4 &&
     accountNumber === accountNumberConfirm &&
     Object.keys(errors).length === 0
 
@@ -315,14 +316,14 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
                 accessibilityState={{ checked: accountType === 'checking' }}
                 accessibilityLabel="Checking account"
               >
-                <MaterialIcons 
-                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={22} 
-                  color="#fff" 
+                <MaterialIcons
+                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={22}
+                  color="#fff"
                 />
                 <Text style={styles.accountTypeText}>Checking</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.accountTypeButton, accountType === 'savings' && styles.accountTypeButtonActive]}
                 onPress={() => setAccountType('savings')}
@@ -330,10 +331,10 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
                 accessibilityState={{ checked: accountType === 'savings' }}
                 accessibilityLabel="Savings account"
               >
-                <MaterialIcons 
-                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={22} 
-                  color="#fff" 
+                <MaterialIcons
+                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={22}
+                  color="#fff"
                 />
                 <Text style={styles.accountTypeText}>Savings</Text>
               </TouchableOpacity>
@@ -489,14 +490,14 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
                 accessibilityState={{ checked: accountType === 'checking' }}
                 accessibilityLabel="Checking account"
               >
-                <MaterialIcons 
-                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={22} 
-                  color="#fff" 
+                <MaterialIcons
+                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={22}
+                  color="#fff"
                 />
                 <Text style={styles.accountTypeText}>Checking</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.accountTypeButton, accountType === 'savings' && styles.accountTypeButtonActive]}
                 onPress={() => setAccountType('savings')}
@@ -504,10 +505,10 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
                 accessibilityState={{ checked: accountType === 'savings' }}
                 accessibilityLabel="Savings account"
               >
-                <MaterialIcons 
-                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={22} 
-                  color="#fff" 
+                <MaterialIcons
+                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'}
+                  size={22}
+                  color="#fff"
                 />
                 <Text style={styles.accountTypeText}>Savings</Text>
               </TouchableOpacity>
@@ -643,11 +644,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 14,
     marginTop: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    ...theme.shadows.emerald,
   },
   primaryButtonDisabled: { opacity: 0.55 },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },

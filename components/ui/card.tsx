@@ -1,3 +1,4 @@
+import { theme } from "lib/theme"
 import * as React from "react"
 import { StyleProp, StyleSheet, Text, TextProps, TextStyle, View, ViewProps, ViewStyle } from "react-native"
 
@@ -120,23 +121,10 @@ const cardStyles = StyleSheet.create<CardStyles>({
   base: {
     borderRadius: 8,
     backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...theme.shadows.sm,
   },
   elevated: {
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    ...theme.shadows.md,
   },
   header: {
     paddingTop: 24,

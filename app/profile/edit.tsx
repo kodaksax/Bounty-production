@@ -3,9 +3,9 @@ import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
-import { getCurrentUserId } from "lib/utils/data-utils";
 import { AuthProfile } from "lib/services/auth-profile-service";
-import React, { useState } from "react";
+import { getCurrentUserId } from "lib/utils/data-utils";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -60,6 +60,12 @@ export default function EditProfileScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const usernameRef = useRef<TextInput>(null);
+  const bioRef = useRef<TextInput>(null);
+  const locationRef = useRef<TextInput>(null);
+  const portfolioRef = useRef<TextInput>(null);
+  const skillsetsRef = useRef<TextInput>(null);
 
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -131,9 +137,9 @@ export default function EditProfileScreen() {
         "You have unsaved changes. Are you sure you want to discard them?",
         [
           { text: "Keep Editing", style: "cancel" },
-          { 
-            text: "Discard", 
-            style: "destructive", 
+          {
+            text: "Discard",
+            style: "destructive",
             onPress: () => {
               // Reset form data to initial state
               setFormData(initialData);
@@ -367,12 +373,16 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#6b7280"
                 accessibilityLabel="Display name"
                 accessibilityHint="Enter your display name"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => usernameRef.current?.focus()}
               />
             </View>
 
             <View style={[styles.fieldContainer, focusedField === 'username' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Username</Text>
               <TextInput
+                ref={usernameRef}
                 style={styles.input}
                 value={formData.username}
                 onChangeText={(text) => setFormData({ ...formData, username: text })}
@@ -383,12 +393,16 @@ export default function EditProfileScreen() {
                 autoCapitalize="none"
                 accessibilityLabel="Username"
                 accessibilityHint="Enter your unique username"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => bioRef.current?.focus()}
               />
             </View>
 
             <View style={[styles.fieldContainer, focusedField === 'bio' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Bio</Text>
               <TextInput
+                ref={bioRef}
                 style={[styles.input, styles.textArea]}
                 value={formData.bio}
                 onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
@@ -402,6 +416,9 @@ export default function EditProfileScreen() {
                 textAlignVertical="top"
                 accessibilityLabel="Bio"
                 accessibilityHint={`Enter your bio, ${bioLength} of ${maxBioLength} characters used`}
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => locationRef.current?.focus()}
               />
               <Text style={styles.characterCounter}>
                 {bioLength}/{maxBioLength}
@@ -415,6 +432,7 @@ export default function EditProfileScreen() {
             <View style={[styles.fieldContainer, focusedField === 'location' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Location</Text>
               <TextInput
+                ref={locationRef}
                 style={styles.input}
                 value={formData.location}
                 onChangeText={(text) => setFormData({ ...formData, location: text })}
@@ -424,12 +442,16 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#6b7280"
                 accessibilityLabel="Location"
                 accessibilityHint="Enter your city and country"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => portfolioRef.current?.focus()}
               />
             </View>
 
             <View style={[styles.fieldContainer, focusedField === 'portfolio' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Website / Portfolio</Text>
               <TextInput
+                ref={portfolioRef}
                 style={styles.input}
                 value={formData.portfolio}
                 onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
@@ -441,6 +463,9 @@ export default function EditProfileScreen() {
                 autoCapitalize="none"
                 accessibilityLabel="Website or Portfolio URL"
                 accessibilityHint="Enter your website or portfolio link"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => skillsetsRef.current?.focus()}
               />
             </View>
           </View>
@@ -451,6 +476,7 @@ export default function EditProfileScreen() {
             <View style={[styles.fieldContainer, focusedField === 'skillsets' && styles.fieldContainerFocused]}>
               <Text style={styles.label}>Skillsets</Text>
               <TextInput
+                ref={skillsetsRef}
                 style={styles.input}
                 value={formData.skillsets}
                 onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
@@ -460,6 +486,8 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#6b7280"
                 accessibilityLabel="Skillsets"
                 accessibilityHint="Enter your skills separated by commas"
+                returnKeyType="done"
+                onSubmitEditing={handleSave}
               />
               <Text style={styles.helpText}>Separate with commas. Max 4 skills recommended.</Text>
             </View>

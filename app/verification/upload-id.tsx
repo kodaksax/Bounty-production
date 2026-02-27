@@ -5,27 +5,28 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { SPACING } from '../../lib/constants/accessibility';
 
 type DocumentType = 'passport' | 'driversLicense' | 'nationalId';
 
 export default function UploadIDScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
+
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('driversLicense');
   const [frontImage, setFrontImage] = useState<string | null>(null);
   const [backImage, setBackImage] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function UploadIDScreen() {
 
   const pickImage = async (side: 'front' | 'back') => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-    
+
     if (!permissionResult.granted) {
       Alert.alert(
         'Permission Required',
@@ -113,7 +114,7 @@ export default function UploadIDScreen() {
     // 1. Onfido: https://onfido.com/
     // 2. Stripe Identity: https://stripe.com/identity
     // 3. Supabase Edge Function + Manual Review
-    
+
     // Placeholder implementation - in production this would call a real API
     // Use a simple timeout without the Promise wrapper pattern
     setTimeout(() => {
@@ -139,8 +140,8 @@ export default function UploadIDScreen() {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
+          <TouchableOpacity
+            onPress={() => router.back()}
             style={styles.backButton}
             accessibilityRole="button"
             accessibilityLabel="Go back"
@@ -246,7 +247,7 @@ export default function UploadIDScreen() {
         {/* Image Upload */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Upload Photos</Text>
-          
+
           {/* Front Side */}
           <Text style={styles.uploadLabel}>Front Side</Text>
           <TouchableOpacity
@@ -336,17 +337,17 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: SPACING.COMPACT_GAP,
+    marginBottom: SPACING.SCREEN_HORIZONTAL,
   },
   backButton: {
-    padding: 8,
+    padding: SPACING.COMPACT_GAP,
   },
   iconCircle: {
     width: 80,
@@ -366,8 +367,8 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: SPACING.SCREEN_HORIZONTAL,
+    marginBottom: SPACING.COMPACT_GAP,
     textAlign: 'center',
   },
   subtitle: {
@@ -375,13 +376,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
   },
   benefitsCard: {
     backgroundColor: 'rgba(5,46,27,0.5)',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
+    padding: SPACING.CARD_PADDING,
+    marginBottom: SPACING.SECTION_GAP,
     borderWidth: 1,
     borderColor: 'rgba(167,243,208,0.2)',
   },
@@ -389,12 +390,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#a7f3d0',
-    marginBottom: 12,
+    marginBottom: SPACING.ELEMENT_GAP,
   },
   benefit: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.COMPACT_GAP,
   },
   benefitText: {
     fontSize: 14,
@@ -402,23 +403,23 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: SPACING.SECTION_GAP,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#a7f3d0',
-    marginBottom: 12,
+    marginBottom: SPACING.ELEMENT_GAP,
   },
   docTypeContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.ELEMENT_GAP,
   },
   docTypeButton: {
     flex: 1,
     backgroundColor: 'rgba(5,46,27,0.5)',
     borderRadius: 12,
-    padding: 16,
+    padding: SPACING.CARD_PADDING,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(167,243,208,0.2)',
@@ -430,7 +431,7 @@ const styles = StyleSheet.create({
   docTypeText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
-    marginTop: 8,
+    marginTop: SPACING.COMPACT_GAP,
     textAlign: 'center',
   },
   docTypeTextActive: {
@@ -441,7 +442,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#a7f3d0',
-    marginBottom: 8,
+    marginBottom: SPACING.COMPACT_GAP,
   },
   uploadBox: {
     backgroundColor: 'rgba(5,46,27,0.5)',
@@ -468,8 +469,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: 'rgba(5,46,27,0.5)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+    padding: SPACING.CARD_PADDING,
+    marginBottom: SPACING.SECTION_GAP,
     borderWidth: 1,
     borderColor: 'rgba(167,243,208,0.3)',
   },
@@ -493,10 +494,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
+    paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: SPACING.SCREEN_HORIZONTAL,
+    gap: SPACING.COMPACT_GAP,
   },
   submitButtonDisabled: {
     opacity: 0.5,
@@ -511,8 +512,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     backgroundColor: 'rgba(245,158,11,0.15)',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    padding: SPACING.ELEMENT_GAP,
+    marginBottom: SPACING.SCREEN_HORIZONTAL,
     borderWidth: 1,
     borderColor: 'rgba(245,158,11,0.3)',
   },

@@ -5,6 +5,7 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
+import { theme } from '../lib/theme'
 import { AddBankAccountModal } from "./add-bank-account-modal"
 import { AddCardModal } from "./add-card-modal"
 
@@ -25,7 +26,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   const [showAddCard, setShowAddCard] = useState(false)
   const [showAddBankAccount, setShowAddBankAccount] = useState(false)
   const [selectedMethodType, setSelectedMethodType] = useState<PaymentMethodType>(preferredType || 'card')
-  
+
   const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
   const [loadFailed, setLoadFailed] = useState(false)
 
@@ -80,8 +81,8 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
       'Are you sure you want to remove this payment method?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Remove', 
+        {
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -133,16 +134,16 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
   if (!isOpen) return null
 
   return (
-    <View style={{ 
-      position: 'absolute', 
-      left: 0, 
-      right: 0, 
-      bottom: 0, 
-      top: 0, 
-      backgroundColor: 'rgba(0,0,0,0.6)', 
-      zIndex: 50, 
-      justifyContent: 'flex-end', 
-      alignItems: 'center' 
+    <View style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      top: 0,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      zIndex: 50,
+      justifyContent: 'flex-end',
+      alignItems: 'center'
     }} {...panResponder.panHandlers}>
       <View
         ref={modalRef}
@@ -158,29 +159,29 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
         }}
       >
         {/* Drag handle - larger for iPhone */}
-        <View style={{ 
-          width: 56, 
-          height: 6, 
-          backgroundColor: 'rgba(255,255,255,0.3)', 
-          borderRadius: 8, 
-          alignSelf: 'center', 
-          marginVertical: 14 
+        <View style={{
+          width: 56,
+          height: 6,
+          backgroundColor: 'rgba(255,255,255,0.3)',
+          borderRadius: 8,
+          alignSelf: 'center',
+          marginVertical: 14
         }} />
 
         {/* Header - improved spacing for iPhone */}
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center', 
-          paddingHorizontal: 20, 
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 20,
           paddingVertical: 12,
           paddingTop: 4
         }}>
-          <TouchableOpacity 
-            onPress={onClose} 
-            style={{ 
-              padding: 8, 
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              padding: 8,
               marginRight: 4,
-              minWidth: 44, 
+              minWidth: 44,
               minHeight: 44, // iOS touch target size
               justifyContent: 'center',
               alignItems: 'center'
@@ -190,12 +191,12 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
           >
             <MaterialIcons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={{ 
-            marginLeft: 8, 
-            fontSize: 20, 
-            fontWeight: '600', 
+          <Text style={{
+            marginLeft: 8,
+            fontSize: 20,
+            fontWeight: '600',
             color: 'white',
-            letterSpacing: 0.3 
+            letterSpacing: 0.3
           }}>Payment Methods</Text>
         </View>
 
@@ -278,30 +279,26 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
 
             {/* Add Method Button */}
             <TouchableOpacity
-              style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                backgroundColor: '#047857', 
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#047857',
                 borderRadius: 14,
                 padding: 18,
                 marginBottom: 20,
                 minHeight: 56,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3
+                ...theme.shadows.emerald
               }}
               onPress={() => selectedMethodType === 'card' ? setShowAddCard(true) : setShowAddBankAccount(true)}
               accessibilityRole="button"
               accessibilityLabel={`Add new ${selectedMethodType === 'card' ? 'card' : 'bank account'}`}
             >
               <MaterialIcons name="add" size={26} color="#ffffff" />
-              <Text style={{ 
-                color: 'white', 
-                fontWeight: '600', 
+              <Text style={{
+                color: 'white',
+                fontWeight: '600',
                 marginLeft: 10,
-                fontSize: 16 
+                fontSize: 16
               }}>
                 {selectedMethodType === 'card' ? 'Add New Card' : 'Add Bank Account'}
               </Text>
@@ -350,9 +347,9 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
               // Empty state when no error
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="credit-card" size={56} color="rgba(255,255,255,0.4)" />
-                <Text style={{ 
-                  color: 'rgba(255,255,255,0.8)', 
-                  textAlign: 'center', 
+                <Text style={{
+                  color: 'rgba(255,255,255,0.8)',
+                  textAlign: 'center',
                   marginTop: 16,
                   fontSize: 16,
                   lineHeight: 24
@@ -364,9 +361,9 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
               // Bank accounts - UI for listing will be added in future iteration
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="account-balance" size={56} color="rgba(255,255,255,0.4)" />
-                <Text style={{ 
-                  color: 'rgba(255,255,255,0.8)', 
-                  textAlign: 'center', 
+                <Text style={{
+                  color: 'rgba(255,255,255,0.8)',
+                  textAlign: 'center',
                   marginTop: 16,
                   fontSize: 16,
                   lineHeight: 24
@@ -379,41 +376,37 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                 data={paymentMethods}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <View style={{ 
-                    flexDirection: 'row', 
-                    alignItems: 'center', 
-                    backgroundColor: 'rgba(16,185,129,0.25)', 
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(16,185,129,0.25)',
                     borderRadius: 14,
                     padding: 18,
                     marginBottom: 14,
                     minHeight: 72, // Comfortable touch target height
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 2,
-                    elevation: 2
+                    ...theme.shadows.sm
                   }}>
                     <MaterialIcons name="credit-card" size={34} color="#ffffff" />
                     <View style={{ flex: 1, marginLeft: 14 }}>
-                      <Text style={{ 
-                        color: 'white', 
+                      <Text style={{
+                        color: 'white',
                         fontWeight: '600',
                         fontSize: 16,
                         marginBottom: 4
                       }}>
                         {stripeService.formatCardDisplay(item)}
                       </Text>
-                      <Text style={{ 
-                        color: 'rgba(255,255,255,0.75)', 
+                      <Text style={{
+                        color: 'rgba(255,255,255,0.75)',
                         fontSize: 14,
-                        letterSpacing: 0.2 
+                        letterSpacing: 0.2
                       }}>
                         Expires {item.card.exp_month.toString().padStart(2, '0')}/{item.card.exp_year}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleRemovePaymentMethod(item.id)}
-                      style={{ 
+                      style={{
                         padding: 12,
                         minWidth: 44,
                         minHeight: 44,

@@ -1,8 +1,9 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
@@ -31,20 +32,23 @@ export function SignUpForm() {
   const [ageVerified, setAgeVerified] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
 
+  const passwordRef = useRef<TextInput>(null)
+  const confirmPasswordRef = useRef<TextInput>(null)
+
   const validateForm = () => {
     const errors: Record<string, string> = {}
-    
+
     // Validate email
     const emailError = validateEmail(email)
     if (emailError) errors.email = emailError
-    
+
     // Validate password - must meet strong password requirements
     if (!password) {
       errors.password = 'Password is required'
     } else if (!ValidationPatterns.strongPassword.test(password)) {
       errors.password = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&)'
     }
-    
+
     // Validate password match
     if (password && confirmPassword && password !== confirmPassword) {
       errors.confirmPassword = 'Passwords do not match'
@@ -59,7 +63,7 @@ export function SignUpForm() {
     if (!termsAccepted) {
       errors.termsAccepted = 'You must accept the Terms & Privacy policy to continue.'
     }
-    
+
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -80,7 +84,7 @@ export function SignUpForm() {
     try {
       setIsLoading(true)
       console.log('[sign-up] Starting sign-up process', { correlationId })
-      
+
       // SIMPLIFIED: Let Supabase handle its own timeout logic
       // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
       // Pass age verification into user_metadata so backend can persist it
@@ -91,10 +95,10 @@ export function SignUpForm() {
           data: { age_verified: ageVerified }
         }
       })
-      
+
       if (error) {
         console.error('[sign-up] Error:', error, { correlationId })
-        
+
         // Parse error using centralized handler
         const authError = parseAuthError(error, correlationId);
         setAuthError(authError.userMessage)
@@ -102,72 +106,72 @@ export function SignUpForm() {
       }
 
       console.log('[sign-up] Sign-up successful', { correlationId, hasSession: !!data.session })
-      
+
       // Clear form data for security (especially password)
       setEmail('')
       setPassword('')
       setConfirmPassword('')
       setAgeVerified(false)
       setTermsAccepted(false)
-      
+
       // Keep user signed in after account creation (auto sign-in)
       // The user will be redirected to onboarding or app based on their profile status
       // Email verification gates will prevent posting/applying until verified
       if (data.session) {
         console.log('[sign-up] User automatically signed in, checking profile', { correlationId })
-        
+
         try {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('username, onboarding_completed')
             .eq('id', data.session.user.id)
             .single()
-          
+
           // Handle profile errors
           if (profileError) {
             if (profileError.code === 'PGRST116') {
               // Profile doesn't exist yet (expected for new users) - proceed to onboarding
               console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
               router.replace('/onboarding' as Href)
-              try { markInitialNavigationDone(); } catch {}
+              try { markInitialNavigationDone(); } catch { }
               return
             }
             // For other errors, throw to be caught by catch block
             throw profileError
           }
-          
+
           // Profile exists - check if onboarding is complete
           // User needs onboarding if username is missing or onboarding_completed is not true
           // Note: onboarding_completed could be false or null for new users
           if (!profile.username || profile.onboarding_completed !== true) {
-            console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
+            console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', {
               correlationId,
               hasUsername: !!profile.username,
               onboardingCompleted: profile.onboarding_completed
             })
             router.replace('/onboarding' as Href)
-            try { markInitialNavigationDone(); } catch {}
+            try { markInitialNavigationDone(); } catch { }
           } else {
             // User has completed onboarding (edge case) - go to app
             console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
             router.replace('/tabs/bounty-app' as Href)
-            try { markInitialNavigationDone(); } catch {}
+            try { markInitialNavigationDone(); } catch { }
           }
         } catch (err) {
           // On error, proceed to onboarding to be safe
           console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
           router.replace('/onboarding' as Href)
-          try { markInitialNavigationDone(); } catch {}
+          try { markInitialNavigationDone(); } catch { }
         }
       } else {
         // No session was created (shouldn't happen, but handle gracefully)
         console.warn('[sign-up] No session created after sign-up, showing email confirmation', { correlationId })
         router.replace('/auth/email-confirmation' as Href)
-        try { markInitialNavigationDone(); } catch {}
+        try { markInitialNavigationDone(); } catch { }
       }
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e, { correlationId })
-      
+
       // Parse error using centralized handler
       const authError = parseAuthError(e, correlationId);
       setAuthError(authError.userMessage)
@@ -207,14 +211,18 @@ export function SignUpForm() {
                 editable={!isLoading}
                 className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.email ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => passwordRef.current?.focus()}
               />
-              {fieldErrors.email && <Text className="text-xs text-red-400 mt-1">{fieldErrors.email}</Text>}
+              {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
             </View>
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Password</Text>
               <View className="relative">
                 <TextInput
+                  ref={passwordRef}
                   value={password}
                   onChangeText={(text) => {
                     setPassword(text)
@@ -228,6 +236,9 @@ export function SignUpForm() {
                   editable={!isLoading}
                   className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(s => !s)}
@@ -237,7 +248,7 @@ export function SignUpForm() {
                   <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
-              {fieldErrors.password && <Text className="text-xs text-red-400 mt-1">{fieldErrors.password}</Text>}
+              {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
               <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, number, and special character</Text>
             </View>
 
@@ -245,6 +256,7 @@ export function SignUpForm() {
               <Text className="text-sm text-white/80 mb-1">Confirm Password</Text>
               <View className="relative">
                 <TextInput
+                  ref={confirmPasswordRef}
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text)
@@ -258,6 +270,8 @@ export function SignUpForm() {
                   editable={!isLoading}
                   className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit}
                 />
                 <TouchableOpacity
                   onPress={() => setShowConfirmPassword(s => !s)}
@@ -267,7 +281,7 @@ export function SignUpForm() {
                   <MaterialIcons name={showConfirmPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
-              {fieldErrors.confirmPassword && <Text className="text-xs text-red-400 mt-1">{fieldErrors.confirmPassword}</Text>}
+              {fieldErrors.confirmPassword ? <ValidationMessage message={fieldErrors.confirmPassword} /> : null}
             </View>
 
             <View className="flex-row items-center mt-2">
@@ -281,7 +295,7 @@ export function SignUpForm() {
               </TouchableOpacity>
               <Text className="text-white/90">I confirm I am 18 years or older</Text>
             </View>
-            {fieldErrors.ageVerified && <Text className="text-xs text-red-400 mt-1">{fieldErrors.ageVerified}</Text>}
+            {fieldErrors.ageVerified ? <ValidationMessage message={fieldErrors.ageVerified} /> : null}
 
             <View className="mt-3">
               <View className="flex-row items-start">
@@ -304,7 +318,11 @@ export function SignUpForm() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {fieldErrors.termsAccepted && <Text className="text-xs text-red-400 mt-1 ml-9">{fieldErrors.termsAccepted}</Text>}
+              {fieldErrors.termsAccepted ? (
+                <View className="ml-9">
+                  <ValidationMessage message={fieldErrors.termsAccepted} />
+                </View>
+              ) : null}
             </View>
 
             <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
