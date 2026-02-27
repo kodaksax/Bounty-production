@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../supabase';
+import { DEEP_LINK_PREFIX } from '../config/app';
 import { generateCorrelationId } from '../utils/auth-errors';
 import { isValidEmail, validateNewPassword } from '../utils/password-validation';
 import { deviceService } from './device-service';
@@ -169,9 +170,11 @@ export async function requestPasswordReset(
     }
 
     // Use environment variable for redirect URL, with fallback
+    // Must use the correct app scheme (bountyexpo-workspace) and route through
+    // the auth callback screen which establishes the session before redirecting
     const resetRedirectUrl = redirectTo ||
       process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL ||
-      'bountyexpo://auth/update-password'
+      `${DEEP_LINK_PREFIX}auth/callback`
 
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: resetRedirectUrl,
