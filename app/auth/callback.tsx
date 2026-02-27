@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { ROUTES } from '../../lib/routes';
 import { supabase } from '../../lib/supabase';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
@@ -32,6 +33,7 @@ export default function AuthCallbackScreen() {
   const [status, setStatus] = useState<CallbackStatus>('loading');
   const [message, setMessage] = useState('Processing your request...');
   const [errorDetails, setErrorDetails] = useState('');
+  const [callbackType, setCallbackType] = useState<string>('');
 
   const handleAuthCallback = useCallback(async () => {
     try {
@@ -52,6 +54,7 @@ export default function AuthCallbackScreen() {
       // Handle different auth callback types
       if (type === 'signup' || type === 'email_change') {
         // Email confirmation
+        setCallbackType('email_confirmation');
         if (token) {
           const { error } = await supabase.auth.verifyOtp({
             token_hash: token as string,
@@ -78,6 +81,7 @@ export default function AuthCallbackScreen() {
         }
       } else if (type === 'recovery') {
         // Password reset flow - must establish a session before navigating
+        setCallbackType('recovery');
         if (access_token && refresh_token) {
           // Implicit flow: Supabase sent access_token + refresh_token
           const { error } = await supabase.auth.setSession({
@@ -171,7 +175,12 @@ export default function AuthCallbackScreen() {
   }, [handleAuthCallback]);
 
   const handleGoToSignIn = () => {
-    router.replace('/auth/sign-in-form' as Href);
+    router.replace(ROUTES.AUTH.SIGN_IN as Href);
+    try { markInitialNavigationDone(); } catch {}
+  };
+
+  const handleRequestNewResetLink = () => {
+    router.replace(ROUTES.AUTH.RESET_PASSWORD as Href);
     try { markInitialNavigationDone(); } catch {}
   };
 
@@ -188,6 +197,8 @@ export default function AuthCallbackScreen() {
     }
   };
 
+  const isRecovery = callbackType === 'recovery';
+
   const renderContent = () => {
     switch (status) {
       case 'loading':
@@ -196,7 +207,9 @@ export default function AuthCallbackScreen() {
             <ActivityIndicator size="large" color="#a7f3d0" />
             <Text style={styles.title}>{message}</Text>
             <Text style={styles.description}>
-              Please wait while we verify your email...
+              {isRecovery
+                ? 'Please wait while we verify your reset link...'
+                : 'Please wait while we verify your email...'}
             </Text>
           </View>
         );
@@ -209,7 +222,9 @@ export default function AuthCallbackScreen() {
             </View>
             <Text style={styles.title}>{message}</Text>
             <Text style={styles.description}>
-              Your email has been verified. You can now access all features of BOUNTY.
+              {isRecovery
+                ? 'Your reset link has been verified. You will be redirected to set your new password.'
+                : 'Your email has been verified. You can now access all features of BOUNTY.'}
             </Text>
           </View>
         );
@@ -227,24 +242,42 @@ export default function AuthCallbackScreen() {
             <View style={styles.helpBox}>
               <MaterialIcons name="info-outline" size={20} color="#a7f3d0" />
               <View style={styles.helpContent}>
-                <Text style={styles.helpTitle}>Need a new confirmation email?</Text>
+                <Text style={styles.helpTitle}>
+                  {isRecovery ? 'Need a new reset link?' : 'Need a new confirmation email?'}
+                </Text>
                 <Text style={styles.helpText}>
-                  Sign in to your account and we'll send you a new verification link.
+                  {isRecovery
+                    ? "Request a new password reset link and we'll send it to your email."
+                    : "Sign in to your account and we'll send you a new verification link."}
                 </Text>
               </View>
             </View>
 
             {/* Actions */}
             <View style={styles.errorActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenEmail}>
-                <MaterialIcons name="email" size={20} color="#a7f3d0" />
-                <Text style={styles.secondaryButtonText}>Check Email</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
-                <Text style={styles.primaryButtonText}>Go to Sign In</Text>
-                <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-              </TouchableOpacity>
+              {isRecovery ? (
+                <>
+                  <TouchableOpacity style={styles.primaryButton} onPress={handleRequestNewResetLink}>
+                    <Text style={styles.primaryButtonText}>Request New Reset Link</Text>
+                    <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSignIn}>
+                    <MaterialIcons name="login" size={20} color="#a7f3d0" />
+                    <Text style={styles.secondaryButtonText}>Back to Sign In</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenEmail}>
+                    <MaterialIcons name="email" size={20} color="#a7f3d0" />
+                    <Text style={styles.secondaryButtonText}>Check Email</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
+                    <Text style={styles.primaryButtonText}>Go to Sign In</Text>
+                    <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         );

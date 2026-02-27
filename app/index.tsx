@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router"
+import type { Href } from "expo-router"
 import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
@@ -66,7 +67,7 @@ export default function Index() {
     if (isPasswordRecovery) {
       if (!isActive || hasNavigatedRef.current) return () => { isActive = false }
       hasNavigatedRef.current = true
-      router.replace('/auth/update-password' as any)
+      router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href)
       try { markInitialNavigationDone() } catch {}
       return () => { isActive = false }
     }
