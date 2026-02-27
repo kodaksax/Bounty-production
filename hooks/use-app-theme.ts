@@ -2,11 +2,12 @@ import { useTheme } from '../components/theme-provider';
 
 /**
  * Hook to access the full design system theme
- * Includes emerald color palette, spacing, typography, shadows, and animations
- * 
+ * Includes emerald color palette, spacing, typography, shadows, and animations.
+ * Colors are automatically resolved based on the active theme (dark/light/system).
+ *
  * @example
- * const { colors, spacing, shadows } = useAppTheme();
- * 
+ * const { colors, spacing, shadows, isDark, setTheme } = useAppTheme();
+ *
  * const styles = StyleSheet.create({
  *   container: {
  *     backgroundColor: colors.background.primary,
@@ -17,8 +18,11 @@ import { useTheme } from '../components/theme-provider';
  */
 export function useAppTheme() {
   const theme = useTheme();
-  
+
   return {
+    theme: theme.theme,
+    setTheme: theme.setTheme,
+    isDark: theme.isDark,
     colors: theme.colors,
     spacing: theme.spacing,
     borderRadius: theme.borderRadius,

@@ -5,6 +5,7 @@ import { BrandingLogo } from "components/ui/branding-logo"
 import { router } from 'expo-router'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
+import { useAppTheme } from "../hooks/use-app-theme"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
@@ -27,6 +28,7 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' |
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
+  const { theme, setTheme, isDark } = useAppTheme()
   
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
@@ -51,6 +53,10 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
   const handleEditProfile = () => {
     router.push('/profile/edit')
+  }
+
+  const handleThemeChange = (option: 'dark' | 'light' | 'system') => {
+    setTheme(option)
   }
 
   // Panel routing
@@ -141,6 +147,34 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
             </View>
           </View>
         )}
+
+        {/* Appearance / Theme Toggle */}
+        <View className="bg-black/30 rounded-xl p-4 mb-4">
+          <View className="flex-row items-center mb-2">
+            <MaterialIcons name="brightness-6" size={22} color="#34d399" />
+            <Text className="ml-2 text-white font-medium text-sm flex-1">Appearance</Text>
+          </View>
+          <Text className="text-emerald-200 text-xs leading-4 mb-3">
+            Choose between dark mode, light mode, or follow your device setting.
+          </Text>
+          <View className="flex-row gap-2">
+            {(['dark', 'light', 'system'] as const).map((option) => (
+              <TouchableOpacity
+                key={option}
+                onPress={() => handleThemeChange(option)}
+                accessibilityRole="button"
+                accessibilityLabel={`Set ${option} theme`}
+                accessibilityState={{ selected: theme === option }}
+                className={`flex-row items-center px-3 py-1 rounded-md ${theme === option ? 'bg-emerald-700' : 'bg-black/40'}`}
+              >
+                {theme === option && (
+                  <MaterialIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />
+                )}
+                <Text className="text-white text-xs font-medium capitalize">{option}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
         
         <SettingsCard
           title="Legal: Terms & Privacy"

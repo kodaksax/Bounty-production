@@ -1,51 +1,84 @@
 // Design system tokens for BountyExpo
 // Spy-themed emerald color palette with glass-morphism effects
 
-export const colors = {
-  // Primary green palette (company branding)
-  primary: {
-    50: '#e6f7ec',
-    100: '#ccefda',
-    200: '#99deb4',
-    300: '#66ce8f',
-    400: '#33bd69',
-    500: '#00912C', // Main brand color - company specified
-    600: '#007423',
-    700: '#00571a',
-    800: '#003a12',
-    900: '#001d09',
-    950: '#000e04',
-  },
-  
-  // Background colors (darker green theme aligned with branding)
+// Shared primary palette (same in both modes)
+const primaryPalette = {
+  50: '#e6f7ec',
+  100: '#ccefda',
+  200: '#99deb4',
+  300: '#66ce8f',
+  400: '#33bd69',
+  500: '#00912C', // Main brand color - company specified
+  600: '#007423',
+  700: '#00571a',
+  800: '#003a12',
+  900: '#001d09',
+  950: '#000e04',
+} as const;
+
+export const darkColors = {
+  primary: primaryPalette,
   background: {
-    primary: '#1a3d2e', // Main background - darker tone of primary
-    secondary: '#2d5240', // Header background - complementary to primary
-    surface: 'rgba(45, 82, 64, 0.75)', // Card surface
-    elevated: 'rgba(45, 82, 64, 0.85)', // Modal/elevated surface
+    primary: '#1a3d2e',
+    secondary: '#2d5240',
+    surface: 'rgba(45, 82, 64, 0.75)',
+    elevated: 'rgba(45, 82, 64, 0.85)',
   },
-  
-  // Text colors
   text: {
-    primary: '#fffef5', // Off-white for readability
+    primary: '#fffef5',
     secondary: 'rgba(255, 254, 245, 0.8)',
     muted: 'rgba(255, 254, 245, 0.6)',
     inverse: '#1a3d2e',
   },
-  
-  // Border colors
   border: {
-    primary: 'rgba(0, 145, 44, 0.4)', // emerald-500
+    primary: 'rgba(0, 145, 44, 0.4)',
     muted: 'rgba(0, 145, 44, 0.2)',
     strong: 'rgba(0, 145, 44, 0.6)',
   },
-  
-  // Status colors
   success: '#00912C',
   warning: '#f59e0b',
   error: '#ef4444',
   info: '#3b82f6',
 } as const;
+
+export const lightColors = {
+  primary: primaryPalette,
+  background: {
+    primary: '#f0faf4',
+    secondary: '#d1f0dd',
+    surface: 'rgba(209, 240, 221, 0.75)',
+    elevated: 'rgba(209, 240, 221, 0.9)',
+  },
+  text: {
+    primary: '#1a3d2e',
+    secondary: 'rgba(26, 61, 46, 0.8)',
+    muted: 'rgba(26, 61, 46, 0.55)',
+    inverse: '#fffef5',
+  },
+  border: {
+    primary: 'rgba(0, 145, 44, 0.35)',
+    muted: 'rgba(0, 145, 44, 0.15)',
+    strong: 'rgba(0, 145, 44, 0.55)',
+  },
+  success: '#00912C',
+  warning: '#d97706',
+  error: '#dc2626',
+  info: '#2563eb',
+} as const;
+
+export const colors = darkColors;
+
+// Structural type shared by both dark and light color palettes
+export type ColorTokens = {
+  primary: typeof primaryPalette;
+  background: { primary: string; secondary: string; surface: string; elevated: string };
+  text: { primary: string; secondary: string; muted: string; inverse: string };
+  border: { primary: string; muted: string; strong: string };
+  success: string;
+  warning: string;
+  error: string;
+  info: string;
+};
 
 // Spacing scale
 export const spacing = {
@@ -224,9 +257,15 @@ export const createCardStyle = (variant: 'default' | 'elevated' = 'default') => 
   };
 };
 
+// Returns the color tokens for a given color scheme
+export const getColorsForScheme = (scheme: 'dark' | 'light') =>
+  scheme === 'light' ? lightColors : darkColors;
+
 // Export the complete theme
 export const theme = {
   colors,
+  darkColors,
+  lightColors,
   spacing,
   borderRadius,
   typography,
@@ -240,8 +279,9 @@ export const theme = {
   getShadow,
   createButtonStyle,
   createCardStyle,
+  getColorsForScheme,
 } as const;
 
 export type Theme = typeof theme;
-export type Colors = typeof colors;
+export type Colors = ColorTokens;
 export type Spacing = typeof spacing;

@@ -1,8 +1,13 @@
 import * as React from 'react'
 import { createContext, useContext, useEffect, useState } from 'react'
-import { theme as designTheme } from '../lib/theme'
+import { Appearance } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ColorTokens, darkColors, lightColors, theme as designTheme } from '../lib/theme'
 
 type Theme = 'dark' | 'light' | 'system'
+
+const THEME_STORAGE_KEY = '@bounty_app_theme'
+const DEFAULT_SYSTEM_SCHEME: 'dark' | 'light' = 'dark'
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -14,7 +19,8 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
-  colors: typeof designTheme.colors
+  isDark: boolean
+  colors: ColorTokens
   spacing: typeof designTheme.spacing
   borderRadius: typeof designTheme.borderRadius
   typography: typeof designTheme.typography
@@ -25,7 +31,8 @@ type ThemeProviderState = {
 const initialState: ThemeProviderState = {
   theme: 'dark',
   setTheme: () => null,
-  colors: designTheme.colors,
+  isDark: true,
+  colors: darkColors,
   spacing: designTheme.spacing,
   borderRadius: designTheme.borderRadius,
   typography: designTheme.typography,
@@ -41,18 +48,50 @@ export function ThemeProvider({
   enableSystem = true,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
+  const [theme, setThemeState] = useState<Theme>(defaultTheme)
+  const [systemScheme, setSystemScheme] = useState<'dark' | 'light'>(
+    () => Appearance.getColorScheme() ?? DEFAULT_SYSTEM_SCHEME
+  )
 
+  // Load persisted preference once on mount (empty deps intentional)
   useEffect(() => {
-    // In React Native, we can use Appearance API to detect system theme
-    // For now, just use the default theme
-    setTheme(defaultTheme)
-  }, [defaultTheme])
+    AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then((stored) => {
+        if (stored === 'dark' || stored === 'light' || stored === 'system') {
+          setThemeState(stored)
+        }
+      })
+      .catch(() => {
+        // ignore storage errors; fall back to default
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const value = {
+  // Listen for system appearance changes
+  useEffect(() => {
+    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemScheme(colorScheme ?? DEFAULT_SYSTEM_SCHEME)
+    })
+    return () => subscription.remove()
+  }, [])
+
+  const setTheme = (next: Theme) => {
+    setThemeState(next)
+    AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {
+      // ignore storage errors
+    })
+  }
+
+  const resolvedScheme: 'dark' | 'light' =
+    theme === 'system' ? systemScheme : theme
+  const isDark = resolvedScheme === 'dark'
+  const resolvedColors: ColorTokens = isDark ? darkColors : lightColors
+
+  const value: ThemeProviderState = {
     theme,
     setTheme,
-    colors: designTheme.colors,
+    isDark,
+    colors: resolvedColors,
     spacing: designTheme.spacing,
     borderRadius: designTheme.borderRadius,
     typography: designTheme.typography,
