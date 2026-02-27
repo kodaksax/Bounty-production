@@ -10,7 +10,7 @@ import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
-import { validateEmail } from '../../lib/utils/auth-validation'
+import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 export default function SignUpRoute() {
@@ -26,6 +26,7 @@ export function SignUpForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -203,6 +204,7 @@ export function SignUpForm() {
                   if (fieldErrors.email) {
                     setFieldErrors(prev => ({ ...prev, email: '' }))
                   }
+                  setEmailSuggestion(suggestEmailCorrection(text))
                 }}
                 placeholder="you@example.com"
                 keyboardType="email-address"
@@ -216,6 +218,21 @@ export function SignUpForm() {
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
               {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
+              {emailSuggestion ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setEmail(emailSuggestion)
+                    setEmailSuggestion(null)
+                    setFieldErrors(prev => ({ ...prev, email: '' }))
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use suggested email: ${emailSuggestion}`}
+                >
+                  <Text className="text-yellow-300 text-xs mt-1">
+                    Did you mean <Text className="underline font-medium">{emailSuggestion}</Text>?
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View>

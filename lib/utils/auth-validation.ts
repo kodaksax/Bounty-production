@@ -13,6 +13,67 @@ export interface ValidationResult {
  */
 import { isValidEmail } from './password-validation';
 
+/** Common email providers used for typo suggestions */
+const COMMON_EMAIL_DOMAINS = [
+  'gmail.com',
+  'yahoo.com',
+  'hotmail.com',
+  'outlook.com',
+  'icloud.com',
+  'aol.com',
+  'protonmail.com',
+  'live.com',
+  'me.com',
+  'msn.com',
+];
+
+/**
+ * Compute Levenshtein edit distance between two strings.
+ * Used internally to detect near-miss domain typos.
+ */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const temp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = temp;
+    }
+  }
+  return dp[n];
+}
+
+/**
+ * Suggest a corrected email address when the domain looks like a typo
+ * of a common provider (edit distance ≤ 2).
+ * Returns the suggested email string, or null if no suggestion.
+ *
+ * Examples:
+ *   "kcw.diy@gmail.comk"      → "kcw.diy@gmail.com"
+ *   "user@gmuil.com"          → "user@gmail.com"
+ *   "user@gmail.com"          → null  (already correct)
+ */
+export function suggestEmailCorrection(email: string): string | null {
+  if (!email || !email.includes('@')) return null;
+  const normalized = email.trim();
+  const atIndex = normalized.lastIndexOf('@');
+  const localPart = normalized.slice(0, atIndex);
+  const domain = normalized.slice(atIndex + 1).trim().toLowerCase();
+  if (!localPart || !domain) return null;
+
+  for (const common of COMMON_EMAIL_DOMAINS) {
+    if (domain === common) return null; // already correct
+    if (levenshtein(domain, common) <= 2) {
+      return `${localPart}@${common}`;
+    }
+  }
+  return null;
+}
+
 export function validateEmail(email: string): string | null {
   if (!email || email.trim().length === 0) {
     return 'Email is required';
