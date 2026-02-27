@@ -52,7 +52,7 @@ export const lightColors = {
   text: {
     primary: '#1a3d2e',
     secondary: 'rgba(26, 61, 46, 0.8)',
-    muted: 'rgba(26, 61, 46, 0.55)',
+    muted: 'rgba(26, 61, 46, 0.65)',
     inverse: '#fffef5',
   },
   border: {
@@ -203,8 +203,8 @@ export const getBorderRadius = (size: keyof typeof borderRadius) => borderRadius
 export const getFontSize = (size: keyof typeof typography.fontSize) => typography.fontSize[size];
 export const getShadow = (size: keyof typeof shadows) => shadows[size];
 
-// Button style generator
-export const createButtonStyle = (variant: 'default' | 'outline' | 'ghost' = 'default') => {
+// Button style generator (accepts optional colorTokens; defaults to dark palette for backward compat)
+export const createButtonStyle = (variant: 'default' | 'outline' | 'ghost' = 'default', colorTokens: ColorTokens = colors) => {
   const baseStyle = {
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing.lg,
@@ -218,7 +218,7 @@ export const createButtonStyle = (variant: 'default' | 'outline' | 'ghost' = 'de
         ...baseStyle,
         backgroundColor: 'transparent',
         borderWidth: 1,
-        borderColor: colors.border.primary,
+        borderColor: colorTokens.border.primary,
       };
     case 'ghost':
       return {
@@ -228,19 +228,19 @@ export const createButtonStyle = (variant: 'default' | 'outline' | 'ghost' = 'de
     default:
       return {
         ...baseStyle,
-        backgroundColor: colors.primary[500],
+        backgroundColor: colorTokens.primary[500],
         ...shadows.lg,
       };
   }
 };
 
-// Card style generator
-export const createCardStyle = (variant: 'default' | 'elevated' = 'default') => {
+// Card style generator (accepts optional colorTokens; defaults to dark palette for backward compat)
+export const createCardStyle = (variant: 'default' | 'elevated' = 'default', colorTokens: ColorTokens = colors) => {
   const baseStyle = {
-    backgroundColor: colors.background.surface,
+    backgroundColor: colorTokens.background.surface,
     borderRadius: borderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.border.muted,
+    borderColor: colorTokens.border.muted,
   };
 
   if (variant === 'elevated') {

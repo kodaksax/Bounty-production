@@ -28,7 +28,7 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' |
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
-  const { theme, setTheme, isDark } = useAppTheme()
+  const { theme, setTheme, colors } = useAppTheme()
   
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
@@ -149,12 +149,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
         )}
 
         {/* Appearance / Theme Toggle */}
-        <View className="bg-black/30 rounded-xl p-4 mb-4">
+        <View style={{ backgroundColor: colors.background.surface, borderColor: colors.border.muted, borderWidth: 1 }} className="rounded-xl p-4 mb-4">
           <View className="flex-row items-center mb-2">
-            <MaterialIcons name="brightness-6" size={22} color="#34d399" />
-            <Text className="ml-2 text-white font-medium text-sm flex-1">Appearance</Text>
+            <MaterialIcons name="brightness-6" size={22} color={colors.primary[400]} />
+            <Text style={{ color: colors.text.primary }} className="ml-2 font-medium text-sm flex-1">Appearance</Text>
           </View>
-          <Text className="text-emerald-200 text-xs leading-4 mb-3">
+          <Text style={{ color: colors.text.secondary }} className="text-xs leading-4 mb-3">
             Choose between dark mode, light mode, or follow your device setting.
           </Text>
           <View className="flex-row gap-2">
@@ -165,12 +165,19 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 accessibilityRole="button"
                 accessibilityLabel={`Set ${option} theme`}
                 accessibilityState={{ selected: theme === option }}
-                className={`flex-row items-center px-3 py-1 rounded-md ${theme === option ? 'bg-emerald-700' : 'bg-black/40'}`}
+                style={{
+                  backgroundColor: theme === option ? colors.primary[600] : colors.background.elevated,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 12,
+                  paddingVertical: 4,
+                  borderRadius: 6,
+                }}
               >
                 {theme === option && (
-                  <MaterialIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />
+                  <MaterialIcons name="check" size={12} color={colors.text.primary} style={{ marginRight: 4 }} />
                 )}
-                <Text className="text-white text-xs font-medium capitalize">{option}</Text>
+                <Text style={{ color: colors.text.primary }} className="text-xs font-medium capitalize">{option}</Text>
               </TouchableOpacity>
             ))}
           </View>

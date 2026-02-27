@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { Appearance } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ColorTokens, darkColors, lightColors, theme as designTheme } from '../lib/theme'
 
 type Theme = 'dark' | 'light' | 'system'
 
-const THEME_STORAGE_KEY = '@bounty_app_theme'
+const THEME_STORAGE_KEY = '@bountyexpo:theme'
 const DEFAULT_SYSTEM_SCHEME: 'dark' | 'light' = 'dark'
 
 type ThemeProviderProps = {
@@ -52,12 +52,15 @@ export function ThemeProvider({
   const [systemScheme, setSystemScheme] = useState<'dark' | 'light'>(
     () => Appearance.getColorScheme() ?? DEFAULT_SYSTEM_SCHEME
   )
+  // Track whether the user has explicitly chosen a theme after mount so the
+  // async storage read cannot overwrite an in-flight user interaction.
+  const userHasChosen = useRef(false)
 
   // Load persisted preference once on mount (empty deps intentional)
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY)
       .then((stored) => {
-        if (stored === 'dark' || stored === 'light' || stored === 'system') {
+        if (!userHasChosen.current && (stored === 'dark' || stored === 'light' || stored === 'system')) {
           setThemeState(stored)
         }
       })
@@ -76,6 +79,7 @@ export function ThemeProvider({
   }, [])
 
   const setTheme = (next: Theme) => {
+    userHasChosen.current = true
     setThemeState(next)
     AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {
       // ignore storage errors
