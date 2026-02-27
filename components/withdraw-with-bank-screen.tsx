@@ -1,12 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuthContext } from '../hooks/use-auth-context';
-import { API_BASE_URL } from '../lib/config/api';
-import { useWallet } from '../lib/wallet-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
-import { EmailVerificationBanner } from './ui/email-verification-banner';
+import { API_BASE_URL } from '../lib/config/api';
+import { theme } from '../lib/theme';
+import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
+import { EmailVerificationBanner } from './ui/email-verification-banner';
+
 
 interface BankAccount {
   id: string;
@@ -32,13 +34,13 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>("");
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [showAddBankAccount, setShowAddBankAccount] = useState(false);
-  
+
   const { balance: walletBalance, refresh } = useWallet();
   const { session } = useAuthContext();
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
-  
+
   const balance = propBalance ?? walletBalance;
-  
+
   const loadConnectStatus = useCallback(async () => {
     if (!session?.access_token) return;
 
@@ -75,7 +77,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       if (response.ok) {
         const data = await response.json();
         setBankAccounts(data.bankAccounts || []);
-        
+
         // Auto-select default bank account or first one
         const defaultAccount = data.bankAccounts?.find((acc: BankAccount) => acc.default);
         if (defaultAccount) {
@@ -90,7 +92,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       setIsLoadingAccounts(false);
     }
   }, [session?.access_token]);
-  
+
   // Load Connect status and bank accounts when session changes
   useEffect(() => {
     loadConnectStatus();
@@ -99,7 +101,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
   const handleConnectOnboarding = async () => {
     setIsOnboarding(true);
-    
+
     try {
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please sign in again.');
@@ -123,11 +125,11 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       }
 
       const { url } = await response.json();
-      
+
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
-        
+
         // Refresh status after user returns
         setTimeout(async () => {
           await loadConnectStatus();
@@ -160,7 +162,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
     }
 
     const amount = parseFloat(withdrawalAmount);
-    
+
     if (isNaN(amount) || amount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
       return;
@@ -203,7 +205,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
     }
 
     setIsProcessing(true);
-    
+
     try {
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please sign in again.');
@@ -227,10 +229,10 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       }
 
       const { transferId } = await response.json();
-      
+
       // Refresh wallet balance
       await refresh();
-      
+
       // Show success
       Alert.alert(
         'Withdrawal Initiated',
@@ -313,8 +315,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={onBack} 
+        <TouchableOpacity
+          onPress={onBack}
           style={styles.backButton}
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -388,8 +390,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Bank Accounts</Text>
-            <TouchableOpacity 
-              onPress={handleAddBankAccount} 
+            <TouchableOpacity
+              onPress={handleAddBankAccount}
               style={styles.addButton}
               accessibilityLabel="Add bank account"
               accessibilityRole="button"
@@ -405,8 +407,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
             <View style={styles.emptyState}>
               <MaterialIcons name="account-balance" size={48} color="rgba(255,255,255,0.3)" />
               <Text style={styles.emptyStateText}>No bank accounts added</Text>
-              <TouchableOpacity 
-                onPress={handleAddBankAccount} 
+              <TouchableOpacity
+                onPress={handleAddBankAccount}
                 style={styles.emptyStateButton}
                 accessibilityLabel="Add your first bank account"
                 accessibilityRole="button"
@@ -517,12 +519,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               parseFloat(withdrawalAmount) <= 0 ||
               bankAccounts.length === 0 ||
               !selectedBankAccount) &&
-              styles.withdrawButtonDisabled
+            styles.withdrawButtonDisabled
           ]}
           accessibilityLabel={withdrawalAmount ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}` : 'Withdraw funds'}
           accessibilityRole="button"
-          accessibilityState={{ 
-            disabled: isProcessing || !hasConnectedAccount || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || bankAccounts.length === 0 || !selectedBankAccount 
+          accessibilityState={{
+            disabled: isProcessing || !hasConnectedAccount || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || bankAccounts.length === 0 || !selectedBankAccount
           }}
         >
           {isProcessing ? (
@@ -778,7 +780,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
     borderRadius: 12,
     paddingVertical: 16,
+    ...theme.shadows.emerald,
   },
+
   withdrawButtonDisabled: {
     opacity: 0.5,
   },

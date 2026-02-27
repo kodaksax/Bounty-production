@@ -4,17 +4,19 @@
  * Shows sync status and provides manual refresh action
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import React from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
+import { theme } from '../lib/theme';
+
 
 interface OfflineModeBannerProps {
   /**
    * Whether to show sync details (queued items count)
    */
   showDetails?: boolean;
-  
+
   /**
    * Custom style for the banner
    */
@@ -69,29 +71,29 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
   return (
     <Animated.View style={[styles.container, { backgroundColor, opacity: fadeAnim }, style]}>
       <View style={styles.content}>
-        <MaterialIcons 
-          name={icon} 
-          size={20} 
-          color="#fff" 
+        <MaterialIcons
+          name={icon}
+          size={20}
+          color="#fff"
           style={isChecking ? styles.spinningIcon : undefined}
         />
-        
+
         <View style={styles.textContainer}>
           <Text style={styles.title}>
-            {!isOnline 
-              ? 'No Internet Connection' 
-              : queuedItemsCount > 0 
+            {!isOnline
+              ? 'No Internet Connection'
+              : queuedItemsCount > 0
                 ? 'Syncing...'
                 : 'Connected'
             }
           </Text>
-          
+
           {showDetails && queuedItemsCount > 0 && (
             <Text style={styles.subtitle}>
               {queuedItemsCount} {queuedItemsCount === 1 ? 'item' : 'items'} pending
             </Text>
           )}
-          
+
           {showDetails && !isOnline && (
             <Text style={styles.subtitle}>
               Changes will sync when you're back online
@@ -100,7 +102,7 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
         </View>
 
         {isOnline && queuedItemsCount > 0 && !isChecking && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={checkConnection}
             style={styles.refreshButton}
             activeOpacity={0.7}
@@ -120,12 +122,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadows.lg,
   },
+
   content: {
     flex: 1,
     flexDirection: 'row',
@@ -166,14 +165,14 @@ export function CompactOfflineBanner({ style }: { style?: any }) {
 
   return (
     <View style={[compactStyles.compactContainer, style]}>
-      <MaterialIcons 
-        name={!isOnline ? 'cloud-off' : 'sync'} 
-        size={16} 
-        color="#f59e0b" 
+      <MaterialIcons
+        name={!isOnline ? 'cloud-off' : 'sync'}
+        size={16}
+        color="#f59e0b"
       />
       <Text style={compactStyles.compactText}>
-        {!isOnline 
-          ? 'Offline' 
+        {!isOnline
+          ? 'Offline'
           : `${queuedItemsCount} syncing`
         }
       </Text>

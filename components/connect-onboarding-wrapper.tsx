@@ -24,6 +24,8 @@ import {
 } from 'react-native';
 
 import { API_BASE_URL } from '../lib/config/api';
+import { theme } from '../lib/theme';
+
 
 export interface ConnectOnboardingWrapperProps {
   /** User's auth token */
@@ -130,7 +132,7 @@ export function ConnectOnboardingWrapper({
   // Check status on mount and cleanup
   useEffect(() => {
     checkAccountStatus();
-    
+
     return () => {
       isMountedRef.current = false;
     };
@@ -140,7 +142,7 @@ export function ConnectOnboardingWrapper({
   useEffect(() => {
     const handleDeepLink = async (event: { url: string }) => {
       const { url } = event;
-      
+
       if (url.includes('connect/return') || url.includes('connect/refresh')) {
         // User returned from onboarding, recheck status
         await checkAccountStatus();
@@ -342,8 +344,8 @@ export function ConnectOnboardingWrapper({
             {isStartingOnboarding
               ? 'Opening...'
               : status?.hasAccount
-              ? 'Continue Setup'
-              : 'Connect Bank Account'}
+                ? 'Continue Setup'
+                : 'Connect Bank Account'}
           </Text>
         </TouchableOpacity>
       )}
@@ -476,12 +478,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadows.emerald,
   },
+
   actionButtonDisabled: {
     backgroundColor: '#9ca3af',
     opacity: 0.7,

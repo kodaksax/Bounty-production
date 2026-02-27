@@ -4,18 +4,20 @@
  * Auto-dismisses when back online, persists when offline
  */
 
-import React, { useEffect, useState } from 'react';
-import { Text, View, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
-import { SPACING, TYPOGRAPHY, SIZING } from '../lib/constants/accessibility';
+import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
+import { theme } from '../lib/theme';
+
 
 interface ConnectionStatusProps {
   /**
    * Whether to show count of queued items
    */
   showQueueCount?: boolean;
-  
+
   /**
    * Auto-dismiss duration when back online (ms)
    */
@@ -26,7 +28,7 @@ interface ConnectionStatusProps {
  * Connection status banner component
  * Appears at the top when offline, auto-dismisses when back online
  */
-export function ConnectionStatus({ 
+export function ConnectionStatus({
   showQueueCount = true,
   dismissDelay = 3000,
 }: ConnectionStatusProps = {}) {
@@ -41,7 +43,7 @@ export function ConnectionStatus({
       // Going offline - show banner
       setShowStatus(true);
       setWasOffline(true);
-      
+
       // Slide down
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -51,14 +53,14 @@ export function ConnectionStatus({
     } else if (wasOffline) {
       // Coming back online - show briefly then hide
       setShowStatus(true);
-      
+
       // Slide down
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start();
-      
+
       // Auto-dismiss after delay
       const timer = setTimeout(() => {
         // Slide up
@@ -71,7 +73,7 @@ export function ConnectionStatus({
           setWasOffline(false);
         });
       }, dismissDelay);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isOnline, wasOffline, dismissDelay, slideAnim]);
@@ -80,9 +82,9 @@ export function ConnectionStatus({
 
   const backgroundColor = isOnline ? '#10b981' : '#ef4444'; // green-500 : red-500
   const icon = isOnline ? 'wifi' : 'wifi-off';
-  const message = isOnline 
-    ? 'Back online' 
-    : queuedItemsCount > 0 
+  const message = isOnline
+    ? 'Back online'
+    : queuedItemsCount > 0
       ? `You're offline. ${queuedItemsCount} ${queuedItemsCount === 1 ? 'item' : 'items'} queued.`
       : "You're offline. Some features unavailable.";
 
@@ -90,7 +92,7 @@ export function ConnectionStatus({
     <Animated.View
       style={[
         styles.container,
-        { 
+        {
           backgroundColor,
           transform: [{ translateY: slideAnim }],
         },
@@ -99,19 +101,19 @@ export function ConnectionStatus({
       accessibilityLiveRegion="polite"
     >
       <View style={styles.content}>
-        <MaterialIcons 
-          name={icon} 
-          size={18} 
-          color="#fff" 
+        <MaterialIcons
+          name={icon}
+          size={18}
+          color="#fff"
           accessibilityElementsHidden
         />
-        <Text 
+        <Text
           style={styles.message}
           accessibilityRole="text"
         >
           {message}
         </Text>
-        
+
         {!isOnline && (
           <TouchableOpacity
             onPress={checkConnection}
@@ -122,9 +124,9 @@ export function ConnectionStatus({
             accessibilityLabel="Retry connection"
             accessibilityHint="Check if connection is available"
           >
-            <MaterialIcons 
-              name="refresh" 
-              size={18} 
+            <MaterialIcons
+              name="refresh"
+              size={18}
               color="#fff"
             />
           </TouchableOpacity>
@@ -143,12 +145,9 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     paddingVertical: SPACING.COMPACT_GAP,
     paddingHorizontal: SPACING.ELEMENT_GAP,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    ...theme.shadows.lg,
   },
+
   content: {
     flexDirection: 'row',
     alignItems: 'center',

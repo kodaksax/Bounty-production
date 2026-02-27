@@ -1,8 +1,10 @@
 "use client"
 
-import * as React from "react"
-import { Modal, StyleSheet, Text, TouchableOpacity, View, Pressable, AccessibilityInfo } from "react-native"
 import { MaterialIcons } from '@expo/vector-icons'
+import * as React from "react"
+import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { theme } from '../../lib/theme'
+
 
 // Enhanced RN Tooltip with mobile-friendly modal presentation
 // Provides helpful context for complex features
@@ -17,7 +19,7 @@ interface TooltipProps {
 
 const Tooltip: React.FC<TooltipProps> = ({ children }) => {
   const [isOpen, setIsOpen] = React.useState(false)
-  
+
   return (
     <>
       {React.Children.map(children, (child) => {
@@ -53,8 +55,8 @@ const TooltipTrigger = ({ asChild = false, children, isOpen, setIsOpen, ...props
   }
 
   return (
-    <TouchableOpacity 
-      {...props} 
+    <TouchableOpacity
+      {...props}
       onPress={handlePress}
       accessibilityLabel="Show help information"
       accessibilityRole="button"
@@ -85,14 +87,14 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
         animationType="fade"
         onRequestClose={() => setIsOpen?.(false)}
       >
-        <Pressable 
-          style={styles.overlay} 
+        <Pressable
+          style={styles.overlay}
           onPress={() => setIsOpen?.(false)}
           accessibilityLabel="Close help information"
           accessibilityRole="button"
         >
-          <View 
-            ref={ref} 
+          <View
+            ref={ref}
             style={styles.contentContainer}
             {...props}
           >
@@ -101,7 +103,7 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
                 <View style={styles.header}>
                   <MaterialIcons name="info-outline" size={24} color="#059669" />
                   <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => setIsOpen?.(false)}
                     accessibilityLabel="Close"
                     accessibilityRole="button"
@@ -161,8 +163,8 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
         animationType="fade"
         onRequestClose={() => setIsOpen(false)}
       >
-        <Pressable 
-          style={styles.overlay} 
+        <Pressable
+          style={styles.overlay}
           onPress={() => setIsOpen(false)}
           accessibilityLabel="Close help information"
           accessibilityRole="button"
@@ -172,7 +174,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
               <View style={styles.header}>
                 <MaterialIcons name="info-outline" size={24} color="#059669" />
                 <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setIsOpen(false)}
                   accessibilityLabel="Close"
                   accessibilityRole="button"
@@ -206,12 +208,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    ...theme.shadows.md,
   },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',

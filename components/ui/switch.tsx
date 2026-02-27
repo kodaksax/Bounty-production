@@ -2,7 +2,9 @@ import * as React from "react";
 import type { TouchableOpacityProps } from "react-native";
 import { Animated, TouchableOpacity } from "react-native";
 
+import { theme } from "lib/theme";
 import { cn } from "lib/utils";
+
 
 interface SwitchProps extends Omit<TouchableOpacityProps, 'onPress'> {
   checked?: boolean;
@@ -73,16 +75,10 @@ const Switch = React.forwardRef<any, SwitchProps>(
             height: 20,
             borderRadius: 10,
             backgroundColor: 'white',
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2,
-            },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
+            ...theme.shadows.sm,
             transform: [{ translateX }],
           }}
+
         />
       </TouchableOpacity>
     );

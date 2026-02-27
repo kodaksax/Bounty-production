@@ -1,5 +1,7 @@
 import * as React from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { theme } from "../../lib/theme";
+
 
 export interface ContextMenuItem {
   label: string;
@@ -69,12 +71,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     minWidth: 160,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    ...theme.shadows.lg,
   },
+
   menuItem: {
     paddingHorizontal: 16,
     paddingVertical: 12,
