@@ -8,7 +8,7 @@ Welcome to the Copilot Coding Agent! This file provides onboarding and best prac
 
 ## 1. Project Overview
 
-- **Project Name:** bountyexpo
+- **Project Name:** Bounty
 - **Main Language/Framework:** TypeScript, React (likely Next.js or Expo)
 - **Key Directories:**
   - `app/` — Main application code
