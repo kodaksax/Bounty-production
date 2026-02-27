@@ -218,7 +218,7 @@ export function SignUpForm() {
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
               {fieldErrors.email ? <ValidationMessage message={fieldErrors.email} /> : null}
-              {emailSuggestion && !fieldErrors.email ? (
+              {emailSuggestion ? (
                 <TouchableOpacity
                   onPress={() => {
                     setEmail(emailSuggestion)

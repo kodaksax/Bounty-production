@@ -64,4 +64,8 @@ describe('suggestEmailCorrection', () => {
     expect(suggestEmailCorrection('notanemail')).toBeNull();
     expect(suggestEmailCorrection('')).toBeNull();
   });
+
+  it('trims leading/trailing whitespace from the full input before building the suggestion', () => {
+    expect(suggestEmailCorrection('  user@gmuil.com  ')).toBe('user@gmail.com');
+  });
 });

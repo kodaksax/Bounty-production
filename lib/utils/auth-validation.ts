@@ -59,9 +59,10 @@ function levenshtein(a: string, b: string): number {
  */
 export function suggestEmailCorrection(email: string): string | null {
   if (!email || !email.includes('@')) return null;
-  const atIndex = email.lastIndexOf('@');
-  const localPart = email.slice(0, atIndex);
-  const domain = email.slice(atIndex + 1).trim().toLowerCase();
+  const normalized = email.trim();
+  const atIndex = normalized.lastIndexOf('@');
+  const localPart = normalized.slice(0, atIndex);
+  const domain = normalized.slice(atIndex + 1).trim().toLowerCase();
   if (!localPart || !domain) return null;
 
   for (const common of COMMON_EMAIL_DOMAINS) {

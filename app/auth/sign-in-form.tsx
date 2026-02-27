@@ -495,7 +495,7 @@ export function SignInForm() {
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
                 {getFieldError('identifier') ? <ValidationMessage message={getFieldError('identifier')} /> : null}
-                {emailSuggestion && !getFieldError('identifier') ? (
+                {emailSuggestion ? (
                   <TouchableOpacity
                     onPress={() => {
                       setIdentifier(emailSuggestion)
