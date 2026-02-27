@@ -3,6 +3,7 @@ import { Alert, Animated } from 'react-native'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
 import { logger } from 'lib/utils/error-logger'
+import type { WalletTransactionRecord } from 'lib/wallet-context'
 
 export interface BountyFormData {
   title: string
@@ -46,7 +47,7 @@ const defaultFormData: BountyFormData = {
 interface UseBountyFormParams {
   currentUserId?: string
   balance: number
-  createEscrow: (bountyId: any, amount: number, title: string, userId?: string) => Promise<any>
+  createEscrow: (bountyId: string | number, amount: number, title: string, posterId: string) => Promise<WalletTransactionRecord>
   isEmailVerified: boolean
   onBountyPosted?: () => void
   setActiveScreen: (screen: string) => void
@@ -112,6 +113,11 @@ export function useBountyForm({
         "Please verify your email to post bounties. We've sent a verification link to your inbox.",
         [{ text: 'OK', style: 'default' }]
       )
+      return
+    }
+
+    if (!currentUserId) {
+      Alert.alert('Not signed in', 'You must be signed in to post a bounty.')
       return
     }
 

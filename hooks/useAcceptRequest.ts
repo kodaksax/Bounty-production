@@ -56,9 +56,24 @@ export function useAcceptRequest({
         throw new Error("Request not found")
       }
 
-      // Prepare identifiers and hunter id early for optimistic UI updates
+      // Prepare identifiers and hunter id
       const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
       const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
+
+      // Check balance before any optimistic UI updates so the UI stays consistent if we bail early
+      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
+        if (balance < request.bounty.amount) {
+          Alert.alert(
+            'Insufficient Balance',
+            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
+            ]
+          )
+          return
+        }
+      }
 
       // Optimistically remove all requests for this bounty so UI moves immediately
       if (resolvedBountyId != null) {
@@ -84,21 +99,6 @@ export function useAcceptRequest({
           if (resolvedBountyId != null && prev.some(pb => String(pb.id) === String(resolvedBountyId))) return prev
           return [newBounty, ...prev]
         })
-      }
-
-      // Check if poster has sufficient balance for paid bounties
-      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        if (balance < request.bounty.amount) {
-          Alert.alert(
-            'Insufficient Balance',
-            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
-            ]
-          )
-          return
-        }
       }
 
       // ANNOTATION: This API call should be transactional on your backend.
@@ -166,9 +166,9 @@ export function useAcceptRequest({
         }
       }
 
-      // Note: Wallet escrow was already created when the bounty was posted (funds are held when bounty is posted).
-      // The ESCROW_HOLD outbox event for Stripe PaymentIntent creation happens in acceptBounty() service.
-      // No additional escrow creation needed during request acceptance.
+      // Note: Wallet escrow is created as part of request acceptance, not at bounty posting time.
+      // The acceptRequest() flow on the server calls paymentService.createEscrow(...) and updates payment_intent_id.
+      // This hook intentionally does NOT create escrow directly; do not add extra escrow creation here to avoid duplicates.
 
       // Auto-create a conversation for coordination (use bountyId as context)
       try {
@@ -184,7 +184,9 @@ export function useAcceptRequest({
           if (convId) {
             // send initial message via supabase function or messages table
             try {
-              await sendSupabaseMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+              if (currentUserId) {
+                await sendSupabaseMessage(convId, `Welcome! You've been selected for: "${(bountyObj as any)?.title || ''}". Let's coordinate the details.`, currentUserId)
+              }
             } catch (msgErr) {
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
@@ -262,24 +264,43 @@ export function useAcceptRequest({
 
       // Send notification to hunter about acceptance
       try {
-        const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
-        await fetch(`${API_BASE}/api/notifications`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: hunterIdForConv,
-            type: 'acceptance',
-            title: 'Bounty Application Accepted!',
-            body: `Your application for "${bountyObj?.title || (request.bounty as any)?.title || 'the bounty'}" has been accepted!`,
-            data: {
-              bountyId: bountyId,
-              posterId: currentUserId,
-              ...((bountyObj?.amount || (request.bounty as any)?.amount) && { amount: (bountyObj?.amount ?? (request.bounty as any)?.amount) }),
-            }
+        const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL
+        if (!API_BASE) {
+          console.error('EXPO_PUBLIC_API_BASE_URL is not set; skipping acceptance notification request.')
+        } else {
+          const response = await fetch(`${API_BASE}/api/notifications`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: hunterIdForConv,
+              type: 'acceptance',
+              title: 'Bounty Application Accepted!',
+              body: `Your application for "${bountyObj?.title || (request.bounty as any)?.title || 'the bounty'}" has been accepted!`,
+              data: {
+                bountyId: bountyId,
+                posterId: currentUserId,
+                ...((bountyObj?.amount || (request.bounty as any)?.amount) && { amount: (bountyObj?.amount ?? (request.bounty as any)?.amount) }),
+              }
+            })
           })
-        })
+
+          if (!response.ok) {
+            let errorText: string | undefined
+            try {
+              errorText = await response.text()
+            } catch {
+              // ignore body parsing errors
+            }
+            console.error(
+              'Acceptance notification request failed:',
+              response.status,
+              response.statusText,
+              errorText
+            )
+          }
+        }
       } catch (notifError) {
         console.error('Failed to send acceptance notification:', notifError)
         // Don't block the flow if notification fails
