@@ -86,8 +86,10 @@ export default function Index() {
         }
         
         // Check if user needs to complete onboarding
-        // This happens when auth user exists but no profile is found
-        if (profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
+        // This happens when auth user exists but no profile is found, OR
+        // profile fetch failed (null) — treat as needing onboarding to avoid
+        // landing in the main app with no profile data (causes "Profile not found" errors)
+        if (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
           if (__DEV__) {
             console.log('[index] User needs onboarding, redirecting to onboarding flow')
           }

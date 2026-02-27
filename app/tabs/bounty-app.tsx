@@ -296,9 +296,9 @@ function BountyAppInner() {
   // Guard: if profile loads and indicates onboarding is required, redirect immediately.
   // This covers the case where the app opened with a stale cached profile that appeared
   // complete, routed here, and then the background fresh-fetch revealed the profile is
-  // missing or incomplete.
+  // missing or incomplete. Also handles null profile (fetch failure with no cache).
   useEffect(() => {
-    if (!isLoading && session && (profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
+    if (!isLoading && session && (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
       router.replace('/onboarding')
     }
   }, [isLoading, session, profile, router])
@@ -776,7 +776,9 @@ function BountyAppInner() {
   // Guard: redirect users who haven't completed onboarding to the onboarding flow.
   // This catches edge cases where a user navigates directly to this screen (e.g. via
   // deep-link or browser back) without a complete profile, bypassing app/index.tsx.
-  if (!isLoading && (profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
+  // Also redirects when profile is null (fetch failed with no cache) to prevent
+  // "Profile not found" errors in the main app.
+  if (!isLoading && session && (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
     if (__DEV__) {
       console.log('[bounty-app] Profile incomplete or onboarding not done, redirecting to onboarding')
     }
