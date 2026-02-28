@@ -21,6 +21,7 @@ import { navigationIntent } from '../../lib/services/navigation-intent'
 import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
 import { ChatDetailScreen } from "./chat-detail-screen"
+import { colors } from '../../lib/theme';
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -295,7 +296,7 @@ export function MessengerScreen({
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#10b981']}
+            colors={[colors.primary[500]]}
           />
         }
         // Performance optimizations

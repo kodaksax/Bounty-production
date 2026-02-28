@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 
+import { colors } from '../../lib/theme';
 interface MfaCodeModalProps {
   visible: boolean;
   title?: string;
@@ -150,7 +151,7 @@ export function MfaCodeModal({
                 flex: 1,
                 paddingVertical: 12,
                 borderRadius: 8,
-                backgroundColor: code.length === 6 && !isLoading ? '#059669' : 'rgba(5,150,105,0.4)',
+                backgroundColor: code.length === 6 && !isLoading ? colors.primary[600] : 'rgba(5,150,105,0.4)',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}

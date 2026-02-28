@@ -798,8 +798,8 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchReports}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
           />
         }
         ListEmptyComponent={<EmptyState />}

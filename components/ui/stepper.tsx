@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(110,231,183,0.3)',
   },
   bubbleActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   bubbleCompleted: {
     backgroundColor: colors.background.secondary,

@@ -170,7 +170,7 @@ export default function BountyDashboard() {
   const getStatusBadgeColor = (status?: string) => {
     switch (status) {
       case 'open':
-        return '#10b981'; // emerald-500
+        return colors.primary[500]; // emerald-500
       case 'in_progress':
         return '#fbbf24'; // amber-400
       case 'completed':
@@ -178,7 +178,7 @@ export default function BountyDashboard() {
       case 'archived':
         return '#6b7280'; // gray-500
       default:
-        return '#10b981';
+        return colors.primary[500];
     }
   };
 
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -642,12 +642,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
     backgroundColor: colors.background.secondary,
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

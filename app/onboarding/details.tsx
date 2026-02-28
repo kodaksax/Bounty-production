@@ -646,7 +646,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#059669',
+    borderColor: colors.primary[600],
   },
   avatarHint: {
     color: '#a7f3d0',

@@ -703,8 +703,8 @@ export default function AuditLogsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchLogs}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -808,7 +808,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   filterChipActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   filterChipText: {
     fontSize: 12,

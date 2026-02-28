@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import { useHapticFeedback } from "lib/haptic-feedback"
-import { theme } from "lib/theme"
+import { theme, colors} from "lib/theme"
 import { cn } from "lib/utils"
 import * as React from "react"
 import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
@@ -209,7 +209,7 @@ const buttonStyles = StyleSheet.create({
   },
   // Focus state for keyboard navigation (WCAG 2.4.7)
   focused: {
-    shadowColor: '#10b981', // Emerald color for focus ring
+    shadowColor: colors.primary[500], // Emerald color for focus ring
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,

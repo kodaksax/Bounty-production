@@ -279,7 +279,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="photo-library"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#9ca3af' : colors.primary[600]}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -300,7 +300,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="attach-file"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#9ca3af' : colors.primary[600]}
             />
             <Text
               className={`ml-2 font-medium ${

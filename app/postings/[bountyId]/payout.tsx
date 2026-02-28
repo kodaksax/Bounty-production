@@ -342,7 +342,7 @@ export default function PayoutScreen() {
               <Switch
                 value={confirmRelease}
                 onValueChange={setConfirmRelease}
-                trackColor={{ false: '#6b7280', true: '#10b981' }}
+                trackColor={{ false: '#6b7280', true: colors.primary[500] }}
                 thumbColor={confirmRelease ? '#fff' : '#f4f4f5'}
               />
             </View>
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     marginBottom: 16,
     alignItems: 'center',
   },
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   receiptButtonText: {
     color: colors.primary[500],
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   releaseButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

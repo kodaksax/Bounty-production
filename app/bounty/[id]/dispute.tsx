@@ -227,7 +227,7 @@ export default function DisputeScreen() {
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
-                    color={dispute.status === 'resolved' ? '#059669' : '#f59e0b'} 
+                    color={dispute.status === 'resolved' ? colors.primary[600] : '#f59e0b'} 
                   />
                   <View className="flex-1 ml-3">
                     <Text className={`font-semibold mb-1 ${

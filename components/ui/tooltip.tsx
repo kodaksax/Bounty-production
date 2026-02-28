@@ -138,7 +138,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   title,
   content,
   iconSize = 18,
-  iconColor = '#10b981',
+  iconColor = colors.primary[500],
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
 

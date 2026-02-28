@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -450,12 +450,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
     backgroundColor: colors.background.secondary,

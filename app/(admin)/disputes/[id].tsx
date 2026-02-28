@@ -152,7 +152,7 @@ export default function AdminDisputeDetailScreen() {
   //     case 'under_review':
   //       return '#3b82f6';
   //     case 'resolved':
-  //       return '#10b981';
+  //       return colors.primary[500];
   //     case 'closed':
   //       return '#6b7280';
   //     default:
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,145,44,0.5)',
   },
   resolveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   closeButton: {
     backgroundColor: '#dc2626',

@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   },
   bannerContainer: {
     backgroundColor: '#065f46',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   iconContainer: {
     width: 48,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   closeButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

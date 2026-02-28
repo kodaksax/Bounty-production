@@ -201,7 +201,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'driversLicense' }}
               accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? colors.primary[500] : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'driversLicense' && styles.docTypeTextActive]}>
                 Driver
                 {"'"}
@@ -220,7 +220,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'passport' }}
               accessibilityHint="Select this document type for verification. Only front photo required"
             >
-              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? colors.primary[500] : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'passport' && styles.docTypeTextActive]}>
                 Passport
               </Text>
@@ -237,7 +237,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'nationalId' }}
               accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? colors.primary[500] : '#a7f3d0'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'nationalId' && styles.docTypeTextActive]}>
                 National ID
               </Text>
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,243,208,0.2)',
   },
   docTypeButtonActive: {
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     backgroundColor: 'rgba(16,185,129,0.1)',
   },
   docTypeText: {

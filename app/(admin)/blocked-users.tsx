@@ -127,7 +127,7 @@ export default function AdminBlockedUsersScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor="#10b981" />
+          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor={colors.primary[500]} />
         }
       >
         {isLoading && blocks.length === 0 ? (
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     borderRadius: 8,
   },
   retryButtonText: {

@@ -419,13 +419,13 @@ export default function UserProfileScreen() {
                   disabled={followLoading}
                 >
                   {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
+                    <ActivityIndicator size="small" color={isFollowing ? colors.primary[500] : "#ffffff"} />
                   ) : (
                     <>
                       <MaterialIcons
                         name={isFollowing ? "person-remove" : "person-add"}
                         size={18}
-                        color={isFollowing ? "#10b981" : "#ffffff"}
+                        color={isFollowing ? colors.primary[500] : "#ffffff"}
                       />
                       <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                         {isFollowing ? "Following" : "Follow"}
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: "#10b981", // emerald-500
+    backgroundColor: colors.primary[500], // emerald-500
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

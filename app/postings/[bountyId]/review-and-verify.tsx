@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

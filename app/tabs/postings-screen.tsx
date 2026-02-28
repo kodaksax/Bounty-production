@@ -793,7 +793,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={[colors.primary[500]]}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -849,7 +849,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={[colors.primary[500]]}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -922,7 +922,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={[colors.primary[500]]}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
