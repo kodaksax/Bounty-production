@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { sendPhoneOTP, verifyPhoneOTP } from '../../lib/services/phone-verification-service';
 
+import { colors } from '../../lib/theme';
 export default function VerifyPhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -36,7 +37,7 @@ export default function VerifyPhoneScreen() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   // Handle resend cooldown
   useEffect(() => {
@@ -260,7 +261,11 @@ export default function VerifyPhoneScreen() {
 
         {/* Resend Code */}
         <View style={styles.resendContainer}>
-          <Text style={styles.resendLabel}>Didn't receive the code?</Text>
+          <Text style={styles.resendLabel}>
+            Didn
+            {"'"}
+            t receive the code?
+          </Text>
           {resendCooldown > 0 ? (
             <Text style={styles.resendCooldown}>
               Resend in {resendCooldown}s
@@ -303,7 +308,7 @@ export default function VerifyPhoneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     flexGrow: 1,

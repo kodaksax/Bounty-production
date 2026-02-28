@@ -1,0 +1,150 @@
+
+> bountyexpo@1.0.0 test
+> jest __tests__/unit/services/stripe-connect-service.test.ts --no-coverage
+
+  console.error
+    Error creating onboarding link: Error: User not found
+        at StripeConnectService.createOnboardingLink (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:72:15)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:180:7)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.createOnboardingLink (services/api/src/services/stripe-connect-service.ts:119:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:180:7)
+
+  console.error
+    Error creating onboarding link: Error: Stripe API error
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:197:9)
+        at Promise.then.completed (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:231:10)
+        at _callCircusTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:316:40)
+        at _runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:252:3)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:126:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at run (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:71:3)
+        at runAndTransformResultsToJestFormat (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+        at jestAdapter (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+        at runTestInternal (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:367:16)
+        at runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:444:34)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.createOnboardingLink (services/api/src/services/stripe-connect-service.ts:119:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:204:7)
+
+  console.error
+    Error getting connect status: Error: User not found
+        at StripeConnectService.getConnectStatus (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:143:15)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:299:7)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.getConnectStatus (services/api/src/services/stripe-connect-service.ts:169:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:299:7)
+
+  console.error
+    Γ¥î Error creating escrow PaymentIntent for bounty invalid_bounty: Error: Bounty not found
+        at StripeConnectService.createEscrowPaymentIntent (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:192:15)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:348:7)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.createEscrowPaymentIntent (services/api/src/services/stripe-connect-service.ts:251:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:348:7)
+
+  console.error
+    Γ¥î Error refunding PaymentIntent pi_test123: TypeError: this.stripe.paymentIntents.retrieve is not a function
+        at StripeConnectService.refundPaymentIntent (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:272:63)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:372:49)
+        at Promise.then.completed (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:231:10)
+        at _callCircusTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:316:40)
+        at _runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:252:3)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:126:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at run (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:71:3)
+        at runAndTransformResultsToJestFormat (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+        at jestAdapter (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+        at runTestInternal (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:367:16)
+        at runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:444:34)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.refundPaymentIntent (services/api/src/services/stripe-connect-service.ts:304:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:372:49)
+
+  console.error
+    Γ¥î Error refunding PaymentIntent pi_test123: TypeError: this.stripe.paymentIntents.retrieve is not a function
+        at StripeConnectService.refundPaymentIntent (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:272:63)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:392:34)
+        at Promise.then.completed (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:231:10)
+        at _callCircusTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:316:40)
+        at _runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:252:3)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:126:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at _runTestsForDescribeBlock (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:121:9)
+        at run (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\run.js:71:3)
+        at runAndTransformResultsToJestFormat (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+        at jestAdapter (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+        at runTestInternal (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:367:16)
+        at runTest (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-runner\build\runTest.js:444:34)
+
+    [0m [90m 357 |[39m       [36mreturn[39m[33m;[39m
+     [90m 358 |[39m     }
+    [31m[1m>[22m[39m[90m 359 |[39m     originalError([33m...[39margs)[33m;[39m
+     [90m     |[39m     [31m[1m^[22m[39m
+     [90m 360 |[39m   }[33m,[39m
+     [90m 361 |[39m   warn[33m:[39m jest[33m.[39mfn()[33m,[39m
+     [90m 362 |[39m   log[33m:[39m jest[33m.[39mfn()[33m,[39m[0m
+
+      at Object.error (jest.setup.js:359:5)
+      at StripeConnectService.refundPaymentIntent (services/api/src/services/stripe-connect-service.ts:304:15)
+      at Object.<anonymous> (__tests__/unit/services/stripe-connect-service.test.ts:392:34)
+
+  console.error
+    Γ¥î Error refunding PaymentIntent pi_test123: TypeError: this.stripe.paymentIntents.retrieve is not a function
+        at StripeConnectService.refundPaymentIntent (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\services\stripe-connect-service.ts:272:63)
+        at Object.<anonymous> (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\__tests__\unit\services\stripe-connect-service.test.ts:414:49)
+        at Promise.then.completed (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\jest-circus\build\utils.js:298:28)
+        at new Promise (<anonymous>)

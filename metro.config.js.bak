@@ -1,0 +1,8 @@
+/**
+ * Legacy/backup Metro configuration for React Native.
+ *
+ * This file is intentionally left without any executable code.
+ * It exists only as a historical reference and is NOT read by Metro or Expo.
+ *
+ * The active configuration lives in `metro.config.js`.
+ */

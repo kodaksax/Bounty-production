@@ -59,13 +59,52 @@ if (isSupabaseConfigured) {
   if (!supabaseAnonKey) reasons.push('EXPO_PUBLIC_SUPABASE_ANON_KEY missing')
   if (mismatch) reasons.push(`Project ref mismatch (url=${urlRef}, key=${keyRef})`)
   const msg = `[supabase] Not configured: ${reasons.join('; ')}`
-  if (typeof __DEV__ !== 'undefined' && __DEV__) console.error(msg)
-  else console.error(msg)
-  supabase = new Proxy({} as any, {
-    get() {
-      throw new Error(msg)
+  console.error(msg)
+
+  // Create a safe, chainable stub that won't throw when modules import `supabase`.
+  // This avoids uncaught exceptions during app startup if env variables are missing.
+  const noopResult = { data: null, error: { message: msg } }
+
+  const makeChainable = () => {
+    const terminal: any = {
+      select: async () => noopResult,
+      insert: async () => noopResult,
+      update: async () => noopResult,
+      delete: async () => noopResult,
+      single: async () => noopResult,
+      rpc: async () => noopResult,
+      then: undefined,
+    }
+
+    const handler: ProxyHandler<any> = {
+      get(_target, prop) {
+        if (prop in terminal) return (terminal as any)[prop]
+        // for chaining, return a callable that itself is chainable
+        return (..._args: any[]) => chainable
+      },
+      apply(_target, _thisArg, _args) {
+        return Promise.resolve(noopResult)
+      },
+    }
+
+    const chainable: any = new Proxy(() => Promise.resolve(noopResult), handler)
+    Object.assign(chainable, terminal)
+    return chainable
+  }
+
+  const chain = makeChainable()
+
+  supabase = {
+    from: (..._args: any[]) => chain,
+    rpc: async () => noopResult,
+    auth: {
+      onAuthStateChange: (_cb: any) => ({ data: null, error: null }),
+      getUser: async () => ({ data: null, error: { message: msg } }),
+      signInWithPassword: async () => ({ data: null, error: { message: msg } }),
+      signOut: async () => ({ data: null, error: { message: msg } }),
     },
-  })
+    __unsafe__: chain,
+  } as unknown as SupabaseClient
 }
 
 export { supabase };

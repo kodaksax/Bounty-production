@@ -1,14 +1,14 @@
 // Create a new file for centralized error logging
-export type ErrorLogLevel = "info" | "warning" | "error" | "critical"
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import NetInfo from '@react-native-community/netinfo';
+export type ErrorLogLevel = "info" | "warning" | "error" | "critical"
 interface ErrorLogEntry {
   level: ErrorLogLevel
   message: string
   context?: Record<string, any>
   timestamp: Date
 }
-
-import NetInfo from '@react-native-community/netinfo';
 
 class ErrorLogger {
   private logs: ErrorLogEntry[] = []
@@ -35,7 +35,7 @@ class ErrorLogger {
           }
         })
       }
-    } catch (e) {
+    } catch {
       // NetInfo isn't available in this runtime; continue without online/offline tracking
       console.error('[ErrorLogger] NetInfo not available, skipping network listener')
       this.isOnline = true
@@ -44,7 +44,7 @@ class ErrorLogger {
     // Try to load offline queue from AsyncStorage (if available)
     try {
       this.loadOfflineQueue()
-    } catch (e) {
+    } catch {
       console.error('[ErrorLogger] AsyncStorage not available, skipping offline queue load')
     }
   }

@@ -37,14 +37,20 @@ const SPECIAL_CHAR_REGEX = new RegExp(
   `[${PASSWORD_REQUIREMENTS.specialChars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}]`
 );
 
-/** Pre-compiled email regex for validation */
-export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Pre-compiled email regex for validation (stricter RFC-like, requires valid domain labels and TLD)
+ * - Local part: allows common unquoted chars
+ * - Domain: labels separated by dots, labels start/end with alnum and may contain hyphens
+ * - TLD: alphabetic only, between 2 and 24 chars
+ */
+export const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/;
 
 /**
  * Validate email format using pre-compiled regex
  */
 export function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email.trim());
+  if (!email) return false
+  const normalized = email.trim()
+  return EMAIL_REGEX.test(normalized)
 }
 
 /**

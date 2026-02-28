@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
-import React, { useCallback, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageActions } from "../../components/MessageActions"
@@ -14,21 +14,15 @@ import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
+import { useValidUserId } from '../../hooks/useValidUserId'
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
-import { getCurrentUserId } from "../../lib/utils/data-utils"
-import { useWallet } from '../../lib/wallet-context'
 
+import { colors } from '../../lib/theme';
 interface ChatDetailScreenProps {
   conversation: Conversation
   onBack?: () => void
   onNavigate?: (screen?: string) => void
-}
-
-// Format message time
-function formatMessageTime(createdAt: string): string {
-  const date = new Date(createdAt);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ChatDetailScreen({
@@ -37,7 +31,7 @@ export function ChatDetailScreen({
   onNavigate,
 }: ChatDetailScreenProps) {
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
+  const currentUserId = useValidUserId()
   const { 
     messages, 
     loading, 
@@ -48,9 +42,7 @@ export function ChatDetailScreen({
     pinMessage,
     unpinMessage,
     copyMessage,
-    reportMessage,
   } = useMessages(conversation.id)
-  const { balance } = useWallet()
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
@@ -160,7 +152,7 @@ export function ChatDetailScreen({
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-background-secondary text-white">
       {/* Header */}
       <View
         className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
@@ -356,8 +348,8 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 12,
     // Make the area outside the rounded message box match the main screen
-    // (use emerald-600 to match `bg-emerald-600` on the root View)
-    backgroundColor: '#059669', // emerald-600
+    // (use emerald-600 to match `bg-background-secondary` on the root View)
+    backgroundColor: colors.background.secondary, // emerald-600
     borderTopWidth: 1,
     // use a slightly darker border so the input area still reads as separate
     borderTopColor: '#047857', // emerald-700

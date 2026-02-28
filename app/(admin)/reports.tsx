@@ -23,8 +23,8 @@ import { reportService } from '../../lib/services/report-service';
 import { supabase } from '../../lib/supabase';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
 
+import { colors } from '../../lib/theme';
 type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
-type FilterPriority = 'all' | 'critical' | 'high' | 'medium' | 'low';
 type SortOption = 'newest' | 'oldest' | 'priority';
 
 /**
@@ -143,7 +143,7 @@ export default function AdminReportsScreen() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('pending');
-  const [priorityFilter, setPriorityFilter] = useState<FilterPriority>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high' | 'critical'>('all');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
 
   // Stats for the header
@@ -416,7 +416,7 @@ export default function AdminReportsScreen() {
       case 'medium':
         return { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', icon: 'info' };
       case 'low':
-        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
+        return { color: colors.primary[500], bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
       default:
         return { color: '#a7f3d0', bg: 'rgba(167,243,208,0.15)', icon: 'help' };
     }
@@ -512,8 +512,8 @@ export default function AdminReportsScreen() {
           </View>
         )}
         <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
-          <MaterialIcons name="pending" size={14} color="#10b981" />
-          <Text style={[styles.statBadgeText, { color: '#10b981' }]}>
+          <MaterialIcons name="pending" size={14} color={colors.primary[500]} />
+          <Text style={[styles.statBadgeText, { color: colors.primary[500] }]}>
             {stats.pending} Pending
           </Text>
         </View>
@@ -544,26 +544,44 @@ export default function AdminReportsScreen() {
           </TouchableOpacity>
         )}
       </View>
-      <TouchableOpacity
-        style={styles.sortButton}
-        onPress={() => {
-          if (Platform.OS !== 'web') {
-            Haptics.selectionAsync();
-          }
-          // Cycle through sort options
-          const options: SortOption[] = ['priority', 'newest', 'oldest'];
-          const currentIndex = options.indexOf(sortBy);
-          setSortBy(options[(currentIndex + 1) % options.length]);
-        }}
-        accessibilityLabel={`Sort by ${sortBy}`}
-      >
-        <MaterialIcons name="sort" size={20} color="#a7f3d0" />
-        <Text style={styles.sortButtonText}>
-          {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={styles.sortButton}
+          onPress={() => {
+            if (Platform.OS !== 'web') {
+              Haptics.selectionAsync();
+            }
+            // Cycle through sort options
+            const options: SortOption[] = ['priority', 'newest', 'oldest'];
+            const currentIndex = options.indexOf(sortBy);
+            setSortBy(options[(currentIndex + 1) % options.length]);
+          }}
+          accessibilityLabel={`Sort by ${sortBy}`}
+        >
+          <MaterialIcons name="sort" size={20} color="#a7f3d0" />
+          <Text style={styles.sortButtonText}>
+            {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.sortButton, styles.priorityButton]}
+          onPress={() => {
+            if (Platform.OS !== 'web') Haptics.selectionAsync();
+            const options = ['all', 'critical', 'high', 'medium', 'low'] as const;
+            type PriorityFilterOption = (typeof options)[number];
+            const currentIndex = options.indexOf(priorityFilter as PriorityFilterOption);
+            setPriorityFilter(options[(currentIndex + 1) % options.length]);
+          }}
+          accessibilityLabel={`Filter by priority ${priorityFilter}`}
+        >
+          <MaterialIcons name="filter-list" size={20} color="#a7f3d0" />
+          <Text style={styles.sortButtonText}>{priorityFilter === 'all' ? 'All' : priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
+
 
   // Report card component
   const renderReportCard = ({ item: report }: { item: EnhancedReport }) => {
@@ -671,7 +689,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'resolved')}
                   accessibilityLabel="Resolve report"
                 >
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                   <Text style={styles.resolveActionText}>Resolve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -688,7 +706,7 @@ export default function AdminReportsScreen() {
             {/* Resolution info for resolved reports */}
             {report.status === 'resolved' && report.resolution_notes && (
               <View style={styles.resolutionInfo}>
-                <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                <MaterialIcons name="check-circle" size={14} color={colors.primary[500]} />
                 <Text style={styles.resolutionText}>{report.resolution_notes}</Text>
               </View>
             )}
@@ -705,7 +723,7 @@ export default function AdminReportsScreen() {
         <MaterialIcons
           name={statusFilter === 'pending' ? 'check-circle' : 'inbox'}
           size={64}
-          color="#10b981"
+          color={colors.primary[500]}
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -780,8 +798,8 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchReports}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -903,6 +921,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 10,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  priorityButton: {
+    marginLeft: 8,
+  },
   sortButtonText: {
     fontSize: 13,
     color: '#a7f3d0',
@@ -1020,7 +1046,7 @@ const styles = StyleSheet.create({
   resolveActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
   },
   dismissAction: {
     backgroundColor: 'rgba(239,68,68,0.15)',
@@ -1041,7 +1067,7 @@ const styles = StyleSheet.create({
   resolutionText: {
     flex: 1,
     fontSize: 13,
-    color: '#10b981',
+    color: colors.primary[500],
     lineHeight: 18,
   },
   emptyContainer: {

@@ -1,27 +1,30 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import NetInfo from '@react-native-community/netinfo'
+import { ValidationMessage } from 'app/components/ValidationMessage'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { makeRedirectUri, ResponseType } from 'expo-auth-session'
+import { ResponseType, makeRedirectUri } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
+import { CaptchaChallenge } from '../../components/ui/captcha-challenge'
 import { Checkbox } from '../../components/ui/checkbox'
 import { useFormSubmission } from '../../hooks/useFormSubmission'
+import { setRememberMePreference } from '../../lib/auth-session-storage'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { parseAuthError, generateCorrelationId } from '../../lib/utils/auth-errors'
+import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
+import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
+import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
-import { withTimeout } from '../../lib/utils/withTimeout'
-import { setRememberMePreference } from '../../lib/auth-session-storage'
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -36,12 +39,21 @@ export function SignInForm() {
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({})
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [captchaVerified, setCaptchaVerified] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+
+  const passwordRef = useRef<TextInput>(null)
+
+  // Derive active lockout and CAPTCHA requirement each render so expired
+  // lockout timestamps are handled correctly without an extra state update.
+  const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
+  const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive
   const [socialAuthLoading, setSocialAuthLoading] = useState(false)
-  const [socialAuthError, setSocialAuthError] = useState<any>(null)
+  const [socialAuthError, setSocialAuthError] = useState<string | null>(null)
 
   // Use form submission hook with rate limiting
   const { submit: handleSubmit, isSubmitting, error: authError, reset: resetError } = useFormSubmission(
@@ -49,13 +61,13 @@ export function SignInForm() {
       // Generate correlation ID for tracking this auth attempt
       const correlationId = generateCorrelationId('signin');
       console.log('[sign-in] Starting sign-in process', { correlationId })
-      
+
       // Check Supabase configuration first
       if (!isSupabaseConfigured) {
         console.error('[sign-in] Supabase is not configured!', { correlationId })
         throw new Error('Authentication service is not configured. Please contact support.')
       }
-      
+
       // Log Supabase configuration status for debugging (development only to avoid leaking env details)
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log('[sign-in] Supabase configured:', {
@@ -65,11 +77,18 @@ export function SignInForm() {
           urlPrefix: process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 15) + '...',
         })
       }
-      
-      // Check for lockout
-      if (lockoutUntil && Date.now() < lockoutUntil) {
-        const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000)
+
+      // Check for lockout first — lockout takes precedence over CAPTCHA.
+      // The CAPTCHA UI is hidden while locked out (captchaRequired is false), so
+      // the CAPTCHA error below is intentionally unreachable in the lockout state.
+      if (isLockoutActive) {
+        const remainingSeconds = Math.ceil((lockoutUntil! - Date.now()) / 1000)
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`)
+      }
+
+      // Require CAPTCHA to be solved after the threshold
+      if (captchaRequired && !captchaVerified) {
+        throw new Error('Please complete the security check before signing in.')
       }
 
       if (!validateForm()) {
@@ -100,12 +119,12 @@ export function SignInForm() {
         // The previous complex retry/timeout logic was causing valid requests to fail
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for detailed rationale
         console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`, { correlationId })
-        
+
         const { data, error } = await supabase.auth.signInWithPassword({
           email: identifier.trim().toLowerCase(),
           password,
         })
-        
+
         console.log(`[sign-in] Auth response received:`, {
           correlationId,
           hasData: Boolean(data),
@@ -115,10 +134,10 @@ export function SignInForm() {
 
         if (error) {
           console.error('[sign-in] Authentication error:', error, { correlationId })
-          
+
           // Parse error using centralized handler
           const authError = parseAuthError(error, correlationId);
-          
+
           // Track failed login attempts
           const newAttempts = loginAttempts + 1
           setLoginAttempts(newAttempts)
@@ -127,6 +146,7 @@ export function SignInForm() {
           if (newAttempts >= 5) {
             const lockout = Date.now() + (5 * 60 * 1000) // 5 minutes
             setLockoutUntil(lockout)
+            setCaptchaVerified(false)
             throw new Error('Too many failed attempts. Please try again in 5 minutes.')
           }
 
@@ -137,6 +157,7 @@ export function SignInForm() {
         // Reset login attempts on success
         setLoginAttempts(0)
         setLockoutUntil(null)
+        setCaptchaVerified(false)
 
         console.log('[sign-in] Authentication successful', { correlationId })
 
@@ -159,15 +180,31 @@ export function SignInForm() {
               $email: data.session.user.email,
               $name: (data.session.user.user_metadata as any)?.full_name || (data.session.user.user_metadata as any)?.name,
             })
-            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email, correlation_id: correlationId }); } catch (e) { }
-          } catch (e) {
+            try { track('Sign In', { user_id: data.session.user.id, email: data.session.user.email, correlation_id: correlationId }); } catch { }
+          } catch {
             // swallow analytics errors
+          }
+
+          // MFA CHECK: If the user has 2FA enrolled, they must complete a TOTP challenge
+          // before accessing the app (elevating from AAL1 to AAL2).
+          try {
+            const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+            if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+              console.log('[sign-in] MFA challenge required, redirecting to MFA screen', { correlationId })
+              router.replace(ROUTES.AUTH.MFA_CHALLENGE as unknown as any)
+              try { markInitialNavigationDone(); } catch { }
+              return
+            }
+          } catch {
+            // Fail-closed: if we cannot determine MFA level, block sign-in to avoid bypassing 2FA
+            console.error('[sign-in] Could not determine MFA level, blocking sign-in', { correlationId })
+            throw new Error('Unable to verify multi-factor authentication status. Please try again.')
           }
 
           // OPTIMIZED: Quick profile check with fast timeout and immediate navigation
           // The AuthProvider will handle full profile sync in the background
           console.log('[sign-in] Performing quick profile check for:', data.session.user.id, { correlationId })
-          
+
           try {
             // Profile check to determine onboarding status
             // Let Supabase SDK handle network timeouts and retry logic
@@ -182,6 +219,7 @@ export function SignInForm() {
               if (profileError.code === 'PGRST116') {
                 console.log('[sign-in] No profile found, redirecting to onboarding', { correlationId })
                 router.replace('/onboarding')
+                try { markInitialNavigationDone(); } catch { }
                 return
               }
               // For other errors, proceed to app - AuthProvider will handle sync
@@ -194,21 +232,23 @@ export function SignInForm() {
             // User needs onboarding if:
             // 1. No profile exists
             // 2. Profile exists but has no username (incomplete)
-            // 3. Profile exists but onboarding_completed is false
-            if (!profile || !profile.username || profile.onboarding_completed === false) {
+            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+            if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // User needs to complete onboarding
-              console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', { 
+              console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', {
                 correlationId,
                 hasUsername: !!profile?.username,
                 onboardingCompleted: profile?.onboarding_completed
               })
               router.replace('/onboarding')
+              try { markInitialNavigationDone(); } catch { }
             } else {
               // User has completed onboarding, go to app
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+              try { markInitialNavigationDone(); } catch { }
             }
-          } catch (profileCheckError: any) {
+          } catch {
             // On error, proceed to app and let AuthProvider handle it
             // This prevents blocking the user from signing in due to profile check issues
             console.log('[sign-in] Profile check error, proceeding to app. AuthProvider will sync.', { correlationId })
@@ -219,10 +259,10 @@ export function SignInForm() {
         }
       } catch (err: any) {
         console.error('[sign-in] Sign-in error:', err, { correlationId })
-        
+
         // Parse error using centralized handler
         const authError = parseAuthError(err, correlationId);
-        
+
         // Throw with user-friendly message
         throw new Error(authError.userMessage)
       }
@@ -241,7 +281,31 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
-  const redirectUri = useMemo(() => makeRedirectUri({}), [])
+
+  // Redirect URI configuration for Google OAuth
+  // Google rejects wildcard URIs, so we use specific schemes
+  const redirectUri = useMemo(() => {
+    // Try to use Expo's auth proxy for most reliable OAuth in development
+    // Falls back to custom scheme for production
+    const uri = makeRedirectUri({
+      // useProxy: true would use https://auth.expo.io/@username/slug
+      // but requires Expo account setup. For now, use custom scheme.
+      scheme: 'bountyexpo-workspace',
+      path: 'auth/callback'
+    });
+    console.log('[Google Auth] Redirect URI:', uri);
+
+    // Log warning if using dynamic exp:// URI (will fail without exact match in Google Console)
+    if (uri.startsWith('exp://') && !uri.includes('localhost') && !uri.includes('127.0.0.1')) {
+      console.warn(
+        '[Google Auth] Using dynamic exp:// URI. This will fail unless you add ' +
+        'the exact URI to Google Cloud Console. Current URI:', uri
+      );
+      console.warn('[Google Auth] To fix: Add this exact URI to your Google OAuth client redirect URIs');
+    }
+
+    return uri;
+  }, [])
 
   // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
   const [request, response, promptAsync] = useIdTokenAuthRequest({
@@ -279,14 +343,9 @@ export function SignInForm() {
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
-    if (!identifier || identifier.trim().length === 0) {
-      errors.identifier = 'Email is required'
-    } else {
-      // Basic email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(identifier.trim())) {
-        errors.identifier = 'Please enter a valid email address'
-      }
+    const emailError = validateEmail(identifier)
+    if (emailError) {
+      errors.identifier = emailError
     }
 
     if (!password) {
@@ -316,22 +375,22 @@ export function SignInForm() {
       try {
         setSocialAuthLoading(true)
         console.log('[google] Starting Google sign-in with id_token')
-        
+
         // Social auth: default to remember me = true
         console.log('[google] Setting remember me preference: true (social auth)')
         await setRememberMePreference(true)
-        
+
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
         })
-        
+
         if (error) throw error
         if (data.session) {
           console.log('[google] Sign-in successful, checking profile')
-          
+
           // Profile check to determine onboarding status
           // Let Supabase SDK handle network timeouts and retry logic
           try {
@@ -345,22 +404,25 @@ export function SignInForm() {
             // User needs onboarding if:
             // 1. No profile exists
             // 2. Profile exists but has no username (incomplete)
-            // 3. Profile exists but onboarding_completed is false
-            if (!profile || !profile.username || profile.onboarding_completed === false) {
+            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+            if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // User needs to complete onboarding
               console.log('[google] Profile incomplete or onboarding not completed, redirecting to onboarding', {
                 hasUsername: !!profile?.username,
                 onboardingCompleted: profile?.onboarding_completed
               })
               router.replace('/onboarding')
+              try { markInitialNavigationDone(); } catch { }
             } else {
               // User has completed onboarding, go to app
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+              try { markInitialNavigationDone(); } catch { }
             }
-          } catch (profileError: any) {
+          } catch {
             console.log('[google] Profile check failed, proceeding to app. AuthProvider will sync.')
             // On error, proceed to app - AuthProvider will handle profile sync
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+            try { markInitialNavigationDone(); } catch { }
           }
         } else {
           setSocialAuthError('No session returned after Google sign-in.')
@@ -402,6 +464,13 @@ export function SignInForm() {
                 );
               })()}
 
+              {socialAuthError && (
+                <ErrorBanner
+                  error={getUserFriendlyError(socialAuthError)}
+                  onDismiss={() => setSocialAuthError(null)}
+                />
+              )}
+
               <View>
                 <Text className="text-sm text-white/80 mb-1">Email</Text>
                 <TextInput
@@ -412,6 +481,7 @@ export function SignInForm() {
                     if (fieldErrors.identifier) {
                       setFieldErrors(prev => ({ ...prev, identifier: '' }))
                     }
+                    setEmailSuggestion(suggestEmailCorrection(text))
                   }}
                   placeholder="you@example.com"
                   keyboardType="email-address"
@@ -420,8 +490,26 @@ export function SignInForm() {
                   editable={!isSubmitting}
                   className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                 />
-                {getFieldError('identifier') && <Text className="text-xs text-red-400 mt-1">{getFieldError('identifier')}</Text>}
+                {getFieldError('identifier') ? <ValidationMessage message={getFieldError('identifier')} /> : null}
+                {emailSuggestion ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIdentifier(emailSuggestion)
+                      setEmailSuggestion(null)
+                      setFieldErrors(prev => ({ ...prev, identifier: '' }))
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use suggested email: ${emailSuggestion}`}
+                  >
+                    <Text className="text-yellow-300 text-xs mt-1">
+                      Did you mean <Text className="underline font-medium">{emailSuggestion}</Text>?
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               <View>
@@ -433,6 +521,7 @@ export function SignInForm() {
                 </View>
                 <View className="relative">
                   <TextInput
+                    ref={passwordRef}
                     nativeID="password"
                     value={password}
                     onChangeText={(text) => {
@@ -447,6 +536,8 @@ export function SignInForm() {
                     editable={!isSubmitting}
                     className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                     placeholderTextColor="rgba(255,255,255,0.4)"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSubmit}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(s => !s)}
@@ -456,7 +547,7 @@ export function SignInForm() {
                     <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
                   </TouchableOpacity>
                 </View>
-                {getFieldError('password') && <Text className="text-xs text-red-400 mt-1">{getFieldError('password')}</Text>}
+                {getFieldError('password') ? <ValidationMessage message={getFieldError('password')} /> : null}
               </View>
 
               <View className="flex-row items-center">
@@ -472,6 +563,18 @@ export function SignInForm() {
                   <Text className="text-white/80 text-sm ml-2">Remember me</Text>
                 </TouchableOpacity>
               </View>
+
+              {captchaRequired && (
+                <View className="mt-4">
+                  <Text className="text-xs text-white/80 mb-2">
+                    Please complete the security check below to continue signing in.
+                  </Text>
+                  <CaptchaChallenge
+                    onVerified={() => setCaptchaVerified(true)}
+                    onReset={() => setCaptchaVerified(false)}
+                  />
+                </View>
+              )}
 
               <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
                 {isSubmitting ? (
@@ -491,6 +594,7 @@ export function SignInForm() {
                     cornerRadius={8}
                     style={{ width: '100%', height: 44 }}
                     onPress={async () => {
+                      setSocialAuthLoading(true)
                       try {
                         console.log('[apple] Starting Apple sign-in')
                         const credential = await AppleAuthentication.signInAsync({
@@ -507,21 +611,21 @@ export function SignInForm() {
                           setSocialAuthError('Authentication service is not configured.')
                           return
                         }
-                        
+
                         // Social auth: default to remember me = true
                         console.log('[apple] Setting remember me preference: true (social auth)')
                         await setRememberMePreference(true)
-                        
+
                         console.log('[apple] Exchanging token with Supabase')
                         const { data, error } = await supabase.auth.signInWithIdToken({
                           provider: 'apple',
                           token: credential.identityToken,
                         })
-                        
+
                         if (error) throw error
                         if (data.session) {
                           console.log('[apple] Sign-in successful, checking profile')
-                          
+
                           // Profile check to determine onboarding status
                           // Let Supabase SDK handle network timeouts and retry logic
                           try {
@@ -535,20 +639,23 @@ export function SignInForm() {
                             // User needs onboarding if:
                             // 1. No profile exists
                             // 2. Profile exists but has no username (incomplete)
-                            // 3. Profile exists but onboarding_completed is false
-                            if (!profile || !profile.username || profile.onboarding_completed === false) {
+                            // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
+                            if (!profile || !profile.username || profile.onboarding_completed !== true) {
                               console.log('[apple] Profile incomplete or onboarding not completed, redirecting to onboarding', {
                                 hasUsername: !!profile?.username,
                                 onboardingCompleted: profile?.onboarding_completed
                               })
                               router.replace('/onboarding')
+                              try { markInitialNavigationDone(); } catch { }
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                              try { markInitialNavigationDone(); } catch { }
                             }
-                          } catch (profileError: any) {
+                          } catch {
                             console.log('[apple] Profile check failed, proceeding to app. AuthProvider will sync.')
                             // On error, proceed to app - AuthProvider will handle profile sync
                             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                            try { markInitialNavigationDone(); } catch { }
                           }
                         }
                       } catch (e: any) {
@@ -557,20 +664,31 @@ export function SignInForm() {
                           setSocialAuthError(errorMsg)
                           console.error('[apple] Error:', e)
                         }
+                      } finally {
+                        setSocialAuthLoading(false)
                       }
                     }}
                   />
+                  {socialAuthLoading && (
+                    <View style={{ position: 'absolute', right: 16, top: 6 }}>
+                      <ActivityIndicator color="#fff" />
+                    </View>
+                  )}
                 </View>
               )}
 
               <TouchableOpacity
-                disabled={!isGoogleConfigured || isSubmitting || !request}
+                disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
                 onPress={() => promptAsync()}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
               >
-                <Text className="text-black font-medium">
-                  {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-                </Text>
+                {socialAuthLoading ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text className="text-black font-medium">
+                    {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>

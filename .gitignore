@@ -13,6 +13,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+eas.json.bak
 
 # Native
 .kotlin/
@@ -56,6 +57,10 @@ postgres-data/
 coverage/
 *.test.results.json
 .nyc_output/
+# k6 load test results
+tests/load/results/
+*.summary.json
+*.html
 
 # Logs
 *.log
@@ -74,3 +79,13 @@ app-example
 .env.local
 
 .env.local
+google-service-account.json
+.env
+
+# Ignore generated temporary JS bundles that may contain secrets
+tmp_bundle/
+supabase/.temp/
+.temp/
+temp/
+# Local editor/history artifacts
+.history/

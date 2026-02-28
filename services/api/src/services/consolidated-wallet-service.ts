@@ -15,21 +15,21 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
-  ValidationError,
-  NotFoundError,
   ConflictError,
   ExternalServiceError,
   handleStripeError,
+  NotFoundError,
+  ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
 
-// Initialize Supabase admin client
-let supabaseAdmin: SupabaseClient | null = null;
+// Initialize Supabase admin client (relaxed typing to avoid PostgREST `never` inference)
+let supabaseAdmin: SupabaseClient<any> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient {
+function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -86,6 +86,28 @@ export interface WalletTransaction {
 }
 
 /**
+ * Helper function to transform database record to WalletTransaction
+ * Ensures type safety and reduces code duplication
+ */
+function toWalletTransaction(dbRecord: any): WalletTransaction {
+  return {
+    id: dbRecord.id,
+    user_id: dbRecord.user_id,
+    type: dbRecord.type,
+    amount: dbRecord.amount,
+    description: dbRecord.description,
+    status: dbRecord.status,
+    bounty_id: dbRecord.bounty_id,
+    stripe_payment_intent_id: dbRecord.stripe_payment_intent_id,
+    stripe_transfer_id: dbRecord.stripe_transfer_id,
+    stripe_connect_account_id: dbRecord.stripe_connect_account_id,
+    metadata: dbRecord.metadata,
+    created_at: dbRecord.created_at,
+    updated_at: dbRecord.updated_at,
+  };
+}
+
+/**
  * User balance result
  */
 export interface BalanceResult {
@@ -111,13 +133,13 @@ export interface TransactionsResult {
  */
 export async function getBalance(userId: string): Promise<BalanceResult> {
   const admin = getSupabaseAdmin();
-  
+
   const { data: profile, error } = await admin
     .from('profiles')
     .select('balance')
     .eq('id', userId)
     .single();
-  
+
   if (error) {
     if (error.code === 'PGRST116') {
       throw new NotFoundError('User', userId);
@@ -126,7 +148,7 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
       error: error.message,
     });
   }
-  
+
   return {
     balance: profile?.balance || 0,
     currency: 'USD',
@@ -145,7 +167,7 @@ export async function getTransactions(
   filters: TransactionFilters = {}
 ): Promise<TransactionsResult> {
   const admin = getSupabaseAdmin();
-  
+
   const {
     type,
     status,
@@ -155,13 +177,13 @@ export async function getTransactions(
     limit = 50,
     offset = 0,
   } = filters;
-  
+
   // Build query
   let query = admin
     .from('wallet_transactions')
     .select('*', { count: 'exact' })
     .eq('user_id', userId);
-  
+
   // Apply filters
   if (type) {
     query = query.eq('type', type);
@@ -178,20 +200,20 @@ export async function getTransactions(
   if (end_date) {
     query = query.lte('created_at', end_date);
   }
-  
+
   // Apply sorting and pagination
   query = query
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
-  
+
   const { data: transactions, error, count } = await query;
-  
+
   if (error) {
     throw new ExternalServiceError('Supabase', 'Failed to fetch transactions', {
       error: error.message,
     });
   }
-  
+
   // Transform to standard format
   const formattedTransactions: WalletTransaction[] = (transactions || []).map((tx: any) => ({
     id: tx.id,
@@ -208,7 +230,7 @@ export async function getTransactions(
     created_at: tx.created_at,
     updated_at: tx.updated_at,
   }));
-  
+
   return {
     transactions: formattedTransactions,
     total: count || 0,
@@ -223,23 +245,61 @@ export async function getTransactions(
  * @param userId - User ID
  * @param amount - Amount in USD
  * @param paymentIntentId - Stripe payment intent ID
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate processing
  * @returns Created transaction
  */
 export async function createDeposit(
   userId: string,
   amount: number,
-  paymentIntentId: string
+  paymentIntentId: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Deposit amount must be positive');
   }
-  
+
   const admin = getSupabaseAdmin();
-  
+
+  // Use payment intent ID and user ID as idempotency key if not provided
+  const effectiveIdempotencyKey = idempotencyKey || `deposit_${userId}_${paymentIntentId}`;
+
+  // Check for duplicate transaction using payment intent ID
+  const { data: existingTx } = await admin
+    .from('wallet_transactions')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .eq('type', 'deposit')
+    .maybeSingle();
+
+  if (existingTx) {
+    logger.warn({
+      paymentIntentId,
+      userId,
+      existingTransactionId: existingTx.id
+    }, '[WalletService] Duplicate deposit detected, returning existing transaction');
+
+    // Return existing transaction - fetch with error handling
+    const { data: transaction, error: fetchError } = await admin
+      .from('wallet_transactions')
+      .select('*')
+      .eq('id', existingTx.id)
+      .single();
+
+    if (fetchError || !transaction) {
+      // If transaction was deleted between checks, log and continue to create new one
+      logger.warn({
+        existingTransactionId: existingTx.id,
+        error: fetchError
+      }, '[WalletService] Existing transaction not found, creating new one');
+    } else {
+      return toWalletTransaction(transaction);
+    }
+  }
+
   // Create transaction record
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: userId,
       type: 'deposit',
       amount,
@@ -249,32 +309,22 @@ export async function createDeposit(
       metadata: {
         payment_intent_id: paymentIntentId,
         created_via: 'webhook',
+        idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
-  
+
   if (txError) {
     throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction', {
       error: txError.message,
     });
   }
-  
+
   // Update user balance atomically
   await updateBalance(userId, amount);
-  
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    stripe_payment_intent_id: transaction.stripe_payment_intent_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -283,45 +333,55 @@ export async function createDeposit(
  * @param userId - User ID
  * @param amount - Amount in USD
  * @param destination - Stripe Connect account ID or bank account token
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate withdrawals
  * @returns Created transaction
  */
 export async function createWithdrawal(
   userId: string,
   amount: number,
-  destination: string
+  destination: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Withdrawal amount must be positive');
   }
-  
+
   const admin = getSupabaseAdmin();
-  
+
+  // Generate deterministic idempotency key from transaction details
+  // Note: Use fixed-point representation for amount to ensure consistency
+  const amountKey = amount.toFixed(2).replace(/\./g, '');
+  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
+
   // Create pending transaction (balance not yet deducted)
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: userId,
       type: 'withdrawal',
       amount: -amount, // Negative for debit
       description: `Withdrawal to account ending in ${destination.slice(-4)}`,
       status: 'pending',
       stripe_connect_account_id: destination,
-    })
+      metadata: {
+        idempotency_key: effectiveIdempotencyKey,
+      },
+    }])
     .select()
     .single();
-  
+
   if (txError) {
     throw new ExternalServiceError('Supabase', 'Failed to create withdrawal transaction', {
       error: txError.message,
     });
   }
-  
+
   try {
     // Deduct from balance atomically (this validates sufficient balance)
     await updateBalance(userId, -amount);
-    
-    // Initiate Stripe transfer
-    const transfer = await stripe.transfers.create({
+
+    // Initiate Stripe transfer with idempotency key
+    const transferParams: Stripe.TransferCreateParams = {
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
       destination,
@@ -329,8 +389,13 @@ export async function createWithdrawal(
         user_id: userId,
         transaction_id: transaction.id,
       },
-    });
-    
+    };
+
+    const transfer = await stripe.transfers.create(
+      transferParams,
+      idempotencyKey ? { idempotencyKey } : {}
+    );
+
     // Update transaction with transfer ID and mark as completed
     const { error: updateError } = await admin
       .from('wallet_transactions')
@@ -344,31 +409,24 @@ export async function createWithdrawal(
         },
       })
       .eq('id', transaction.id);
-    
+
     if (updateError) {
-      logger.error({ 
-        transactionId: transaction.id, 
-        transferId: transfer.id, 
-        error: updateError 
+      logger.error({
+        transactionId: transaction.id,
+        transferId: transfer.id,
+        error: updateError
       }, '[WalletService] Failed to update transaction with transfer ID');
     }
-    
-    return {
-      id: transaction.id,
-      user_id: transaction.user_id,
-      type: transaction.type,
-      amount: transaction.amount,
-      description: transaction.description,
+
+    return toWalletTransaction({
+      ...transaction,
       status: 'completed',
       stripe_transfer_id: transfer.id,
       stripe_connect_account_id: destination,
-      metadata: transaction.metadata,
-      created_at: transaction.created_at,
-      updated_at: transaction.updated_at,
-    };
+    });
   } catch (error) {
     const handledError = handleStripeError(error);
-    
+
     // Best-effort: mark transaction as failed
     try {
       await admin
@@ -382,7 +440,7 @@ export async function createWithdrawal(
         error: txUpdateError instanceof Error ? txUpdateError.message : String(txUpdateError),
       }, '[WalletService] Failed to mark withdrawal transaction as failed');
     }
-    
+
     // Best-effort: refund the balance (rollback)
     // Only attempt if balance was actually deducted (error occurred after updateBalance)
     if (!(error instanceof ValidationError && error.message?.includes('Insufficient balance'))) {
@@ -397,7 +455,7 @@ export async function createWithdrawal(
         }, '[WalletService] CRITICAL: Failed to rollback user balance after withdrawal failure');
       }
     }
-    
+
     throw handledError;
   }
 }
@@ -408,19 +466,24 @@ export async function createWithdrawal(
  * @param bountyId - Bounty ID
  * @param posterId - Poster user ID
  * @param amount - Amount in USD
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate escrow
  * @returns Created transaction
  */
 export async function createEscrow(
   bountyId: string,
   posterId: string,
-  amount: number
+  amount: number,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   if (amount <= 0) {
     throw new ValidationError('Escrow amount must be positive');
   }
-  
+
   const admin = getSupabaseAdmin();
-  
+
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `escrow_${bountyId}_${posterId}`;
+
   // Check for existing escrow transaction to prevent duplicates
   const { data: existingEscrow } = await admin
     .from('wallet_transactions')
@@ -429,15 +492,15 @@ export async function createEscrow(
     .eq('type', 'escrow')
     .eq('status', 'completed')
     .maybeSingle();
-  
+
   if (existingEscrow) {
     throw new ConflictError('Escrow already exists for this bounty');
   }
-  
+
   // Create escrow transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: posterId,
       bounty_id: bountyId,
       type: 'escrow',
@@ -447,32 +510,22 @@ export async function createEscrow(
       metadata: {
         bounty_id: bountyId,
         escrowed_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
-  
+
   if (txError) {
     throw new ExternalServiceError('Supabase', 'Failed to create escrow transaction', {
       error: txError.message,
     });
   }
-  
+
   // Deduct from poster's balance atomically (validates sufficient balance)
   await updateBalance(posterId, -amount);
-  
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -480,14 +533,19 @@ export async function createEscrow(
  * Called when bounty is completed
  * @param bountyId - Bounty ID
  * @param hunterId - Hunter user ID
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate releases
  * @returns Created release transaction
  */
 export async function releaseEscrow(
   bountyId: string,
-  hunterId: string
+  hunterId: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
-  
+
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `release_${bountyId}_${hunterId}`;
+
   // Check for existing release or refund to prevent double-release
   const { data: existingRelease } = await admin
     .from('wallet_transactions')
@@ -496,11 +554,11 @@ export async function releaseEscrow(
     .in('type', ['release', 'refund'])
     .eq('status', 'completed')
     .maybeSingle();
-  
+
   if (existingRelease) {
     throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
   }
-  
+
   // Find the escrow transaction
   const { data: escrowTx, error: escrowError } = await admin
     .from('wallet_transactions')
@@ -509,53 +567,99 @@ export async function releaseEscrow(
     .eq('type', 'escrow')
     .eq('status', 'completed')
     .single();
-  
+
   if (escrowError || !escrowTx) {
     throw new NotFoundError('Escrow transaction', bountyId);
   }
-  
-  const amount = Math.abs(escrowTx.amount);
-  
-  // Create release transaction
+
+  const totalAmount = Math.abs(escrowTx.amount);
+
+  // Calculate platform fee
+  const platformFeePercent = config.stripe.platformFeePercent || 5;
+  const platformFee = Number(((totalAmount * platformFeePercent) / 100).toFixed(2));
+  const hunterAmount = totalAmount - platformFee;
+
+  // Record release transaction for hunter
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: hunterId,
       bounty_id: bountyId,
       type: 'release',
-      amount, // Positive for credit
+      amount: hunterAmount, // Positive for credit
       description: `Payment for bounty ${bountyId}`,
       status: 'completed',
       metadata: {
         bounty_id: bountyId,
         escrow_transaction_id: escrowTx.id,
+        platform_fee: platformFee,
         released_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
-  
+
   if (txError) {
     throw new ExternalServiceError('Supabase', 'Failed to create release transaction', {
       error: txError.message,
     });
   }
-  
+
+  // Record platform fee transaction
+  const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
+  await admin.from('wallet_transactions').insert([{
+    user_id: PLATFORM_ACCOUNT_ID,
+    bounty_id: bountyId,
+    type: 'deposit', // Platform fee is a deposit for the platform
+    amount: platformFee,
+    description: `Platform fee for bounty ${bountyId}`,
+    status: 'completed',
+    metadata: {
+      bounty_id: bountyId,
+      source_transaction_id: transaction.id,
+      type: 'platform_fee',
+    }
+  }]);
+
   // Add to hunter's balance atomically
-  await updateBalance(hunterId, amount);
-  
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+  await updateBalance(hunterId, hunterAmount);
+
+  // Best effort: Attempt Stripe transfer if hunter has a connected account
+  try {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('stripe_connect_account_id')
+      .eq('id', hunterId)
+      .single();
+
+    if (profile?.stripe_connect_account_id) {
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(hunterAmount * 100),
+        currency: 'usd',
+        destination: profile.stripe_connect_account_id,
+        metadata: {
+          bounty_id: bountyId,
+          transaction_id: transaction.id,
+        },
+      }, idempotencyKey ? { idempotencyKey: `tr_${idempotencyKey}` } : {});
+
+      // Update transaction with transfer ID
+      await admin
+        .from('wallet_transactions')
+        .update({ stripe_transfer_id: transfer.id })
+        .eq('id', transaction.id);
+    }
+  } catch (stripeError) {
+    logger.error({
+      error: stripeError,
+      bountyId,
+      hunterId
+    }, '[WalletService] Stripe transfer failed during escrow release');
+    // We don't throw here as the balance and ledger are already updated
+  }
+
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -564,15 +668,20 @@ export async function releaseEscrow(
  * @param bountyId - Bounty ID
  * @param posterId - Poster user ID
  * @param reason - Refund reason
+ * @param idempotencyKey - Optional idempotency key for preventing duplicate refunds
  * @returns Created refund transaction
  */
 export async function refundEscrow(
   bountyId: string,
   posterId: string,
-  reason: string
+  reason: string,
+  idempotencyKey?: string
 ): Promise<WalletTransaction> {
   const admin = getSupabaseAdmin();
-  
+
+  // Generate effective idempotency key
+  const effectiveIdempotencyKey = idempotencyKey || `refund_${bountyId}_${posterId}`;
+
   // Check for existing release or refund to prevent double-refund
   const { data: existingRelease } = await admin
     .from('wallet_transactions')
@@ -581,11 +690,11 @@ export async function refundEscrow(
     .in('type', ['release', 'refund'])
     .eq('status', 'completed')
     .maybeSingle();
-  
+
   if (existingRelease) {
     throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
   }
-  
+
   // Find the escrow transaction
   const { data: escrowTx, error: escrowError } = await admin
     .from('wallet_transactions')
@@ -594,17 +703,17 @@ export async function refundEscrow(
     .eq('type', 'escrow')
     .eq('status', 'completed')
     .single();
-  
+
   if (escrowError || !escrowTx) {
     throw new NotFoundError('Escrow transaction', bountyId);
   }
-  
+
   const amount = Math.abs(escrowTx.amount);
-  
+
   // Create refund transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert({
+    .insert([{
       user_id: posterId,
       bounty_id: bountyId,
       type: 'refund',
@@ -616,32 +725,22 @@ export async function refundEscrow(
         escrow_transaction_id: escrowTx.id,
         reason,
         refunded_at: new Date().toISOString(),
+        idempotency_key: effectiveIdempotencyKey,
       },
-    })
+    }])
     .select()
     .single();
-  
+
   if (txError) {
     throw new ExternalServiceError('Supabase', 'Failed to create refund transaction', {
       error: txError.message,
     });
   }
-  
+
   // Add back to poster's balance atomically
   await updateBalance(posterId, amount);
-  
-  return {
-    id: transaction.id,
-    user_id: transaction.user_id,
-    type: transaction.type,
-    amount: transaction.amount,
-    description: transaction.description,
-    status: transaction.status,
-    bounty_id: transaction.bounty_id,
-    metadata: transaction.metadata,
-    created_at: transaction.created_at,
-    updated_at: transaction.updated_at,
-  };
+
+  return toWalletTransaction(transaction);
 }
 
 /**
@@ -652,26 +751,27 @@ export async function refundEscrow(
  */
 export async function updateBalance(userId: string, amount: number): Promise<void> {
   const admin = getSupabaseAdmin();
-  
+
   // Try RPC function first (if it exists in the future)
-  const { error: rpcError } = await admin.rpc('update_balance', {
+  // Use loose typing for RPC until Database.Functions are modeled
+  const { error: rpcError } = await (admin as any).rpc('update_balance', {
     p_user_id: userId,
     p_amount: amount,
   });
-  
+
   // If RPC function doesn't exist, fall back to optimistic locking
   // Check for specific Postgres error indicating function doesn't exist
   if (rpcError) {
     const errorCode = (rpcError as any).code;
-    
+
     // PGRST202: Function not found in Supabase PostgREST
     const isFunctionNotFound = errorCode === 'PGRST202';
-    
+
     if (isFunctionNotFound) {
       // Optimistic locking approach
       const MAX_RETRIES = 3;
       let retries = 0;
-      
+
       while (retries < MAX_RETRIES) {
         try {
           // Read current balance
@@ -680,7 +780,7 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
             .select('balance')
             .eq('id', userId)
             .single();
-          
+
           if (readError) {
             if (readError.code === 'PGRST116') {
               throw new NotFoundError('User', userId);
@@ -689,15 +789,15 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
               error: readError.message,
             });
           }
-          
+
           const oldBalance = profile.balance || 0;
           const newBalance = oldBalance + amount;
-          
+
           // Check for negative balance
           if (newBalance < 0) {
             throw new ValidationError('Insufficient balance');
           }
-          
+
           // Update with optimistic lock (WHERE balance = old_balance)
           const { data: updated, error: updateError } = await admin
             .from('profiles')
@@ -705,18 +805,18 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
             .eq('id', userId)
             .eq('balance', oldBalance)
             .select();
-          
+
           if (updateError) {
             throw new ExternalServiceError('Supabase', 'Failed to update balance', {
               error: updateError.message,
             });
           }
-          
+
           // If no rows updated, balance changed (optimistic lock failed)
           if (!updated || updated.length === 0) {
             throw new ConflictError('Balance changed during update, please retry');
           }
-          
+
           // Success
           return;
         } catch (error) {
@@ -724,13 +824,13 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
           if (!(error instanceof ConflictError)) {
             throw error;
           }
-          
+
           // ConflictError: apply retry policy with backoff
           retries++;
           if (retries >= MAX_RETRIES) {
             throw new ConflictError('Balance changed during update after multiple retries, please try again');
           }
-          
+
           // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
           const delayMs = Math.min(1000, 100 * Math.pow(2, retries - 1));
           await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -739,7 +839,7 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
     } else {
       // RPC function exists but failed - interpret the error appropriately
       const errorMessage = rpcError.message?.toLowerCase() || '';
-      
+
       // Check for specific error patterns and throw appropriate error types
       if (errorMessage.includes('insufficient') || errorMessage.includes('negative')) {
         throw new ValidationError('Insufficient balance');
@@ -752,7 +852,7 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
       }
     }
   }
-  
+
   // RPC succeeded
 }
 

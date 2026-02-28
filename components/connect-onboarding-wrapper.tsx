@@ -24,6 +24,8 @@ import {
 } from 'react-native';
 
 import { API_BASE_URL } from '../lib/config/api';
+import { colors, theme } from '../lib/theme';
+
 
 export interface ConnectOnboardingWrapperProps {
   /** User's auth token */
@@ -74,6 +76,7 @@ export function ConnectOnboardingWrapper({
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingOnboarding, setIsStartingOnboarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = React.useRef(true);
 
   // Check current Connect account status
   const checkAccountStatus = useCallback(async () => {
@@ -89,11 +92,15 @@ export function ConnectOnboardingWrapper({
         },
       });
 
+      if (!isMountedRef.current) return;
+
       if (!response.ok) {
         throw new Error('Failed to verify account status');
       }
 
       const data = await response.json();
+
+      if (!isMountedRef.current) return;
 
       const accountStatus: ConnectAccountStatus = {
         hasAccount: !!data.accountId,
@@ -113,22 +120,29 @@ export function ConnectOnboardingWrapper({
       }
     } catch (err: any) {
       console.error('[ConnectOnboardingWrapper] Status check error:', err);
+      if (!isMountedRef.current) return;
       setError(err.message || 'Failed to check account status');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [authToken, onComplete]);
 
-  // Check status on mount
+  // Check status on mount and cleanup
   useEffect(() => {
     checkAccountStatus();
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [checkAccountStatus]);
 
   // Handle deep link returns
   useEffect(() => {
     const handleDeepLink = async (event: { url: string }) => {
       const { url } = event;
-      
+
       if (url.includes('connect/return') || url.includes('connect/refresh')) {
         // User returned from onboarding, recheck status
         await checkAccountStatus();
@@ -161,12 +175,16 @@ export function ConnectOnboardingWrapper({
         }),
       });
 
+      if (!isMountedRef.current) return;
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to create onboarding link');
       }
 
       const { url } = await response.json();
+
+      if (!isMountedRef.current) return;
 
       // Check if we can open the URL
       const supported = await Linking.canOpenURL(url);
@@ -185,6 +203,8 @@ export function ConnectOnboardingWrapper({
       );
     } catch (err: any) {
       console.error('[ConnectOnboardingWrapper] Onboarding start error:', err);
+
+      if (!isMountedRef.current) return;
 
       let errorMessage = err.message || 'Failed to start onboarding';
       let requiresSupport = false;
@@ -205,7 +225,9 @@ export function ConnectOnboardingWrapper({
         requiresSupport,
       });
     } finally {
-      setIsStartingOnboarding(false);
+      if (isMountedRef.current) {
+        setIsStartingOnboarding(false);
+      }
     }
   }, [authToken, returnUrl, refreshUrl, onError]);
 
@@ -222,7 +244,7 @@ export function ConnectOnboardingWrapper({
     if (status.payoutsEnabled) {
       return {
         icon: 'check-circle' as const,
-        color: '#059669',
+        color: colors.primary[600],
         text: 'Account verified and ready for payouts',
       };
     }
@@ -262,7 +284,7 @@ export function ConnectOnboardingWrapper({
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
         <Text style={styles.loadingText}>Checking account status...</Text>
       </View>
     );
@@ -322,8 +344,8 @@ export function ConnectOnboardingWrapper({
             {isStartingOnboarding
               ? 'Opening...'
               : status?.hasAccount
-              ? 'Continue Setup'
-              : 'Connect Bank Account'}
+                ? 'Continue Setup'
+                : 'Connect Bank Account'}
           </Text>
         </TouchableOpacity>
       )}
@@ -336,7 +358,7 @@ export function ConnectOnboardingWrapper({
           accessibilityRole="button"
           accessibilityLabel="Refresh account status"
         >
-          <MaterialIcons name="refresh" size={20} color="#059669" />
+          <MaterialIcons name="refresh" size={20} color={colors.primary[600]} />
           <Text style={styles.refreshButtonText}>Refresh Status</Text>
         </TouchableOpacity>
       )}
@@ -357,15 +379,15 @@ export function ConnectOnboardingWrapper({
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Why connect a bank account?</Text>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Receive earnings from completed bounties</Text>
         </View>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Fast withdrawals in 1-2 business days</Text>
         </View>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Secure transfers powered by Stripe</Text>
         </View>
       </View>
@@ -452,16 +474,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadows.emerald,
   },
+
   actionButtonDisabled: {
     backgroundColor: '#9ca3af',
     opacity: 0.7,
@@ -482,7 +501,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   refreshButtonText: {
-    color: '#059669',
+    color: colors.primary[600],
     fontSize: 14,
     marginLeft: 4,
   },

@@ -1,14 +1,24 @@
-
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { BrandingLogo } from 'components/ui/branding-logo';
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuthContext } from '../hooks/use-auth-context';
+import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
 import { useStripe } from '../lib/stripe-context';
+import { colors, theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
-import { useEmailVerification } from '../hooks/use-email-verification';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
+
+
+interface BankAccount {
+  id: string;
+  last4: string;
+  bankName?: string;
+  accountType: string;
+  verified: boolean;
+  defaultForCurrency: boolean;
+}
 
 interface WithdrawScreenProps {
   onBack?: () => void;
@@ -21,17 +31,19 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
   const [connectedAccountId, setConnectedAccountId] = useState<string>("");
+  const [hasBankAccount, setHasBankAccount] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isOnboarding, setIsOnboarding] = useState(false);
-  
+
   // Use wallet context for balance - this ensures balance is always in sync
   const { withdraw, balance: walletBalance, refresh } = useWallet();
   const { paymentMethods, isLoading } = useStripe();
   const { session } = useAuthContext();
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
-  
+
   // Use prop balance if provided, otherwise use wallet context balance
   const balance = propBalance ?? walletBalance;
-  
+
   // Set default selected method when payment methods load
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedMethod) {
@@ -39,10 +51,20 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
   }, [paymentMethods, selectedMethod]);
 
-  // Check for existing Connect account on mount
+  // Check for existing Connect account and bank accounts when session is available/changes
   useEffect(() => {
+    if (!session?.access_token) {
+      return;
+    }
     verifyConnectOnboarding();
-  }, []);
+  }, [session?.access_token]);
+
+  // Fetch bank accounts when Connect account is verified
+  useEffect(() => {
+    if (hasConnectedAccount && session?.access_token) {
+      fetchBankAccounts();
+    }
+  }, [hasConnectedAccount, session?.access_token]);
 
   const verifyConnectOnboarding = async () => {
     if (!session?.access_token) return;
@@ -68,9 +90,33 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
   };
 
+  const fetchBankAccounts = async () => {
+    if (!session?.access_token || !hasConnectedAccount) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.bankAccounts && data.bankAccounts.length > 0) {
+          setBankAccounts(data.bankAccounts);
+          setHasBankAccount(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching bank accounts:', error);
+    }
+  };
+
   const handleConnectOnboarding = async () => {
     setIsOnboarding(true);
-    
+
     try {
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please sign in again.');
@@ -95,12 +141,12 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       }
 
       const { url, accountId } = await response.json();
-      
+
       // Open the Stripe Connect onboarding URL
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
-        
+
         // After returning, verify onboarding status
         setTimeout(async () => {
           await verifyConnectOnboarding();
@@ -110,11 +156,11 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       }
     } catch (error: any) {
       console.error('Connect onboarding error:', error);
-      
+
       // Provide detailed error messages with troubleshooting guidance
       let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
       let errorTitle = 'Onboarding Failed';
-      
+
       // Check for common Stripe Connect issues
       if (error.message?.includes('account already exists')) {
         errorTitle = 'Account Already Exists';
@@ -126,7 +172,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         errorTitle = 'Network Error';
         errorMessage = 'Unable to connect to the payment service. Please check your internet connection and try again.';
       }
-      
+
       Alert.alert(
         errorTitle,
         errorMessage + '\n\nIf this problem persists, please contact support at support@bountyexpo.com',
@@ -158,13 +204,24 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       return;
     }
 
-    // Check if user has connected account for bank transfers
+    // Check if user has connected account and bank account for transfers
+    if (hasConnectedAccount && !hasBankAccount && !selectedMethod) {
+      Alert.alert(
+        'Bank Account Required',
+        'To withdraw funds, you need to add a bank account to your Stripe Connect account.\n\nThis ensures fast and secure withdrawals.',
+        [
+          { text: 'OK' }
+        ]
+      );
+      return;
+    }
+
     if (!hasConnectedAccount && !selectedMethod) {
       Alert.alert(
         'Setup Required',
-        'To withdraw funds, you need to either:\n\n1. Connect your bank account (recommended)\n2. Select a payment method',
+        'To withdraw funds, you need to:\n\n1. Complete Stripe Connect onboarding\n2. Add a bank account\n\nThis ensures fast and secure withdrawals.',
         [
-          { text: 'Connect Bank Account', onPress: handleConnectOnboarding },
+          { text: 'Get Started', onPress: handleConnectOnboarding },
           { text: 'Cancel', style: 'cancel' }
         ]
       );
@@ -172,14 +229,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
 
     setIsProcessing(true);
-    
+
     try {
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please sign in again.');
       }
 
-      if (hasConnectedAccount) {
-        // Use Stripe Connect transfer
+      if (hasBankAccount) {
+        // Use Stripe Connect transfer to bank account
         const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
           method: 'POST',
           headers: {
@@ -198,14 +255,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         }
 
         const { transferId, transactionId, estimatedArrival, message } = await response.json();
-        
+
         // Refresh wallet to get updated balance from API
         await refresh();
-        
+
         // Show success message
         Alert.alert(
           'Withdrawal Initiated',
-          message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
+          message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
           [{ text: 'OK', onPress: onBack }]
         );
       } else {
@@ -229,7 +286,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     } catch (error: any) {
       console.error('Withdrawal error:', error);
       Alert.alert(
-        'Error', 
+        'Error',
         error.message || 'Failed to process withdrawal. Please try again.',
         [{ text: 'OK' }]
       );
@@ -287,23 +344,50 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       <ScrollView style={styles.scrollArea} contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.methodsBox}>
           <Text style={styles.methodsTitle}>Select Withdrawal Method</Text>
-          
+
           {/* Bank Account - Stripe Connect */}
-          {hasConnectedAccount ? (
+          {hasConnectedAccount && hasBankAccount ? (
+            <>
+              <TouchableOpacity
+                style={[styles.methodRow, styles.methodRowActive]}
+                onPress={() => setSelectedMethod('')}
+              >
+                <View style={styles.methodIconCircle}>
+                  <MaterialIcons name="account-balance" size={20} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.methodName}>
+                    Primary bank account {bankAccounts[0]?.last4 ? `(****${bankAccounts[0].last4})` : ''}
+                  </Text>
+                  <Text style={styles.methodDetails}>
+                    {bankAccounts[0]?.verified ? 'Verified • ' : 'Pending verification • '}
+                    Fastest withdrawal method • 1-3 business days
+                  </Text>
+                  {(bankAccounts?.length ?? 0) > 1 && (
+                    <Text style={styles.methodDetails}>
+                      {`+ ${(bankAccounts?.length ?? 0) - 1} additional linked bank ${((bankAccounts?.length ?? 0) - 1) === 1 ? 'account' : 'accounts'
+                        } in Stripe. Payouts go to your default account.`}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.methodCheckCircle}>
+                  <MaterialIcons name="check" size={16} color="#34d399" />
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : hasConnectedAccount && !hasBankAccount ? (
             <TouchableOpacity
-              style={[styles.methodRow, styles.methodRowActive]}
-              onPress={() => setSelectedMethod('')}
+              style={[styles.methodRow, styles.methodRowInactive]}
+              onPress={handleConnectOnboarding}
             >
               <View style={styles.methodIconCircle}>
-                <MaterialIcons name="account-balance" size={20} color="#fff" />
+                <MaterialIcons name="add" size={20} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.methodName}>Bank Account (Connected)</Text>
-                <Text style={styles.methodDetails}>Fastest withdrawal method • 1-3 business days</Text>
+                <Text style={styles.methodName}>Add Bank Account</Text>
+                <Text style={styles.methodDetails}>Required for withdrawals</Text>
               </View>
-              <View style={styles.methodCheckCircle}>
-                <MaterialIcons name="check" size={16} color="#34d399" />
-              </View>
+              <MaterialIcons name="arrow-forward" size={20} color="#6ee7b7" />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -327,10 +411,10 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               )}
             </TouchableOpacity>
           )}
-          
+
           {/* Divider */}
           <View style={{ height: 1, backgroundColor: '#047857', marginVertical: 12 }} />
-          
+
           {/* Payment Methods */}
           {isLoading ? (
             <View style={[styles.methodRow, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -374,7 +458,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               </TouchableOpacity>
             ))
           )}
-          
+
           {/* Processing time info */}
           <View style={styles.methodRowInactive}>
             <View style={styles.methodIconCircle}>
@@ -396,11 +480,11 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           onPress={handleWithdraw}
           style={[
             styles.bottomButton,
-            withdrawalAmount > 0 && (selectedMethod || hasConnectedAccount) && !isProcessing
-              ? styles.bottomButtonActive 
+            withdrawalAmount > 0 && (selectedMethod || hasBankAccount) && !isProcessing
+              ? styles.bottomButtonActive
               : styles.bottomButtonInactive,
           ]}
-          disabled={withdrawalAmount <= 0 || (!selectedMethod && !hasConnectedAccount) || isProcessing}
+          disabled={withdrawalAmount <= 0 || (!selectedMethod && !hasBankAccount) || isProcessing}
         >
           {isProcessing ? (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -422,14 +506,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   backButton: {
     marginRight: 12,
@@ -495,7 +579,7 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     backgroundColor: '#047857',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 1,
     borderRadius: 8,
     color: '#fff',
@@ -563,11 +647,12 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     borderTopWidth: 1,
-    borderTopColor: '#10b981',
-    elevation: 10,
+    borderTopColor: colors.primary[500],
+    ...theme.shadows.lg,
   },
+
   bottomButton: {
     width: '100%',
     paddingVertical: 16,
@@ -575,7 +660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomButtonActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   bottomButtonInactive: {
     backgroundColor: '#04785799',

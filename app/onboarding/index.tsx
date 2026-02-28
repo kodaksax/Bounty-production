@@ -6,14 +6,14 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { colors } from '../../lib/theme';
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 export default function OnboardingIndex() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkOnboardingStatus();
@@ -34,8 +34,6 @@ export default function OnboardingIndex() {
       console.error('Error checking onboarding status:', error);
       // On error, default to showing carousel
       router.replace('/onboarding/carousel');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -49,7 +47,7 @@ export default function OnboardingIndex() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     justifyContent: 'center',
     alignItems: 'center',
   },

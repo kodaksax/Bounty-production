@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.types';
 
 // Realtime event payload interface
 export interface RealtimeEvent {
@@ -9,7 +10,7 @@ export interface RealtimeEvent {
 }
 
 export class RealtimeService {
-  private supabaseClient: any = null;
+  private supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
   private wsClients: Set<any> = new Set();
 
   constructor() {
@@ -19,7 +20,7 @@ export class RealtimeService {
 
     // Initialize Supabase client if credentials are available
     if (supabaseUrl && supabaseAnon) {
-      this.supabaseClient = createClient(
+      this.supabaseClient = createClient<Database>(
         supabaseUrl,
         supabaseAnon
       );

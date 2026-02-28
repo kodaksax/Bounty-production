@@ -7,18 +7,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActionSheetIOS,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -27,7 +28,10 @@ import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { attachmentService } from '../../lib/services/attachment-service';
+import { Profile } from '../../lib/services/database.types';
+import { supabase } from '../../lib/supabase';
 
+import { colors } from '../../lib/theme';
 const COMMON_SKILLS = [
   'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
   'Gardening', 'Photography', 'Tutoring', 'Tech Support', 'Design',
@@ -37,7 +41,7 @@ export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { updateProfile: updateAuthProfile } = useAuthProfile();
+  const { userId } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
@@ -55,8 +59,8 @@ export default function DetailsScreen() {
     onboardingData.location || ((normalized as any)?._raw && (normalized as any)._raw.location) || (localProfile as any)?.location || ''
   );
   const [skills, setSkills] = useState<string[]>(
-    onboardingData.skills.length > 0 
-      ? onboardingData.skills 
+    onboardingData.skills.length > 0
+      ? onboardingData.skills
       : ((normalized as any)?._raw && (normalized as any)._raw.skills) || (localProfile as any)?.skills || []
   );
   const [customSkill, setCustomSkill] = useState('');
@@ -94,17 +98,67 @@ export default function DetailsScreen() {
   }, [avatarUri]);
 
   const pickAvatar = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
-      return;
+    const showPicker = async () => {
+      return new Promise<'camera' | 'library' | null>((resolve) => {
+        const options = ['Take Photo', 'Choose from Library', 'Cancel'];
+        if (Platform.OS === 'ios') {
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              options,
+              cancelButtonIndex: 2,
+            },
+            (buttonIndex: number) => {
+              if (buttonIndex === 0) resolve('camera');
+              else if (buttonIndex === 1) resolve('library');
+              else resolve(null);
+            }
+          );
+        } else {
+          Alert.alert(
+            'Select Photo',
+            'Choose a source',
+            [
+              { text: 'Take Photo', onPress: () => resolve('camera') },
+              { text: 'Choose from Library', onPress: () => resolve('library') },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(null) }
+          );
+        }
+      });
+    };
+
+    const source = await showPicker();
+    if (!source) return;
+
+    let result: ImagePicker.ImagePickerResult;
+
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow camera access to take a profile picture.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
+
     if (result.canceled) return;
     const asset = result.assets?.[0];
     if (!asset) return;
@@ -127,7 +181,7 @@ export default function DetailsScreen() {
         progress: 0,
       } as any);
       setAvatarUri(uploaded.remoteUri || asset.uri);
-    } catch (e) {
+    } catch {
       setAvatarUri(asset.uri);
     } finally {
       setUploading(false);
@@ -156,7 +210,7 @@ export default function DetailsScreen() {
 
   const handleNext = async () => {
     setSaving(true);
-    
+
     // Save to local storage with all fields
     const result = await updateProfile({
       displayName: displayName.trim() || undefined,
@@ -173,11 +227,129 @@ export default function DetailsScreen() {
       return;
     }
 
-    // Also sync to Supabase via AuthProfileService
-    await updateAuthProfile({
-      about: bio.trim() || undefined,
-      avatar: avatarUri || undefined,
-    });
+    // Sync all fields to Supabase via direct update
+    // This ensures profile data persists to the database and is available across devices
+    // We update the profiles table directly to ensure all fields are saved
+    const saveToSupabase = async () => {
+      if (!userId) return false;
+
+      const profileUpdate: Partial<Profile> = {};
+
+      if (displayName.trim()) {
+        profileUpdate.display_name = displayName.trim();
+      }
+      if (title.trim()) {
+        profileUpdate.title = title.trim();
+      }
+      if (bio.trim()) {
+        profileUpdate.about = bio.trim();
+      }
+      if (location.trim()) {
+        profileUpdate.location = location.trim();
+      }
+      if (skills.length > 0) {
+        profileUpdate.skills = skills;
+      }
+      // Only persist avatar_url when we have a confirmed remote URI,
+      // not a local file:// path that would break on other devices.
+      if (avatarUri && !avatarUri.startsWith('file://')) {
+        profileUpdate.avatar_url = avatarUri;
+      }
+
+      // Only update if we have fields to save
+      if (Object.keys(profileUpdate).length === 0) {
+        return true;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', userId);
+
+      if (error) {
+        console.error('[Onboarding Details] Error saving to Supabase:', error);
+        return false;
+      }
+
+      console.log('[Onboarding Details] Successfully saved profile data to database');
+      return true;
+    };
+
+    try {
+      const success = await saveToSupabase();
+
+      if (!success) {
+        setSaving(false);
+
+        // Handle retry attempts with user feedback - allows up to 3 total attempts
+        const handleRetryAttempts = async () => {
+          setSaving(true);
+          const retrySuccess = await saveToSupabase();
+          if (retrySuccess) {
+            setSaving(false);
+            router.push('/onboarding/phone');
+          } else {
+            setSaving(false);
+            // Show option to skip after second failed attempt
+            Alert.alert(
+              'Still Unable to Save',
+              'We could not save your profile. You can skip this step and update your profile later.',
+              [
+                {
+                  text: 'Try One More Time',
+                  onPress: async () => {
+                    setSaving(true);
+                    const finalSuccess = await saveToSupabase();
+                    setSaving(false);
+                    if (finalSuccess) {
+                      router.push('/onboarding/phone');
+                    } else {
+                      // After 3 attempts, just allow skip
+                      Alert.alert('Unable to Save', 'Please skip for now and try again later from your profile settings.', [
+                        { text: 'OK', onPress: () => router.push('/onboarding/phone') }
+                      ]);
+                    }
+                  }
+                },
+                { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/phone') }
+              ]
+            );
+          }
+        };
+
+        Alert.alert(
+          'Connection Error',
+          'Failed to save your profile. Please check your internet connection and try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: handleRetryAttempts,
+            },
+            {
+              text: 'Skip for now',
+              style: 'cancel',
+              onPress: () => router.push('/onboarding/phone'),
+            },
+          ]
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('[Onboarding Details] Exception saving to Supabase:', error);
+      setSaving(false);
+      Alert.alert(
+        'Connection Error',
+        'An unexpected error occurred. You can skip this step and update your profile later.',
+        [
+          {
+            text: 'Skip for now',
+            style: 'cancel',
+            onPress: () => router.push('/onboarding/phone'),
+          },
+        ]
+      );
+      return;
+    }
 
     setSaving(false);
     router.push('/onboarding/phone');
@@ -256,7 +428,11 @@ export default function DetailsScreen() {
               placeholderTextColor="rgba(255,255,255,0.4)"
               autoCapitalize="words"
             />
-            <Text style={styles.hint}>How you'd like to be called</Text>
+            <Text style={styles.hint}>
+              How you
+              {"'"}
+              d like to be called
+            </Text>
           </View>
 
           {/* Title/Profession */}
@@ -309,7 +485,7 @@ export default function DetailsScreen() {
             <Text style={styles.hintWithMargin}>
               What can you help with?
             </Text>
-            
+
             {/* Common skills as chips */}
             <View style={styles.skillsContainer}>
               {COMMON_SKILLS.map((skill) => (
@@ -403,7 +579,7 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -470,7 +646,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#059669',
+    borderColor: colors.primary[600],
   },
   avatarHint: {
     color: '#a7f3d0',

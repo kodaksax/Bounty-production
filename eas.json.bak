@@ -1,0 +1,57 @@
+{
+  "cli": {
+    "version": ">= 16.19.3",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "buildNumber": "auto"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "beta",
+      "ios": {
+        "simulator": false,
+        "buildNumber": "auto",
+        "resourceClass": "m1-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${STAGING_SUPABASE_ANON_KEY}",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_TEST_PUBLISHABLE_KEY}",
+        "EXPO_PUBLIC_ENVIRONMENT": "beta"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "ios": {
+        "simulator": false,
+        "buildNumber": "auto",
+        "resourceClass": "m1-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.bountyfinder.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "${PRODUCTION_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${PRODUCTION_SUPABASE_ANON_KEY}",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_LIVE_PUBLISHABLE_KEY}",
+        "EXPO_PUBLIC_ENVIRONMENT": "production"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "${APPLE_ID}",
+        "ascAppId": "${ASC_APP_ID}",
+        "appleTeamId": "${APPLE_TEAM_ID}"
+      }
+    }
+  }
+}

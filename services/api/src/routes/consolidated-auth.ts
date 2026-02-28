@@ -6,12 +6,14 @@
  * - server/index.js (lines 152-202)
  */
 
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { asyncHandler, ValidationError, AuthenticationError, ExternalServiceError } from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import { asyncHandler, AuthenticationError, ExternalServiceError, ValidationError } from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
+import { Database } from '../types/database.types';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
@@ -94,7 +96,7 @@ async function authRateLimitMiddleware(
 /**
  * Clean up expired rate limit entries every 5 minutes
  */
-let cleanupIntervalId: NodeJS.Timeout | null = null;
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function startRateLimitCleanup() {
   if (cleanupIntervalId) return; // Already started
@@ -123,7 +125,7 @@ export function stopRateLimitCleanup() {
  * Supabase admin client singleton for user management operations
  * Reused across all requests to avoid repeated connection setup
  */
-const supabaseAdminClient = createClient(
+const supabaseAdminClient = createClient<Database>(
   config.supabase.url,
   config.supabase.serviceRoleKey,
   {
@@ -137,7 +139,7 @@ const supabaseAdminClient = createClient(
 /**
  * Get Supabase admin client for user management operations
  */
-function getSupabaseAdmin() {
+function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
   return supabaseAdminClient;
 }
 
@@ -253,7 +255,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Register a new user account',
-        body: registerSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(registerSchema, 'AuthRegisterRequest'),
         response: {
           201: {
             type: 'object',
@@ -294,7 +297,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Sign in with email and password',
-        body: signInSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(signInSchema, 'AuthSignInRequest'),
         response: {
           200: {
             type: 'object',
@@ -330,7 +334,7 @@ export async function registerConsolidatedAuthRoutes(
 
       try {
         // Sign in with Supabase (use regular client for sign-in, not admin)
-        const supabaseClient = createClient(
+        const supabaseClient = createClient<Database>(
           config.supabase.url,
           config.supabase.anonKey
         );
@@ -405,7 +409,8 @@ export async function registerConsolidatedAuthRoutes(
       schema: {
         tags: ['auth'],
         description: 'Sign up for a new account (alternative endpoint)',
-        body: signUpSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(signUpSchema, 'AuthSignUpRequest'),
         response: {
           201: {
             type: 'object',

@@ -3,6 +3,8 @@ import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
+import { theme } from "../../lib/theme";
+
 
 export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
@@ -29,16 +31,16 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
       onBountyTabRepress?.();
       return;
     }
-    
+
     if (screen === activeScreen) return;
-    
+
     // Trigger haptic feedback - different types for different screens
     if (screen === "bounty") {
       triggerHaptic('medium'); // Main screen gets medium feedback
     } else {
       triggerHaptic('selection'); // Other screens get selection feedback
     }
-    
+
     onNavigate(screen);
   }, [activeScreen, onNavigate, triggerHaptic, onBountyTabRepress]);
 
@@ -83,32 +85,32 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
       <View style={styles.bottomNav}>
         {/* Left side items - evenly distributed */}
         <View style={styles.sideSection}>
-          <TouchableOpacity 
-            onPress={() => handleNavigate("create")} 
+          <TouchableOpacity
+            onPress={() => handleNavigate("create")}
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Create new bounty or message"
             accessibilityState={{ selected: activeScreen === "create" }}
           >
-            <MaterialIcons 
-              name="chat" 
-              color={activeScreen === "create" ? "#fffef5" : "#9ca3af"} 
-              size={NAV_ICON_SIZE} 
+            <MaterialIcons
+              name="chat"
+              color={activeScreen === "create" ? "#fffef5" : "#9ca3af"}
+              size={NAV_ICON_SIZE}
             />
           </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => handleNavigate("wallet")} 
+          <TouchableOpacity
+            onPress={() => handleNavigate("wallet")}
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="View wallet and transactions"
             accessibilityState={{ selected: activeScreen === "wallet" }}
           >
-            <MaterialIcons 
-              name="account-balance-wallet" 
-              color={activeScreen === "wallet" ? "#fffef5" : "#9ca3af"} 
-              size={NAV_ICON_SIZE} 
+            <MaterialIcons
+              name="account-balance-wallet"
+              color={activeScreen === "wallet" ? "#fffef5" : "#9ca3af"}
+              size={NAV_ICON_SIZE}
             />
           </TouchableOpacity>
         </View>
@@ -135,10 +137,10 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               accessibilityState={{ selected: activeScreen === "bounty" }}
               accessibilityHint="This is the main screen with available bounties"
             >
-              <MaterialIcons 
-                name="gps-fixed" 
-                color={activeScreen === "bounty" ? "#fffef5" : "#d1fae5"} 
-                size={CENTER_ICON_SIZE} 
+              <MaterialIcons
+                name="gps-fixed"
+                color={activeScreen === "bounty" ? "#fffef5" : "#d1fae5"}
+                size={CENTER_ICON_SIZE}
               />
             </TouchableOpacity>
           </Animated.View>
@@ -146,48 +148,48 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
 
         {/* Right side items - evenly distributed */}
         <View style={styles.sideSection}>
-          <TouchableOpacity 
-            onPress={() => handleNavigate("postings")} 
+          <TouchableOpacity
+            onPress={() => handleNavigate("postings")}
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Search and browse postings"
             accessibilityState={{ selected: activeScreen === "postings" }}
           >
-            <MaterialIcons 
-              name="edit-note" 
-              color={activeScreen === "postings" ? "#fffef5" : "#9ca3af"} 
-              size={NAV_ICON_SIZE} 
+            <MaterialIcons
+              name="edit-note"
+              color={activeScreen === "postings" ? "#fffef5" : "#9ca3af"}
+              size={NAV_ICON_SIZE}
             />
           </TouchableOpacity>
           {showAdmin ? (
-            <TouchableOpacity 
-              onPress={() => handleNavigate("admin")} 
+            <TouchableOpacity
+              onPress={() => handleNavigate("admin")}
               style={styles.navButton}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="Admin panel"
               accessibilityState={{ selected: activeScreen === "admin" }}
             >
-              <MaterialIcons 
-                name="admin-panel-settings" 
-                color={activeScreen === "admin" ? "#00dc50" : "#9ca3af"} 
-                size={NAV_ICON_SIZE} 
+              <MaterialIcons
+                name="admin-panel-settings"
+                color={activeScreen === "admin" ? "#00dc50" : "#9ca3af"}
+                size={NAV_ICON_SIZE}
               />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
-              onPress={() => handleNavigate("profile")} 
+            <TouchableOpacity
+              onPress={() => handleNavigate("profile")}
               style={styles.navButton}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="View and edit profile"
               accessibilityState={{ selected: activeScreen === "profile" }}
             >
-              <MaterialIcons 
-                name="person" 
-                color={activeScreen === "profile" ? "#fffef5" : "#9ca3af"} 
-                size={NAV_ICON_SIZE} 
+              <MaterialIcons
+                name="person"
+                color={activeScreen === "profile" ? "#fffef5" : "#9ca3af"}
+                size={NAV_ICON_SIZE}
               />
             </TouchableOpacity>
           )}
@@ -216,16 +218,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderTopLeftRadius: 28, // Increased radius for modern look
     borderTopRightRadius: 28,
-    elevation: 20,
+    ...theme.shadows.lg,
     // Enhanced glass-morphism effect
     borderWidth: 1,
     borderColor: "rgba(0, 145, 44, 0.25)", // Company specified primary green
-    // Add sophisticated shadow
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
   },
+
   // Left and right sections take equal space, ensuring center is dead center
   sideSection: {
     flex: 1, // Equal flex for left and right
@@ -247,6 +245,7 @@ const styles = StyleSheet.create({
     minHeight: SIZING.MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -28, // Align with raised center button
   },
   centerButton: {
     height: 68, // Slightly larger for emphasis
@@ -260,14 +259,10 @@ const styles = StyleSheet.create({
     marginTop: -28, // Raised higher for more prominence
     minWidth: SIZING.MIN_TOUCH_TARGET + 24, // Larger touch target
     minHeight: SIZING.MIN_TOUCH_TARGET + 24,
-    // Enhanced glow effect for emphasis
-    shadowColor: "#00912C",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    elevation: 12,
+    ...theme.shadows.emerald,
     overflow: 'hidden',
   },
+
   centerButtonInner: {
     width: "100%",
     height: "100%",

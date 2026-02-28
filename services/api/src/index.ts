@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
+import { walletCleanupCron } from './services/wallet-cleanup-cron';
+
+// Initialize OpenTelemetry FIRST - before any other modules
+// This must happen before importing instrumented modules
+// Note: OpenTelemetry initialization is deferred until after dotenv loads
 // Defer importing modules that may read environment variables until after
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
@@ -57,7 +62,7 @@ import type { AuthenticatedRequest } from './middleware/auth';
 
 const { eq } = require('drizzle-orm');
 const Fastify = require('fastify');
-const { db, pool } = require('./db/connection');
+const { db, pool, closeDbPools } = require('./db/connection');
 // Detect Supabase mode (used to skip direct Postgres ping at startup)
 const STARTUP_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const STARTUP_SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -90,6 +95,8 @@ const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidat
 const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetricsRoutes } = require('./routes/metrics');
+const { registerMonitoringDashboardRoutes } = require('./routes/monitoring-dashboard');
+const { registerUploadRoutes } = require('./routes/upload');
 
 // Import logger and analytics
 const { logger } = require('./services/logger');
@@ -99,6 +106,17 @@ const { initializeIdempotencyService } = require('./services/idempotency-service
 // Import monitoring
 const { recordHttpRequest } = require('./monitoring/metrics');
 const { tracingMiddleware, tracing } = require('./monitoring/tracing');
+const { initializeOpenTelemetry } = require('./monitoring/opentelemetry');
+require('./monitoring/business-metrics');
+
+// Initialize OpenTelemetry for APM monitoring
+// This must happen early to instrument all subsequent module loads
+const otelSDK = initializeOpenTelemetry();
+if (otelSDK) {
+  logger.info('[startup] OpenTelemetry APM monitoring enabled');
+} else {
+  logger.info('[startup] OpenTelemetry APM monitoring disabled');
+}
 
 // Initialize analytics on startup
 backendAnalytics.initialize();
@@ -108,7 +126,6 @@ initializeIdempotencyService().catch((error: Error) => {
   logger.error('[startup] Failed to initialize idempotency service:', error);
 });
 
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 // Create Fastify instance early so routes can be registered against it
 const fastify = Fastify({
@@ -118,6 +135,11 @@ const fastify = Fastify({
 // Register WebSocket plugin and all routes
 const startServer = async () => {
   await fastify.register(require('@fastify/websocket'));
+  await fastify.register(require('@fastify/multipart'), {
+    limits: {
+      fileSize: 10 * 1024 * 1024 // 10MB default, will be validated by service too
+    }
+  });
 
   // Register request context middleware globally (first middleware)
   // This adds request ID and context to all requests
@@ -134,7 +156,7 @@ const startServer = async () => {
   // Register metrics middleware (response-time tracking)
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     const startTime = Date.now();
-    
+
     // Store start time on request
     (request as any)._startTime = startTime;
   });
@@ -143,14 +165,14 @@ const startServer = async () => {
     const startTime = (request as any)._startTime || Date.now();
     const duration = Date.now() - startTime;
     recordHttpRequest(request.method, request.url, reply.statusCode, duration);
-    
+
     // End tracing span if exists
     const span = (reply as any)._span;
     if (span) {
       tracing.addTags(span.spanId, {
         'http.status_code': reply.statusCode
       });
-      
+
       const status = reply.statusCode >= 400 ? 'error' : 'success';
       tracing.endSpan(span.spanId, status);
     }
@@ -205,163 +227,28 @@ const startServer = async () => {
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
 
+  // Register upload routes
+  await registerUploadRoutes(fastify);
+
   // Register health check routes (monitoring)
   await registerHealthRoutes(fastify);
 
   // Register metrics routes (monitoring)
   await registerMetricsRoutes(fastify);
 
-  // Legacy delete account endpoint (kept for backwards compatibility)
-  // NOTE: This endpoint duplicates functionality in consolidated-auth routes
-  // Consider removing after migration is complete
-  // Delete account endpoint
-  fastify.delete('/auth/delete-account', {
-    preHandler: authMiddleware
-  }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
-    try {
-      if (!request.userId) {
-        return reply.code(401).send({ success: false, message: 'User ID not found in token' });
-      }
+  // Register monitoring dashboard routes (APM)
+  await registerMonitoringDashboardRoutes(fastify);
 
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!supabaseUrl || !serviceKey) {
-        return reply.code(500).send({ success: false, message: 'Supabase service credentials not configured on API server' });
-      }
 
-      const sAdmin = createSupabaseClient(supabaseUrl, serviceKey);
-
-      // --- Dependent data cleanup (order matters) ---
-      // 1. Delete completion submissions tied to this user as hunter
-      try {
-        const { error: compErr } = await sAdmin
-          .from('completion_submissions')
-          .delete()
-          .eq('hunter_id', request.userId);
-        if (compErr) request.log.warn({ err: compErr }, 'completion_submissions cleanup failed (continuing)');
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'completion_submissions cleanup threw (continuing)');
-      }
-
-      // 2. Delete bounty requests by this user (hunter applications)
-      try {
-        const { error: reqErr } = await sAdmin
-          .from('bounty_requests')
-          .delete()
-          .eq('user_id', request.userId);
-        if (reqErr) request.log.warn({ err: reqErr }, 'bounty_requests cleanup failed (continuing)');
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'bounty_requests cleanup threw (continuing)');
-      }
-
-      // 3. Delete bounties created by this user to avoid NOT NULL poster_id violations on profile deletion
-      // (If business rules require archival/refund flows, implement them here before deletion.)
-      try {
-        const { error: bntyErr } = await sAdmin
-          .from('bounties')
-          .delete()
-          .eq('poster_id', request.userId);
-        if (bntyErr) request.log.warn({ err: bntyErr }, 'bounties cleanup failed (continuing)');
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'bounties cleanup threw (continuing)');
-      }
-
-      // 3.5. Detect and mark stale bounties where this user was the hunter
-      try {
-        const staleResult = await staleBountyService.detectStaleBounties(request.userId);
-        if (staleResult.success && staleResult.staleBountyCount > 0) {
-          request.log.info({ staleBountyCount: staleResult.staleBountyCount }, 'Stale bounties detected and marked');
-        }
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'Stale bounty detection failed (continuing)');
-      }
-
-      // 4. Delete conversations created by this user, with explicit child cleanup to avoid FK/RLS issues
-      try {
-        // Fetch conversation ids first
-        const { data: convs, error: convListErr } = await sAdmin
-          .from('conversations')
-          .select('id')
-          .eq('created_by', request.userId);
-        if (convListErr) {
-          request.log.warn({ err: convListErr }, 'conversations list failed (continuing)');
-        } else if (convs && convs.length > 0) {
-          const ids = convs.map((c: any) => c.id);
-          // Delete messages in those conversations
-          const { error: msgErr } = await sAdmin
-            .from('messages')
-            .delete()
-            .in('conversation_id', ids);
-          if (msgErr) request.log.warn({ err: msgErr }, 'messages deletion failed (continuing)');
-          // Delete participants in those conversations
-          const { error: partErr } = await sAdmin
-            .from('conversation_participants')
-            .delete()
-            .in('conversation_id', ids);
-          if (partErr) request.log.warn({ err: partErr }, 'participants deletion failed (continuing)');
-          // Finally delete the conversations
-          const { error: convDelErr } = await sAdmin
-            .from('conversations')
-            .delete()
-            .in('id', ids);
-          if (convDelErr) request.log.warn({ err: convDelErr }, 'conversations deletion failed (continuing)');
-        }
-        // Also remove any participant rows for this user in other conversations
-        const { error: partUserErr } = await sAdmin
-          .from('conversation_participants')
-          .delete()
-          .eq('user_id', request.userId);
-        if (partUserErr) request.log.warn({ err: partUserErr }, 'participant rows for user deletion failed (continuing)');
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'conversations cascade deletion threw (continuing)');
-      }
-
-      // Attempt admin deletion of auth user
-      let adminDeleted = false;
-      try {
-        const { error: adminError } = await sAdmin.auth.admin.deleteUser(request.userId);
-        if (adminError) {
-          request.log.warn({ err: adminError }, 'admin.deleteUser failed, will fallback');
-        } else {
-          adminDeleted = true;
-        }
-      } catch (e: any) {
-        request.log.warn({ err: e?.message || e }, 'admin.deleteUser threw, will fallback');
-      }
-
-      // Fallback: delete profile row if still present
-      if (!adminDeleted) {
-        const { error: profileErr } = await sAdmin
-          .from('profiles')
-          .delete()
-          .eq('id', request.userId);
-        if (profileErr) {
-          return reply.code(500).send({ success: false, message: `Failed to delete account: ${profileErr.message}` });
-        }
-      }
-
-      // Also remove from local API service users table if it exists
-      try {
-        await db.delete(users).where(eq(users.id, request.userId));
-      } catch (e) {
-        // non-fatal
-      }
-
-      return { success: true, message: 'Account deletion completed successfully.' };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unexpected error deleting account';
-      return reply.code(500).send({ success: false, message });
-    }
-  });
 
   // WebSocket route for realtime events - using any to avoid TypeScript complications
   fastify.register(async function (fastify: any) {
     fastify.get('/events/subscribe', { websocket: true }, (connection: any, req: any) => {
       console.log('📡 New WebSocket connection for realtime events');
-      
+
       // Add client to realtime service
       realtimeService.addWebSocketClient(connection);
-      
+
       // Send connection confirmation
       connection.socket.send(JSON.stringify({
         type: 'connection',
@@ -373,10 +260,10 @@ const startServer = async () => {
     // WebSocket route for messaging
     fastify.get('/messages/subscribe', { websocket: true }, async (connection: any, req: any) => {
       console.log('💬 New WebSocket connection for messaging');
-      
+
       // Extract token from query string or headers
       const token = req.query?.token || req.headers?.authorization?.replace('Bearer ', '');
-      
+
       if (!token) {
         connection.socket.send(JSON.stringify({
           type: 'error',
@@ -389,7 +276,7 @@ const startServer = async () => {
 
       // Authenticate the connection
       const auth = await wsMessagingService.authenticateConnection(token);
-      
+
       if (!auth) {
         connection.socket.send(JSON.stringify({
           type: 'error',
@@ -405,7 +292,7 @@ const startServer = async () => {
       // Get user's conversations
       const { conversationParticipants } = await import('./db/schema');
       const { eq, and, sql } = await import('drizzle-orm');
-      
+
       const userConvs = await db
         .select({ conversation_id: conversationParticipants.conversation_id })
         .from(conversationParticipants)
@@ -420,7 +307,7 @@ const startServer = async () => {
 
       // Add client to messaging service
       await wsMessagingService.addClient(userId, connection, conversationIds);
-      
+
       // Send connection confirmation
       connection.socket.send(JSON.stringify({
         type: 'connected',
@@ -434,7 +321,7 @@ const startServer = async () => {
       connection.socket.on('message', async (message: any) => {
         try {
           const data = JSON.parse(message.toString());
-          
+
           switch (data.type) {
             case 'join':
               // Join a conversation room
@@ -442,21 +329,21 @@ const startServer = async () => {
                 wsMessagingService.joinRoom(userId, data.conversationId);
               }
               break;
-              
+
             case 'leave':
               // Leave a conversation room
               if (data.conversationId) {
                 wsMessagingService.leaveRoom(userId, data.conversationId);
               }
               break;
-              
+
             case 'typing':
               // Handle typing indicator
               if (data.conversationId) {
                 wsMessagingService.handleTyping(userId, data.conversationId, data.isTyping || false);
               }
               break;
-              
+
             default:
               console.log(`Unknown message type: ${data.type}`);
           }
@@ -490,9 +377,9 @@ fastify.get('/me', {
 
     // Create user if doesn't exist (first request)
     if (!user) {
-      const handle = request.user?.user_metadata?.handle || 
-                   request.user?.email?.split('@')[0] || 
-                   `user_${request.userId.slice(0, 8)}`;
+      const handle = request.user?.user_metadata?.handle ||
+        request.user?.email?.split('@')[0] ||
+        `user_${request.userId.slice(0, 8)}`;
 
       const newUsers = await db
         .insert(users)
@@ -515,8 +402,8 @@ fastify.get('/me', {
     };
   } catch (error) {
     console.error('Error in /me endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to retrieve user profile' 
+    return reply.code(500).send({
+      error: 'Failed to retrieve user profile'
     });
   }
 });
@@ -527,13 +414,13 @@ fastify.post('/bounties/:bountyId/accept', {
 }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { bountyId } = request.params as { bountyId: string };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
 
     const result = await bountyService.acceptBounty(bountyId, request.userId);
-    
+
     if (!result.success) {
       return reply.code(400).send({ error: result.error });
     }
@@ -541,8 +428,8 @@ fastify.post('/bounties/:bountyId/accept', {
     return { message: 'Bounty accepted successfully', bountyId };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/accept endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to accept bounty' 
+    return reply.code(500).send({
+      error: 'Failed to accept bounty'
     });
   }
 });
@@ -553,13 +440,13 @@ fastify.post('/bounties/:bountyId/complete', {
 }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { bountyId } = request.params as { bountyId: string };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
 
     const result = await bountyService.completeBounty(bountyId, request.userId);
-    
+
     if (!result.success) {
       return reply.code(400).send({ error: result.error });
     }
@@ -567,8 +454,8 @@ fastify.post('/bounties/:bountyId/complete', {
     return { message: 'Bounty completed successfully', bountyId };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/complete endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to complete bounty' 
+    return reply.code(500).send({
+      error: 'Failed to complete bounty'
     });
   }
 });
@@ -580,7 +467,7 @@ fastify.post('/bounties/:bountyId/updates', {
   try {
     const { bountyId } = request.params as { bountyId: string };
     const { message, attachments } = request.body as { message: string; attachments?: any[] };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
@@ -600,15 +487,15 @@ fastify.post('/bounties/:bountyId/updates', {
     };
 
     logger.info('Progress update posted', { bountyId, userId: request.userId });
-    
-    return { 
-      message: 'Progress update posted successfully', 
+
+    return {
+      message: 'Progress update posted successfully',
       data: result,
     };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/updates endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to post progress update' 
+    return reply.code(500).send({
+      error: 'Failed to post progress update'
     });
   }
 });
@@ -620,7 +507,7 @@ fastify.post('/bounties/:bountyId/approve', {
   try {
     const { bountyId } = request.params as { bountyId: string };
     const { rating, comment } = request.body as { rating?: number; comment?: string };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
@@ -637,22 +524,22 @@ fastify.post('/bounties/:bountyId/approve', {
 
     // Update bounty status to completed
     const result = await bountyService.update(bountyId, { status: 'completed' });
-    
+
     if (!result) {
       return reply.code(400).send({ error: 'Failed to approve completion' });
     }
 
     logger.info('Bounty completion approved', { bountyId, userId: request.userId, rating });
 
-    return { 
-      message: 'Bounty completion approved successfully', 
+    return {
+      message: 'Bounty completion approved successfully',
       bountyId,
       rating,
     };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/approve endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to approve bounty completion' 
+    return reply.code(500).send({
+      error: 'Failed to approve bounty completion'
     });
   }
 });
@@ -664,7 +551,7 @@ fastify.post('/bounties/:bountyId/request-changes', {
   try {
     const { bountyId } = request.params as { bountyId: string };
     const { feedback } = request.body as { feedback: string };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
@@ -694,14 +581,14 @@ fastify.post('/bounties/:bountyId/request-changes', {
 
     logger.info('Revision requested for bounty', { bountyId, userId: request.userId });
 
-    return { 
-      message: 'Revision request sent successfully', 
+    return {
+      message: 'Revision request sent successfully',
       data: result,
     };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/request-changes endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to request changes' 
+    return reply.code(500).send({
+      error: 'Failed to request changes'
     });
   }
 });
@@ -713,7 +600,7 @@ fastify.post('/bounties/:bountyId/cancel', {
   try {
     const { bountyId } = request.params as { bountyId: string };
     const { reason } = request.body as { reason?: string };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
@@ -723,21 +610,21 @@ fastify.post('/bounties/:bountyId/cancel', {
       reason,
       cancelledBy: request.userId,
     });
-    
+
     if (!result.success) {
       return reply.code(400).send({ error: result.error });
     }
 
-    return { 
-      message: 'Bounty cancelled and refund processed successfully', 
+    return {
+      message: 'Bounty cancelled and refund processed successfully',
       bountyId,
       refundId: result.refundId,
       amount: result.amount,
     };
   } catch (error) {
     console.error('Error in /bounties/:bountyId/cancel endpoint:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to cancel bounty and process refund' 
+    return reply.code(500).send({
+      error: 'Failed to cancel bounty and process refund'
     });
   }
 });
@@ -748,7 +635,7 @@ fastify.post('/stripe/validate-payment', {
 }, async (request: AuthenticatedRequest, reply: FastifyReply) => {
   try {
     const { amountCents } = request.body as { amountCents: number };
-    
+
     if (!request.userId) {
       return reply.code(401).send({ error: 'User ID not found in token' });
     }
@@ -761,13 +648,13 @@ fastify.post('/stripe/validate-payment', {
       request.userId,
       amountCents
     );
-    
+
     return result;
   } catch (error) {
     console.error('Error in /stripe/validate-payment endpoint:', error);
     const message = error instanceof Error ? error.message : 'Failed to validate payment capability';
-    return reply.code(500).send({ 
-      error: message 
+    return reply.code(500).send({
+      error: message
     });
   }
 });
@@ -796,8 +683,8 @@ fastify.post('/stripe/connect/onboarding-link', {
   } catch (error) {
     console.error('Error in /stripe/connect/onboarding-link endpoint:', error);
     const message = error instanceof Error ? error.message : 'Failed to create onboarding link';
-    return reply.code(500).send({ 
-      error: message 
+    return reply.code(500).send({
+      error: message
     });
   }
 });
@@ -816,8 +703,8 @@ fastify.get('/stripe/connect/status', {
   } catch (error) {
     console.error('Error in /stripe/connect/status endpoint:', error);
     const message = error instanceof Error ? error.message : 'Failed to get connect status';
-    return reply.code(500).send({ 
-      error: message 
+    return reply.code(500).send({
+      error: message
     });
   }
 });
@@ -935,7 +822,7 @@ const start = async () => {
     await fastify.listen({ port, host });
     console.log(`🚀 BountyExpo API server listening on ${host}:${port}`);
     console.log(`📡 WebSocket server available at ws://${host}:${port}/events/subscribe`);
-    
+
     // Start scheduled risk assessment jobs
     try {
       riskAssessmentCron.start();
@@ -943,7 +830,15 @@ const start = async () => {
     } catch (cronErr) {
       console.warn('⚠️  Failed to start risk assessment cron:', cronErr);
     }
-    
+
+    // Start wallet cleanup job
+    try {
+      walletCleanupCron.start();
+      console.log('🕐 Wallet cleanup cron started');
+    } catch (cronErr) {
+      console.warn('⚠️  Failed to start wallet cleanup cron:', cronErr);
+    }
+
     // If Supabase mode is enabled, avoid pinging the Postgres pool (this
     // prevents ECONNRESET/ECONNREFUSED logs when legacy DB envs point at
     // a different DB type or closed port). Start the outbox worker and let
@@ -982,19 +877,32 @@ const start = async () => {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  
+
   // Stop cron jobs
   try {
     riskAssessmentCron.stop();
     console.log('🛑 Risk assessment cron stopped');
-  } catch {}
-  
+  } catch { }
+
+  try {
+    walletCleanupCron.stop();
+    console.log('🛑 Wallet cleanup cron stopped');
+  } catch { }
+
   // Stop the outbox worker
   outboxWorker.stop();
-  
+
   // Flush analytics events
   await backendAnalytics.flush();
-  
+
+  // Close database connection pools (primary and replica if configured)
+  try {
+    await closeDbPools();
+    console.log('🛑 Database pools closed');
+  } catch (err) {
+    console.error('⚠️  Error closing database pools during shutdown:', err);
+  }
+
   await fastify.close();
   process.exit(0);
 });

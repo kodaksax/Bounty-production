@@ -7,7 +7,7 @@ export type BountyStatus = "open" | "in_progress" | "completed" | "archived";
 
 // TypeScript interfaces
 export interface Bounty {
-  id: string;
+  id: string | number;
   user_id: string;
   title: string;
   description: string;
@@ -33,7 +33,7 @@ export interface BountyFormValues {
 export const BountyStatusSchema = z.enum(["open", "in_progress", "completed", "archived"]);
 
 export const BountySchema = z.object({
-  id: z.string(),
+  id: z.union([z.string(), z.number()]),
   user_id: z.string(),
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),

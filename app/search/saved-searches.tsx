@@ -16,6 +16,7 @@ import { useAuthContext } from '../../hooks/use-auth-context';
 import { searchService } from '../../lib/services/search-service';
 import type { SavedSearch } from '../../lib/types';
 
+import { colors } from '../../lib/theme';
 export default function SavedSearchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -67,7 +68,7 @@ export default function SavedSearchesScreen() {
       setNewSearchQuery('');
       setShowNewSearchModal(false);
       await loadSavedSearches();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save search');
     }
   };
@@ -121,7 +122,9 @@ export default function SavedSearchesScreen() {
         </View>
         {item.query && (
           <Text style={styles.searchQuery} numberOfLines={1}>
-            "{item.query}"
+            {"\""}
+            {item.query}
+            {"\""}
           </Text>
         )}
         <Text style={styles.searchDate}>
@@ -247,7 +250,9 @@ export default function SavedSearchesScreen() {
               />
 
               <Text style={styles.hintText}>
-                You'll receive notifications when new bounties match this search.
+                You
+                {"'"}
+                ll receive notifications when new bounties match this search.
               </Text>
             </View>
 
@@ -276,7 +281,7 @@ export default function SavedSearchesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   header: {
     flexDirection: 'row',

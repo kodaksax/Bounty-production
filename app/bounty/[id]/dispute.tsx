@@ -2,23 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   Alert,
   Linking,
+  StyleSheet,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, AlertCircle, Upload, Phone, Mail, HelpCircle } from 'lucide-react-native';
+import { ArrowLeft, AlertCircle, Phone, Mail, HelpCircle } from 'lucide-react-native';
 import { disputeService } from 'lib/services/dispute-service';
 import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
-import type { BountyDispute, DisputeEvidence, BountyCancellation } from 'lib/types';
+import { DisputeSubmissionForm } from 'components/dispute-submission-form';
+import type { BountyDispute, LocalDisputeEvidence, BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
+import { colors } from '../../../lib/theme';
 export default function DisputeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -30,8 +34,8 @@ export default function DisputeScreen() {
   const [dispute, setDispute] = useState<BountyDispute | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [reason, setReason] = useState('');
-  const [evidenceText, setEvidenceText] = useState('');
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [evidenceInput, setEvidenceInput] = useState('');
   
   useEffect(() => {
     loadData();
@@ -65,29 +69,13 @@ export default function DisputeScreen() {
     }
   };
   
-  const handleCreateDispute = async () => {
-    if (!reason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for the dispute');
-      return;
-    }
-    
+  const handleCreateDispute = async (reason: string, evidence: LocalDisputeEvidence[]) => {
     if (!userId || !cancellation) {
-      Alert.alert('Error', 'Unable to create dispute');
-      return;
+      throw new Error('Unable to create dispute');
     }
     
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      
-      const evidence: DisputeEvidence[] = evidenceText.trim()
-        ? [{
-            id: Date.now().toString(),
-            type: 'text',
-            content: evidenceText,
-            uploadedAt: new Date().toISOString(),
-          }]
-        : [];
-      
       const result = await disputeService.createDispute(
         cancellation.id,
         userId,
@@ -104,53 +92,59 @@ export default function DisputeScreen() {
               text: 'OK',
               onPress: () => {
                 setDispute(result);
-                setReason('');
-                setEvidenceText('');
               },
             },
           ]
         );
       } else {
-        Alert.alert('Error', 'Failed to create dispute');
+        throw new Error('Failed to create dispute');
       }
-    } catch (error) {
-      console.error('Error creating dispute:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setSubmitting(false);
     }
   };
   
-  const handleAddEvidence = async () => {
-    if (!evidenceText.trim() || !dispute) {
-      Alert.alert('Error', 'Please provide evidence details');
-      return;
+  const handleAddEvidence = async (evidenceText: string) => {
+    if (!dispute) {
+      throw new Error('No dispute found');
     }
     
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      
-      const newEvidence: DisputeEvidence = {
-        id: Date.now().toString(),
+      const newEvidence: LocalDisputeEvidence = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
         type: 'text',
         content: evidenceText,
         uploadedAt: new Date().toISOString(),
       };
-      
-      const success = await disputeService.addEvidence(dispute.id, newEvidence);
+
+      // Use uploadEvidence for user-submitted items so the server assigns
+      // persisted fields (`uploaded_by`, timestamps) and stores them in the
+      // `dispute_evidence` table.
+      const success = await disputeService.uploadEvidence(dispute.id, String(userId), {
+        type: newEvidence.type,
+        content: newEvidence.content,
+        description: newEvidence.description,
+        mimeType: (newEvidence as any).mimeType,
+        fileSize: (newEvidence as any).fileSize,
+      });
       
       if (success) {
         Alert.alert('Success', 'Evidence added successfully');
-        setEvidenceText('');
         await loadData(); // Reload to show new evidence
+        setShowEvidenceModal(false);
+        setEvidenceInput('');
       } else {
-        Alert.alert('Error', 'Failed to add evidence');
+        throw new Error('Failed to add evidence');
       }
-    } catch (error) {
-      console.error('Error adding evidence:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmitEvidence = () => {
+    if (evidenceInput.trim()) {
+      handleAddEvidence(evidenceInput.trim());
     }
   };
 
@@ -166,7 +160,7 @@ export default function DisputeScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
       </View>
     );
   }
@@ -184,7 +178,7 @@ export default function DisputeScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -204,7 +198,7 @@ export default function DisputeScreen() {
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-emerald-600 px-4 py-6 pt-12">
+        <View className="bg-background-secondary px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -233,7 +227,7 @@ export default function DisputeScreen() {
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
-                    color={dispute.status === 'resolved' ? '#059669' : '#f59e0b'} 
+                    color={dispute.status === 'resolved' ? colors.primary[600] : '#f59e0b'} 
                   />
                   <View className="flex-1 ml-3">
                     <Text className={`font-semibold mb-1 ${
@@ -289,123 +283,36 @@ export default function DisputeScreen() {
                   <Text className="text-base font-semibold text-gray-900 mb-2">
                     Add More Evidence
                   </Text>
-                  <TextInput
-                    value={evidenceText}
-                    onChangeText={setEvidenceText}
-                    placeholder="Provide additional evidence..."
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    className="border border-gray-300 rounded-lg p-3 text-base text-gray-900 mb-3"
-                    style={{ minHeight: 100 }}
-                  />
+                  <Text className="text-sm text-gray-600 mb-3">
+                    Provide additional text evidence to support your dispute. For images or documents, please contact support.
+                  </Text>
                   <TouchableOpacity
-                    onPress={handleAddEvidence}
-                    disabled={submitting || !evidenceText.trim()}
-                    className={`flex-row items-center justify-center rounded-lg py-3 ${
-                      submitting || !evidenceText.trim()
-                        ? 'bg-gray-300'
-                        : 'bg-emerald-600'
-                    }`}
+                    onPress={() => setShowEvidenceModal(true)}
+                    className="flex-row items-center justify-center rounded-lg py-3 bg-background-secondary"
                   >
-                    {submitting ? (
-                      <ActivityIndicator color="white" size="small" />
-                    ) : (
-                      <>
-                        <Upload size={18} color="white" />
-                        <Text className="text-white font-medium ml-2">
-                          Submit Evidence
-                        </Text>
-                      </>
-                    )}
+                    <Text className="text-white font-medium">
+                      + Add Evidence
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
             </>
           ) : (
-            /* Create Dispute Form */
-            <>
-              {/* Info Box */}
-              <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <View className="flex-row items-start">
-                  <AlertCircle size={20} color="#3b82f6" />
-                  <View className="flex-1 ml-3">
-                    <Text className="text-blue-900 font-semibold mb-1">
-                      Dispute Process
-                    </Text>
-                    <Text className="text-blue-800 text-sm">
-                      If you believe the cancellation decision is unfair, you can create a dispute. 
-                      Our team will review the evidence and make a final decision.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              
-              {/* Reason Input */}
-              <View className="mb-6">
-                <Text className="text-base font-semibold text-gray-900 mb-2">
-                  Reason for Dispute *
-                </Text>
-                <Text className="text-sm text-gray-600 mb-3">
-                  Explain why you believe the cancellation decision should be reviewed.
-                </Text>
-                <TextInput
-                  value={reason}
-                  onChangeText={setReason}
-                  placeholder="Enter your reason..."
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                  className="border border-gray-300 rounded-lg p-3 text-base text-gray-900"
-                  style={{ minHeight: 120 }}
-                />
-              </View>
-              
-              {/* Evidence Input */}
-              <View className="mb-6">
-                <Text className="text-base font-semibold text-gray-900 mb-2">
-                  Supporting Evidence
-                </Text>
-                <Text className="text-sm text-gray-600 mb-3">
-                  Provide any evidence that supports your case (optional but recommended).
-                </Text>
-                <TextInput
-                  value={evidenceText}
-                  onChangeText={setEvidenceText}
-                  placeholder="Describe your evidence..."
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                  className="border border-gray-300 rounded-lg p-3 text-base text-gray-900"
-                  style={{ minHeight: 120 }}
-                />
-              </View>
-              
-              {/* Submit Button */}
-              <TouchableOpacity
-                onPress={handleCreateDispute}
-                disabled={submitting || !reason.trim()}
-                className={`rounded-lg py-4 ${
-                  submitting || !reason.trim()
-                    ? 'bg-gray-300'
-                    : 'bg-emerald-600'
-                }`}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-white text-center font-semibold text-base">
-                    Submit Dispute
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </>
+            /* Create Dispute Form - Using DisputeSubmissionForm component */
+            <View className="flex-1">
+              <DisputeSubmissionForm
+                bountyTitle={bounty.title}
+                onSubmit={handleCreateDispute}
+                isSubmitting={submitting}
+                showGuidance={true}
+              />
+            </View>
           )}
           
           {/* Support Contact Section - Always visible */}
           <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mt-6">
             <View className="flex-row items-start">
-              <HelpCircle size={20} color="#059669" />
+              <HelpCircle size={20} color={colors.primary[600]} />
               <View className="flex-1 ml-3">
                 <Text className="text-emerald-900 font-semibold mb-1">
                   Dispute Mediation Support
@@ -416,14 +323,14 @@ export default function DisputeScreen() {
                 <View className="flex-row flex-wrap gap-2">
                   <TouchableOpacity
                     onPress={handleContactSupport}
-                    className="flex-row items-center bg-emerald-600 px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-background-secondary px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_EMAIL}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleCallSupport}
-                    className="flex-row items-center bg-emerald-500 px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-primary-500 px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_PHONE}</Text>
@@ -444,6 +351,128 @@ export default function DisputeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Evidence Modal */}
+      <Modal
+        visible={showEvidenceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEvidenceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Evidence</Text>
+            <Text style={styles.modalSubtitle}>
+              Describe the additional evidence
+            </Text>
+            <TextInput
+              value={evidenceInput}
+              onChangeText={setEvidenceInput}
+              placeholder="Enter evidence details..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              style={styles.modalInput}
+              editable={!submitting}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={handleSubmitEvidence}
+                disabled={submitting || !evidenceInput.trim()}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonPrimary,
+                  (submitting || !evidenceInput.trim()) && styles.modalButtonDisabled,
+                ]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowEvidenceModal(false);
+                  setEvidenceInput('');
+                }}
+                disabled={submitting}
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+              >
+                <Text style={styles.modalButtonTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    minHeight: 100,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.background.secondary,
+  },
+  modalButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  modalButtonDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextSecondary: {
+    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

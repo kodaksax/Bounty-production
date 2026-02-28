@@ -1,16 +1,18 @@
-import * as React from "react"
-import { 
-  TextInput, 
-  TextInputProps, 
-  StyleSheet, 
-  View, 
-  Text, 
-  Animated,
-  AccessibilityInfo,
-  TouchableOpacity,
-} from "react-native"
 import { MaterialIcons } from '@expo/vector-icons'
+import * as React from "react"
+import {
+  AccessibilityInfo,
+  Animated,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  TouchableOpacity,
+  View,
+} from "react-native"
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
+import { theme, colors } from '../../lib/theme'
+
 
 interface InputProps extends TextInputProps {
   variant?: "default" | "outline" | "filled"
@@ -49,9 +51,9 @@ interface InputProps extends TextInputProps {
 }
 
 const Input = React.forwardRef<TextInput, InputProps>(
-  ({ 
-    variant = "default", 
-    style, 
+  ({
+    variant = "default",
+    style,
     label,
     error,
     helperText,
@@ -62,7 +64,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
     containerStyle,
     onFocus,
     onBlur,
-    ...props 
+    ...props
   }, ref) => {
     const [isFocused, setIsFocused] = React.useState(false)
     const borderAnim = React.useRef(new Animated.Value(0)).current
@@ -108,14 +110,14 @@ const Input = React.forwardRef<TextInput, InputProps>(
     // Determine border color based on state
     const getBorderColor = () => {
       if (error) return '#ef4444' // red-500
-      if (isValid) return '#10b981' // emerald-500
-      if (isFocused) return '#059669' // emerald-600
+      if (isValid) return colors.primary[500] // emerald-500
+      if (isFocused) return colors.primary[600] // emerald-600
       return variant === 'outline' ? '#3b82f6' : '#d1d5db'
     }
 
     const animatedBorderColor = borderAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: ['#d1d5db', '#059669'],
+      outputRange: ['#d1d5db', colors.primary[600]],
     })
 
     // Generate unique ID for accessibility
@@ -126,39 +128,39 @@ const Input = React.forwardRef<TextInput, InputProps>(
     return (
       <View style={[inputStyles.container, containerStyle]}>
         {label && (
-          <Text 
+          <Text
             style={[inputStyles.label, error && inputStyles.labelError]}
             nativeID={`${inputId}-label`}
           >
             {label}
           </Text>
         )}
-        
-        <Animated.View 
+
+        <Animated.View
           style={[
             inputStyles.inputContainer,
             inputStyles[variant],
             isFocused && inputStyles.focused,
             error && inputStyles.errorBorder,
             isValid && inputStyles.validBorder,
-            { 
-              borderColor: error ? '#ef4444' : isValid ? '#10b981' : 
-                prefersReducedMotion ? getBorderColor() : animatedBorderColor 
+            {
+              borderColor: error ? '#ef4444' : isValid ? colors.primary[500] :
+                prefersReducedMotion ? getBorderColor() : animatedBorderColor
             },
           ]}
         >
           {leftIcon && (
-            <MaterialIcons 
-              name={leftIcon} 
-              size={20} 
-              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+            <MaterialIcons
+              name={leftIcon}
+              size={20}
+              color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
               style={inputStyles.leftIcon}
             />
           )}
-          
+
           <TextInput
             style={[
-              inputStyles.base, 
+              inputStyles.base,
               leftIcon && inputStyles.inputWithLeftIcon,
               rightIcon && inputStyles.inputWithRightIcon,
               style
@@ -170,52 +172,52 @@ const Input = React.forwardRef<TextInput, InputProps>(
             accessible={true}
             accessibilityLabel={label}
             accessibilityHint={error || helperText}
-            accessibilityState={{ 
+            accessibilityState={{
               disabled: props.editable === false,
             }}
             {...props}
           />
-          
+
           {rightIcon && onRightIconPress && (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={onRightIconPress}
               accessibilityRole="button"
               accessibilityLabel={`${rightIcon} action`}
               style={inputStyles.rightIconButton}
             >
-              <MaterialIcons 
-                name={rightIcon} 
-                size={20} 
-                color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+              <MaterialIcons
+                name={rightIcon}
+                size={20}
+                color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
               />
             </TouchableOpacity>
           )}
-          
+
           {rightIcon && !onRightIconPress && (
-            <MaterialIcons 
-              name={rightIcon} 
-              size={20} 
-              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
+            <MaterialIcons
+              name={rightIcon}
+              size={20}
+              color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
               style={inputStyles.rightIcon}
               accessibilityElementsHidden={true}
             />
           )}
-          
+
           {isValid && !rightIcon && (
-            <MaterialIcons 
-              name="check-circle" 
-              size={20} 
-              color="#10b981"
+            <MaterialIcons
+              name="check-circle"
+              size={20}
+              color={colors.primary[500]}
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />
           )}
         </Animated.View>
-        
+
         {error && (
           <View style={inputStyles.errorContainer}>
             <MaterialIcons name="error-outline" size={14} color="#ef4444" />
-            <Text 
+            <Text
               style={inputStyles.errorText}
               nativeID={errorId}
               accessibilityRole="alert"
@@ -224,9 +226,9 @@ const Input = React.forwardRef<TextInput, InputProps>(
             </Text>
           </View>
         )}
-        
+
         {helperText && !error && (
-          <Text 
+          <Text
             style={inputStyles.helperText}
             nativeID={helperId}
           >
@@ -286,18 +288,15 @@ const inputStyles = StyleSheet.create({
     borderColor: 'transparent',
   },
   focused: {
-    borderColor: '#059669', // emerald-600
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: colors.primary[600], // emerald-600
+    ...theme.shadows.sm,
   },
+
   errorBorder: {
     borderColor: '#ef4444',
   },
   validBorder: {
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   leftIcon: {
     marginLeft: SPACING.ELEMENT_GAP,

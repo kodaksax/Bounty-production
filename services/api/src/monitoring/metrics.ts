@@ -33,13 +33,14 @@ class MetricsCollector {
    * Increment a counter metric
    */
   incrementCounter(name: string, value: number = 1, labels?: Record<string, string>): void {
+    // Always increment the base counter for aggregation
+    const baseCurrent = this.counters.get(name) || 0;
+    this.counters.set(name, baseCurrent + value);
+
     if (labels) {
       const key = this.getLabelKey(name, labels);
       const current = this.counters.get(key) || 0;
       this.counters.set(key, current + value);
-    } else {
-      const current = this.counters.get(name) || 0;
-      this.counters.set(name, current + value);
     }
   }
 
@@ -47,11 +48,12 @@ class MetricsCollector {
    * Set a gauge metric (current value)
    */
   setGauge(name: string, value: number, labels?: Record<string, string>): void {
+    // Always set the base gauge
+    this.gauges.set(name, value);
+
     if (labels) {
       const key = this.getLabelKey(name, labels);
       this.gauges.set(key, value);
-    } else {
-      this.gauges.set(name, value);
     }
   }
 
@@ -59,8 +61,16 @@ class MetricsCollector {
    * Observe a value in a histogram (for latency/duration tracking)
    */
   observeHistogram(name: string, value: number, labels?: Record<string, string>): void {
-    const key = labels ? this.getLabelKey(name, labels) : name;
-    
+    // Always observe in the base histogram for aggregation
+    this.updateHistogram(name, value);
+
+    if (labels) {
+      const key = this.getLabelKey(name, labels);
+      this.updateHistogram(key, value);
+    }
+  }
+
+  private updateHistogram(key: string, value: number): void {
     let histogram = this.histograms.get(key);
     if (!histogram) {
       histogram = {
@@ -152,9 +162,9 @@ class MetricsCollector {
     // Histograms
     for (const [name, histogram] of Array.from(this.histograms.entries())) {
       const { metricName, labels } = this.parseKey(name);
-      
+
       lines.push(`# TYPE ${metricName} histogram`);
-      
+
       // Buckets
       for (const bucket of histogram.buckets) {
         const bucketLabelStr = labels
@@ -162,13 +172,13 @@ class MetricsCollector {
           : `{le="${bucket.le}"}`;
         lines.push(`${metricName}_bucket${bucketLabelStr} ${bucket.count}`);
       }
-      
+
       // +Inf bucket
       const infLabelStr = labels
         ? `{${labels},le="+Inf"}`
         : `{le="+Inf"}`;
       lines.push(`${metricName}_bucket${infLabelStr} ${histogram.count}`);
-      
+
       // Sum and count
       const labelStr = labels ? `{${labels}}` : '';
       lines.push(`${metricName}_sum${labelStr} ${histogram.sum}`);
@@ -225,7 +235,7 @@ class MetricsCollector {
   private parseKey(key: string): { metricName: string; labels?: string } {
     const match = key.match(/^([^{]+)(?:\{(.+)\})?$/);
     if (!match) return { metricName: key };
-    
+
     return {
       metricName: match[1],
       labels: match[2]
@@ -242,36 +252,36 @@ export const METRICS = {
   HTTP_REQUESTS_TOTAL: 'http_requests_total',
   HTTP_REQUEST_DURATION_MS: 'http_request_duration_milliseconds',
   HTTP_ERRORS_TOTAL: 'http_errors_total',
-  
+
   // Database metrics
   DB_QUERY_DURATION_MS: 'db_query_duration_milliseconds',
   DB_QUERIES_TOTAL: 'db_queries_total',
   DB_ERRORS_TOTAL: 'db_errors_total',
   DB_CONNECTIONS_ACTIVE: 'db_connections_active',
-  
+
   // WebSocket metrics
   WS_CONNECTIONS_ACTIVE: 'websocket_connections_active',
   WS_MESSAGES_SENT: 'websocket_messages_sent',
   WS_MESSAGES_RECEIVED: 'websocket_messages_received',
   WS_ERRORS_TOTAL: 'websocket_errors_total',
-  
+
   // Payment metrics
   PAYMENT_TRANSACTIONS_TOTAL: 'payment_transactions_total',
   PAYMENT_SUCCESS_TOTAL: 'payment_success_total',
   PAYMENT_FAILURES_TOTAL: 'payment_failures_total',
   PAYMENT_AMOUNT_CENTS: 'payment_amount_cents_total',
-  
+
   // Business metrics
   BOUNTIES_CREATED: 'bounties_created_total',
   BOUNTIES_ACCEPTED: 'bounties_accepted_total',
   BOUNTIES_COMPLETED: 'bounties_completed_total',
   BOUNTIES_CANCELLED: 'bounties_cancelled_total',
-  
+
   // Worker metrics
   WORKER_JOBS_PROCESSED: 'worker_jobs_processed_total',
   WORKER_JOBS_FAILED: 'worker_jobs_failed_total',
   OUTBOX_EVENTS_PROCESSED: 'outbox_events_processed_total',
-  
+
   // Cache metrics (if Redis is used)
   CACHE_HITS: 'cache_hits_total',
   CACHE_MISSES: 'cache_misses_total',
@@ -290,7 +300,7 @@ export function recordHttpRequest(
     logger.warn({ durationMs }, '[metrics] Negative duration recorded, setting to 0');
     durationMs = 0;
   }
-  
+
   if (statusCode < 100 || statusCode > 599) {
     logger.warn({ statusCode }, '[metrics] Invalid status code recorded');
     return;
@@ -301,12 +311,12 @@ export function recordHttpRequest(
     path,
     status: String(statusCode)
   });
-  
+
   metrics.observeHistogram(METRICS.HTTP_REQUEST_DURATION_MS, durationMs, {
     method,
     path
   });
-  
+
   if (statusCode >= 400) {
     metrics.incrementCounter(METRICS.HTTP_ERRORS_TOTAL, 1, {
       method,
@@ -319,7 +329,7 @@ export function recordHttpRequest(
 export function recordDatabaseQuery(operation: string, durationMs: number, success: boolean): void {
   metrics.incrementCounter(METRICS.DB_QUERIES_TOTAL, 1, { operation });
   metrics.observeHistogram(METRICS.DB_QUERY_DURATION_MS, durationMs, { operation });
-  
+
   if (!success) {
     metrics.incrementCounter(METRICS.DB_ERRORS_TOTAL, 1, { operation });
   }
@@ -327,7 +337,7 @@ export function recordDatabaseQuery(operation: string, durationMs: number, succe
 
 export function recordPayment(success: boolean, amountCents: number, paymentType: string): void {
   metrics.incrementCounter(METRICS.PAYMENT_TRANSACTIONS_TOTAL, 1, { type: paymentType });
-  
+
   if (success) {
     metrics.incrementCounter(METRICS.PAYMENT_SUCCESS_TOTAL, 1, { type: paymentType });
     metrics.incrementCounter(METRICS.PAYMENT_AMOUNT_CENTS, amountCents, { type: paymentType });

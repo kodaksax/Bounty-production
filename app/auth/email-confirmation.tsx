@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import {
     Animated,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -16,7 +17,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
+import { colors } from '../../lib/theme';
 export default function EmailConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -42,6 +45,7 @@ export default function EmailConfirmationScreen() {
 
   const handleGoToSignIn = () => {
     router.replace('/auth/sign-in-form' as Href);
+    try { markInitialNavigationDone(); } catch {}
   };
 
   return (
@@ -52,9 +56,13 @@ export default function EmailConfirmationScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Animated Email Icon */}
-        <Animated.View 
+        <Animated.View
           style={[
             styles.iconContainer,
             { transform: [{ scale: pulseAnim }] }
@@ -66,7 +74,7 @@ export default function EmailConfirmationScreen() {
         </Animated.View>
 
         <Text style={styles.title}>Check Your Email</Text>
-        
+
         <View style={styles.stepsContainer}>
           <View style={styles.step}>
             <View style={styles.stepNumber}>
@@ -75,7 +83,9 @@ export default function EmailConfirmationScreen() {
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Open your inbox</Text>
               <Text style={styles.stepDescription}>
-                We've sent a confirmation link to your email address
+                We
+                {"'"}
+                ve sent a confirmation link to your email address
               </Text>
             </View>
           </View>
@@ -113,10 +123,12 @@ export default function EmailConfirmationScreen() {
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            Can't find the email? Check your spam folder or request a new confirmation email.
+            Can
+            {"'"}
+            t find the email? Check your spam folder or request a new confirmation email.
           </Text>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Action Button */}
       <View style={styles.actions}>
@@ -132,7 +144,7 @@ export default function EmailConfirmationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -141,18 +153,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
   },
-  brandingText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 3,
-    marginLeft: 10,
-  },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 24,
   },
+
   iconContainer: {
     marginBottom: 24,
   },

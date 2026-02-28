@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, AccessibilityInfo } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import type { UserFriendlyError } from '../lib/utils/error-messages';
-import { useHapticFeedback } from '../lib/haptic-feedback';
+import React from 'react';
+import { AccessibilityInfo, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
+import { useHapticFeedback } from '../lib/haptic-feedback';
+import { theme } from '../lib/theme';
+import type { UserFriendlyError } from '../lib/utils/error-messages';
+
 
 interface ErrorBannerProps {
   error: UserFriendlyError;
@@ -20,9 +22,9 @@ interface ErrorBannerProps {
  * Shows at the top of screens with dismiss and action buttons
  * Includes entrance animation and haptic feedback
  */
-export function ErrorBanner({ 
-  error, 
-  onDismiss, 
+export function ErrorBanner({
+  error,
+  onDismiss,
   onAction,
   autoDismissMs = 0,
 }: ErrorBannerProps) {
@@ -50,7 +52,7 @@ export function ErrorBanner({
     triggerHaptic('error');
 
     const animDuration = prefersReducedMotion ? 0 : 300;
-    
+
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -77,7 +79,7 @@ export function ErrorBanner({
 
   const handleDismiss = React.useCallback(() => {
     const animDuration = prefersReducedMotion ? 0 : 200;
-    
+
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: -100,
@@ -101,12 +103,12 @@ export function ErrorBanner({
 
   const backgroundColor = error.type === 'validation' ? '#f59e0b' : '#dc2626';
   const iconName = getIconForErrorType(error.type);
-  
+
   return (
-    <Animated.View 
+    <Animated.View
       style={[
-        styles.container, 
-        { 
+        styles.container,
+        {
           backgroundColor,
           transform: [{ translateY: slideAnim }],
           opacity: opacityAnim,
@@ -116,20 +118,20 @@ export function ErrorBanner({
       accessibilityLiveRegion="assertive"
     >
       <View style={styles.content}>
-        <MaterialIcons 
-          name={iconName} 
-          size={22} 
-          color="#fff" 
+        <MaterialIcons
+          name={iconName}
+          size={22}
+          color="#fff"
           accessibilityElementsHidden={true}
         />
         <View style={styles.textContainer}>
-          <Text 
+          <Text
             style={styles.title}
             accessibilityRole="text"
           >
             {error.title}
           </Text>
-          <Text 
+          <Text
             style={styles.message}
             accessibilityRole="text"
           >
@@ -137,10 +139,10 @@ export function ErrorBanner({
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.actions}>
         {error.retryable && onAction && error.action && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleAction}
             style={styles.actionButton}
             activeOpacity={0.7}
@@ -151,9 +153,9 @@ export function ErrorBanner({
             <Text style={styles.actionText}>{error.action}</Text>
           </TouchableOpacity>
         )}
-        
+
         {onDismiss && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleDismiss}
             style={styles.dismissButton}
             activeOpacity={0.7}
@@ -204,12 +206,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderRadius: 12,
     marginBottom: SPACING.ELEMENT_GAP,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    ...theme.shadows.lg,
   },
+
   content: {
     flex: 1,
     flexDirection: 'row',

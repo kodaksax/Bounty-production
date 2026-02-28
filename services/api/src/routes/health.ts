@@ -6,6 +6,7 @@ import { logger } from '../services/logger';
 import { metrics, METRICS } from '../monitoring/metrics';
 import { alerting } from '../monitoring/alerts';
 import { createClient } from '@supabase/supabase-js';
+import { pool, readPool, isReadReplica } from '../db/connection';
 
 interface HealthCheckResult {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -14,6 +15,7 @@ interface HealthCheckResult {
   service: string;
   checks: {
     database?: HealthCheck;
+    databaseRead?: HealthCheck;
     supabase?: HealthCheck;
     stripe?: HealthCheck;
     websocket?: HealthCheck;
@@ -83,6 +85,25 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
       overallStatus = 'unhealthy';
     }
 
+    // Check read replica (only when separately configured)
+    try {
+      const readCheck = await checkReadReplica();
+      if (readCheck !== null) {
+        checks.databaseRead = readCheck;
+        if (readCheck.status === 'down') {
+          overallStatus = 'unhealthy';
+        } else if (readCheck.status === 'degraded' && overallStatus === 'healthy') {
+          overallStatus = 'degraded';
+        }
+      }
+    } catch (error) {
+      checks.databaseRead = {
+        status: 'down',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      overallStatus = 'unhealthy';
+    }
+
     // Check Supabase
     try {
       const supabaseCheck = await checkSupabase();
@@ -141,7 +162,6 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
   fastify.get('/health/ready', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Quick database check using existing pool
-      const { pool } = require('../db/connection');
       await pool.query('SELECT 1');
       
       return reply.code(200).send({ ready: true });
@@ -170,8 +190,6 @@ async function checkDatabase(): Promise<HealthCheck> {
   
   try {
     // Import the existing pool from db/connection instead of creating a new one
-    const { pool } = require('../db/connection');
-    
     await pool.query('SELECT 1');
     
     const latencyMs = Date.now() - startTime;
@@ -181,6 +199,38 @@ async function checkDatabase(): Promise<HealthCheck> {
       latencyMs,
       details: {
         connectionString: process.env.DATABASE_URL ? 'configured' : 'missing'
+      }
+    };
+  } catch (error) {
+    return {
+      status: 'down',
+      latencyMs: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+/**
+ * Check read replica connectivity and performance.
+ * Returns null when no separate replica is configured (DATABASE_READ_URL not set).
+ */
+async function checkReadReplica(): Promise<HealthCheck | null> {
+  if (!isReadReplica) {
+    return null;
+  }
+
+  const startTime = Date.now();
+
+  try {
+    await readPool.query('SELECT 1');
+
+    const latencyMs = Date.now() - startTime;
+
+    return {
+      status: latencyMs < 100 ? 'up' : 'degraded',
+      latencyMs,
+      details: {
+        connectionString: 'configured'
       }
     };
   } catch (error) {

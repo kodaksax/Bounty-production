@@ -1,16 +1,18 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, AccessibilityInfo } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-  withDelay,
-  Easing,
-} from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect } from 'react';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { theme, colors } from '../../lib/theme';
+
 
 interface SuccessAnimationProps {
   /**
@@ -43,7 +45,7 @@ export function SuccessAnimation({
   visible,
   icon = 'check-circle',
   size = 80,
-  color = '#10b981',
+  color = colors.primary[500],
   onComplete,
 }: SuccessAnimationProps) {
   const scale = useSharedValue(0);
@@ -74,7 +76,7 @@ export function SuccessAnimation({
         scale.value = 1;
         opacity.value = 1;
         checkScale.value = 1;
-        
+
         // Still call onComplete after a brief delay
         const timer = setTimeout(() => {
           onComplete?.();
@@ -84,7 +86,7 @@ export function SuccessAnimation({
         // Full animation sequence
         // 1. Fade in container
         opacity.value = withTiming(1, { duration: 200 });
-        
+
         // 2. Scale up circle with bounce
         scale.value = withSequence(
           withSpring(1.2, {
@@ -96,7 +98,7 @@ export function SuccessAnimation({
             stiffness: 200,
           })
         );
-        
+
         // 3. Pop in checkmark slightly delayed
         checkScale.value = withDelay(
           150,
@@ -138,9 +140,9 @@ export function SuccessAnimation({
     <Animated.View style={[styles.container, containerStyle]}>
       <Animated.View style={[styles.circle, circleStyle]}>
         <Animated.View style={checkStyle}>
-          <MaterialIcons 
-            name={icon} 
-            size={size} 
+          <MaterialIcons
+            name={icon}
+            size={size}
             color={color}
             accessibilityLabel="Success"
           />
@@ -165,7 +167,7 @@ export function ConfettiAnimation({ visible, onComplete }: { visible: boolean; o
     Array.from({ length: 20 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
-      color: ['#10b981', '#6ee7b7', '#059669', '#34d399'][Math.floor(Math.random() * 4)],
+      color: [colors.primary[500], '#6ee7b7', colors.primary[600], '#34d399'][Math.floor(Math.random() * 4)],
     }))
   );
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
@@ -215,21 +217,21 @@ function ConfettiParticle({ particle }: { particle: ConfettiParticle }) {
     const duration = 1500 + Math.random() * 1000;
     // Random horizontal drift
     const drift = (Math.random() - 0.5) * 100;
-    
+
     translateY.value = withTiming(600, {
       duration,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-    
+
     translateX.value = withTiming(drift, {
       duration,
       easing: Easing.bezier(0.5, 0, 0.5, 1),
     });
-    
+
     opacity.value = withTiming(0, {
       duration: duration * 0.8,
     });
-    
+
     rotation.value = withTiming(360 * (2 + Math.random() * 2), {
       duration,
       easing: Easing.linear,
@@ -279,13 +281,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#10b981',
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    borderColor: colors.primary[500],
+    ...theme.shadows.emerald,
   },
+
   confettiContainer: {
     position: 'absolute',
     top: 0,

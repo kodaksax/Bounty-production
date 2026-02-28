@@ -1,18 +1,14 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import * as Sentry from '@sentry/react-native'
+import { BrandingLogo } from "components/ui/branding-logo"
 import { router } from 'expo-router'
 import React, { useState } from "react"
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native"
-import { BrandingLogo } from "components/ui/branding-logo"
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
-import { withTimeout } from "../lib/utils/withTimeout"
-import { clearRememberMePreference } from "../lib/auth-session-storage"
-import { EditProfileScreen } from "./edit-profile-screen"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
@@ -20,6 +16,7 @@ import { LocationSettingsScreen } from "./settings/location-settings-screen"
 import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
 import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
 import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
+import { colors } from '../lib/theme';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -31,11 +28,11 @@ type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' |
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
-  
+
   // Import profile hooks to get real profile data
   const { profile: authProfile } = useAuthProfile()
   const { profile: normalizedProfile } = useNormalizedProfile()
-  
+
   // Use actual profile data from auth or normalized profile
   const profileData = {
     name: authProfile?.username || normalizedProfile?.username || '@user',
@@ -53,25 +50,11 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
     )
   }
 
-  const handleProfileSave = (data: { name: string; about: string; phone: string; avatar?: string }) => {
-    // Profile updates are handled by authProfileService subscribers
-    // Just return to root panel - the profile will update automatically
-    setPanel('root')
+  const handleEditProfile = () => {
+    router.push('/profile/edit')
   }
 
   // Panel routing
-  if (panel === 'editProfile') {
-    return (
-      <EditProfileScreen
-        onBack={() => setPanel('root')}
-        initialName={profileData.name}
-        initialAbout={profileData.about}
-        initialPhone={profileData.phone}
-        initialAvatar={profileData.avatar}
-        onSave={handleProfileSave}
-      />
-    )
-  }
   if (panel === 'privacy') return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
   if (panel === 'location') return <LocationSettingsScreen onBack={() => setPanel('root')} />
@@ -84,7 +67,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   return (
     <View className="flex-1 bg-emerald-600">
       {/* Header */}
-      <View className="flex-row justify-between items-center p-4 pt-8">
+      <View className="flex-row justify-between items-center p-4">
         <View className="flex-row items-center">
           <BrandingLogo size="medium" />
         </View>
@@ -100,13 +83,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           description="Allows users to modify their personal information such as name, profile picture, contact details, and update their role preferences. It provides"
           primaryLabel="Save Changes"
           secondaryLabel="View My Profile"
-          onPrimary={() => setPanel('editProfile')}
-          onSecondary={() => setPanel('editProfile')}
+          onPrimary={handleEditProfile}
+          onSecondary={handleEditProfile}
           icon="person"
         />
         <SettingsCard
           title="Privacy & Security Settings"
-            description="Provides users with options to manage their account's privacy and security, including password changes, two-factor authentication"
+          description="Provides users with options to manage their account's privacy and security, including password changes, two-factor authentication"
           primaryLabel="Open"
           onPrimary={() => setPanel('privacy')}
           icon="lock"
@@ -132,7 +115,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           onPrimary={() => setPanel('help')}
           icon="help-center"
         />
-        
+
         {/* Admin Tab Toggle - only visible to users with admin permissions */}
         {isAdmin && (
           <View className="bg-black/30 rounded-xl p-4 mb-4">
@@ -142,8 +125,8 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
                 <View className="ml-2 flex-1">
                   <Text className="text-white font-medium text-sm">Admin Tab</Text>
                   <Text className="text-emerald-200 text-xs leading-4 mt-1" numberOfLines={2}>
-                    {isAdminTabEnabled 
-                      ? 'Admin tab is visible, replacing the profile tab in navigation.' 
+                    {isAdminTabEnabled
+                      ? 'Admin tab is visible, replacing the profile tab in navigation.'
                       : 'Enable to show admin tab in navigation bar.'}
                   </Text>
                 </View>
@@ -151,7 +134,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               <Switch
                 value={isAdminTabEnabled}
                 onValueChange={handleAdminTabToggle}
-                trackColor={{ false: '#374151', true: '#10b981' }}
+                trackColor={{ false: '#374151', true: colors.primary[500] }}
                 thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
                 accessibilityLabel="Toggle admin tab visibility"
                 accessibilityHint={isAdminTabEnabled ? 'Disable to hide admin tab' : 'Enable to show admin tab in navigation'}
@@ -159,7 +142,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
             </View>
           </View>
         )}
-        
+
         <SettingsCard
           title="Legal: Terms & Privacy"
           description="Read our Terms of Service and Privacy Policy."
@@ -167,7 +150,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           onPrimary={() => setPanel('terms')}
           icon="gavel"
         />
-        
+
         <SettingsCard
           title="Community Guidelines"
           description="Learn about our community standards for safety, trust, and respectful behavior."
@@ -177,7 +160,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           }}
           icon="security"
         />
-        
+
         {/* Log Out - placed directly after Legal */}
         <SettingsCard
           title="Log Out"
@@ -185,70 +168,12 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="Confirm Log Out"
           onPrimary={async () => {
             try {
-              // Lazy imports to avoid bundling server-only code
-              // Use the shared supabase client
+              // Delegate the logout work to a shared helper so it can be unit-tested
+              // and keeps the component thin.
               // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { supabase } = require('../lib/supabase');
-              // SecureStore to clear tokens
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const SecureStore = require('expo-secure-store');
-              // Auth profile service to clear drafts
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const { authProfileService } = require('../lib/services/auth-profile-service');
+              const { performLogout } = require('../lib/services/logout-service');
 
-              // Get current user ID before signing out
-              const currentUserId = authProfile?.id;
-
-              // Mark this as an intentional sign-out to prevent "Session Expired" alert
-              markIntentionalSignOut();
-
-              // OPTIMIZATION: Sign out locally first for immediate response
-              // Server sign-out will be attempted in background
-              await supabase.auth.signOut({ scope: 'local' });
-
-              // OPTIMIZATION: Navigate immediately after local sign-out for perceived speed
-              // Navigation itself provides sufficient feedback to the user
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { router } = require('expo-router');
-                if (router && typeof router.replace === 'function') {
-                  router.replace('/auth/sign-in-form');
-                }
-              } catch (e) {
-                console.error('[Logout] Router navigation failed', e);
-              }
-
-              // OPTIMIZATION: Run cleanup operations in background (non-blocking)
-              // These operations don't need to block the user experience
-              // Using void to explicitly indicate fire-and-forget behavior
-              void Promise.all([
-                // Clear remember me preference
-                clearRememberMePreference().catch(e => 
-                  console.error('[Logout] Failed to clear remember me preference', e)
-                ),
-                // Clear user-specific draft data
-                currentUserId ? authProfileService.clearUserDraftData(currentUserId).catch(e =>
-                  console.error('[Logout] Draft cleanup failed', e)
-                ) : Promise.resolve(),
-                // Clear stored tokens (best-effort)
-                Promise.all([
-                  SecureStore.deleteItemAsync('sb-access-token').catch(e => 
-                    console.error('[Logout] Failed to delete sb-access-token', e)
-                  ),
-                  SecureStore.deleteItemAsync('sb-refresh-token').catch(e =>
-                    console.error('[Logout] Failed to delete sb-refresh-token', e)
-                  )
-                ]),
-                // Attempt server sign-out in background (best-effort)
-                // Note: This calls signOut() without scope, which will attempt both local and server.
-                // Since local is already cleared, this effectively only does server-side cleanup.
-                supabase.auth.signOut().catch(e => 
-                  console.error('[Logout] Background server signout failed (non-critical)', e)
-                )
-              ]).catch(e => {
-                // Log but don't show error - user is already logged out
-                console.error('[Logout] Background cleanup errors (non-critical)', e);
-              });
+              await performLogout({ currentUserId: authProfile?.id, router: require('expo-router').router });
             } catch (e) {
               console.error('[Logout] Error:', e);
               Alert.alert('Error', 'Failed to log out properly.');
@@ -311,7 +236,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
                               // Delete user account and associated data
                               const result = await deleteUserAccount();
-                              
+
                               if (!result.success) {
                                 console.error('[DeleteAccount] Deletion failed:', result.message);
                                 Alert.alert('Deletion Failed', result.message);

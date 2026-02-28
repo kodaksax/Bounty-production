@@ -1,5 +1,21 @@
 
 // Stripe API types
+import { API_BASE_URL } from '../config/api';
+import { API_TIMEOUTS } from '../config/network';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
+import { getNetworkErrorMessage } from '../utils/network-connectivity';
+import { analyticsService } from './analytics-service';
+import {
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
+} from './payment-error-handler';
+import { performanceService } from './performance-service';
+
 export interface StripePaymentMethod {
   id: string;
   type: 'card' | string;
@@ -95,19 +111,6 @@ export interface StripeConnectVerificationResponse {
   detailsSubmitted: boolean;
   capabilities?: Record<string, string>;
 }
-
-import { API_BASE_URL } from '../config/api';
-import { analyticsService } from './analytics-service';
-import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
-} from './payment-error-handler';
-import { performanceService } from './performance-service';
 
 class StripeService {
   private publishableKey: string = '';
@@ -251,6 +254,11 @@ class StripeService {
   /**
    * Create a PaymentIntent via the backend API
    * This is the production-ready implementation that calls your backend
+   * 
+   * NOTE: This method uses retries for reliability but is NOT idempotent.
+   * If the backend doesn't use idempotency keys, retries could create duplicate
+   * PaymentIntents. For critical payment flows, use createPaymentIntentSecure()
+   * which includes built-in idempotency protection.
    */
   async createPaymentIntent(amount: number, currency: string = 'usd', authToken?: string): Promise<StripePaymentIntent> {
     performanceService.startMeasurement('payment_initiate', 'payment_process', {
@@ -270,8 +278,8 @@ class StripeService {
         };
       }
       
-      // Call backend API to create PaymentIntent
-      const response = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
+      // Call backend API to create PaymentIntent with timeout and retry
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,6 +292,8 @@ class StripeService {
             purpose: 'wallet_deposit',
           },
         }),
+        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment intent creation
+        retries: 2,
       });
 
       if (!response.ok) {
@@ -449,7 +459,7 @@ class StripeService {
         // This ensures the backend is aware of 3DS authentication completion
         try {
           const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
-          await fetch(`${API_BASE_URL}/payments/confirm`, {
+          await fetchWithTimeout(`${API_BASE_URL}/payments/confirm`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -459,6 +469,8 @@ class StripeService {
               paymentIntentId,
               paymentMethodId,
             }),
+            timeout: API_TIMEOUTS.DEFAULT,
+            retries: 1,
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
@@ -539,23 +551,35 @@ class StripeService {
         return [];
       }
 
-      // Use fetch API without custom timeout wrapper
-      // This relies on the network stack's TCP timeouts and browser defaults
-      // Allows requests to complete naturally without premature cancellation
-      // Fetch payment methods from backend
-      const response = await fetch(`${API_BASE_URL}/payments/methods`, {
+      // Use fetchWithTimeout with retry logic for better reliability
+      // Listing payment methods is a read-only operation, use DEFAULT timeout
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds for read operations
+        retries: 2, // Retry twice on failure
       });
 
       if (!response.ok) {
         // Treat non-OK responses as errors so callers can distinguish
         // between an empty list and an API failure.
         const text = await response.text().catch(() => null);
-        const message = text ? `Failed to fetch payment methods: ${text}` : `Failed to fetch payment methods (status ${response.status})`;
+        let errorBody: string | null = null;
+        // Try to extract a human-readable message from the JSON body
+        if (text) {
+          try {
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
+          } catch {
+            errorBody = text;
+          }
+        }
+        const message = errorBody
+          ? `Payment methods request failed (${response.status}): ${errorBody}`
+          : `Payment methods request failed with status ${response.status}`;
         throw { type: 'api_error', code: response.status.toString(), message };
       }
 
@@ -580,10 +604,61 @@ class StripeService {
       });
     } catch (error) {
       console.error('[StripeService] Error fetching payment methods:', error);
+      
+      // Use proper typing for enhanced error with dynamic properties
+      type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
+
+      // For structured API errors (e.g. 4xx/5xx from Edge Function), preserve the
+      // original message so callers see the actual status code rather than a generic
+      // "Connection failed" string produced by getNetworkErrorMessage.
+      const isStructuredApiError = error && typeof error === 'object' && !Array.isArray(error) &&
+        (error as Record<string, unknown>).type === 'api_error' &&
+        (error as Record<string, unknown>).code;
+
+      let enhancedError: EnhancedError;
+      if (isStructuredApiError) {
+        // Keep the original message; only wrap in an Error if needed
+        const originalError = error as Record<string, unknown>;
+        enhancedError = (error instanceof Error ? error : new Error(String(originalError.message))) as EnhancedError;
+        // Copy structured fields so handleStripeError can read type/code
+        for (const [key, value] of Object.entries(originalError)) {
+          if (!(key in enhancedError)) {
+            enhancedError[key] = value;
+          }
+        }
+      } else {
+        // For network-level errors, enhance with a user-friendly message
+        const errorMessage = getNetworkErrorMessage(error);
+        enhancedError = error instanceof Error
+          ? error as EnhancedError
+          : new Error(errorMessage) as EnhancedError;
+        if (errorMessage && enhancedError.message !== errorMessage) {
+          enhancedError.message = errorMessage;
+        }
+        // Preserve structured fields (type, code) from non-Error throws for handleStripeError
+        if (error && typeof error === 'object' && !(error instanceof Error)) {
+          const originalError = error as Record<string, unknown>;
+          for (const [key, value] of Object.entries(originalError)) {
+            if (key !== 'message' && key !== 'name' && key !== 'stack' && !(key in enhancedError)) {
+              enhancedError[key] = value;
+            }
+          }
+        }
+      }
+
+      if (!enhancedError.name) {
+        enhancedError.name = error instanceof Error ? error.name : 'Error';
+      }
+      
+      // Preserve original error for debugging
+      if (!enhancedError.cause) {
+        enhancedError.cause = error;
+      }
+      
       // Rethrow a handled error so upstream callers (context/services) can
       // present a clear error message to the user instead of silently
       // treating an error as "no payment methods".
-      throw this.handleStripeError(error);
+      throw this.handleStripeError(enhancedError);
     }
   }
 
@@ -598,12 +673,14 @@ class StripeService {
         throw new Error('Authentication required to remove payment method');
       }
 
-      const response = await fetch(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
+        retries: 1,
       });
 
       if (!response.ok) {
@@ -617,6 +694,120 @@ class StripeService {
     } catch (error) {
       console.error('[StripeService] Error detaching payment method:', error);
       throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Attach (save) an existing payment method to the current user's Stripe customer
+   * Calls POST /payments/methods on the backend to persist the payment method.
+   */
+  async attachPaymentMethod(paymentMethodId: string, authToken?: string): Promise<StripePaymentMethod> {
+    try {
+      await this.initialize();
+
+      if (!authToken) {
+        throw new Error('Authentication required to save payment method');
+      }
+
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ paymentMethodId }),
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 1,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => null);
+        let errorBody: string | null = null;
+        if (text) {
+          try {
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
+          } catch {
+            errorBody = text;
+          }
+        }
+        const message = errorBody
+          ? `Payment method save failed (${response.status}): ${errorBody}`
+          : `Payment method save failed with status ${response.status}`;
+        throw { type: 'api_error', code: response.status.toString(), message };
+      }
+
+      const rawJson = await response.json().catch((parseErr: unknown) => {
+        console.error('[StripeService] Failed to parse attachPaymentMethod response body:', parseErr);
+        return null;
+      }) as Record<string, unknown> | null;
+      if (!rawJson || typeof rawJson !== 'object') {
+        throw {
+          type: 'api_error',
+          code: 'invalid_response',
+          message: 'Payment method save failed: invalid response format from server',
+        };
+      }
+
+      const pmValue = rawJson.paymentMethod;
+      if (!pmValue || typeof pmValue !== 'object') {
+        throw {
+          type: 'api_error',
+          code: 'invalid_response',
+          message: 'Payment method save failed: missing payment method in server response',
+        };
+      }
+
+      const pm = pmValue as Record<string, unknown>;
+      const rawCard = pm.card;
+      const cardData = (rawCard && typeof rawCard === 'object' ? rawCard : {}) as Record<string, unknown>;
+      return {
+        id: (typeof pm.id === 'string' ? pm.id : '') || '',
+        type: 'card' as const,
+        card: {
+          brand: (typeof cardData.brand === 'string' ? cardData.brand : 'unknown'),
+          last4: (typeof cardData.last4 === 'string' ? cardData.last4 : '****'),
+          exp_month: (typeof cardData.exp_month === 'number' ? cardData.exp_month : 0),
+          exp_year: (typeof cardData.exp_year === 'number' ? cardData.exp_year : 0),
+        },
+        created: (typeof pm.created === 'number' ? pm.created : Math.floor(Date.now() / 1000)),
+      };
+    } catch (error) {
+      console.error('[StripeService] Error attaching payment method:', error);
+
+      // Use proper typing for enhanced error with known Stripe error fields
+      type EnhancedError = Error & { type?: string; code?: string; cause?: unknown };
+
+      // For structured API errors (e.g. 4xx/5xx from Edge Function), preserve the
+      // original message so the status code surfaces to the caller.
+      const isStructuredApiError = error && typeof error === 'object' && !Array.isArray(error) &&
+        (error as Record<string, unknown>).type === 'api_error' &&
+        (error as Record<string, unknown>).code;
+
+      let enhancedError: EnhancedError;
+      if (isStructuredApiError) {
+        const originalError = error as Record<string, string | undefined>;
+        enhancedError = (error instanceof Error ? error : new Error(String(originalError.message))) as EnhancedError;
+        if (!enhancedError.type) enhancedError.type = originalError.type;
+        if (!enhancedError.code) enhancedError.code = originalError.code;
+      } else {
+        const errorMessage = getNetworkErrorMessage(error);
+        enhancedError = error instanceof Error
+          ? error as EnhancedError
+          : new Error(errorMessage) as EnhancedError;
+        if (errorMessage && enhancedError.message !== errorMessage) {
+          enhancedError.message = errorMessage;
+        }
+      }
+
+      if (!enhancedError.name) {
+        enhancedError.name = error instanceof Error ? error.name : 'Error';
+      }
+      if (!enhancedError.cause) {
+        enhancedError.cause = error;
+      }
+
+      throw this.handleStripeError(enhancedError);
     }
   }
 
@@ -1108,8 +1299,16 @@ class StripeService {
     }
 
     if (error?.type === 'api_error' || error?.type === 'StripeAPIError') {
-      const stripeError = new Error('Payment service temporarily unavailable. Please try again.') as Error & { type?: string };
+      // Preserve the original message when it contains specific API error details
+      // (e.g. "Payment methods request failed (405): Method not allowed") so callers
+      // can surface a meaningful message rather than a generic fallback.
+      const defaultMessage = 'Payment service temporarily unavailable. Please try again.';
+      const message = error.message && error.message !== defaultMessage
+        ? error.message
+        : defaultMessage;
+      const stripeError = new Error(message) as Error & { type?: string; code?: string };
       stripeError.type = 'api_error';
+      stripeError.code = error.code;
       return stripeError;
     }
 
@@ -1431,6 +1630,182 @@ class StripeService {
   }
 
   /**
+   * Check if Apple Pay is supported on this device
+   * @returns Promise<boolean> indicating whether Apple Pay is available
+   */
+  async isApplePaySupported(): Promise<boolean> {
+    try {
+      // Apple Pay is only available on iOS
+      const { Platform } = await import('react-native');
+      if (Platform.OS !== 'ios') {
+        return false;
+      }
+
+      await this.initialize();
+
+      // Check if the SDK is available and has Apple Pay support
+      if (!this.stripeSDK) {
+        return false;
+      }
+
+      // Try to access isApplePaySupported from the SDK
+      // The method might be at different locations depending on SDK version
+      const isApplePaySupportedFn = 
+        this.stripeSDK.isApplePaySupported || 
+        this.stripeSDK.ApplePay?.isApplePaySupported;
+
+      if (typeof isApplePaySupportedFn === 'function') {
+        return await isApplePaySupportedFn();
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[StripeService] Error checking Apple Pay support:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Present Apple Pay payment sheet
+   * @param amount Amount in dollars (e.g., 10.50)
+   * @param description Description for the payment (default: "Add Money to Wallet")
+   * @param cartItems Optional custom cart items for Apple Pay sheet
+   * @returns Promise with success status and error details
+   */
+  async presentApplePay(
+    amount: number,
+    description: string = 'Add Money to Wallet',
+    cartItems?: Array<{ label: string; amount: string; type?: 'final' | 'pending' }>
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    errorCode?: string;
+  }> {
+    try {
+      // Check platform first - Apple Pay is iOS only
+      const { Platform } = await import('react-native');
+      if (Platform.OS !== 'ios') {
+        return {
+          success: false,
+          error: 'Apple Pay is only available on iOS',
+          errorCode: 'platform_not_supported',
+        };
+      }
+
+      // Validate amount - enforce Stripe's minimum charge amount
+      if (amount < 0.5) {
+        return {
+          success: false,
+          error: 'Amount must be at least $0.50',
+          errorCode: 'invalid_amount',
+        };
+      }
+
+      // If custom cartItems are provided, validate that their total matches the amount
+      if (cartItems && cartItems.length > 0) {
+        const totalFromCart = cartItems.reduce((sum, item) => {
+          const itemAmount = Number(item.amount);
+          return Number.isFinite(itemAmount) ? sum + itemAmount : sum;
+        }, 0);
+
+        const totalFromCartInCents = Math.round(totalFromCart * 100);
+        const amountInCents = Math.round(amount * 100);
+
+        if (
+          Number.isFinite(totalFromCartInCents) &&
+          Number.isFinite(amountInCents) &&
+          totalFromCartInCents !== amountInCents
+        ) {
+          console.warn(
+            '[StripeService] Apple Pay amount mismatch:',
+            { amount, totalFromCart }
+          );
+          return {
+            success: false,
+            error: 'Payment amount does not match cart total',
+            errorCode: 'amount_mismatch',
+          };
+        }
+      }
+
+      await this.initialize();
+
+      if (!this.stripeSDK) {
+        return {
+          success: false,
+          error: 'Stripe SDK not available',
+          errorCode: 'sdk_unavailable',
+        };
+      }
+
+      // Get the presentApplePay function from SDK
+      const presentApplePayFn = 
+        this.stripeSDK.presentApplePay || 
+        this.stripeSDK.ApplePay?.presentApplePay;
+
+      if (typeof presentApplePayFn !== 'function') {
+        return {
+          success: false,
+          error: 'Apple Pay not available in this SDK version',
+          errorCode: 'apple_pay_unavailable',
+        };
+      }
+
+      // Prepare cart items
+      const items = cartItems || [
+        {
+          label: description,
+          amount: amount.toFixed(2),
+          type: 'final' as const,
+        },
+      ];
+
+      // Present the Apple Pay sheet
+      const { error: presentError } = await presentApplePayFn({
+        cartItems: items,
+        country: 'US',
+        currency: 'USD',
+        requiredShippingAddressFields: [],
+        requiredBillingContactFields: ['postalAddress'],
+      });
+
+      if (presentError) {
+        console.error('[StripeService] Apple Pay presentation error:', presentError);
+
+        // Handle user cancellation separately
+        const cancelCodes = ['Canceled', 'canceled', 'USER_CANCELLED', 'user_cancelled'];
+        if (presentError.code && cancelCodes.includes(presentError.code)) {
+          return {
+            success: false,
+            error: 'Payment cancelled by user',
+            errorCode: 'cancelled',
+          };
+        }
+
+        return {
+          success: false,
+          error: presentError.message || 'Failed to present Apple Pay',
+          errorCode: presentError.code,
+        };
+      }
+
+      // If we get here, the payment was presented successfully
+      // Note: The actual payment confirmation should be handled separately
+      // using confirmApplePayPayment with the client secret
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('[StripeService] Error presenting Apple Pay:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorCode: 'unknown_error',
+      };
+    }
+  }
+
+  /**
    * Get the native SDK instance for advanced use cases
    */
   getStripeSDK(): any {
@@ -1472,6 +1847,20 @@ class StripeService {
     if (!error) return 'An unknown error occurred';
     
     const errorMessage = error.message || error.toString();
+    
+    // Handle network and timeout errors with user-friendly messages
+    if (error.name === 'TimeoutError' || errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+      return 'Connection timed out. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'AbortError') {
+      // Don't show the generic "Aborted" message
+      return 'Connection interrupted. Please check your internet connection and try again.';
+    }
+    
+    if (error.name === 'NetworkError' || errorMessage.includes('Network') || errorMessage.includes('fetch failed')) {
+      return 'Unable to connect. Please check your internet connection.';
+    }
     
     // Detect test/live mode mismatch
     if (errorMessage.includes('No such setupintent') || errorMessage.includes('No such paymentintent')) {

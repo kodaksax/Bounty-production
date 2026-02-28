@@ -6,14 +6,6 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 
-interface SettingItem {
-  id: string;
-  label: string;
-  description: string;
-  type: 'switch' | 'select';
-  value: boolean | string;
-}
-
 export default function AdminGeneralSettingsScreen() {
   const router = useRouter();
   const [settings, setSettings] = useState({
@@ -34,7 +26,7 @@ export default function AdminGeneralSettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof settings, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setSettings((prev) => ({ ...prev, [key]: option })),
     }));

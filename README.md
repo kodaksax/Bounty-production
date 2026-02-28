@@ -1,6 +1,8 @@
 # BOUNTY
 
-> Mobile-first micro‑bounty marketplace. Create → Match → Chat → Complete → Settle. Fast, transparent, escrow‑backed.
+> Mobile-first mobile-only micro‑bounty marketplace (iOS & Android). Create → Match → Chat → Complete → Settle. Fast, transparent, escrow‑backed.
+
+**Platform note:** This project targets iOS and Android only. Avoid adding or relying on web-only dependencies; if CI/tooling requires a web build, add safe web stubs and platform guards rather than importing native-only modules on web.
 
 ## 🚀 Elevator Pitch
 BOUNTYExpo makes it **fast and safe** to post small jobs ("bounties"), get matched with a hunter, coordinate in-app, and settle payment via an escrow flow. Designed for trust, speed, and clarity.
@@ -139,7 +141,7 @@ cp .env.example .env
 
 3. **Start Development Stack**
 ```bash
-# Start infrastructure services (PostgreSQL + Stripe Mock)
+# Start infrastructure services (PostgreSQL + Redis + Stripe Mock)
 pnpm dev
 
 # In a new terminal, start the API server  
@@ -147,6 +149,7 @@ pnpm dev:api
 
 # This will:
 # ✅ Start PostgreSQL database on port 5432
+# ✅ Start Redis cache on port 6379
 # ✅ Start Stripe Mock server on port 12111
 # ✅ Start BountyExpo API server on port 3001
 # ✅ Automatically run database migrations
@@ -200,6 +203,7 @@ After running `pnpm dev`, these services will be available:
 |---------|-----|-------------|
 | **API Server** | http://localhost:3001 | Main BountyExpo API |
 | **PostgreSQL** | localhost:5432 | Database server |
+| **Redis** | localhost:6379 | Cache server |
 | **Stripe Mock** | http://localhost:12111 | Mock payment processing |
 | **API Health** | http://localhost:3001/health | Health check endpoint |
 
@@ -244,7 +248,7 @@ STRIPE_WEBHOOK_SECRET=whsec_your_secret_here
 PORT=3001
 ```
 
-📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./STRIPE_INTEGRATION_BACKEND.md)
+📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./docs/payments/STRIPE_INTEGRATION_BACKEND.md)
 
 ### Testing payments from a physical device (Expo Go)
 
@@ -505,6 +509,40 @@ rm -rf .expo
 npx expo start --clear
 ```
 
+### Redis Caching (API Layer)
+The API uses Redis for caching frequently accessed data to improve response times and reduce database load.
+
+**Cached Resources:**
+- **Profiles**: Cached for 5 minutes (300s)
+- **Bounties**: Cached for 3 minutes (180s)
+- **Bounty Lists**: Cached for 1 minute (60s)
+
+**Cache Invalidation:**
+- Profile updates automatically invalidate the profile cache
+- Bounty create/update/delete operations invalidate bounty caches
+- Status changes (accept/complete/archive) invalidate related caches
+- List caches are cleared when bounties are modified
+
+**Configuration:**
+Set these environment variables to customize caching behavior:
+
+```bash
+# Redis Configuration
+REDIS_HOST=localhost          # Redis server host
+REDIS_PORT=6379              # Redis server port
+REDIS_ENABLED=true           # Enable/disable caching
+REDIS_TTL_PROFILE=300        # Profile cache TTL (seconds)
+REDIS_TTL_BOUNTY=180         # Bounty cache TTL (seconds)
+REDIS_TTL_BOUNTY_LIST=60     # Bounty list cache TTL (seconds)
+```
+
+**Testing Redis:**
+```bash
+# Test Redis connection and caching operations
+cd services/api
+npx tsx src/test-redis-simple.ts
+```
+
 ### Image Optimization
 - **Auto-caching**: The app uses `expo-image` instead of React Native's `Image` for automatic caching
 - **Lazy loading**: Images in lists are loaded on-demand with thumbnail optimization
@@ -540,10 +578,58 @@ Performance is tracked using:
 - Bundle size < 10MB
 - App launch < 2 seconds
 
-## 🧪 Testing (Planned)
-- Unit: domain helpers & formatting.
-- Integration: navigation flows (Detox / Maestro candidate).
-- Snapshot: stable UI components (BottomNav, PostingCard, ChatBubble).
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run unit tests only
+npm run test:unit
+
+# Run integration tests
+npm run test:integration
+
+# Run end-to-end tests
+npm run test:e2e
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Run with verbose output for debugging
+npm run test:verbose
+```
+
+### Test Status
+
+**Current Coverage** (~20% overall):
+- ✅ **593 tests passing** across unit, integration, and E2E suites
+- ✅ Strong coverage in critical areas:
+  - Phone & Email Verification (100%)
+  - Password Validation (94%)
+  - Sanitization Utilities (93%)
+  - Date Utilities (100%)
+  - Bounty Validation (100%)
+
+**Test Organization**:
+- `__tests__/unit/` - Unit tests for services, utilities, and components
+- `__tests__/integration/` - API integration tests
+- `__tests__/e2e/` - End-to-end user flow tests
+
+### Coverage Improvement
+
+We're actively working to increase test coverage across the codebase. See [COVERAGE_IMPROVEMENT_PLAN.md](./docs/testing/COVERAGE_IMPROVEMENT_PLAN.md) for:
+- Current coverage metrics and goals
+- Prioritized areas for new tests
+- Testing best practices and patterns
+- How to contribute tests
+
+**Note**: Coverage thresholds are currently disabled in CI to allow incremental improvement without blocking development. Coverage reports are still generated and uploaded to Codecov for visibility.
 
 ## 🧭 Roadmap (Signal)
 Short Term:
@@ -662,6 +748,31 @@ pnpm type-check
 - Ensure you're using test keys (start with `sk_test_` and `pk_test_`)
 - Verify Stripe Mock server is running on port 12111
 - Check the console for payment-related errors
+
+**"Redis connection issues"**
+```bash
+# Check if Redis container is running
+docker ps | grep redis
+
+# Restart Redis service
+docker compose restart redis
+
+# Check Redis logs
+docker logs bountyexpo-redis
+
+# Test Redis connection
+cd services/api
+npx tsx src/test-redis-simple.ts
+```
+
+**"Cache issues or stale data"**
+```bash
+# Flush Redis cache (use with caution)
+docker exec bountyexpo-redis redis-cli FLUSHDB
+
+# Or disable caching temporarily
+# Set REDIS_ENABLED=false in .env
+```
 
 ### Getting Help
 

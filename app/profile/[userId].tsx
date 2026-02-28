@@ -6,17 +6,17 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
 import { getCurrentUserId } from "lib/utils/data-utils";
-import React, { useEffect, useState } from "react";
+import { shareProfile } from "lib/utils/share-utils";
+import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
@@ -24,20 +24,22 @@ import { EnhancedProfileSection, PortfolioSection } from "../../components/enhan
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
+import { ScreenHeader } from "../../components/ui/screen-header";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
-import { useAuthContext } from "../../hooks/use-auth-context";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
+import { navigationIntent } from "../../lib/services/navigation-intent";
+import { colors } from '../../lib/theme';
+;
 
 export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  
+
   const { profile, loading, error } = useNormalizedProfile(userId);
   const {
     isFollowing,
@@ -115,10 +117,10 @@ export default function UserProfileScreen() {
             return;
           }
         }
-        
+
         // Generate skills from profile data
         const profileSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = [];
-        
+
         // Add actual skills from profile first
         const raw = (profile as any)?._raw || null;
         const rawSkills = profile.skills || (raw && raw.skills) || [];
@@ -126,26 +128,26 @@ export default function UserProfileScreen() {
           rawSkills.slice(0, 4).forEach((skill, index: number) => {
             // Validate skill is a string
             if (typeof skill === 'string' && skill.trim()) {
-              profileSkills.push({ 
-                id: `skill-${index}`, 
-                icon: 'star', 
+              profileSkills.push({
+                id: `skill-${index}`,
+                icon: 'star',
                 text: skill.trim()
               });
             }
           });
         }
-        
+
         // Add location if available
         const location = profile.location || (raw && raw.location);
         if (location) {
           profileSkills.push({ id: 'location', icon: 'location-on', text: `Based in ${location}` });
         }
-        
+
         // Add verified contact if phone is set
         if (raw && raw.phone) {
           profileSkills.push({ id: 'verified', icon: 'verified-user', text: 'Verified contact' });
         }
-        
+
         // Add join date
         if (profile.joinDate) {
           const joinDate = new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -153,7 +155,7 @@ export default function UserProfileScreen() {
         } else {
           profileSkills.push({ id: 'joined', icon: 'favorite', text: 'Member since 2024' });
         }
-        
+
         setSkills(profileSkills);
       } catch (error) {
         console.error('Error loading skills:', error);
@@ -183,9 +185,11 @@ export default function UserProfileScreen() {
         undefined // no bounty context
       );
 
-      
-  // Navigate to messenger
-  router.push(ROUTES.TABS.MESSENGER as any);
+      // Set intent to open this conversation
+      await navigationIntent.setPendingConversationId(conversation.id);
+
+      // Navigate to messenger
+      router.push(ROUTES.TABS.MESSENGER as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
       Alert.alert('Error', 'Failed to start conversation. Please try again.');
@@ -211,17 +215,12 @@ export default function UserProfileScreen() {
   };
 
   const handleShare = async () => {
-    try {
-      const profileUrl = `https://bountyexpo.app/profile/${userId}`;
-      const message = `Check out ${profile?.name || profile?.username}'s profile on BountyExpo!\n\n${profileUrl}`;
-      
-      await Share.share({
-        title: `${profile?.name || profile?.username} on BountyExpo`,
-        message,
-      });
-    } catch (error) {
-      console.error('Error sharing profile:', error);
-    }
+    await shareProfile({
+      name: profile?.name || undefined,
+      username: profile?.username || undefined,
+      id: userId as string,
+      // about: profile?.about // 'about' does not exist on NormalizedProfile
+    });
   };
 
   const handleBlock = () => {
@@ -272,20 +271,24 @@ export default function UserProfileScreen() {
     setShowMoreMenu(false);
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <BrandingLogo size="small" />
-          </View>
-          <View style={{ width: 40 }} />
-        </View>
-        <ScrollView 
+        <ScreenHeader
+          showBack
+          onBack={handleBack}
+          centerNode={<BrandingLogo size="small" />}
+        />
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         >
@@ -298,19 +301,18 @@ export default function UserProfileScreen() {
   if (error || !profile) {
     return (
       <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top - 8, 6) }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <BrandingLogo size="small" />
-        </View>
+        <ScreenHeader
+          showBack
+          onBack={handleBack}
+          centerNode={<BrandingLogo size="small" />}
+        />
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text style={styles.errorTitle}>Profile not found</Text>
           <Text style={styles.errorText}>
             {error || "This user profile could not be loaded."}
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
             <Text style={styles.retryButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -323,25 +325,21 @@ export default function UserProfileScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top - 40, 6) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <BrandingLogo size="small" />
-        </View>
-        {!isOwnProfile && (
-          <TouchableOpacity 
-            onPress={() => setShowMoreMenu(!showMoreMenu)} 
+      <ScreenHeader
+        showBack
+        onBack={handleBack}
+        centerNode={<BrandingLogo size="small" />}
+        rightNode={!isOwnProfile ? (
+          <TouchableOpacity
+            onPress={() => setShowMoreMenu(!showMoreMenu)}
             style={styles.moreButton}
             accessibilityRole="button"
             accessibilityLabel="More options"
           >
             <MaterialIcons name="more-vert" size={24} color="#ffffff" />
           </TouchableOpacity>
-        )}
-        {isOwnProfile && <View style={{ width: 40 }} />}
-      </View>
+        ) : null}
+      />
 
       {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
       {showMoreMenu && !isOwnProfile && (
@@ -374,15 +372,16 @@ export default function UserProfileScreen() {
         </View>
       )}
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
       >
         {/* Enhanced Profile Section */}
-        <EnhancedProfileSection 
-          userId={userId} 
+        <EnhancedProfileSection
+          userId={userId}
           isOwnProfile={isOwnProfile}
           showPortfolio={false}
+          hideActions={true}
           activityStats={{
             jobsAccepted: stats.jobsAccepted,
             bountiesPosted: stats.bountiesPosted,
@@ -399,8 +398,8 @@ export default function UserProfileScreen() {
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity 
-                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]} 
+              <TouchableOpacity
+                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]}
                 onPress={handleMessage}
                 disabled={isCreatingChat}
               >
@@ -420,13 +419,13 @@ export default function UserProfileScreen() {
                   disabled={followLoading}
                 >
                   {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
+                    <ActivityIndicator size="small" color={isFollowing ? colors.primary[500] : "#ffffff"} />
                   ) : (
                     <>
                       <MaterialIcons
                         name={isFollowing ? "person-remove" : "person-add"}
                         size={18}
-                        color={isFollowing ? "#10b981" : "#ffffff"}
+                        color={isFollowing ? colors.primary[500] : "#ffffff"}
                       />
                       <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                         {isFollowing ? "Following" : "Follow"}
@@ -485,7 +484,7 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   header: {
     flexDirection: "row",
@@ -493,7 +492,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   headerCenter: {
     flexDirection: "row",
@@ -584,7 +583,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: "#10b981", // emerald-500
+    backgroundColor: colors.primary[500], // emerald-500
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -661,7 +660,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(167, 243, 208, 0.1)",
   },
   followingButtonText: {
-    color: "#10b981",
+    color: colors.primary[500],
   },
   statsContainer: {
     flexDirection: "row",

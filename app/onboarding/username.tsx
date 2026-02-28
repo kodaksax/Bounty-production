@@ -1,27 +1,25 @@
 /**
  * Username Onboarding Screen
  * First step: collect unique username (required)
- * Features: Bounty branding, state persistence via context, modal for legal docs
+ * Features: Bounty branding, state persistence via context, navigation to legal docs
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Image, ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View, } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
-import { PRIVACY_TEXT } from '../../assets/legal/privacy';
-import { TERMS_TEXT } from '../../assets/legal/terms';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -29,8 +27,7 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
 
-type LegalModalType = 'terms' | 'privacy' | null;
-
+import { colors } from '../../lib/theme';
 export default function UsernameScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -45,7 +42,8 @@ export default function UsernameScreen() {
   const [checking, setChecking] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [accepted, setAccepted] = useState(onboardingData.accepted);
-  const [legalModal, setLegalModal] = useState<LegalModalType>(null);
+  const [submitTick, setSubmitTick] = useState(0);
+  const submittingRef = useRef(false);
 
   // Sync from context on mount
   useEffect(() => {
@@ -55,6 +53,13 @@ export default function UsernameScreen() {
     if (onboardingData.accepted !== accepted) {
       setAccepted(onboardingData.accepted);
     }
+    // Cleanup guard on unmount: ensure submitting ref is cleared so retries remain possible
+    return () => {
+      if (submittingRef.current) {
+        submittingRef.current = false;
+        setSubmitTick((t) => t + 1);
+      }
+    };
   }, []);
 
   // Load prior acceptance
@@ -117,14 +122,21 @@ export default function UsernameScreen() {
   }, [username]);
 
   const handleNext = async () => {
-    // Validate prerequisites
-    if (!isValid || checking || !accepted) return;
+    // Validate prerequisites - guard against disabled state
+    if (!isValid || checking || !accepted) {
+      return;
+    }
 
     // Check if user is authenticated
     if (!userId) {
       setError('Please sign in to continue. Your session may have expired.');
       return;
     }
+
+    // Prevent duplicate submissions / navigation (use ref as immediate guard)
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitTick((t) => t + 1);
 
     try {
       // persist acceptance
@@ -141,6 +153,8 @@ export default function UsernameScreen() {
 
       if (!result.success) {
         setError(result.error || 'Failed to save username');
+        submittingRef.current = false;
+        setSubmitTick((t) => t + 1);
         return;
       }
 
@@ -165,12 +179,16 @@ export default function UsernameScreen() {
         
         if (updateError) {
           // Handle unique constraint violation (username already taken)
-          if (updateError.code === '23505') {
+            if (updateError.code === '23505') {
             setError('This username is already taken. Please choose another.');
+            submittingRef.current = false;
+            setSubmitTick((t) => t + 1);
             return;
           }
           console.error('[onboarding] Error updating profile:', updateError);
           setError('Failed to update profile. Please try again.');
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
           return;
         }
         
@@ -195,10 +213,14 @@ export default function UsernameScreen() {
           // Handle unique constraint violation (username already taken)
           if (insertError.code === '23505') {
             setError('This username is already taken. Please choose another.');
+            submittingRef.current = false;
+            setSubmitTick((t) => t + 1);
             return;
           }
           console.error('[onboarding] Error creating profile:', insertError);
           setError('Failed to save profile. Please try again.');
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
           return;
         }
 
@@ -210,52 +232,24 @@ export default function UsernameScreen() {
         }
       }
 
-      router.push('/onboarding/details');
+      // Navigate to next onboarding step and then clear submitting guard so the UI can recover
+      try {
+        router.push('/onboarding/details');
+      } catch (navError) {
+        console.error('[onboarding] Navigation error:', navError);
+        setError('Navigation failed. Please try again.');
+      } finally {
+        if (submittingRef.current) {
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
+        }
+      }
     } catch (err) {
       console.error('[onboarding] Error:', err);
       setError('Failed to save username. Please try again.');
+      submittingRef.current = false;
+      setSubmitTick((t) => t + 1);
     }
-  };
-
-  const renderLegalModal = () => {
-    const title = legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy';
-    const content = legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT;
-    const paragraphs = content.split(/\n\n+/);
-
-    return (
-      <Modal
-        visible={!!legalModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setLegalModal(null)}
-      >
-        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
-          <View style={styles.modalHeader}>
-            <MaterialIcons 
-              name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'} 
-              size={24} 
-              color="#a7f3d0" 
-            />
-            <Text style={styles.modalTitle}>{title}</Text>
-            <TouchableOpacity 
-              onPress={() => setLegalModal(null)} 
-              style={styles.modalCloseButton}
-              accessibilityLabel="Close"
-            >
-              <MaterialIcons name="close" size={24} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView 
-            style={styles.modalScroll}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-          >
-            {paragraphs.map((p, i) => (
-              <Text key={i} style={styles.modalParagraph}>{p}</Text>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
-    );
   };
 
   return (
@@ -296,7 +290,7 @@ export default function UsernameScreen() {
               <ActivityIndicator size="small" color="#a7f3d0" style={styles.indicator} />
             )}
             {!checking && username && isValid && (
-              <MaterialIcons name="check-circle" size={24} color="#10b981" style={styles.indicator} />
+              <MaterialIcons name="check-circle" size={24} color={colors.primary[500]} style={styles.indicator} />
             )}
           </View>
           
@@ -319,17 +313,19 @@ export default function UsernameScreen() {
 
         {/* Legal acceptance */}
         <View style={styles.legalBox}>
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() => setAccepted(!accepted)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: accepted }}
-            accessibilityLabel="Accept terms and privacy policy"
-          >
-            <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+          <View style={styles.checkboxRow}>
+            <TouchableOpacity
+              onPress={() => setAccepted(!accepted)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: accepted }}
+              accessibilityLabel="Accept terms and privacy policy"
+              style={styles.checkboxButton}
+            >
+              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+            </TouchableOpacity>
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('terms')}
+              onPress={() => router.push('/legal/terms')}
               accessibilityRole="link"
               accessibilityLabel="View Terms of Service"
             >
@@ -337,26 +333,38 @@ export default function UsernameScreen() {
             </TouchableOpacity>
             <Text style={styles.legalText}> and</Text>
             <TouchableOpacity 
-              onPress={() => setLegalModal('privacy')}
+              onPress={() => router.push('/legal/privacy')}
               accessibilityRole="link"
               accessibilityLabel="View Privacy Policy"
             >
               <Text style={styles.linkText}> Privacy Policy</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Next Button */}
-        <TouchableOpacity
-          style={[styles.nextButton, (!isValid || checking || !accepted) && styles.nextButtonDisabled]}
-          onPress={handleNext}
-          disabled={!isValid || checking || !accepted}
-        >
-          <Text style={styles.nextButtonText}>
-            {checking ? 'Checking...' : 'Next'}
-          </Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-        </TouchableOpacity>
+        {(() => {
+          // Depend on submitTick so that updates to it trigger re-renders that reflect the latest submittingRef state
+          const submitting = submittingRef.current && submitTick >= 0;
+          return (
+            <TouchableOpacity
+              style={[
+                styles.nextButton,
+                (!isValid || checking || !accepted || submitting) && styles.nextButtonDisabled,
+              ]}
+              onPress={handleNext}
+              disabled={!isValid || checking || !accepted || submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#052e1b" style={{ marginRight: 8 }} />
+              ) : null}
+              <Text style={styles.nextButtonText}>
+                {submitting ? 'Saving...' : checking ? 'Checking...' : 'Next'}
+              </Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Progress indicator */}
         <View style={styles.progressContainer}>
@@ -366,9 +374,6 @@ export default function UsernameScreen() {
           <View style={styles.progressDot} />
         </View>
       </View>
-
-      {/* Legal Modal */}
-      {renderLegalModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -376,7 +381,7 @@ export default function UsernameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   content: {
     flex: 1,
@@ -428,6 +433,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  checkboxButton: {
+    marginRight: 4,
   },
   legalText: {
     color: 'rgba(255,255,255,0.85)',
@@ -526,40 +534,5 @@ const styles = StyleSheet.create({
   },
   progressDotActive: {
     backgroundColor: '#a7f3d0',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(167,243,208,0.2)',
-  },
-  modalTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginLeft: 12,
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalScroll: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  modalParagraph: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 12,
   },
 });

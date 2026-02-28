@@ -131,7 +131,7 @@ export default function ChoosePeopleScreen() {
                 } else {
                   router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'create' } } as any)
                 }
-              } catch (e) {
+              } catch {
                 router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'create' } } as any)
               }
             }}

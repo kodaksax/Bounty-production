@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -37,7 +37,6 @@ export default function HunterApplyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -275,7 +274,9 @@ export default function HunterApplyScreen() {
           <Text style={styles.waitingTitle} accessibilityRole="header">Waiting for Selection</Text>
           <Text style={styles.waitingText}>
             Your application has been submitted. The poster is reviewing applications and will
-            select a hunter soon. You'll be notified when a decision is made.
+            select a hunter soon. You
+            {"'"}
+            ll be notified when a decision is made.
           </Text>
           <View style={styles.statusBadge}>
             <MaterialIcons name="pending" size={16} color="#fbbf24" />
@@ -328,7 +329,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
   },
@@ -449,12 +450,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -469,10 +470,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.primary[600],
   },
   stageLabel: {
     color: '#6ee7b7',

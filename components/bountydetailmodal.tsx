@@ -3,20 +3,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
-import React, { useEffect, useRef, useState } from "react"
+import { colors, theme } from "lib/theme"
+import { shareBounty } from "lib/utils/share-utils"
+import { useEffect, useRef, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -29,6 +29,9 @@ import type { Message } from '../lib/types'
 import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
+// Alert defer delay to allow React to process state updates before showing alert
+const ALERT_DEFER_DELAY = 100;
+
 // Type for detail rows in Additional Details section
 interface DetailRow {
   icon: 'schedule' | 'build' | 'place' | 'access-time';
@@ -40,14 +43,14 @@ interface DetailRow {
 
 interface BountyDetailModalProps {
   bounty: {
-    id: number
+    id: string | number
     username?: string
     title: string
     price: number
     distance: number | null
     description?: string
-    user_id?: string
-  poster_id?: string
+    user_id?: string | null
+    poster_id?: string | null
     work_type?: 'online' | 'in_person'
     attachments?: AttachmentMeta[]
     attachments_json?: string
@@ -85,10 +88,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   // Resolve poster identity - prefer poster_id, fall back to user_id for compatibility
   const [displayUsername, setDisplayUsername] = useState<string>(bounty.username || 'Loading...')
   const posterId = bounty.poster_id || bounty.user_id
-  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId)
+  const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
-  
+
+  // Track mounted state to prevent showing alerts after unmount
+  const isMountedRef = useRef(true)
+  // Store timeout IDs for cleanup
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 
   useEffect(() => {
     // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Anonymous'
@@ -127,21 +135,21 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     if (!shouldFetchDetail) return () => { mounted = false }
 
-    ;(async () => {
-      if (!mounted) return
-      setIsLoadingAttachments(true)
-      try {
-        const full = await bountyService.getById(initialBounty.id)
-        if (mounted && full) {
-          // Merge - prefer fields already present in initialBounty when available
-          setDetailBounty({ ...initialBounty, ...full } as any)
+      ; (async () => {
+        if (!mounted) return
+        setIsLoadingAttachments(true)
+        try {
+          const full = await bountyService.getById(initialBounty.id)
+          if (mounted && full) {
+            // Merge - prefer fields already present in initialBounty when available
+            setDetailBounty({ ...initialBounty, ...full } as any)
+          }
+        } catch (e) {
+          console.error('Failed to fetch bounty details for modal:', e)
+        } finally {
+          if (mounted) setIsLoadingAttachments(false)
         }
-      } catch (e) {
-        console.error('Failed to fetch bounty details for modal:', e)
-      } finally {
-        if (mounted) setIsLoadingAttachments(false)
-      }
-    })()
+      })()
 
     return () => { mounted = false }
   }, [initialBounty])
@@ -189,6 +197,17 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     return () => { mounted = false }
   }, [detailBounty, initialBounty])
 
+  // Cleanup effect: clear timeouts and mark as unmounted
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current)
+        alertTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   // Sample description if not provided
   const description =
     bounty.description ||
@@ -196,30 +215,12 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
   // Handle Share button
   const handleShare = async () => {
-    try {
-      const shareMessage = `Check out this bounty: ${bounty.title}\nAmount: $${bounty.price}\n\nView on BountyExpo: bountyexpo://bounties/${bounty.id}`;
-      
-      if (Platform.OS === 'web') {
-        // On web, copy to clipboard
-        const link = `https://bountyexpo.app/bounties/${bounty.id}`;
-        if (typeof navigator !== 'undefined' && navigator.clipboard) {
-          await navigator.clipboard.writeText(link);
-          Alert.alert('Link Copied', 'Bounty link copied to clipboard!');
-        } else {
-          // Fallback: show link in alert
-          Alert.alert('Share Link', link);
-        }
-      } else {
-        // On mobile, use native share
-        await Share.share({
-          message: shareMessage,
-          title: bounty.title,
-        });
-      }
-    } catch (error) {
-      console.error('Error sharing bounty:', error);
-      Alert.alert('Error', 'Failed to share bounty. Please try again.');
-    }
+    await shareBounty({
+      title: bounty.title,
+      price: bounty.price,
+      id: bounty.id,
+      description: bounty.description,
+    });
   };
 
   // Handle Report button
@@ -272,7 +273,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   useEffect(() => {
     const checkApplicationStatus = async () => {
       if (!currentUserId || !bounty.id) return
-      
+
       try {
         const requests = await bountyRequestService.getAll({
           bountyId: bounty.id,
@@ -283,7 +284,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         console.error('Error checking application status:', error)
       }
     }
-    
+
     checkApplicationStatus()
   }, [bounty.id, currentUserId])
 
@@ -301,7 +302,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       )
       return
     }
-    
+
     if (!currentUserId || !bounty.id) {
       Alert.alert('Error', 'Unable to apply. Please try again.')
       return
@@ -330,7 +331,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
       if (request) {
         setHasApplied(true)
-        
+
         // Send notification to poster about the application
         try {
           const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
@@ -354,29 +355,50 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           console.error('Failed to send application notification:', notifError)
           // Don't block the flow if notification fails
         }
-        
-        Alert.alert(
-          'Application Submitted',
-          'Your application has been submitted. The bounty poster will review it soon.',
-          [
-            {
-              text: 'View In Progress',
-              onPress: () => {
-                handleClose()
-                router.push(`/in-progress/${bounty.id}/hunter`)
+
+        // Set loading state to false after all async operations complete
+        setIsApplying(false)
+
+        // Defer Alert to allow React to process state updates and re-render
+        // Only show alert if component is still mounted
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
+
+          Alert.alert(
+            'Application Submitted',
+            'Your application has been submitted. The bounty poster will review it soon.',
+            [
+              {
+                text: 'View In Progress',
+                onPress: () => {
+                  // Navigate first, then close modal to ensure navigation completes
+                  router.push(`/in-progress/${bounty.id}/hunter`)
+                  // Small delay to let navigation start before closing modal
+                  setTimeout(() => {
+                    handleClose()
+                  }, 50)
+                },
               },
-            },
-            { text: 'OK' },
-          ]
-        )
+              { text: 'OK' },
+            ]
+          )
+        }, ALERT_DEFER_DELAY)
       } else {
-        Alert.alert('Error', 'Failed to submit application. Please try again.')
+        setIsApplying(false)
+        // Defer Alert to allow React to process state updates
+        alertTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return
+          Alert.alert('Error', 'Failed to submit application. Please try again.')
+        }, ALERT_DEFER_DELAY)
       }
     } catch (error) {
       console.error('Error applying for bounty:', error)
-      Alert.alert('Error', 'An error occurred while submitting your application.')
-    } finally {
       setIsApplying(false)
+      // Defer Alert to allow React to process state updates
+      alertTimeoutRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return
+        Alert.alert('Error', 'An error occurred while submitting your application.')
+      }, ALERT_DEFER_DELAY)
     }
   }
 
@@ -400,215 +422,215 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         >
           {/* Rounded card (clips children) */}
           <View style={styles.card}>
-        {/* Header - iPhone optimized */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <BrandingLogo size="small" />
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
-              <MaterialIcons name="share" size={20} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleReport} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
-              <MaterialIcons name="report" size={20} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
-              <MaterialIcons name="close" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Bounty Details - Scrollable content */}
-        <ScrollView
-          ref={messagesEndRef}
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.bountyCard}>
-            <View style={styles.cardContent}>
-              {/* User info - Clickable to navigate to profile */}
-              <TouchableOpacity 
-                style={styles.userInfo}
-                onPress={() => {
-                  if (posterId) {
-                    router.push(`/profile/${posterId}`)
-                  }
-                }}
-                // Disable when no poster ID (can't navigate) or while profile is loading (prevents duplicate taps)
-                disabled={!posterId || profileLoading}
-              >
-                {profileLoading ? (
-                  <View style={styles.profileLoadingContainer}>
-                    <ActivityIndicator size="small" color="#a7f3d0" />
-                    <Text style={styles.loadingText}>Loading profile...</Text>
-                  </View>
-                ) : (
-                  <>
-                    <Avatar style={styles.avatar}>
-                      <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
-                      <AvatarFallback style={styles.avatarFallback}>
-                        <Text style={styles.avatarText}>
-                          {displayUsername.substring(0, 2).toUpperCase()}
-                        </Text>
-                      </AvatarFallback>
-                    </Avatar>
-                    <View style={styles.userTextInfo}>
-                      <Text style={styles.username}>{displayUsername}</Text>
-                      <Text style={styles.postTime}>Posted 2h ago</Text>
-                    </View>
-                    {posterId && (
-                      <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Title */}
-              <Text style={styles.title}>{bounty.title}</Text>
-
-              {/* Price and distance / Online badge */}
-              <View style={styles.priceDistanceContainer}>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.priceText}>${bounty.price}</Text>
-                </View>
-                {bounty.work_type === 'online' ? (
-                  <View style={styles.onlineBadge}>
-                    <MaterialIcons name="wifi" size={14} color="#10b981" />
-                    <Text style={styles.onlineText}>Online</Text>
-                  </View>
-                ) : bounty.distance === null ? (
-                  <Text style={styles.distanceText}>Location TBD</Text>
-                ) : (
-                  <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
-                )}
+            {/* Header - iPhone optimized */}
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                <BrandingLogo size="small" />
               </View>
-
-              {/* Description */}
-              <View style={styles.descriptionContainer}>
-                <Text style={styles.sectionHeader}>Description</Text>
-                <Text style={styles.descriptionText}>{description}</Text>
+              <View style={styles.headerActions}>
+                <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
+                  <MaterialIcons name="share" size={20} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleReport} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
+                  <MaterialIcons name="report" size={20} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+                  <MaterialIcons name="close" size={20} color="white" />
+                </TouchableOpacity>
               </View>
+            </View>
 
-              {/* Additional Details - Timeline, Skills, Location, Deadline */}
-              {(bounty.timeline || bounty.skills_required || bounty.location || bounty.deadline) && (
-                <View style={styles.additionalDetailsContainer}>
-                  <Text style={styles.sectionHeader}>Additional Details</Text>
-                  
-                  {([
-                    bounty.timeline && {
-                      icon: 'schedule' as const,
-                      color: '#a7f3d0',
-                      label: 'Timeline',
-                      value: bounty.timeline,
-                    },
-                    bounty.skills_required && {
-                      icon: 'build' as const,
-                      color: '#a7f3d0',
-                      label: 'Skills Required',
-                      value: bounty.skills_required,
-                    },
-                    bounty.location && bounty.work_type !== 'online' && {
-                      icon: 'place' as const,
-                      color: '#a7f3d0',
-                      label: 'Location',
-                      value: bounty.location,
-                    },
-                    bounty.is_time_sensitive && bounty.deadline && {
-                      icon: 'access-time' as const,
-                      color: '#fbbf24',
-                      label: '⚡ Deadline',
-                      value: bounty.deadline,
-                      urgent: true,
-                    },
-                  ].filter(Boolean) as DetailRow[]).map((detail, index, array) => (
-                    <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
-                      <MaterialIcons name={detail.icon} size={16} color={detail.color} />
-                      <View style={styles.detailContent}>
-                        <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
-                          {detail.label}
-                        </Text>
-                        <Text style={[styles.detailValue, detail.urgent && { color: '#fbbf24', fontWeight: '600' }]}>
-                          {detail.value}
-                        </Text>
+            {/* Bounty Details - Scrollable content */}
+            <ScrollView
+              ref={messagesEndRef}
+              style={styles.scrollContainer}
+              contentContainerStyle={styles.scrollContent}
+            >
+              <View style={styles.bountyCard}>
+                <View style={styles.cardContent}>
+                  {/* User info - Clickable to navigate to profile */}
+                  <TouchableOpacity
+                    style={styles.userInfo}
+                    onPress={() => {
+                      if (posterId) {
+                        router.push(`/profile/${posterId}`)
+                      }
+                    }}
+                    // Disable when no poster ID (can't navigate) or while profile is loading (prevents duplicate taps)
+                    disabled={!posterId || profileLoading}
+                  >
+                    {profileLoading ? (
+                      <View style={styles.profileLoadingContainer}>
+                        <ActivityIndicator size="small" color="#a7f3d0" />
+                        <Text style={styles.loadingText}>Loading profile...</Text>
                       </View>
-                    </View>
-                  ))}
-                </View>
-              )}
+                    ) : (
+                      <>
+                        <Avatar style={styles.avatar}>
+                          <AvatarImage src={bounty.poster_avatar || normalizedPoster?.avatar || "/placeholder.svg?height=40&width=40"} alt={displayUsername} />
+                          <AvatarFallback style={styles.avatarFallback}>
+                            <Text style={styles.avatarText}>
+                              {displayUsername.substring(0, 2).toUpperCase()}
+                            </Text>
+                          </AvatarFallback>
+                        </Avatar>
+                        <View style={styles.userTextInfo}>
+                          <Text style={styles.username}>{displayUsername}</Text>
+                          <Text style={styles.postTime}>Posted 2h ago</Text>
+                        </View>
+                        {posterId && (
+                          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                        )}
+                      </>
+                    )}
+                  </TouchableOpacity>
 
-              {/* Attachments */}
-              {(isLoadingAttachments || actualAttachments.length > 0) && (
-                <View style={styles.attachmentsSection}>
-                  <Text style={styles.sectionHeader}>Attachments</Text>
-                  {isLoadingAttachments ? (
-                    <View style={styles.attachmentsLoadingContainer}>
-                      <ActivityIndicator size="small" color="#a7f3d0" />
-                      <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.attachmentsContainer}>
-                      {actualAttachments.map((attachment) => {
-                        const isImage = !!(attachment.mimeType && attachment.mimeType.startsWith('image/')) || (!!attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name))
-                        const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
+                  {/* Title */}
+                  <Text style={styles.title}>{bounty.title}</Text>
 
-                        return (
-                          <TouchableOpacity
-                            key={attachment.id}
-                            style={styles.attachmentItem}
-                            onPress={() => handleAttachmentOpen(attachment)}
-                          >
-                            <View style={styles.attachmentIcon}>
-                              {isImage ? (
-                                // Show thumbnail when available (prefer remoteUri, fallback to local uri)
-                                <Image
-                                  source={{ uri: attachment.remoteUri || attachment.uri }}
-                                  style={{ width: 40, height: 40, borderRadius: 6 }}
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <MaterialIcons name="description" size={20} color="#a7f3d0" />
-                              )}
-                            </View>
-                            <View style={styles.attachmentInfo}>
-                              <Text style={styles.attachmentName}>{attachment.name}</Text>
-                              <Text style={styles.attachmentSize}>
-                                {attachment.size ? `${sizeInMB} MB` : 'Unknown size'}
-                              </Text>
-                            </View>
-                            <View style={styles.downloadButton}>
-                              <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
-                            </View>
-                          </TouchableOpacity>
-                        )
-                      })}
+                  {/* Price and distance / Online badge */}
+                  <View style={styles.priceDistanceContainer}>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.priceText}>${bounty.price}</Text>
+                    </View>
+                    {bounty.work_type === 'online' ? (
+                      <View style={styles.onlineBadge}>
+                        <MaterialIcons name="wifi" size={14} color={colors.primary[500]} />
+                        <Text style={styles.onlineText}>Online</Text>
+                      </View>
+                    ) : bounty.distance === null ? (
+                      <Text style={styles.distanceText}>Location TBD</Text>
+                    ) : (
+                      <Text style={styles.distanceText}>{bounty.distance} mi away</Text>
+                    )}
+                  </View>
+
+                  {/* Description */}
+                  <View style={styles.descriptionContainer}>
+                    <Text style={styles.sectionHeader}>Description</Text>
+                    <Text style={styles.descriptionText}>{description}</Text>
+                  </View>
+
+                  {/* Additional Details - Timeline, Skills, Location, Deadline */}
+                  {(bounty.timeline || bounty.skills_required || bounty.location || bounty.deadline) && (
+                    <View style={styles.additionalDetailsContainer}>
+                      <Text style={styles.sectionHeader}>Additional Details</Text>
+
+                      {([
+                        bounty.timeline && {
+                          icon: 'schedule' as const,
+                          color: '#a7f3d0',
+                          label: 'Timeline',
+                          value: bounty.timeline,
+                        },
+                        bounty.skills_required && {
+                          icon: 'build' as const,
+                          color: '#a7f3d0',
+                          label: 'Skills Required',
+                          value: bounty.skills_required,
+                        },
+                        bounty.location && bounty.work_type !== 'online' && {
+                          icon: 'place' as const,
+                          color: '#a7f3d0',
+                          label: 'Location',
+                          value: bounty.location,
+                        },
+                        bounty.is_time_sensitive && bounty.deadline && {
+                          icon: 'access-time' as const,
+                          color: '#fbbf24',
+                          label: '⚡ Deadline',
+                          value: bounty.deadline,
+                          urgent: true,
+                        },
+                      ].filter(Boolean) as DetailRow[]).map((detail, index, array) => (
+                        <View key={index} style={[styles.detailRow, index === array.length - 1 && { marginBottom: 0 }]}>
+                          <MaterialIcons name={detail.icon} size={16} color={detail.color} />
+                          <View style={styles.detailContent}>
+                            <Text style={[styles.detailLabel, detail.urgent && { color: '#fbbf24' }]}>
+                              {detail.label}
+                            </Text>
+                            <Text style={[styles.detailValue, detail.urgent && { color: '#fbbf24', fontWeight: '600' }]}>
+                              {detail.value}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Attachments */}
+                  {(isLoadingAttachments || actualAttachments.length > 0) && (
+                    <View style={styles.attachmentsSection}>
+                      <Text style={styles.sectionHeader}>Attachments</Text>
+                      {isLoadingAttachments ? (
+                        <View style={styles.attachmentsLoadingContainer}>
+                          <ActivityIndicator size="small" color="#a7f3d0" />
+                          <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.attachmentsContainer}>
+                          {actualAttachments.map((attachment) => {
+                            const isImage = !!(attachment.mimeType && attachment.mimeType.startsWith('image/')) || (!!attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name))
+                            const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
+
+                            return (
+                              <TouchableOpacity
+                                key={attachment.id}
+                                style={styles.attachmentItem}
+                                onPress={() => handleAttachmentOpen(attachment)}
+                              >
+                                <View style={styles.attachmentIcon}>
+                                  {isImage ? (
+                                    // Show thumbnail when available (prefer remoteUri, fallback to local uri)
+                                    <Image
+                                      source={{ uri: attachment.remoteUri || attachment.uri }}
+                                      style={{ width: 40, height: 40, borderRadius: 6 }}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <MaterialIcons name="description" size={20} color="#a7f3d0" />
+                                  )}
+                                </View>
+                                <View style={styles.attachmentInfo}>
+                                  <Text style={styles.attachmentName}>{attachment.name}</Text>
+                                  <Text style={styles.attachmentSize}>
+                                    {attachment.size ? `${sizeInMB} MB` : 'Unknown size'}
+                                  </Text>
+                                </View>
+                                <View style={styles.downloadButton}>
+                                  <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                                </View>
+                              </TouchableOpacity>
+                            )
+                          })}
+                        </View>
+                      )}
                     </View>
                   )}
                 </View>
-              )}
+              </View>
+
+            </ScrollView>
+
+            {/* Accept Bounty Button - With safe area inset */}
+            <View style={styles.actionContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.acceptButton,
+                  (hasApplied || isApplying) && styles.acceptButtonDisabled
+                ]}
+                onPress={handleApplyForBounty}
+                disabled={hasApplied || isApplying}
+              >
+                {isApplying ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.acceptButtonText}>
+                    {hasApplied ? 'Application Submitted' : 'Apply for Bounty'}
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
-          </View>
-
-        </ScrollView>
-
-        {/* Accept Bounty Button - With safe area inset */}
-        <View style={styles.actionContainer}>
-          <TouchableOpacity 
-            style={[
-              styles.acceptButton,
-              (hasApplied || isApplying) && styles.acceptButtonDisabled
-            ]}
-            onPress={handleApplyForBounty}
-            disabled={hasApplied || isApplying}
-          >
-            {isApplying ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.acceptButtonText}>
-                {hasApplied ? 'Application Submitted' : 'Apply for Bounty'}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
           </View>
         </View>
       </View>
@@ -633,20 +655,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  // Outer shadow wrapper (no overflow so shadow isn't clipped)
   cardShadow: {
     borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
+    ...theme.shadows.lg,
     backgroundColor: 'transparent',
   },
   // Inner rounded card
   card: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -684,7 +701,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   scrollContent: {
     padding: 16,
@@ -881,18 +898,14 @@ const styles = StyleSheet.create({
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: colors.primary[500], // emerald-500
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...theme.shadows.emerald,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: colors.background.secondary, // emerald-600 (darker)
     opacity: 0.6,
   },
   acceptButtonText: {

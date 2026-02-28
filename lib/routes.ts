@@ -5,8 +5,11 @@ export const ROUTES = {
   ROOT: '/' as const,
   // Auth
   AUTH: {
-    SIGN_IN: '/auth/sign-in',
+    SIGN_IN: '/auth/sign-in-form',
     SIGN_UP: '/auth/sign-up-form',
+    MFA_CHALLENGE: '/auth/mfa-challenge',
+    RESET_PASSWORD: '/auth/reset-password',
+    UPDATE_PASSWORD: '/auth/update-password',
   },
   // Tabs / main app surfaces
   TABS: {
@@ -50,6 +53,10 @@ export const ROUTES = {
     // Analytics & Reporting
     ANALYTICS: '/(admin)/analytics',
     REPORTS: '/(admin)/reports',
+    
+    // Dispute Management
+    DISPUTES: '/(admin)/disputes',
+    DISPUTE_DETAIL: (id: string | number) => `/(admin)/disputes/${id}` as const,
     
     // Settings section
     SETTINGS: {

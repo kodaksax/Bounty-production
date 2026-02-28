@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -21,6 +20,7 @@ import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
+import { colors } from '../../../lib/theme';
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -40,7 +40,6 @@ export default function BountyDashboard() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
   const { pushColor, popColor } = useBackgroundColor();
 
@@ -171,7 +170,7 @@ export default function BountyDashboard() {
   const getStatusBadgeColor = (status?: string) => {
     switch (status) {
       case 'open':
-        return '#10b981'; // emerald-500
+        return colors.primary[500]; // emerald-500
       case 'in_progress':
         return '#fbbf24'; // amber-400
       case 'completed':
@@ -179,7 +178,7 @@ export default function BountyDashboard() {
       case 'archived':
         return '#6b7280'; // gray-500
       default:
-        return '#10b981';
+        return colors.primary[500];
     }
   };
 
@@ -214,7 +213,7 @@ export default function BountyDashboard() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
         <Text style={styles.loadingText}>Loading bounty...</Text>
       </SafeAreaView>
     );
@@ -362,7 +361,7 @@ export default function BountyDashboard() {
                   </Text>
                   {isCompleted && (
                     <View style={styles.completedCheckmark}>
-                      <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                      <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -505,7 +504,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -609,7 +608,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -643,12 +642,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -663,10 +662,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.primary[600],
   },
   stageLabel: {
     color: '#6ee7b7',
@@ -706,7 +705,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -773,7 +772,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

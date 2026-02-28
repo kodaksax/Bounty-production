@@ -1,29 +1,76 @@
 {
   "expo": {
     "name": "BOUNTY",
+    "jsEngine": "hermes",
     "slug": "BOUNTYExpo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
     "userInterfaceStyle": "automatic",
-    
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
+      "buildNumber": "1",
+      "jsEngine": "hermes",
       "infoPlist": {
+        "NSApplePayCapability": "production",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture, attach images to posts,and add portfolio media.",
-        "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed."
+        "NSPhotoLibraryUsageDescription": "BOUNTY needs access to your photo library to let you choose a profile picture, attach images to posts, and manage your portfolio media.",
+        "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed.",
+        "NSCameraUsageDescription": "BOUNTY needs camera access to take photos for your profile or posts.",
+        "NSLocationWhenInUseUsageDescription": "BOUNTY uses your location to show nearby bounties and help you find local opportunities.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BOUNTY uses your location in the background to keep nearby bounties and time-sensitive matches accurate even when the app is not active.",
+        "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
+        "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends.",
+        "UIBackgroundModes": [
+          "location",
+          "location"
+        ]
+      },
+      "associatedDomains": [
+        "applinks:bountyfinder.app",
+        "applinks:*.bountyfinder.app"
+      ],
+      "config": {
+        "googleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}",
+        "usesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default",
+          "Default"
+        ],
+        "com.apple.developer.in-app-payments": [
+          "merchant.com.bountyexpo-workspace"
+        ]
       }
     },
     "android": {
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/bounty-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "app.bountyfinder.BOUNTYExpo"
+      "package": "app.bountyfinder.BOUNTYExpo",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "bountyfinder.app",
+              "pathPrefix": "/auth"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -45,7 +92,7 @@
           "image": "./assets/images/bounty-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#15803d"
         }
       ],
       [
@@ -53,14 +100,14 @@
         {
           "icon": "./assets/images/bounty-icon.png",
           "color": "#10b981"
-          
         }
       ],
       "expo-secure-store",
       "expo-web-browser",
-      
       "expo-video",
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
@@ -72,6 +119,10 @@
       "eas": {
         "projectId": "b5485f88-0b1f-4622-bbed-b1ae142dcb46"
       }
+    },
+    "runtimeVersion": "1.0.1",
+    "updates": {
+      "url": "https://u.expo.dev/b5485f88-0b1f-4622-bbed-b1ae142dcb46"
     }
   }
 }

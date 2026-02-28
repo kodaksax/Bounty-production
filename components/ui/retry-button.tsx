@@ -1,16 +1,18 @@
-import React from 'react';
-import { 
-  TouchableOpacity, 
-  Text, 
-  StyleSheet, 
-  ActivityIndicator, 
-  View,
-  Animated,
-  AccessibilityInfo,
-} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useHapticFeedback } from '../../lib/haptic-feedback';
+import React from 'react';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
+import { useHapticFeedback } from '../../lib/haptic-feedback';
+import { theme, colors } from '../../lib/theme';
+
 
 interface RetryButtonProps {
   onRetry: () => void | Promise<void>;
@@ -123,10 +125,10 @@ export function RetryButton({
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>
-              <MaterialIcons 
-                name="refresh" 
-                size={isCompact ? 16 : 18} 
-                color="#fff" 
+              <MaterialIcons
+                name="refresh"
+                size={isCompact ? 16 : 18}
+                color="#fff"
                 accessibilityElementsHidden={true}
               />
               <Text style={[styles.label, isCompact && styles.compactLabel]}>
@@ -138,7 +140,7 @@ export function RetryButton({
       </Animated.View>
 
       {errorMessage && (
-        <Text 
+        <Text
           style={styles.errorMessage}
           accessibilityRole="alert"
         >
@@ -163,19 +165,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
     paddingHorizontal: SPACING.SECTION_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
     borderRadius: 12,
     gap: SPACING.COMPACT_GAP,
     minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
     minWidth: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadows.sm,
   },
+
   compactButton: {
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     paddingVertical: SPACING.COMPACT_GAP,

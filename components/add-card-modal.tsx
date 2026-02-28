@@ -1,13 +1,15 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import type React from "react"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { API_BASE_URL } from "../lib/config/api"
+import { API_TIMEOUTS } from "../lib/config/network"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
+import { colors, theme } from "../lib/theme"
+import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -40,18 +42,18 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const [expiryDate, setExpiryDate] = useState("")
   const [securityCode, setSecurityCode] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [cardErrors, setCardErrors] = useState<{[key: string]: string}>({})
+  const [cardErrors, setCardErrors] = useState<{ [key: string]: string }>({})
   const [setupIntentSecret, setSetupIntentSecret] = useState<string | null>(null)
   const [isCreatingSetupIntent, setIsCreatingSetupIntent] = useState(false)
   const [isSDKAvailable, setIsSDKAvailable] = useState<boolean>(false)
   const [paymentElementFailed, setPaymentElementFailed] = useState<boolean>(false)
-  
+
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session } = useAuthContext()
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3): Promise<void> => {
+  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<void> => {
     let lastErr: any
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       try {
@@ -61,8 +63,9 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         lastErr = e
         // Skip backoff after the last attempt
         if (attempt < totalAttempts - 1) {
-          // brief backoff
-          await new Promise(r => setTimeout(r, 600))
+          // brief backoff using provided base delay
+          const backoff = Math.min(baseDelayMs * Math.pow(2, attempt), 4000)
+          await new Promise(r => setTimeout(r, backoff))
         }
       }
     }
@@ -95,18 +98,6 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldUsePaymentElement, paymentElementFailed])
 
-  // Helper to timeout fetch
-  const fetchWithTimeout = async (resource: RequestInfo | URL, options: RequestInit = {}, timeoutMs = 10000) => {
-    const controller = new AbortController()
-    const id = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const response = await fetch(resource, { ...options, signal: controller.signal })
-      return response
-    } finally {
-      clearTimeout(id)
-    }
-  }
-
   const createSetupIntent = async () => {
     if (!session?.access_token) {
       Alert.alert('Error', 'Please sign in to add a payment method')
@@ -115,32 +106,47 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      let response: Response | null = null
-      let lastErr: any
-      for (let attempt = 0; attempt < 2; attempt++) {
+      // Use centralized fetchWithTimeout with retries
+      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          usage: 'off_session',
+        }),
+        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
+        retries: 2,
+      })
+
+      if (!response.ok) {
+        // Try to surface a meaningful error message from the server
+        let message = `Request failed with status ${response.status}`
         try {
-          response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              usage: 'off_session',
-            }),
-          }, 10000)
-          if (response.ok) break
-          lastErr = new Error(`HTTP ${response.status}`)
-        } catch (e) {
-          lastErr = e
+          const data: unknown = await response.json()
+          if (data && typeof data === 'object' && 'error' in data) {
+            const errorField = (data as { error?: unknown }).error
+            if (typeof errorField === 'string' && errorField.trim().length > 0) {
+              message = errorField
+            }
+          }
+        } catch {
+          try {
+            const text = await response.text()
+            if (text && text.trim().length > 0) {
+              message = text
+            }
+          } catch {
+            // Ignore body parsing errors; fall back to status-based message
+          }
         }
-        await new Promise(r => setTimeout(r, 700))
+
+        throw new Error(message)
       }
-      if (!response || !response.ok) {
-        throw lastErr || new Error('Failed to initialize payment setup')
-      }
+
       const { clientSecret } = await response.json()
-      
+
       // Log detected key mode for debugging
       // This helps diagnose configuration issues during development
       // Note: __DEV__ is a React Native global constant that is true in development mode
@@ -151,25 +157,25 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           console.warn('[AddCardModal] Could not detect publishable key mode. Please verify EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY is set correctly.')
         }
       }
-      
+
       setSetupIntentSecret(clientSecret)
     } catch (error) {
       console.error('[AddCardModal] SetupIntent creation error:', error)
-      
+
       // Parse error for better user messaging
       const errorMessage = stripeService.parseStripeError(error)
-      
+
       // Use specific alert title only for configuration-related errors
       const isConfigError = errorMessage.toLowerCase().includes('configuration') ||
-                           errorMessage.toLowerCase().includes('publishable key') ||
-                           errorMessage.toLowerCase().includes('secret key') ||
-                           errorMessage.toLowerCase().includes('different modes')
-      
+        errorMessage.toLowerCase().includes('publishable key') ||
+        errorMessage.toLowerCase().includes('secret key') ||
+        errorMessage.toLowerCase().includes('different modes')
+
       Alert.alert(
         isConfigError ? 'Payment Configuration Error' : 'Error',
         errorMessage
       )
-      
+
       // Fallback to manual form if setup creation fails
       setPaymentElementFailed(true)
     } finally {
@@ -180,7 +186,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const handlePaymentElementSuccess = async () => {
     // Refresh payment methods after successful save
     await refreshPaymentMethodsWithRetry(2, 3000)
-    
+
     Alert.alert('Success', 'Payment method added successfully!', [
       { text: 'OK', onPress: onBack }
     ])
@@ -208,7 +214,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const handleCardNumberChange = (value: string) => {
     const formatted = formatCardNumber(value)
     setCardNumber(formatted)
-    
+
     // Clear error when user starts typing
     if (cardErrors.cardNumber) {
       setCardErrors(prev => {
@@ -216,7 +222,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         return rest
       })
     }
-    
+
     // Basic validation
     const cleanNumber = value.replace(/\s/g, '')
     if (cleanNumber.length > 0 && !stripeService.validateCardNumber(cleanNumber)) {
@@ -235,7 +241,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       } else {
         setExpiryDate(`${month}/${year}`)
       }
-      
+
       // Clear error when user starts typing
       if (cardErrors.expiryDate) {
         setCardErrors(prev => {
@@ -243,14 +249,14 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           return rest
         })
       }
-      
+
       // Validate expiry date
       if (digitsOnly.length === 4) {
         const monthNum = parseInt(month)
         const yearNum = parseInt('20' + year)
         const currentYear = new Date().getFullYear()
         const currentMonth = new Date().getMonth() + 1
-        
+
         if (monthNum < 1 || monthNum > 12) {
           setCardErrors(prev => ({ ...prev, expiryDate: 'Invalid month' }))
         } else if (yearNum < currentYear || (yearNum === currentYear && monthNum < currentMonth)) {
@@ -263,27 +269,27 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const handleSave = async () => {
     setIsLoading(true)
     setCardErrors({})
-    
+
     try {
       // Validate all fields
-      const errors: {[key: string]: string} = {}
-      
+      const errors: { [key: string]: string } = {}
+
       if (!cardNumber || cardNumber.length < 19) {
         errors.cardNumber = 'Please enter a valid card number'
       }
-      
+
       if (!cardholderName.trim()) {
         errors.cardholderName = 'Please enter the cardholder name'
       }
-      
+
       if (!expiryDate || expiryDate.length < 5) {
         errors.expiryDate = 'Please enter a valid expiry date'
       }
-      
+
       if (!securityCode || securityCode.length < 3) {
         errors.securityCode = 'Please enter a valid security code'
       }
-      
+
       if (Object.keys(errors).length > 0) {
         setCardErrors(errors)
         return
@@ -306,12 +312,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           securityCode,
         })
       }
-      
+
       // Show success and close modal
       Alert.alert('Success', 'Payment method added successfully!', [
         { text: 'OK', onPress: onBack }
       ])
-      
+
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add payment method')
     } finally {
@@ -319,10 +325,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     }
   }
 
-  const isFormValid = 
-    cardNumber.length >= 19 && 
-    cardholderName.trim() !== "" && 
-    expiryDate.length >= 5 && 
+  const isFormValid =
+    cardNumber.length >= 19 &&
+    cardholderName.trim() !== "" &&
+    expiryDate.length >= 5 &&
     securityCode.length >= 3 &&
     Object.keys(cardErrors).length === 0
 
@@ -707,7 +713,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 12,
@@ -738,11 +744,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    ...theme.shadows.sm,
   },
   previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
   brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#ef4444' },
@@ -774,11 +776,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 14,
     marginTop: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    ...theme.shadows.emerald,
   },
   primaryButtonDisabled: { opacity: 0.55 },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },

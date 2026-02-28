@@ -2,24 +2,27 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { updatePassword, verifyResetToken } from 'lib/services/auth-service'
-import { 
-  calculatePasswordStrength, 
-  getStrengthColor, 
-  getStrengthWidth,
-  validateNewPassword,
-  validatePasswordMatch,
-  type PasswordStrengthResult 
+import {
+    calculatePasswordStrength,
+    getStrengthColor,
+    getStrengthWidth,
+    validateNewPassword,
+    validatePasswordMatch,
+    type PasswordStrengthResult
 } from 'lib/utils/password-validation'
-import React, { useEffect, useState } from 'react'
-import { Image, ActivityIndicator, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ScrollView, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  View } from 'react-native'
+import { useEffect, useState } from 'react'
+import {
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 export default function UpdatePasswordRoute() { 
   return <UpdatePasswordScreen /> 
@@ -69,7 +72,7 @@ export function UpdatePasswordScreen() {
         if (!result.success) {
           setError(result.message)
         }
-      } catch (e) {
+      } catch {
         setError('Failed to verify reset link. Please request a new one.')
         setTokenValid(false)
       } finally {
@@ -147,12 +150,18 @@ export function UpdatePasswordScreen() {
             {error || 'This password reset link is invalid or has expired.'}
           </Text>
           <TouchableOpacity 
-            onPress={() => router.push('/auth/reset-password')}
+            onPress={() => {
+              router.push('/auth/reset-password')
+              try { markInitialNavigationDone(); } catch {}
+            }}
             className="bg-emerald-600 rounded-lg py-3 px-6 mb-4"
           >
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/auth/sign-in-form')}>
+          <TouchableOpacity onPress={() => {
+            router.push('/auth/sign-in-form')
+            try { markInitialNavigationDone(); } catch {}
+          }}>
             <Text className="text-white/80">Back to Sign In</Text>
           </TouchableOpacity>
         </View>
@@ -173,7 +182,10 @@ export function UpdatePasswordScreen() {
             Your password has been successfully updated. You can now sign in with your new password.
           </Text>
           <TouchableOpacity 
-            onPress={() => router.replace('/auth/sign-in-form')}
+            onPress={() => {
+              router.replace('/auth/sign-in-form')
+              try { markInitialNavigationDone(); } catch {}
+            }}
             className="bg-emerald-600 rounded-lg py-3 px-6"
           >
             <View className="flex-row items-center">

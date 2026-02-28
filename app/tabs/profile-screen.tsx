@@ -15,13 +15,14 @@ import { CURRENT_USER_ID } from "lib/utils/data-utils";
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from "../../hooks/useAuthProfile";
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
+import { colors } from '../../lib/theme';
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -36,7 +37,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     avatar: "/placeholder.svg?height=80&width=80",
   })
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([])
-  
+
   // Auth session (Supabase) provides canonical user id
   const { session } = useAuthContext();
   const authUserId = session?.user?.id;
@@ -60,6 +61,20 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const isProfileReady = !!profileUuid
   // Determine if viewing own profile (then let EnhancedProfileSection load current-user)
   const isOwnProfile = !!(authUserId && profileUuid && profileUuid === authUserId)
+
+  // Debounce guard for refreshes triggered by mount/focus
+  const lastRefreshAtRef = useRef<number>(0);
+  const REFRESH_DEBOUNCE_MS = 2000;
+
+  // Helper to centralize debounce logic for refreshes.
+  // Returns true and updates `lastRefreshAtRef` when a refresh should proceed.
+  const shouldRefresh = () => {
+    const now = Date.now();
+    const last = lastRefreshAtRef.current || 0;
+    if (now - last < REFRESH_DEBOUNCE_MS) return false;
+    lastRefreshAtRef.current = now;
+    return true;
+  };
 
   // Fetch initial statistics from Supabase, responding to auth user changes
   useEffect(() => {
@@ -105,27 +120,30 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   useEffect(() => {
     const ensureProfile = async () => {
       if (!authUserId || authUserId === CURRENT_USER_ID) return;
-      
+      // Debounced refresh to avoid repeated calls when mounting + focusing
+      if (!shouldRefresh()) return;
+
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();
-      
-  // Also refresh normalized profile (local + supabase)
-  await refreshUserProfile();
+
+      // Also refresh normalized profile (local + supabase)
+      await refreshUserProfile();
     };
     ensureProfile();
   }, [authUserId, refreshUserProfile, refreshAuthProfile]);
 
-  // On-focus refresh to ensure latest avatar and fields are shown when returning
   useFocusEffect(
     React.useCallback(() => {
-      let isActive = true;
       const run = async () => {
         try {
+          // Debounce guard
+          if (!shouldRefresh()) return;
           await Promise.all([refreshAuthProfile(), refreshUserProfile()]);
         } catch (e) {
           console.error('[ProfileScreen] focus refresh failed:', e);
         }
       };
+      let isActive = true;
       run();
       return () => { isActive = false };
     }, [refreshAuthProfile, refreshUserProfile])
@@ -161,10 +179,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         } else {
           // Generate skills from profiles
           const defaultSkills: { id: string; icon: string; text: string; credentialUrl?: string }[] = []
-          
+
           // Prefer auth profile data
           const profileToUse = authProfile || userProfile
-          
+
           // If we have phone or location in the raw profile, prefer those
           const raw = (profileToUse as any)?._raw || null;
           if (raw && raw.phone) {
@@ -174,14 +192,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           if (raw && raw.location) {
             defaultSkills.push({ id: '1', icon: 'location-on', text: `Based in ${raw.location}` })
           }
-          
+
           if (authProfile?.created_at) {
             const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
           } else {
             defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
           }
-          
+
           setSkills(defaultSkills)
         }
       } catch (error) {
@@ -189,8 +207,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       }
     }
     load()
-  // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
-  }, [showSettings, userProfile?.username, authProfile?.id, authUserId])
+    // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
+  }, [authProfile?.id, authProfile?.username, userProfile?.id, userProfile?.username, authUserId, showSettings]);
 
   const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
     setSkills(updatedSkills)
@@ -228,8 +246,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
   const shareProfile = async () => {
     try {
-  const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
-  const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
+      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
+      const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
       const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
 
       await Share.share({
@@ -256,7 +274,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-background-secondary text-white">
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
@@ -268,61 +286,60 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           </View>
         </View>
       )}
-  {/* Header — left: BOUNTY brand, right: back + settings */}
-  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
+      {/* Header — left: BOUNTY brand, right: back + settings */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
         <View className="flex-row items-center gap-2">
           <BrandingLogo size="medium" />
         </View>
         <View className="flex-row items-center">
-          <TouchableOpacity 
-            className="p-2" 
-            onPress={shareProfile} 
+          <TouchableOpacity
+            className="p-2"
+            onPress={shareProfile}
             accessibilityRole="button"
             accessibilityLabel="Share profile"
             accessibilityHint="Share your profile via social media or messaging apps"
           >
-            <MaterialIcons 
-              name="share" 
-              size={22} 
-              color="#ffffff" 
+            <MaterialIcons
+              name="share"
+              size={22}
+              color="#ffffff"
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
-          <TouchableOpacity 
-            className="p-2" 
-            onPress={() => setShowSettings(true)} 
+          <TouchableOpacity
+            onPress={() => setShowSettings(true)}
             accessibilityRole="button"
             accessibilityLabel="Open settings"
             accessibilityHint="Access profile settings and preferences"
           >
-            <MaterialIcons 
-              name="settings" 
-              size={24} 
-              color="#ffffff" 
+            <MaterialIcons
+              name="settings"
+              size={24}
+              color="#ffffff"
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
-        className="flex-1 pb-40" 
+      <ScrollView
+        className="flex-1 pb-40"
         contentContainerStyle={{ paddingBottom: 220 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#10b981']}
+            colors={[colors.primary[500]]}
           />
         }
       >
         {/* Profile + Stats merged card */}
         {isProfileReady ? (
           // If this is the signed-in user's profile, pass undefined so the hook resolves the "current-user" profile
-          <EnhancedProfileSection 
-            userId={isOwnProfile ? undefined : profileUuid} 
-            isOwnProfile={isOwnProfile} 
+          <EnhancedProfileSection
+            userId={isOwnProfile ? undefined : profileUuid}
+            isOwnProfile={isOwnProfile}
             key={profileUuid}
             showPortfolio={false}
             activityStats={{
@@ -415,7 +432,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#10b981",
+    borderColor: colors.primary[500],
     borderRadius: 4,
   },
   editButtonText: {

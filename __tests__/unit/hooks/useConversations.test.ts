@@ -67,7 +67,7 @@ describe('useConversations', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    // Error should be set
+    // Error should be set to the rejected error's message
     expect(result.current.error).toBe('Failed to fetch');
   });
 });

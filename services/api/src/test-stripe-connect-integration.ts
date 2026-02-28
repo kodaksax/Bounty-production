@@ -7,10 +7,10 @@ dotenv.config();
 async function testWithTestKeys() {
   console.log('🧪 Testing Stripe Connect with Test Keys\n');
 
-  // Use a test Stripe key (this is a safely shareable test key format)
-  const testStripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_REPLACEME';
-  
-  if (!testStripeKey.startsWith('sk_test_')) {
+  // Read Stripe key from environment; do NOT include any literal keys here
+  const testStripeKey = process.env.STRIPE_SECRET_KEY || '';
+
+  if (!testStripeKey || !testStripeKey.startsWith('sk_test_')) {
     console.log('⚠️  No test key configured. To test with real Stripe:');
     console.log('   1. Get test keys from https://dashboard.stripe.com/test/apikeys');
     console.log('   2. Set STRIPE_SECRET_KEY=sk_test_... in .env file');

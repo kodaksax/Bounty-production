@@ -1,12 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { cachedDataService, type CacheOptions } from '../lib/services/cached-data-service';
 import { logger } from '../lib/utils/error-logger';
 
 export interface UseCachedDataResult<T> {
   data: T | null;
   isLoading: boolean;
+  isValidating: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+  setData: (data: T) => void;
   isStale: boolean;
   isOffline: boolean;
 }
@@ -20,9 +22,10 @@ export function useCachedData<T>(
   options: CacheOptions & { enabled?: boolean } = {}
 ): UseCachedDataResult<T> {
   const { enabled = true, ...cacheOptions } = options;
-  
+
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [isStale, setIsStale] = useState(false);
   const [isOffline, setIsOffline] = useState(!cachedDataService.getOnlineStatus());
@@ -50,12 +53,36 @@ export function useCachedData<T>(
     } finally {
       setIsLoading(false);
     }
-  }, [key, fetchFn, enabled, cacheOptions]);
+  }, [key, fetchFn, enabled, JSON.stringify(cacheOptions)]);
 
   // Initial fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Subscribe to background revalidation events
+  useEffect(() => {
+    if (!enabled) return;
+
+    const unsubscribe = cachedDataService.onRevalidated(key, (newData) => {
+      setData(newData);
+      setIsValidating(false);
+    });
+
+    // Also listen for background revalidation errors so we can surface them
+    const unsubscribeError = cachedDataService.onRevalidationError
+      ? cachedDataService.onRevalidationError(key, (err: any) => {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setIsValidating(false);
+        })
+      : () => {};
+
+
+    return () => {
+      unsubscribe();
+      unsubscribeError();
+    };
+  }, [key, enabled]);
 
   // Check online status periodically
   useEffect(() => {
@@ -68,14 +95,17 @@ export function useCachedData<T>(
   }, []);
 
   const refetch = useCallback(() => {
+    setIsValidating(true);
     return fetchData(true);
   }, [fetchData]);
 
   return {
     data,
     isLoading,
+    isValidating,
     error,
     refetch,
+    setData,
     isStale,
     isOffline,
   };

@@ -10,5 +10,9 @@
         "copilot/auto"
       ]
     }
-  }
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "github-actions.workflows.pinned.workflows": [
+    ".github/workflows/ci.yml"
+  ]
 }

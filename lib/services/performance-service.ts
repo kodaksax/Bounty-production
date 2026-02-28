@@ -1,6 +1,6 @@
 // lib/services/performance-service.ts - Performance monitoring with Expo and Sentry
-import * as Sentry from '@sentry/react-native';
 import { analyticsService } from './analytics-service';
+import { getSentry } from './sentry-init';
 
 export type PerformanceMetric = 
   | 'api_call'
@@ -34,12 +34,11 @@ class PerformanceService {
     try {
       const startTime = Date.now();
 
-      // Start Sentry transaction for distributed tracing
-      const sentryStartTransaction = (Sentry as { startTransaction?: (context: {
-        name: string;
-        op?: string;
-        data?: Record<string, unknown>;
-      }) => SentryTransaction | undefined }).startTransaction;
+      // Start Sentry transaction for distributed tracing (if Sentry available)
+      const Sentry = getSentry?.();
+      const sentryStartTransaction = Sentry && typeof Sentry.startTransaction === 'function'
+        ? (Sentry.startTransaction as (context: { name: string; op?: string; data?: Record<string, unknown> }) => SentryTransaction | undefined)
+        : undefined;
 
       const transaction = sentryStartTransaction?.({
         name: `${metric}:${name}`,
@@ -55,7 +54,12 @@ class PerformanceService {
 
     } catch (error) {
       console.error('[Performance] Failed to start measurement:', error);
-      Sentry.captureException(error);
+      // Use safe getter in case Sentry isn't available in this runtime
+      try {
+        getSentry()?.captureException?.(error);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -91,13 +95,17 @@ class PerformanceService {
       // Log slow operations (> 1 second)
       if (duration > 1000) {
         console.error(`[Performance] Slow operation detected: ${name} took ${duration}ms`);
-        Sentry.captureMessage(`Slow operation: ${name}`, {
-          level: 'warning',
-          extra: {
-            duration_ms: duration,
-            ...metadata,
-          },
-        });
+        try {
+          getSentry()?.captureMessage?.(`Slow operation: ${name}`, {
+            level: 'warning',
+            extra: {
+              duration_ms: duration,
+              ...metadata,
+            },
+          });
+        } catch {
+          // ignore
+        }
       }
 
       this.timers.delete(name);
@@ -105,7 +113,11 @@ class PerformanceService {
       return duration;
     } catch (error) {
       console.error('[Performance] Failed to end measurement:', error);
-      Sentry.captureException(error);
+      try {
+        getSentry()?.captureException?.(error);
+      } catch {
+        // ignore
+      }
       return null;
     }
   }
@@ -161,10 +173,14 @@ class PerformanceService {
       // Log slow API calls
       if (duration > 3000) {
         console.error(`[Performance] Slow API call: ${method} ${endpoint} took ${duration}ms`);
-        Sentry.captureMessage(`Slow API call: ${method} ${endpoint}`, {
-          level: 'warning',
-          extra: properties,
-        });
+        try {
+          getSentry()?.captureMessage?.(`Slow API call: ${method} ${endpoint}`, {
+            level: 'warning',
+            extra: properties,
+          });
+        } catch {
+          // ignore
+        }
       }
     } catch (error) {
       console.error('[Performance] Failed to record API call:', error);

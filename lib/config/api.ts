@@ -1,6 +1,14 @@
 import getApiBaseFallback from 'lib/utils/dev-host'
 import { getReachableApiBaseUrl } from 'lib/utils/network'
 
+// Supabase Edge Functions base URL (set EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL in your .env).
+// When set, modules that import API_BASE_URL or call getApiBaseUrl() will route requests
+// through Edge Functions instead of the legacy Node server.
+// Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
+const supabaseFunctionsUrl = (
+  (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined) || ''
+).replace(/\/+$/, '') // strip any accidental trailing slashes
+
 // Preferred environment variables (Expo public envs are bundled to client)
 const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
   || (process.env.EXPO_PUBLIC_API_URL as string | undefined)
@@ -9,9 +17,13 @@ const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
 
 /**
  * Returns a runtime-resolved API base URL appropriate for the current device.
- * Uses the network helper to map localhost to the dev machine's LAN address when needed.
+ * Prefers EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL (Supabase Edge Functions) when set,
+ * then falls back to the legacy Node server URL helpers.
  */
 export function getApiBaseUrl(fallbackPort = 3001): string {
+  // If a Supabase Functions URL is configured, use it directly (no LAN resolution needed)
+  if (supabaseFunctionsUrl) return supabaseFunctionsUrl
+
   // Resolve using network helper first
   const resolved = getReachableApiBaseUrl(preferred, fallbackPort)
 
@@ -24,7 +36,7 @@ export function getApiBaseUrl(fallbackPort = 3001): string {
       const fallback = getApiBaseFallback()
       if (fallback) return fallback
     }
-  } catch (e) {
+  } catch {
     // ignore and fall back to resolved value
   }
 
@@ -39,4 +51,4 @@ try {
   if (__DEV__) {
     console.log('[API Config] Resolved API_BASE_URL:', API_BASE_URL)
   }
-} catch (e) {}
+} catch {}

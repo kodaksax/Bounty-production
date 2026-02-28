@@ -36,10 +36,10 @@ class AlertingService {
   }
 
   /**
-   * Setup default alerting rules
+   * Setup default alerting rules based on production requirements
    */
   private setupDefaultRules(): void {
-    // High error rate alert
+    // High error rate alert - triggers when error rate > 1%
     this.addRule({
       name: 'high_error_rate',
       condition: () => {
@@ -59,25 +59,46 @@ class AlertingService {
       cooldownMs: 300000 // 5 minutes
     });
 
-    // Slow response time alert
+    // Slow API response time alert - triggers when p95 > 1000ms (1s)
     this.addRule({
-      name: 'slow_response_time',
+      name: 'slow_api_response_time',
       condition: () => {
         const histogram = metrics.getHistogram(METRICS.HTTP_REQUEST_DURATION_MS);
         if (!histogram || histogram.count < 100) return false;
-        
+
         // Calculate p95
         const p95 = this.calculateP95(histogram);
-        return p95 > 500; // > 500ms p95
+        return p95 > 1000; // > 1000ms (1s) p95
       },
-      threshold: 500,
+      threshold: 1000,
       currentValue: () => {
         const histogram = metrics.getHistogram(METRICS.HTTP_REQUEST_DURATION_MS);
         return histogram ? this.calculateP95(histogram) : 0;
       },
-      severity: 'warning',
-      message: 'Response time p95 exceeded 500ms',
+      severity: 'critical',
+      message: 'API response time p95 exceeded 1 second',
       cooldownMs: 300000 // 5 minutes
+    });
+
+    // Slow database query alert - triggers when p95 > 5000ms (5s)
+    this.addRule({
+      name: 'slow_database_query',
+      condition: () => {
+        const histogram = metrics.getHistogram(METRICS.DB_QUERY_DURATION_MS);
+        if (!histogram || histogram.count < 50) return false;
+
+        // Calculate p95
+        const p95 = this.calculateP95(histogram);
+        return p95 > 5000; // > 5000ms (5s) p95
+      },
+      threshold: 5000,
+      currentValue: () => {
+        const histogram = metrics.getHistogram(METRICS.DB_QUERY_DURATION_MS);
+        return histogram ? this.calculateP95(histogram) : 0;
+      },
+      severity: 'critical',
+      message: 'Database query p95 exceeded 5 seconds',
+      cooldownMs: 600000 // 10 minutes
     });
 
     // Database connection failures
@@ -94,9 +115,9 @@ class AlertingService {
       cooldownMs: 600000 // 10 minutes
     });
 
-    // Payment failures
+    // Payment failure rate alert - triggers when failure rate > 5%
     this.addRule({
-      name: 'payment_failures',
+      name: 'payment_failure_rate',
       condition: () => {
         const total = metrics.getCounter(METRICS.PAYMENT_TRANSACTIONS_TOTAL);
         const failures = metrics.getCounter(METRICS.PAYMENT_FAILURES_TOTAL);
@@ -174,7 +195,7 @@ class AlertingService {
    */
   private triggerAlert(name: string, rule: AlertRule): void {
     const value = rule.currentValue();
-    
+
     const alert: AlertInstance = {
       rule: name,
       severity: rule.severity,
@@ -187,7 +208,7 @@ class AlertingService {
 
     this.activeAlerts.set(name, alert);
     this.lastAlertTime.set(name, Date.now());
-    
+
     // Add to history
     this.addToHistory(alert);
 
@@ -212,7 +233,7 @@ class AlertingService {
     if (alert && !alert.resolved) {
       alert.resolved = true;
       this.activeAlerts.delete(name);
-      
+
       logger.info({ rule: name }, '[alerts] Alert resolved');
     }
   }
@@ -236,11 +257,20 @@ class AlertingService {
    */
   private addToHistory(alert: AlertInstance): void {
     this.alertHistory.push(alert);
-    
+
     // Limit history size
     if (this.alertHistory.length > this.maxHistorySize) {
       this.alertHistory = this.alertHistory.slice(-this.maxHistorySize);
     }
+  }
+
+  /**
+   * Reset the alerting service (useful for testing)
+   */
+  reset(): void {
+    this.activeAlerts.clear();
+    this.lastAlertTime.clear();
+    this.alertHistory = [];
   }
 
   /**
@@ -250,14 +280,12 @@ class AlertingService {
     if (!histogram || histogram.count === 0) return 0;
 
     const targetCount = histogram.count * 0.95;
-    let cumulativeCount = 0;
-
     for (const bucket of histogram.buckets) {
-      cumulativeCount += bucket.count;
-      if (cumulativeCount >= targetCount) {
+      if (bucket.count >= targetCount) {
         return bucket.le;
       }
     }
+
 
     return histogram.buckets[histogram.buckets.length - 1].le;
   }

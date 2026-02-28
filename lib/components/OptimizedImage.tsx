@@ -94,7 +94,7 @@ function getThumbnailUrl(source: string | ImageSource | { uri: string }, width?:
     if (height) url.searchParams.set('h', height.toString());
     
     return url.toString();
-  } catch (e) {
+  } catch {
     // If URL parsing fails, return original URI
     return uri;
   }

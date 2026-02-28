@@ -1,0 +1,18 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build with EAS and submit to App Store Connect"
+  lane :build_and_submit_ios do
+    sh("eas build --platform ios --profile production --non-interactive")
+    sh("eas submit --platform ios --profile production --non-interactive --apple-id #{ENV['APPLE_ID']} --asc-app-id #{ENV['ASC_APP_ID']} --apple-team-id #{ENV['APPLE_TEAM_ID']}")
+  end
+end
+
+platform :android do
+  desc "Build with EAS and submit to Google Play"
+  lane :build_and_submit_android do
+    sh("eas build --platform android --profile production --non-interactive")
+    # Expects the Play service account JSON to be written to /tmp/play-service-account.json by CI
+    sh("eas submit --platform android --profile production --non-interactive --key /tmp/play-service-account.json")
+  end
+end

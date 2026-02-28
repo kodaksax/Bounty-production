@@ -28,14 +28,14 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
           await setAdminTabEnabled(false);
           try {
             router.replace(ROUTES.TABS.BOUNTY_APP);
-          } catch {}
+          } catch { }
         }
       }
     ]);
   }, [setAdminTabEnabled]);
 
   return (
-    <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+    <View style={[styles.header, { paddingTop: 12 }]}>
       <View style={styles.row}>
         {(onBack || showBack) && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -51,9 +51,9 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
         <View style={styles.actions}>
           {actions}
           {/* Exit admin */}
-            <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Hide admin tab" accessibilityRole="button">
-              <MaterialIcons name="admin-panel-settings" size={22} color="#ffddb5" />
-            </TouchableOpacity>
+          <TouchableOpacity onPress={handleExitAdmin} style={styles.iconButton} accessibilityLabel="Hide admin tab" accessibilityRole="button">
+            <MaterialIcons name="admin-panel-settings" size={22} color="#ffddb5" />
+          </TouchableOpacity>
         </View>
       </View>
     </View>

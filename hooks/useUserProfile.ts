@@ -1,11 +1,8 @@
-/**
- * useUserProfile Hook
- * Manages user profile state and provides profile operations
- */
-
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CACHE_KEYS } from '../lib/services/cached-data-service';
 import { userProfileService, type ProfileCompleteness } from '../lib/services/userProfile';
 import { useAuthContext } from './use-auth-context';
+import { useCachedData } from './useCachedData';
 
 interface ProfileData {
   username: string;
@@ -20,6 +17,7 @@ interface ProfileData {
 interface UseUserProfileResult {
   profile: ProfileData | null;
   loading: boolean;
+  isValidating: boolean;
   error: string | null;
   isComplete: boolean;
   completeness: ProfileCompleteness | null;
@@ -30,36 +28,60 @@ interface UseUserProfileResult {
 }
 
 export function useUserProfile(): UseUserProfileResult {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [completeness, setCompleteness] = useState<ProfileCompleteness | null>(null);
   const { session } = useAuthContext();
   const authUserId = session?.user?.id;
 
-  const fetchProfile = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      // Pass explicit userId so we load the profile for the authenticated user
-      const data = await userProfileService.getProfile(authUserId);
-      setProfile(data);
-      
-      const complete = await userProfileService.checkCompleteness(authUserId);
-      setCompleteness(complete);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profile');
-      console.error('[useUserProfile] Error fetching profile:', err);
-    } finally {
-      setLoading(false);
-    }
+  const cacheKey = useMemo(() =>
+    authUserId ? CACHE_KEYS.USER_PROFILE(authUserId) : 'user_profile_guest',
+    [authUserId]
+  );
+
+  const fetchFn = useCallback(async () => {
+    const data = await userProfileService.getProfile(authUserId);
+    const complete = await userProfileService.checkCompleteness(authUserId);
+    return { profile: data, completeness: complete };
   }, [authUserId]);
+
+  const {
+    data: cachedData,
+    isLoading: loading,
+    isValidating,
+    error: fetchError,
+    refetch,
+    setData: setCachedData
+  } = useCachedData<{ profile: ProfileData | null; completeness: ProfileCompleteness | null }>(
+    cacheKey,
+    fetchFn,
+    { enabled: !!authUserId }
+  );
+
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [completeness, setCompleteness] = useState<ProfileCompleteness | null>(null);
+
+  // Sync state with cached data
+  useEffect(() => {
+    if (cachedData) {
+      setProfile(cachedData.profile);
+      setCompleteness(cachedData.completeness);
+    }
+  }, [cachedData]);
+
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError.message);
+    }
+  }, [fetchError]);
+
+  const fetchProfile = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   const saveProfile = useCallback(async (data: ProfileData) => {
     try {
       setError(null);
       const result = await userProfileService.saveProfile(data, authUserId);
-      
+
       if (result.success) {
         setProfile(data);
         const complete = await userProfileService.checkCompleteness(authUserId);
@@ -67,7 +89,7 @@ export function useUserProfile(): UseUserProfileResult {
       } else {
         setError(result.error || 'Failed to save profile');
       }
-      
+
       return result;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to save profile';
@@ -80,13 +102,13 @@ export function useUserProfile(): UseUserProfileResult {
     try {
       setError(null);
       const result = await userProfileService.updateProfile(updates, authUserId);
-      
+
       if (result.success) {
         await fetchProfile();
       } else {
         setError(result.error || 'Failed to update profile');
       }
-      
+
       return result;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to update profile';
@@ -117,6 +139,7 @@ export function useUserProfile(): UseUserProfileResult {
   return {
     profile,
     loading,
+    isValidating,
     error,
     isComplete: completeness?.isComplete ?? false,
     completeness,

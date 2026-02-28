@@ -6,7 +6,7 @@ import { AvatarFallback } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from "react"
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActionSheetIOS, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { usePortfolioUpload } from '../hooks/use-portfolio-upload'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -17,6 +17,7 @@ import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
 import { processAvatarImage } from '../lib/utils/image-utils'
 import { useWallet } from '../lib/wallet-context'
+import { colors } from '../lib/theme'
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -69,17 +70,60 @@ export function EditProfileScreen({
   const userId = authProfile?.id || 'anon';
   const DRAFT_KEY = `editProfile:draft:${userId}`;
 
+  // Track whether form has been modified
+  const [hasChanges, setHasChanges] = React.useState(false);
+
+  // Track initial values to compare against
+  const [initialValues, setInitialValues] = React.useState({
+    name: '',
+    title: '',
+    location: '',
+    portfolio: '',
+    bio: '',
+    avatar: '',
+  });
+
   // Reset form data when userId changes to prevent data leaks between users
   React.useEffect(() => {
     // Clear form state to prevent showing previous user's data
-    setName(authProfile?.username || normalized?.name || localProfile?.displayName || initialName);
-    setTitle(normalized?.title || "");
-    setLocation((normalized as any)?.location || "");
-    setPortfolio((normalized as any)?.portfolio || "");
-    setBio(authProfile?.about || normalized?.bio || localProfile?.location || "");
-    setAvatar(authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar);
+    const newName = authProfile?.username || normalized?.name || localProfile?.displayName || initialName;
+    const newTitle = normalized?.title || "";
+    const newLocation = normalized?.location || "";
+    const newPortfolio = normalized?.portfolio || "";
+    const newBio = authProfile?.about || normalized?.bio || localProfile?.location || "";
+    const newAvatar = authProfile?.avatar || normalized?.avatar || localProfile?.avatar || initialAvatar;
+
+    setName(newName);
+    setTitle(newTitle);
+    setLocation(newLocation);
+    setPortfolio(newPortfolio);
+    setBio(newBio);
+    setAvatar(newAvatar);
     setPendingAvatarRemoteUri(undefined);
+    setHasChanges(false);
+
+    // Update initial values
+    setInitialValues({
+      name: newName,
+      title: newTitle,
+      location: newLocation,
+      portfolio: newPortfolio,
+      bio: newBio,
+      avatar: newAvatar,
+    });
   }, [userId]); // Reset when userId changes
+
+  // Check if any field has changed from initial values
+  React.useEffect(() => {
+    const changed =
+      name !== initialValues.name ||
+      title !== initialValues.title ||
+      location !== initialValues.location ||
+      portfolio !== initialValues.portfolio ||
+      bio !== initialValues.bio ||
+      avatar !== initialValues.avatar;
+    setHasChanges(changed);
+  }, [name, title, location, portfolio, bio, avatar, initialValues]);
 
   // Hydrate draft on mount (only if userId hasn't changed)
   React.useEffect(() => {
@@ -95,7 +139,7 @@ export function EditProfileScreen({
           if (draft.bio) setBio(draft.bio);
           if (draft.avatar) setAvatar(draft.avatar);
         }
-      } catch {}
+      } catch { }
     })();
   }, [DRAFT_KEY]);
 
@@ -103,11 +147,11 @@ export function EditProfileScreen({
   React.useEffect(() => {
     const t = setTimeout(() => {
       const payload = { name, title, location, portfolio, bio, avatar };
-      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(payload)).catch(() => {});
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(payload)).catch(() => { });
     }, 250);
     return () => clearTimeout(t);
   }, [name, title, location, portfolio, bio, avatar, DRAFT_KEY]);
-  
+
   // Show loading state if profiles are still loading
   const isLoading = authLoading || normalizedLoading
 
@@ -135,7 +179,7 @@ export function EditProfileScreen({
   const handleSave = async () => {
     // Prevent multiple simultaneous saves
     if (isSaving) return
-    
+
     // Validation
     const nameError = validateName(name)
     if (nameError) {
@@ -150,60 +194,68 @@ export function EditProfileScreen({
     }
 
     setIsSaving(true)
-    
+
     try {
-      // Update Supabase profile via auth profile service (primary source of truth)
+      // OPTIMIZATION: Parallelize profile updates for faster save
+      // Update primary auth profile first, then run other updates concurrently
       const updatedProfile = await updateAuthProfile({
         username: name.trim(),
         about: (bio || '').trim(),
         avatar: (pendingAvatarRemoteUri || avatar)?.trim()
       })
-      
+
       if (!updatedProfile) {
         setUploadMessage('Failed to save profile. Please try again.')
         setTimeout(() => setUploadMessage(null), 2500)
         setIsSaving(false)
         return
       }
-      
-      // Also update local profile service for backward compatibility
-      const updates = { 
-        displayName: name.trim(), 
+
+      // OPTIMIZATION: Run secondary updates and cleanup concurrently
+      // These are non-critical and can happen in parallel
+      const updates = {
+        displayName: name.trim(),
         avatar: (pendingAvatarRemoteUri || avatar)?.trim(),
-        // Store additional fields in local profile service if supported
         location: location.trim() || undefined,
       } as any
-      
-      await updateProfile(updates).catch(e => {
-        console.error('[EditProfile] local profile update failed (non-critical):', e)
+
+      const userProfileUpdate = {
+        name: name.trim(),
+        title: title.trim() || undefined,
+        location: location.trim() || undefined,
+        portfolio: portfolio.trim() || undefined,
+        bio: (bio || '').trim(),
+        avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
+      }
+
+      // Execute all secondary operations in parallel and log any failures
+      const secondaryOperations = [
+        { name: 'updateProfile', promise: updateProfile(updates) },
+        { name: 'updateUserProfile', promise: updateUserProfile(userProfileUpdate) },
+        { name: 'refreshNormalized', promise: refreshNormalized?.() || Promise.resolve() },
+        { name: 'clearDraft', promise: AsyncStorage.removeItem(DRAFT_KEY) },
+      ]
+
+      const secondaryResults = await Promise.allSettled(
+        secondaryOperations.map((op) => op.promise)
+      )
+
+      secondaryResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const opName = secondaryOperations[index]?.name ?? `operation_${index}`
+          console.error(
+            '[EditProfileScreen] Secondary profile update failed',
+            { operation: opName, reason: result.reason }
+          )
+        }
       })
 
-      // Update the profile used by Profile screen (name/title/location/portfolio/bio/avatar)
-      try {
-        await updateUserProfile({
-          name: name.trim(),
-          title: title.trim() || undefined,
-          location: location.trim() || undefined,
-          portfolio: portfolio.trim() || undefined,
-          bio: (bio || '').trim(),
-          avatar: (pendingAvatarRemoteUri || avatar)?.trim() || undefined,
-        })
-      } catch (e) {
-        console.error('[EditProfile] useProfile update failed (non-critical):', e)
-      }
-      
       // Notify parent legacy state if provided
       onSave({ name: name.trim(), about: (bio || '').trim(), phone: '', avatar })
-      
+
       setUploadMessage('✓ Profile updated successfully!')
       setTimeout(() => setUploadMessage(null), 1200)
-      
-  // Refresh normalized profile cache
-  try { await refreshNormalized?.() } catch {}
 
-  // Clear draft after successful save
-  try { await AsyncStorage.removeItem(DRAFT_KEY) } catch {}
-      
       // Return to previous screen after a short delay
       setTimeout(() => {
         setIsSaving(false)
@@ -219,22 +271,72 @@ export function EditProfileScreen({
 
   const handleAvatarClick = async () => {
     try {
-      // Request permission
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        setUploadMessage('Permission to access photos is required');
-        setTimeout(() => setUploadMessage(null), 3000);
-        return;
-      }
+      const showPicker = async () => {
+        return new Promise<'camera' | 'library' | null>((resolve) => {
+          const options = ['Take Photo', 'Choose from Library', 'Cancel'];
+          if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+              {
+                options,
+                cancelButtonIndex: 2,
+              },
+              (buttonIndex: number) => {
+                if (buttonIndex === 0) resolve('camera');
+                else if (buttonIndex === 1) resolve('library');
+                else resolve(null);
+              }
+            );
+          } else {
+            Alert.alert(
+              'Select Photo',
+              'Choose a source',
+              [
+                { text: 'Take Photo', onPress: () => resolve('camera') },
+                { text: 'Choose from Library', onPress: () => resolve('library') },
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+              ],
+              { cancelable: true, onDismiss: () => resolve(null) }
+            );
+          }
+        });
+      };
 
-      // Launch image library with square aspect ratio for avatar cropping
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-        exif: false,
-      });
+      const source = await showPicker();
+      if (!source) return;
+
+      let result: ImagePicker.ImagePickerResult;
+
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          setUploadMessage('Permission to access camera is required');
+          setTimeout(() => setUploadMessage(null), 3000);
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.9,
+        });
+      } else {
+        // Request permission
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          setUploadMessage('Permission to access photos is required');
+          setTimeout(() => setUploadMessage(null), 3000);
+          return;
+        }
+
+        // Launch image library with square aspect ratio for avatar cropping
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.9,
+          exif: false,
+        });
+      }
 
       if (result.canceled) return;
 
@@ -253,14 +355,18 @@ export function EditProfileScreen({
       setUploadProgress(0);
       setUploadMessage('Processing image…');
 
-      // Process the avatar image (crop to square and compress)
+      // OPTIMIZATION: Process the avatar image with optimized pipeline
+      // The new processAvatarImage combines crop+resize+compression into fewer operations
       let processedUri = selected.uri;
       try {
+        setUploadProgress(0.05);
         const processed = await processAvatarImage(selected.uri, 400);
         processedUri = processed.uri;
-        setUploadProgress(0.3);
+        setUploadProgress(0.4); // Processing faster now, takes less progress bar space
+        setUploadMessage('Uploading…');
       } catch (processError) {
         console.error('Avatar processing failed, using original:', processError);
+        setUploadMessage('Processing failed, uploading original…');
       }
 
       const attachment = {
@@ -273,24 +379,32 @@ export function EditProfileScreen({
         progress: 0,
       };
 
-      setUploadMessage('Uploading…');
       try {
         const uploaded = await attachmentService.upload(attachment, {
-          onProgress: (p) => setUploadProgress(0.3 + p * 0.7),
+          onProgress: (p) => setUploadProgress(0.4 + p * 0.6),
         });
         // Use processed URI for immediate preview; store remote for persistence
         setAvatar(processedUri);
         setPendingAvatarRemoteUri(uploaded.remoteUri);
         setIsUploadingAvatar(false);
-        setUploadMessage('Profile picture uploaded successfully!');
-        setTimeout(() => setUploadMessage(null), 3000);
+        setUploadMessage('✓ Profile picture uploaded!');
+        setTimeout(() => setUploadMessage(null), 2500);
       } catch (uploadError) {
         console.error('Failed to upload avatar:', uploadError);
         setIsUploadingAvatar(false);
         setAvatar(processedUri);
         setPendingAvatarRemoteUri(undefined);
-        setUploadMessage('Upload failed - using local image');
-        setTimeout(() => setUploadMessage(null), 3000);
+
+        // Provide more specific error message based on error type
+        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+        if (errorMessage.includes('timeout')) {
+          setUploadMessage('Upload timeout - check your connection and try again');
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          setUploadMessage('Network error - using local image for now');
+        } else {
+          setUploadMessage('Upload failed - using local image');
+        }
+        setTimeout(() => setUploadMessage(null), 4000);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -301,20 +415,53 @@ export function EditProfileScreen({
   }
 
   const handleBack = () => {
-    // Just navigate back; draft is persisted automatically
-    if (onBack) onBack()
+    // Check if user has unsaved changes
+    if (hasChanges) {
+      // Show warning dialog
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Are you sure you want to leave without saving?',
+        [
+          {
+            text: 'Keep Editing',
+            style: 'cancel',
+          },
+          {
+            text: 'Discard Changes',
+            style: 'destructive',
+            onPress: () => {
+              // Reset form to initial values
+              setName(initialValues.name);
+              setTitle(initialValues.title);
+              setLocation(initialValues.location);
+              setPortfolio(initialValues.portfolio);
+              setBio(initialValues.bio);
+              setAvatar(initialValues.avatar);
+              setPendingAvatarRemoteUri(undefined);
+              setHasChanges(false);
+
+              // Navigate back
+              if (onBack) onBack();
+            },
+          },
+        ]
+      );
+    } else {
+      // No changes, navigate back immediately
+      if (onBack) onBack();
+    }
   }
 
   // Show loading spinner if profiles are loading
   if (isLoading) {
     return (
       <View className="flex-1 bg-emerald-600 items-center justify-center">
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
         <Text className="text-white text-sm mt-4">Loading profile...</Text>
       </View>
     )
   }
-  
+
   // Show error state if there's an error loading profiles
   if (localProfileError || normalizedError) {
     return (
@@ -333,7 +480,7 @@ export function EditProfileScreen({
           <Text className="text-emerald-200 text-sm mt-2 text-center">
             {localProfileError || normalizedError}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={onBack}
             className="mt-6 px-6 py-3 bg-emerald-700 rounded-lg"
           >
@@ -359,136 +506,146 @@ export function EditProfileScreen({
       )}
       {/* Header - Twitter-like modal style */}
       <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
-        <TouchableOpacity onPress={onBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
+        <TouchableOpacity onPress={handleBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
           <MaterialIcons name="close" size={22} color="#ffffff" />
         </TouchableOpacity>
         <Text className="text-white font-extrabold text-base tracking-widest">Edit Profile</Text>
-        <TouchableOpacity 
-          onPress={handleSave} 
+        <TouchableOpacity
+          onPress={handleSave}
           disabled={isSaving}
           className={`px-4 py-2 bg-white rounded-full ${isSaving ? 'opacity-60' : ''}`}
           accessibilityLabel="Update Profile"
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#059669" />
+            <ActivityIndicator size="small" color={colors.primary[600]} />
           ) : (
             <Text className="text-emerald-700 font-extrabold">Update Profile</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Scrollable Content */}
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Banner area (Twitter-like aesthetic placeholder) */}
-        <View className="h-24 bg-emerald-800/40" />
+      {/* Scrollable Content with KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Banner area (Twitter-like aesthetic placeholder) */}
+          <View className="h-24 bg-emerald-800/40" />
 
-        {/* Avatar */}
-        <View className="px-4 -mt-8 flex flex-col items-start">
-          <View className="relative mb-2">
-            <View className="h-20 w-20 rounded-full overflow-hidden border-2 border-emerald-500 bg-emerald-800 items-center justify-center">
-              {avatar ? (
-                <OptimizedImage
-                  source={{ uri: avatar }}
-                  width={80}
-                  height={80}
-                  style={{ width: 80, height: 80, borderRadius: 40 }}
-                  resizeMode="cover"
-                  useThumbnail
-                  priority="low"
-                  alt="Profile"
-                />
-              ) : (
-                <AvatarFallback className="bg-emerald-800 text-emerald-200">
-                  {initialName.substring(0, 2).toUpperCase()}
-                </AvatarFallback>
-              )}
+          {/* Avatar */}
+          <View className="px-4 -mt-8 flex flex-col items-start">
+            <View className="relative mb-2">
+              <View className="h-20 w-20 rounded-full overflow-hidden border-2 border-emerald-500 bg-emerald-800 items-center justify-center">
+                {avatar ? (
+                  <OptimizedImage
+                    source={{ uri: avatar }}
+                    width={80}
+                    height={80}
+                    style={{ width: 80, height: 80, borderRadius: 40 }}
+                    resizeMode="cover"
+                    useThumbnail
+                    priority="low"
+                    alt="Profile"
+                  />
+                ) : (
+                  <AvatarFallback className="bg-emerald-800 text-emerald-200">
+                    {initialName.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                )}
+              </View>
+              <TouchableOpacity
+                style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center' }}
+                onPress={handleAvatarClick}
+                disabled={isUploadingAvatar}
+              >
+                {isUploadingAvatar ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <MaterialIcons name="camera-alt" size={16} color="white" />
+                )}
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
-              onPress={handleAvatarClick}
-              disabled={isUploadingAvatar}
-            >
-              {isUploadingAvatar ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <MaterialIcons name="camera-alt" size={16} color="white" />
-              )}
-            </TouchableOpacity>
+            {isUploadingAvatar ? (
+              <Text className="text-xs text-emerald-100/80">Uploading... {Math.round(uploadProgress * 100)}%</Text>
+            ) : null}
           </View>
-          {isUploadingAvatar ? (
-            <Text className="text-xs text-emerald-100/80">Uploading... {Math.round(uploadProgress * 100)}%</Text>
-          ) : null}
-        </View>
 
-        {/* Fields - Twitter style inputs */}
-        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-          <Text className="text-xs text-emerald-300 mb-1">Name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Your name"
-            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
-          />
-        </View>
-
-        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-          <Text className="text-xs text-emerald-300 mb-1">Title</Text>
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="e.g., Full Stack Developer"
-            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
-          />
-        </View>
-
-        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-          <Text className="text-xs text-emerald-300 mb-1">Location</Text>
-          <TextInput
-            value={location}
-            onChangeText={setLocation}
-            placeholder="City, Country"
-            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
-          />
-        </View>
-
-        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-          <Text className="text-xs text-emerald-300 mb-1">Portfolio</Text>
-          <TextInput
-            value={portfolio}
-            onChangeText={setPortfolio}
-            placeholder="https://yourportfolio.com"
-            keyboardType="url"
-            autoCapitalize="none"
-            className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
-          />
-          <View className="flex-row items-center mt-3">
-            <TouchableOpacity
-              onPress={pickPortfolioItem}
-              className="bg-emerald-600 rounded-lg px-3 py-2"
-              disabled={isUploadingPortfolio}
-            >
-              <Text className="text-white text-sm">
-                {isUploadingPortfolio ? `Uploading ${Math.round((portfolioProgress || 0) * 100)}%` : 'Add Portfolio Item'}
-              </Text>
-            </TouchableOpacity>
-            <Text className="text-xs text-emerald-200 ml-3">Upload images, videos, or files</Text>
+          {/* Fields - Twitter style inputs */}
+          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+            <Text className="text-xs text-emerald-300 mb-1">Name</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+            />
           </View>
-        </View>
 
-        <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-          <Text className="text-xs text-emerald-300 mb-1">Bio</Text>
-          <TextInput
-            placeholder="Tell us about yourself"
-            multiline
-            numberOfLines={4}
-            value={bio}
-            onChangeText={setBio}
-            className="w-full bg-emerald-800/40 rounded-md p-3 text-white"
-          />
-        </View>
-        {/* Footer space */}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+            <Text className="text-xs text-emerald-300 mb-1">Title</Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Full Stack Developer"
+              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+            />
+          </View>
+
+          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+            <Text className="text-xs text-emerald-300 mb-1">Location</Text>
+            <TextInput
+              value={location}
+              onChangeText={setLocation}
+              placeholder="City, Country"
+              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+            />
+          </View>
+
+          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+            <Text className="text-xs text-emerald-300 mb-1">Portfolio</Text>
+            <TextInput
+              value={portfolio}
+              onChangeText={setPortfolio}
+              placeholder="https://yourportfolio.com"
+              keyboardType="url"
+              autoCapitalize="none"
+              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+            />
+            <View className="flex-row items-center mt-3">
+              <TouchableOpacity
+                onPress={pickPortfolioItem}
+                className="bg-emerald-600 rounded-lg px-3 py-2"
+                disabled={isUploadingPortfolio}
+              >
+                <Text className="text-white text-sm">
+                  {isUploadingPortfolio ? `Uploading ${Math.round((portfolioProgress || 0) * 100)}%` : 'Add Portfolio Item'}
+                </Text>
+              </TouchableOpacity>
+              <Text className="text-xs text-emerald-200 ml-3">Upload images, videos, or files</Text>
+            </View>
+          </View>
+
+          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
+            <Text className="text-xs text-emerald-300 mb-1">Bio</Text>
+            <TextInput
+              placeholder="Tell us about yourself"
+              multiline
+              numberOfLines={4}
+              value={bio}
+              onChangeText={setBio}
+              className="w-full bg-emerald-800/40 rounded-md p-3 text-white"
+            />
+          </View>
+          {/* Footer space */}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }

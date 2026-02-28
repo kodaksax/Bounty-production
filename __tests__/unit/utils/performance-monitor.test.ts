@@ -10,7 +10,7 @@ import {
 
 // Mock performance.now() for consistent testing
 const mockPerformanceNow = jest.fn();
-global.performance.now = mockPerformanceNow;
+let originalPerformanceNow: () => number;
 
 // Mock console methods to verify logging behavior
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -18,6 +18,28 @@ const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 
 // Mock __DEV__ global
 (global as any).__DEV__ = true;
+
+// Setup and teardown for performance.now mock
+beforeAll(() => {
+  // Save original performance.now
+  originalPerformanceNow = global.performance.now.bind(global.performance);
+  
+  // Replace performance.now with mock using Object.defineProperty since it's read-only
+  Object.defineProperty(global.performance, 'now', {
+    writable: true,
+    configurable: true,
+    value: mockPerformanceNow,
+  });
+});
+
+afterAll(() => {
+  // Restore original performance.now
+  Object.defineProperty(global.performance, 'now', {
+    writable: true,
+    configurable: true,
+    value: originalPerformanceNow,
+  });
+});
 
 describe('PerformanceMonitor', () => {
   beforeEach(() => {

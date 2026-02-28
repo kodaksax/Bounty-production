@@ -34,7 +34,7 @@ class MockEventEmitter {
   constructor() {
     this.listeners = {};
   }
-  
+
   addListener(event, callback) {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
@@ -42,19 +42,19 @@ class MockEventEmitter {
     this.listeners[event].push(callback);
     return { remove: () => this.removeListener(event, callback) };
   }
-  
+
   removeListener(event, callback) {
     if (this.listeners[event]) {
       this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
     }
   }
-  
+
   emit(event, ...args) {
     if (this.listeners[event]) {
       this.listeners[event].forEach(callback => callback(...args));
     }
   }
-  
+
   removeAllListeners(event) {
     if (event) {
       delete this.listeners[event];
@@ -83,7 +83,7 @@ jest.mock('react-native', () => {
       flatten: (style) => style,
     },
     Animated: {
-      Value: jest.fn().mockImplementation((value) => ({ 
+      Value: jest.fn().mockImplementation((value) => ({
         _value: value,
         setValue: jest.fn(),
         interpolate: jest.fn().mockReturnValue(value),
@@ -112,10 +112,44 @@ jest.mock('react-native', () => {
     TouchableOpacity: 'TouchableOpacity',
     TextInput: 'TextInput',
     ScrollView: 'ScrollView',
+    KeyboardAvoidingView: 'KeyboardAvoidingView',
     FlatList: 'FlatList',
     ActivityIndicator: 'ActivityIndicator',
+    Alert: {
+      alert: jest.fn(),
+    },
+    Image: 'Image',
   };
 });
+
+// Mock expo-device
+jest.mock('expo-device', () => ({
+  isDevice: true,
+  brand: 'Apple',
+  manufacturer: 'Apple',
+  modelName: 'iPhone',
+  modelId: 'iPhone12,1',
+  designName: 'iPhone 11',
+  productName: 'iPhone11,8',
+  deviceYearClass: 2019,
+  totalMemory: 4294967296,
+  supportedCpuArchitectures: ['arm64'],
+  osName: 'iOS',
+  osVersion: '14.0',
+  osBuildId: '18A373',
+  osInternalBuildId: '18A373',
+  osBuildFingerprint: null,
+  platformApiLevel: null,
+  deviceName: 'Test iPhone',
+  getDeviceTypeAsync: jest.fn().mockResolvedValue(1),
+  DeviceType: {
+    UNKNOWN: 0,
+    PHONE: 1,
+    TABLET: 2,
+    DESKTOP: 3,
+    TV: 4,
+  },
+}));
 
 // Mock expo-haptics
 jest.mock('expo-haptics', () => ({
@@ -154,7 +188,7 @@ jest.mock('@react-native-community/netinfo', () => ({
     type: 'wifi',
     details: null,
   }),
-  addEventListener: jest.fn().mockReturnValue(() => {}),
+  addEventListener: jest.fn().mockReturnValue(() => { }),
 }));
 
 // Mock @react-native-async-storage/async-storage
@@ -170,10 +204,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock @stripe/stripe-react-native
-// Provides basic function structure without assumptions about fallback behavior
-// Individual tests should override these mocks as needed for their specific scenarios
+// Simulates SDK unavailability in test environment (expected in non-native environments)
+// Individual tests can override these mocks as needed for their specific scenarios
 jest.mock('@stripe/stripe-react-native', () => ({
-  initStripe: jest.fn().mockResolvedValue(undefined),
+  initStripe: jest.fn().mockRejectedValue(new Error('SDK not available in test environment')),
   createPaymentMethod: jest.fn(),
   confirmPayment: jest.fn(),
   initPaymentSheet: jest.fn(),
@@ -214,7 +248,7 @@ jest.mock('expo-modules-core', () => ({
     constructor() {
       this.listeners = {};
     }
-    
+
     addListener(event, callback) {
       if (!this.listeners[event]) {
         this.listeners[event] = [];
@@ -222,19 +256,19 @@ jest.mock('expo-modules-core', () => ({
       this.listeners[event].push(callback);
       return { remove: () => this.removeListener(event, callback) };
     }
-    
+
     removeListener(event, callback) {
       if (this.listeners[event]) {
         this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
       }
     }
-    
+
     emit(event, ...args) {
       if (this.listeners[event]) {
         this.listeners[event].forEach(callback => callback(...args));
       }
     }
-    
+
     removeAllListeners(event) {
       if (event) {
         delete this.listeners[event];
@@ -279,18 +313,53 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock @expo/vector-icons
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  return {
+    MaterialIcons: (props) => React.createElement('MaterialIcons', props),
+    Ionicons: (props) => React.createElement('Ionicons', props),
+    FontAwesome: (props) => React.createElement('FontAwesome', props),
+    AntDesign: (props) => React.createElement('AntDesign', props),
+    Entypo: (props) => React.createElement('Entypo', props),
+    Feather: (props) => React.createElement('Feather', props),
+  };
+});
+
 // Mock console methods to reduce noise in tests, but preserve critical errors
 const originalError = console.error;
 global.console = {
   ...console,
   error: (...args) => {
-    // Only suppress specific known noisy errors (customize as needed)
+    // Convert first argument to string for pattern matching
+    const firstArg = args[0]?.toString() || '';
+
+    // Only suppress specific known noisy errors from test error paths
     if (
-      typeof args[0] === 'string' &&
-      (
-        args[0].includes('DeprecationWarning') ||
-        args[0].includes('Some known noisy error')
-      )
+      firstArg.includes('DeprecationWarning') ||
+      firstArg.includes('Some known noisy error') ||
+      firstArg.includes('[StripeService]') ||
+      firstArg.includes('[phone-verification]') ||
+      firstArg.includes('[auth-service]') ||
+      firstArg.includes('[authProfileService]') ||
+      firstArg.includes('[AuthSessionStorage]') ||
+      firstArg.includes('[portfolio-service]') ||
+      firstArg.includes('Error getting permission status') ||
+      firstArg.includes('[supabase] Not configured') ||
+      firstArg.includes('react-test-renderer is deprecated') ||
+      firstArg.includes('Draft error') ||
+      firstArg.includes('Preference error') ||
+      firstArg.includes('Token error') ||
+      firstArg.includes('Cleanup errors (non-critical)') ||
+      firstArg.includes('Sharing is not available on this device') ||
+      firstArg.includes('Error sharing receipt:') ||
+      firstArg.includes('Error getting connect status:') ||
+      firstArg.includes('Error creating escrow PaymentIntent') ||
+      firstArg.includes('Error creating onboarding link:') ||
+      firstArg.includes('Error refunding PaymentIntent:') ||
+      firstArg.includes('Error validating payment capability:') ||
+      firstArg.includes('Error in Stripe webhook handler:') ||
+      firstArg.includes('[Redis] Redis client error:')
     ) {
       return;
     }

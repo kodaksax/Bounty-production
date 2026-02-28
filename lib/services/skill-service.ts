@@ -176,7 +176,7 @@ export const skillService = {
    */
   async createMultiple(
     userId: string,
-    skills: Array<{ icon: string; text: string }>,
+    skills: { icon: string; text: string }[],
   ): Promise<{ skills: Skill[]; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint for bulk creation.

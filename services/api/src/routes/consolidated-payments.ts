@@ -4,25 +4,27 @@
  */
 
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { asyncHandler } from '../middleware/error-handler';
-import * as PaymentService from '../services/consolidated-payment-service';
 import { z } from 'zod';
+import { asyncHandler } from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
+import * as PaymentService from '../services/consolidated-payment-service';
 
 /**
  * Request schemas for validation
  */
 const createPaymentIntentSchema = z.object({
-  amountCents: z.number().int().min(50, 'Amount must be at least $0.50'),
+  amountCents: z.number().int().min(100, 'Amount must be at least $1.00'),
   currency: z.string().toLowerCase().optional().default('usd'),
   metadata: z.record(z.string()).optional(),
   description: z.string().optional(),
   bountyId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 const confirmPaymentIntentSchema = z.object({
   paymentIntentId: z.string(),
   paymentMethodId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 const attachPaymentMethodSchema = z.object({
@@ -31,6 +33,7 @@ const attachPaymentMethodSchema = z.object({
 
 const cancelPaymentIntentSchema = z.object({
   reason: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 /**
@@ -39,7 +42,7 @@ const cancelPaymentIntentSchema = z.object({
 export async function registerConsolidatedPaymentRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
-  
+
   /**
    * POST /payments/create-payment-intent
    * Create a new payment intent
@@ -49,9 +52,9 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Create a payment intent for processing a payment',
-        body: createPaymentIntentSchema,
+
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
         response: {
           200: {
             type: 'object',
@@ -68,7 +71,7 @@ export async function registerConsolidatedPaymentRoutes(
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const body = createPaymentIntentSchema.parse(request.body);
-      
+
       const result = await PaymentService.createPaymentIntent({
         userId: request.userId!,
         amountCents: body.amountCents,
@@ -78,17 +81,18 @@ export async function registerConsolidatedPaymentRoutes(
           ...(body.bountyId && { bounty_id: body.bountyId }),
         },
         description: body.description,
+        idempotencyKey: body.idempotencyKey,
       });
-      
+
       request.log.info(
         { paymentIntentId: result.paymentIntentId, amount: result.amount },
         'Payment intent created'
       );
-      
+
       return result;
     })
   );
-  
+
   /**
    * POST /payments/confirm
    * Confirm a payment intent
@@ -98,29 +102,31 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Confirm a payment intent',
-        body: confirmPaymentIntentSchema,
+
+
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const body = confirmPaymentIntentSchema.parse(request.body);
-      
+
       const result = await PaymentService.confirmPaymentIntent(
         body.paymentIntentId,
         request.userId!,
-        body.paymentMethodId
+        body.paymentMethodId,
+        body.idempotencyKey
       );
-      
+
       request.log.info(
         { paymentIntentId: body.paymentIntentId, status: result.status },
         'Payment intent confirmed'
       );
-      
+
       return result;
     })
   );
-  
+
   /**
    * GET /payments/methods
    * List user's payment methods
@@ -130,17 +136,17 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'List all payment methods for the authenticated user',
+
+
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const methods = await PaymentService.listPaymentMethods(request.userId!);
-      
+
       return { paymentMethods: methods };
     })
   );
-  
+
   /**
    * POST /payments/methods
    * Attach a payment method to user
@@ -150,31 +156,32 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Attach a payment method to the user account',
-        body: attachPaymentMethodSchema,
+
+
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const body = attachPaymentMethodSchema.parse(request.body);
-      
+
       const method = await PaymentService.attachPaymentMethod(
         request.userId!,
         body.paymentMethodId
       );
-      
+
       request.log.info(
         { paymentMethodId: method.id },
         'Payment method attached'
       );
-      
+
       return {
         success: true,
         paymentMethod: method,
       };
     })
   );
-  
+
   /**
    * DELETE /payments/methods/:id
    * Detach a payment method from user
@@ -184,24 +191,22 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Remove a payment method from the user account',
-        params: z.object({
-          id: z.string(),
-        }),
+
+
+        params: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
-      
+
       await PaymentService.detachPaymentMethod(request.userId!, id);
-      
+
       request.log.info({ paymentMethodId: id }, 'Payment method detached');
-      
+
       return { success: true };
     })
   );
-  
+
   /**
    * POST /payments/setup-intent
    * Create a setup intent for adding payment method without charge
@@ -211,22 +216,22 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Create a setup intent for adding a payment method',
+
+
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const result = await PaymentService.createSetupIntent(request.userId!);
-      
+
       request.log.info(
         { setupIntentId: result.setupIntentId },
         'Setup intent created'
       );
-      
+
       return result;
     })
   );
-  
+
   /**
    * POST /payments/:id/cancel
    * Cancel a payment intent
@@ -236,26 +241,30 @@ export async function registerConsolidatedPaymentRoutes(
     {
       preHandler: authMiddleware,
       schema: {
-        tags: ['payments'],
-        description: 'Cancel a payment intent',
-        params: z.object({
-          id: z.string(),
-        }),
-        body: cancelPaymentIntentSchema,
+
+
+        params: { type: 'object' },
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
       const body = cancelPaymentIntentSchema.parse(request.body);
-      
-      await PaymentService.cancelPaymentIntent(id, request.userId!, body.reason);
-      
+
+      await PaymentService.cancelPaymentIntent(
+        id,
+        request.userId!,
+        body.reason,
+        body.idempotencyKey
+      );
+
       request.log.info({ paymentIntentId: id }, 'Payment intent cancelled');
-      
+
       return { success: true };
     })
   );
-  
+
   /**
    * GET /payments/:id/status
    * Get payment intent status
@@ -266,20 +275,18 @@ export async function registerConsolidatedPaymentRoutes(
       preHandler: authMiddleware,
       schema: {
         tags: ['payments'],
-        description: 'Get payment intent status',
-        params: z.object({
-          id: z.string(),
-        }),
+
+        params: { type: 'object' },
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
-      
+
       const status = await PaymentService.getPaymentIntentStatus(id, request.userId!);
-      
+
       return status;
     })
   );
-  
+
   fastify.log.info('Consolidated payment routes registered');
 }

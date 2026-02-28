@@ -7,22 +7,21 @@ import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
-import { getCurrentUserId } from "lib/utils/data-utils"
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useMemo, useState } from "react"
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
-import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
+import { useValidUserId } from '../../hooks/useValidUserId'
 import { messageService } from '../../lib/services/message-service'
 import { logClientError as _logClientError } from '../../lib/services/monitoring'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
-import { useWallet } from '../../lib/wallet-context'
 import { ChatDetailScreen } from "./chat-detail-screen"
+import { colors } from '../../lib/theme';
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -54,22 +53,19 @@ export function MessengerScreen({
   onNavigate: (screen: string) => void
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
-  const { session } = useAuthContext()
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } = useConversations()
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { balance } = useWallet()
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
       await refresh()
     } finally {
       setIsRefreshing(false)
     }
-  }
+  }, [refresh])
 
   const handleConversationClick = async (id: string) => {
     await markConversationReadSafe(id)
@@ -91,7 +87,7 @@ export function MessengerScreen({
         await markAsRead(convId)
       } else {
         // local conv id (conv-...), use local message service
-        try { await messageService.markAsRead(convId) } catch (e) { /* best-effort */ }
+        try { await messageService.markAsRead(convId) } catch { /* best-effort */ }
       }
     } catch (e) {
       try { _logClientError('markConversationReadSafe failed', { err: String(e), convId }) } catch {}
@@ -122,7 +118,7 @@ export function MessengerScreen({
         for (let i = 0; i < maxAttempts && mounted; i++) {
           try {
             conv = await messageService.getConversation(pending)
-          } catch (err) {
+          } catch {
             conv = null
           }
           if (conv) break
@@ -158,13 +154,13 @@ export function MessengerScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleBackToInbox = () => {
+  const handleBackToInbox = useCallback(() => {
     setActiveConversation(null)
     onConversationModeChange?.(false)
     refresh() // Refresh conversation list when returning
-  }
+  }, [onConversationModeChange, refresh])
 
-  const handleDeleteConversation = (conversation: Conversation) => {
+  const handleDeleteConversation = useCallback((conversation: Conversation) => {
     Alert.alert(
       'Delete Conversation',
       `Are you sure you want to delete your conversation with ${conversation.name}?`,
@@ -176,14 +172,14 @@ export function MessengerScreen({
           onPress: async () => {
             try {
               await deleteConversation(conversation.id)
-            } catch (err) {
+            } catch {
               Alert.alert('Error', 'Failed to delete conversation')
             }
           },
         },
       ]
     )
-  }
+  }, [deleteConversation])
 
   // Optimized keyExtractor for FlatList
   const keyExtractor = useCallback((item: Conversation) => item.id, []);
@@ -195,7 +191,14 @@ export function MessengerScreen({
       onPress={() => handleConversationClick(item.id)}
       onDelete={() => handleDeleteConversation(item)}
     />
-  ), []);
+  ), [handleConversationClick, handleDeleteConversation]);
+
+  // getItemLayout for better scroll performance
+  const getItemLayout = useCallback((_: any, index: number) => ({
+    length: 76, // Approximate height: 12px (padding-top) + 48px (content) + 12px (padding-bottom) + 4px (margin)
+    offset: 76 * index,
+    index,
+  }), []);
 
   // Empty list component
   const ListEmptyComponent = useCallback(() => {
@@ -204,6 +207,18 @@ export function MessengerScreen({
         <View className="px-4 py-6">
           <ConversationsListSkeleton count={5} />
         </View>
+      );
+    }
+    
+    if (error) {
+      return (
+        <EmptyState
+          icon="cloud-off"
+          title="Unable to Load Messages"
+          description="Check your internet connection and try again"
+          actionLabel="Try Again"
+          onAction={handleRefresh}
+        />
       );
     }
     
@@ -216,7 +231,7 @@ export function MessengerScreen({
         onAction={() => onNavigate?.('bounty')}
       />
     );
-  }, [loading]);
+  }, [loading, error, onNavigate, handleRefresh]);
 
   if (activeConversation) {
     const conversation = conversations.find((c) => c.id === activeConversation)
@@ -226,7 +241,7 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ marginTop: -20 }}>
+    <View className="flex flex-col min-h-screen bg-background-secondary text-white" style={{ marginTop: -20 }}>
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
@@ -281,10 +296,11 @@ export function MessengerScreen({
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={['#10b981']}
+            colors={[colors.primary[500]]}
           />
         }
         // Performance optimizations
+        getItemLayout={getItemLayout}
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
         windowSize={5}
@@ -313,38 +329,53 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   onDelete 
 }) {
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
-  const time = formatConversationTime(conversation.updatedAt);
+  const currentUserId = useValidUserId()
   
-  // Get the other participant's ID (not the current user)
-  const otherUserId = conversation.participantIds?.find(id => id !== currentUserId)
+  // Memoize time formatting
+  const time = useMemo(
+    () => formatConversationTime(conversation.updatedAt),
+    [conversation.updatedAt]
+  );
+  
+  // Memoize other participant ID lookup
+  const otherUserId = useMemo(
+    () => conversation.participantIds?.find(id => id !== currentUserId),
+    [conversation.participantIds, currentUserId]
+  );
   
   // Fetch the other user's profile for 1:1 chats
   const { profile: otherUserProfile } = useNormalizedProfile(otherUserId)
   
-  // Use profile data if available for 1:1 chats
-  const displayName = !conversation.isGroup && otherUserProfile?.username 
-    ? otherUserProfile.username 
-    : conversation.name
-  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
-    ? otherUserProfile.avatar 
-    : conversation.avatar
-  
-  // Generate initials for fallback
-  const initials = generateInitials(
-    otherUserProfile?.username,
-    otherUserProfile?.name
+  // Memoize display values
+  const displayName = useMemo(
+    () => !conversation.isGroup && otherUserProfile?.username 
+      ? otherUserProfile.username 
+      : conversation.name,
+    [conversation.isGroup, conversation.name, otherUserProfile?.username]
   );
   
-  const handleAvatarPress = (e: any) => {
+  const avatarUrl = useMemo(
+    () => !conversation.isGroup && otherUserProfile?.avatar 
+      ? otherUserProfile.avatar 
+      : conversation.avatar,
+    [conversation.isGroup, conversation.avatar, otherUserProfile?.avatar]
+  );
+  
+  // Memoize initials generation
+  const initials = useMemo(
+    () => generateInitials(otherUserProfile?.username, otherUserProfile?.name),
+    [otherUserProfile?.username, otherUserProfile?.name]
+  );
+  
+  const handleAvatarPress = useCallback((e: any) => {
     e.stopPropagation()
     if (otherUserId && !conversation.isGroup) {
       router.push(`/profile/${otherUserId}`)
     }
-  }
+  }, [otherUserId, conversation.isGroup, router]);
   
-  // Render swipe action (delete button)
-  const renderRightActions = () => (
+  // Memoize swipe action render
+  const renderRightActions = useCallback(() => (
     <TouchableOpacity
       className="bg-red-500 justify-center items-center px-6 rounded-lg my-1 mr-2"
       onPress={onDelete}
@@ -352,7 +383,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       <MaterialIcons name="delete" size={24} color="white" />
       <Text className="text-white text-xs mt-1">Delete</Text>
     </TouchableOpacity>
-  );
+  ), [onDelete]);
   
   return (
     <Swipeable
@@ -360,7 +391,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       overshootRight={false}
       friction={2}
     >
-      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-emerald-600" onPress={onPress}>
+      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-background-secondary" onPress={onPress}>
         <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
           <View className="relative">
             {conversation.isGroup ? (

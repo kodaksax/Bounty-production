@@ -1,7 +1,9 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
-import React from "react";
-import { Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+// 1. Update imports
+import { colors, theme } from "lib/theme";
+import { shareBounty } from "lib/utils/share-utils";
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -43,14 +45,12 @@ export function BountyCard({
   const isOwner = currentUserId === bounty.user_id;
 
   const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out this bounty: ${bounty.title} - $${bounty.amount}`,
-        title: bounty.title,
-      });
-    } catch (error) {
-      // User cancelled or error occurred
-    }
+    await shareBounty({
+      title: bounty.title,
+      price: bounty.amount, // bounty.amount is used in BountyCard, not price
+      id: bounty.id,
+      description: bounty.description,
+    });
   };
 
   const getStatusColor = () => {
@@ -58,7 +58,7 @@ export function BountyCard({
     if (submittedForReview) return '#38bdf8'
     switch (bounty.status) {
       case "open":
-        return "#10b981"; // emerald-500
+        return colors.primary[500]; // emerald-500
       case "in_progress":
         return "#fbbf24"; // amber-400
       case "completed":
@@ -70,7 +70,7 @@ export function BountyCard({
       case "cancellation_requested":
         return "#f97316"; // orange-500
       default:
-        return "#10b981";
+        return colors.primary[500];
     }
   };
 
@@ -207,7 +207,7 @@ export function BountyCard({
                   onEdit();
                 }}
               >
-                <MaterialIcons name="edit" size={16} color="#10b981" />
+                <MaterialIcons name="edit" size={16} color={colors.primary[500]} />
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
@@ -240,8 +240,6 @@ export function BountyCard({
               <TouchableOpacity
                 style={[styles.actionButton, styles.viewButton]}
                 onPress={(e) => {
-                  e.stopPropagation();
-                  onViewCancellation();
                 }}
               >
                 <MaterialIcons name="visibility" size={16} color="#3b82f6" />
@@ -285,15 +283,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(16, 185, 129, 0.2)", // emerald-500/20
-    // Elevated shadow
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...theme.shadows.md,
   },
   header: {
     flexDirection: "row",

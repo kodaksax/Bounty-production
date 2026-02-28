@@ -30,6 +30,28 @@ export interface PlaceDetails {
 }
 
 /**
+ * Error response for place details
+ */
+export interface PlaceDetailsError {
+  error: string;
+  details: null;
+}
+
+/**
+ * Type guard to check if a place details response is an error
+ */
+export function isPlaceDetailsError(
+  response: PlaceDetails | PlaceDetailsError
+): response is PlaceDetailsError {
+  return (
+    typeof (response as any).error === 'string' &&
+    (response as any).details === null &&
+    !('placeId' in response) &&
+    !('formattedAddress' in response)
+  );
+}
+
+/**
  * Address Autocomplete Service
  * Provides real-time address suggestions using Google Places API
  * 
@@ -175,19 +197,19 @@ class AddressAutocompleteService {
   /**
    * Get detailed information about a specific place
    * @param placeId The place ID from a suggestion
-   * @returns Detailed place information
+   * @returns Detailed place information or error response
    */
-  async getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  async getPlaceDetails(placeId: string): Promise<PlaceDetails | PlaceDetailsError> {
     if (!this.isConfigured()) {
       console.error('Address autocomplete not configured');
-      return null;
+      return { error: 'Service not configured', details: null };
     }
 
     // Validate and sanitize place ID
     const sanitizedPlaceId = sanitizePlaceId(placeId);
     if (!sanitizedPlaceId) {
       console.error('Invalid place ID provided');
-      return null;
+      return { error: 'Invalid place ID provided', details: null };
     }
 
     try {
@@ -238,17 +260,21 @@ class AddressAutocompleteService {
           longitude: result.geometry?.location?.lng,
           components,
         };
+      } else if (data.status === 'NOT_FOUND') {
+        // Handle NOT_FOUND status specifically
+        console.error('Place not found:', sanitizedPlaceId);
+        return { error: 'Place not found', details: null };
       } else {
         // Log error status for debugging but don't expose API error message
         console.error('Place details API error:', data.status);
         if (__DEV__) {
           console.error('Place details API error details (dev only):', data.error_message);
         }
-        return null;
+        return { error: 'Unable to fetch place details', details: null };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching place details:', error);
-      return null;
+      return { error: 'Network error occurred', details: null };
     }
   }
 

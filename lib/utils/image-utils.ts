@@ -85,27 +85,45 @@ export async function cropImage(
  * @param uri - Source image URI
  * @param maxWidth - Maximum width in pixels
  * @param maxHeight - Maximum height in pixels
+ * @param originalDimensions - Optional pre-fetched dimensions to avoid redundant fetch
  * @returns Resized image result
  */
 export async function resizeImage(
   uri: string,
   maxWidth: number = MAX_IMAGE_WIDTH,
-  maxHeight: number = MAX_IMAGE_HEIGHT
+  maxHeight: number = MAX_IMAGE_HEIGHT,
+  originalDimensions?: { width: number; height: number }
 ): Promise<ProcessedImage> {
-  // First get the original dimensions
-  const original = await ImageManipulator.manipulateAsync(
-    uri,
-    [],
-    { format: ImageManipulator.SaveFormat.JPEG }
-  );
-
-  const originalWidth = original.width;
-  const originalHeight = original.height;
+  // Use provided dimensions or fetch them (optimization: pass dimensions to avoid redundant fetch)
+  let originalWidth: number;
+  let originalHeight: number;
+  let originalResult: any = null;
+  
+  if (originalDimensions) {
+    originalWidth = originalDimensions.width;
+    originalHeight = originalDimensions.height;
+  } else {
+    originalResult = await ImageManipulator.manipulateAsync(
+      uri,
+      [],
+      { format: ImageManipulator.SaveFormat.JPEG }
+    );
+    originalWidth = originalResult.width;
+    originalHeight = originalResult.height;
+  }
 
   // Check if resize is needed
   if (originalWidth <= maxWidth && originalHeight <= maxHeight) {
+    // If no dimensions were provided, return the original result we already fetched
+    if (!originalDimensions && originalResult) {
+      return {
+        uri: originalResult.uri,
+        width: originalWidth,
+        height: originalHeight,
+      };
+    }
     return {
-      uri: original.uri,
+      uri,
       width: originalWidth,
       height: originalHeight,
     };
@@ -180,6 +198,7 @@ export function estimateFileSizeFromBase64(base64: string): number {
 /**
  * Processes an image with cropping, resizing, and compression
  * Ensures the final image is under the target file size
+ * Uses binary search for optimal compression quality
  * @param uri - Source image URI
  * @param options - Processing options
  * @returns Processed image result
@@ -197,57 +216,175 @@ export async function processImage(
     crop,
   } = options;
 
-  let currentUri = uri;
+  const saveFormat =
+    format === 'png'
+      ? ImageManipulator.SaveFormat.PNG
+      : format === 'webp'
+        ? ImageManipulator.SaveFormat.WEBP
+        : ImageManipulator.SaveFormat.JPEG;
 
-  // Step 1: Apply crop if specified
+  // OPTIMIZATION: Combine crop + resize + initial compression into ONE operation
+  // This eliminates intermediate file writes and redundant image loads
+  const operations: any[] = [];
+  
   if (crop) {
-    const cropped = await cropImage(currentUri, crop);
-    currentUri = cropped.uri;
+    operations.push({ crop });
+  }
+  
+  // Calculate resize dimensions if needed
+  // We need to get dimensions first if we have a crop, otherwise we can estimate
+  let shouldResize = true;
+  let resizeOp: any = null;
+  
+  if (crop) {
+    // After crop, check if resize is needed
+    const cropWidth = crop.width;
+    const cropHeight = crop.height;
+    
+    if (cropWidth > maxWidth || cropHeight > maxHeight) {
+      const widthRatio = maxWidth / cropWidth;
+      const heightRatio = maxHeight / cropHeight;
+      const ratio = Math.min(widthRatio, heightRatio);
+      const newWidth = Math.round(cropWidth * ratio);
+      const newHeight = Math.round(cropHeight * ratio);
+      resizeOp = { resize: { width: newWidth, height: newHeight } };
+      operations.push(resizeOp);
+    }
+  } else {
+    // No crop - need to get original dimensions to calculate resize
+    // We'll do this in the combined operation below
+    shouldResize = false;
   }
 
-  // Step 2: Resize to max dimensions
-  const resized = await resizeImage(currentUri, maxWidth, maxHeight);
-  currentUri = resized.uri;
+  // Execute combined operations with initial compression
+  let result = await ImageManipulator.manipulateAsync(
+    uri,
+    operations,
+    { compress: quality, format: saveFormat, base64: true }
+  );
 
-  // Step 3: Compress with quality, iterating if needed to meet size target
-  let currentQuality = quality;
-  let compressed = await compressImage(currentUri, currentQuality, format);
-  let previousSize = compressed.base64 ? estimateFileSizeFromBase64(compressed.base64) : 0;
-  let iterations = 0;
-
-  // Iterate to reduce quality if file is still too large
-  // Optimizations:
-  // - Max iterations limit prevents excessive processing
-  // - Larger quality steps (QUALITY_STEP) reduce iterations
-  // - Early exit if size reduction between iterations is minimal
-  while (
-    compressed.base64 &&
-    estimateFileSizeFromBase64(compressed.base64) > maxFileSizeBytes &&
-    currentQuality > MIN_COMPRESS_QUALITY &&
-    iterations < MAX_COMPRESSION_ITERATIONS
-  ) {
-    currentQuality -= QUALITY_STEP;
-    currentQuality = Math.max(currentQuality, MIN_COMPRESS_QUALITY);
-    compressed = await compressImage(currentUri, currentQuality, format);
-    iterations++;
-
-    // Early exit if size reduction is minimal (< threshold)
-    if (compressed.base64) {
-      const currentSize = estimateFileSizeFromBase64(compressed.base64);
-      const sizeReduction = previousSize > 0 ? (previousSize - currentSize) / previousSize : 0;
-      if (sizeReduction < MIN_SIZE_REDUCTION_THRESHOLD && iterations > 1) {
-        // Further compression won't help much, exit early
-        break;
-      }
-      previousSize = currentSize;
+  // If no crop was specified and we still need to check resize
+  if (!crop && shouldResize === false) {
+    if (result.width > maxWidth || result.height > maxHeight) {
+      const widthRatio = maxWidth / result.width;
+      const heightRatio = maxHeight / result.height;
+      const ratio = Math.min(widthRatio, heightRatio);
+      const newWidth = Math.round(result.width * ratio);
+      const newHeight = Math.round(result.height * ratio);
+      
+      // Need to resize - do it now with compression
+      result = await ImageManipulator.manipulateAsync(
+        result.uri,
+        [{ resize: { width: newWidth, height: newHeight } }],
+        { compress: quality, format: saveFormat, base64: true }
+      );
     }
   }
 
+  // Check if we need further compression using binary search
+  if (!result.base64) {
+    return {
+      uri: result.uri,
+      width: result.width,
+      height: result.height,
+    };
+  }
+
+  let currentSize = estimateFileSizeFromBase64(result.base64);
+  
+  // If already under target, return immediately
+  if (currentSize <= maxFileSizeBytes) {
+    return {
+      uri: result.uri,
+      width: result.width,
+      height: result.height,
+      base64: result.base64,
+    };
+  }
+
+  // OPTIMIZATION: Use binary search to find optimal quality faster
+  // Use a single, minimally compressed base image for all iterative compression steps
+  // to avoid compounding artifacts by recompressing already-compressed outputs.
+  const baseImageForCompression = await ImageManipulator.manipulateAsync(
+    result.uri,
+    [],
+    { compress: 1, format: saveFormat }
+  );
+
+  let lowQuality = MIN_COMPRESS_QUALITY;
+  let highQuality = quality;
+  let bestResult = result;
+  let bestUnderTarget: ProcessedImage | null = null; // Track best result that meets size target
+  let iterations = 0;
+
+  while (iterations < MAX_COMPRESSION_ITERATIONS && highQuality - lowQuality > 0.1) {
+    // Try mid-point quality
+    const midQuality = (lowQuality + highQuality) / 2;
+    
+    const compressed = await ImageManipulator.manipulateAsync(
+      baseImageForCompression.uri,
+      [],
+      { compress: midQuality, format: saveFormat, base64: true }
+    );
+
+    // Some test mocks may return undefined or an object without base64.
+    // Guard against that to avoid throwing when reading properties.
+    if (!compressed || !compressed.base64) {
+      iterations++;
+      continue;
+    }
+
+    if (compressed.base64) {
+      const size = estimateFileSizeFromBase64(compressed.base64);
+      
+      if (size <= maxFileSizeBytes) {
+        // This quality works, try higher quality
+        bestResult = compressed;
+        bestUnderTarget = compressed;
+        lowQuality = midQuality;
+        
+        // If we're close enough to target, stop here
+        if (size >= maxFileSizeBytes * 0.9) {
+          break;
+        }
+      } else {
+        // Size too large, try lower quality
+        highQuality = midQuality;
+        
+        // Keep this result if it's better than current best (and both have base64)
+        if (bestResult.base64 && size < estimateFileSizeFromBase64(bestResult.base64)) {
+          bestResult = compressed;
+        }
+      }
+    }
+    
+    iterations++;
+  }
+  // If we still haven't found a result under target, try `MIN_COMPRESS_QUALITY`.
+  // Ensure we attempt the minimum quality at least once if binary search didn't find a solution.
+  if (!bestUnderTarget) {
+    const minQualityResult = await ImageManipulator.manipulateAsync(
+      baseImageForCompression.uri,
+      [],
+      { compress: MIN_COMPRESS_QUALITY, format: saveFormat, base64: true }
+    );
+    
+    if (minQualityResult && minQualityResult.base64) {
+      const size = estimateFileSizeFromBase64(minQualityResult.base64);
+      if (size <= maxFileSizeBytes) {
+        bestUnderTarget = minQualityResult;
+      }
+    }
+  }
+
+  // Return best result that meets target, or best overall if none meet target
+  const finalResult = bestUnderTarget || bestResult;
+
   return {
-    uri: compressed.uri,
-    width: compressed.width,
-    height: compressed.height,
-    base64: compressed.base64,
+    uri: finalResult.uri,
+    width: finalResult.width,
+    height: finalResult.height,
+    base64: finalResult.base64,
   };
 }
 
@@ -276,6 +413,7 @@ export function getCenteredSquareCrop(
 
 /**
  * Processes an avatar image with square crop and compression
+ * OPTIMIZED: Fetches dimensions once and reuses in processImage
  * @param uri - Source image URI
  * @param targetSize - Target size for the avatar (default: 400px)
  * @returns Processed avatar image
@@ -284,17 +422,18 @@ export async function processAvatarImage(
   uri: string,
   targetSize: number = 400
 ): Promise<ProcessedImage> {
-  // First get original dimensions
+  // OPTIMIZATION: Get dimensions once with minimal processing
   const original = await ImageManipulator.manipulateAsync(
     uri,
     [],
-    { format: ImageManipulator.SaveFormat.JPEG }
+    { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
   );
 
-  // Calculate centered square crop
+  // Calculate centered square crop based on dimensions
   const crop = getCenteredSquareCrop(original.width, original.height);
 
-  // Process with square crop and resize to target
+  // Process with square crop and resize to target in one optimized pass
+  // The processImage function now combines operations to reduce intermediate file writes
   return processImage(uri, {
     crop,
     maxWidth: targetSize,

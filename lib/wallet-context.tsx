@@ -1,8 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from './config/api';
-import { getSecureJSON, setSecureJSON, SecureKeys } from './utils/secure-storage';
-import { paymentService } from './services/payment-service';
+import { API_TIMEOUTS } from './config/network';
 import { bountyService } from './services/bounty-service';
+import { paymentService } from './services/payment-service';
+import { supabase } from './supabase';
+import { fetchWithTimeout } from './utils/fetch-with-timeout';
+import { getNetworkErrorMessage } from './utils/network-connectivity';
+import { getSecureJSON, SecureKeys, setSecureJSON } from './utils/secure-storage';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -32,6 +36,10 @@ export interface WalletTransactionRecord {
   escrowStatus?: "funded" | "pending" | "released";
 }
 
+// Shape stored in SecureStore — identical to WalletTransactionRecord except `date` is
+// serialized as an ISO string by JSON.stringify and must be re-hydrated on load.
+type PersistedWalletTransaction = Omit<WalletTransactionRecord, 'date'> & { date: string };
+
 interface WalletContextValue {
   balance: number;
   isLoading: boolean;
@@ -59,6 +67,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
+  const lastOptimisticDepositRef = useRef<number | null>(null);
 
   const persist = useCallback(async (value: number) => {
     try { 
@@ -67,6 +76,130 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('[wallet] Error persisting balance:', error);
     }
   }, []);
+
+  const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
+    try { 
+      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, list); 
+    } catch (error) {
+      console.error('[wallet] Error persisting transactions:', error);
+    }
+  }, []);
+
+  /** Helper: return the current session access token, or null if not signed in. */
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      return sessionData.session?.access_token ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Refresh wallet data from the API (fetches real transaction history and balance)
+  // Defined before useEffect so it can be called on mount for initial API sync.
+  const refreshFromApi = useCallback(async (accessToken?: string) => {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Fetch balance from API with timeout and retry
+      const balanceResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/balance`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 2,
+      });
+
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json();
+        const apiBalance = typeof balanceData.balance === 'number' ? balanceData.balance : 0;
+
+        // Compute resolvedBalance synchronously from the closure-captured balance.
+        // Mutating a local variable as a side effect inside the setBalance updater
+        // is unsafe: the updater is called asynchronously (or even twice in Strict
+        // Mode), so persist(resolvedBalance) could run before the updater executes
+        // and end up persisting the wrong value.
+        const now = Date.now();
+        const hasRecentOptimisticDeposit =
+          lastOptimisticDepositRef.current !== null &&
+          now - lastOptimisticDepositRef.current < 60_000;
+
+        const resolvedBalance = hasRecentOptimisticDeposit && balance > apiBalance
+          ? balance
+          : apiBalance;
+
+        if (!hasRecentOptimisticDeposit || balance <= apiBalance) {
+          lastOptimisticDepositRef.current = null;
+        }
+
+        setBalance(resolvedBalance);
+
+        try {
+          await persist(resolvedBalance);
+        } catch (persistError) {
+          console.error('[wallet] Failed to persist balance', persistError);
+        }
+      }
+
+      // Fetch transactions from API with timeout and retry
+      const txResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/transactions?limit=100`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: API_TIMEOUTS.DEFAULT,
+        retries: 2,
+      });
+
+      // Transaction types that represent outflow (money leaving the user's wallet)
+      const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
+
+      if (txResponse.ok) {
+        const txData = await txResponse.json();
+        if (txData.transactions && Array.isArray(txData.transactions)) {
+          // Map API transactions to local format
+          const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map((tx: any) => ({
+            id: tx.id,
+            type: tx.type as WalletTransactionType,
+            // Use centralized config for transaction sign
+            amount: OUTFLOW_TYPES.includes(tx.type) 
+              ? -Math.abs(tx.amount) 
+              : Math.abs(tx.amount),
+            date: new Date(tx.date),
+            details: {
+              title: tx.details?.title,
+              method: tx.details?.method,
+              status: tx.details?.status,
+              bounty_id: tx.details?.bounty_id,
+            },
+          }));
+
+          // Merge inside the setTransactions updater so the merge always runs
+          // against the latest state, not a potentially stale closed-over snapshot.
+          // This also makes refreshFromApi safe to call from the mount effect
+          // whose dependency array is [] (initial closure has transactions = []).
+          setTransactions(prev => {
+            const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+            const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
+            const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+            mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+            persistTransactions(mergedTransactions); // fire-and-forget inside updater
+            return mergedTransactions;
+          });
+        }
+      }
+    } catch (error) {
+      const errorMessage = getNetworkErrorMessage(error);
+      console.error('[wallet] Error refreshing from API:', errorMessage, error);
+      // Fall back to local data
+    } finally {
+      setIsLoading(false);
+    }
+  }, [persist, persistTransactions, balance]);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -80,9 +213,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // Load transactions from SecureStore
-      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
+      const storedTx = await getSecureJSON<PersistedWalletTransaction[]>(SecureKeys.WALLET_TRANSACTIONS);
       if (storedTx && Array.isArray(storedTx)) {
-        setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
+        setTransactions(storedTx.map((t): WalletTransactionRecord => ({ ...t, date: new Date(t.date) })));
       }
     } catch (error) {
       console.error('[wallet] Error refreshing from storage:', error);
@@ -91,16 +224,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [persist]);
 
   useEffect(() => { 
-    refresh(); 
+    const init = async () => {
+      await refresh();
+      // After loading the SecureStore cache, sync from the API so the server
+      // is the authoritative source of truth for balance and transactions.
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          await refreshFromApi(token);
+        }
+      } catch (err) {
+        console.error('[wallet] Error syncing from API on mount:', err);
+      }
+    };
+    init();
   }, []); // Only run once on mount, not on every refresh change
-
-  const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
-    try { 
-      await setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, list); 
-    } catch (error) {
-      console.error('[wallet] Error persisting transactions:', error);
-    }
-  }, []);
 
   const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
     const record: WalletTransactionRecord = {
@@ -123,6 +261,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       persist(next);
       return next;
     });
+    lastOptimisticDepositRef.current = Date.now();
     await logTransaction({
       type: 'deposit',
       amount: amount, // inflow positive
@@ -132,25 +271,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const withdraw = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
     if (amount <= 0 || Number.isNaN(amount)) return false;
-    let success = false;
+    // Keep the guard inside the updater so concurrent calls always check the
+    // latest committed balance (prev), preventing negative balances even when
+    // multiple withdrawals are scheduled before a re-render occurs.
+    // React calls the updater synchronously during dispatch, so `deducted` is
+    // set correctly before the `if (!deducted)` check below.
+    let deducted = false;
     setBalance(prev => {
-      if (prev >= amount) {
-        const next = prev - amount;
-        persist(next);
-        success = true;
-        return next;
-      }
-      success = false;
-      return prev;
+      if (prev < amount) return prev;
+      deducted = true;
+      const next = prev - amount;
+      persist(next);
+      return next;
     });
-    if (success) {
-      await logTransaction({
-        type: 'withdrawal',
-        amount: -amount, // outflow negative
-        details: { method: meta?.method, ...meta },
-      });
-    }
-    return success;
+    if (!deducted) return false;
+    await logTransaction({
+      type: 'withdrawal',
+      amount: -amount, // outflow negative
+      details: { method: meta?.method, ...meta },
+    });
+    return true;
   }, [persist, logTransaction]);
 
   const clearAllTransactions = useCallback(async () => {
@@ -183,7 +323,49 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       throw new Error('Insufficient balance to create escrow');
     }
 
-    // Deduct from balance
+    const bountyIdStr = String(bountyId);
+
+    // Attempt to create escrow on the server first so the server is the source
+    // of truth. Only update local state after server confirmation.
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/wallet/escrow`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ bountyId: bountyIdStr, amount, title }),
+          timeout: API_TIMEOUTS.DEFAULT,
+          retries: 0, // No retries for financial operations to prevent double-spend
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error((errData as any).error || 'Failed to create escrow on server');
+        }
+
+        const apiData = await response.json();
+        // Use server-confirmed balance as source of truth
+        const newBalance = typeof apiData.newBalance === 'number' ? apiData.newBalance : balance - amount;
+        setBalance(newBalance);
+        await persist(newBalance);
+
+        const record = await logTransaction({
+          type: 'escrow',
+          amount: -amount,
+          details: { title, bounty_id: bountyIdStr, status: 'pending' },
+          escrowStatus: 'funded',
+        });
+        return record;
+      }
+    } catch (error) {
+      // Re-throw so callers can handle the failure and roll back (e.g. delete bounty)
+      throw error;
+    }
+
+    // Fallback: no active session – update local state only (e.g. in development)
     setBalance(prev => {
       const next = prev - amount;
       persist(next);
@@ -196,14 +378,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       amount: -amount, // outflow negative
       details: { 
         title,
-        bounty_id: String(bountyId),
+        bounty_id: bountyIdStr,
         status: 'pending'
       },
       escrowStatus: 'funded',
     });
 
     return record;
-  }, [balance, persist, logTransaction]);
+  }, [balance, persist, logTransaction, getAccessToken]);
 
   // Release escrowed funds to hunter when bounty is completed
   // Calls the backend API to capture PaymentIntent and transfer to hunter's Connect account
@@ -299,6 +481,35 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const escrowAmount = Math.abs(escrowTx.amount);
     const refundAmount = (escrowAmount * refundPercentage) / 100;
 
+    // Attempt server-side refund first to ensure server is the source of truth.
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/wallet/refund`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            bountyId: bountyIdStr,
+            reason: `${refundPercentage}% refund`,
+          }),
+          timeout: API_TIMEOUTS.DEFAULT,
+          retries: 0, // No retries for financial operations
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          console.error('[wallet] Server refund failed:', (errData as any).error);
+          return false;
+        }
+      }
+    } catch (error) {
+      console.error('[wallet] Error calling refund API, proceeding with local update:', error);
+      // Fall through to update local state so UI stays consistent
+    }
+
     // Update escrow transaction status
     setTransactions(prev => {
       const next = prev.map(tx => 
@@ -327,81 +538,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       },
     });
 
-    return true;
-  }, [transactions, persistTransactions, logTransaction, persist]);
-
-  // Refresh wallet data from the API (fetches real transaction history and balance)
-  const refreshFromApi = useCallback(async (accessToken?: string) => {
-    if (!accessToken) {
-      return;
-    }
-
-    setIsLoading(true);
+    // Sync balance from API to reconcile after the refund
     try {
-      // Fetch balance from API
-      const balanceResponse = await fetch(`${API_BASE_URL}/wallet/balance`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setBalance(balanceData.balance);
-        await persist(balanceData.balance);
+      const token = await getAccessToken();
+      if (token) {
+        await refreshFromApi(token);
       }
-
-      // Fetch transactions from API
-      const txResponse = await fetch(`${API_BASE_URL}/wallet/transactions?limit=100`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // Transaction types that represent outflow (money leaving the user's wallet)
-      const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
-
-      if (txResponse.ok) {
-        const txData = await txResponse.json();
-        if (txData.transactions && Array.isArray(txData.transactions)) {
-          // Map API transactions to local format
-          const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map((tx: any) => ({
-            id: tx.id,
-            type: tx.type as WalletTransactionType,
-            // Use centralized config for transaction sign
-            amount: OUTFLOW_TYPES.includes(tx.type) 
-              ? -Math.abs(tx.amount) 
-              : Math.abs(tx.amount),
-            date: new Date(tx.date),
-            details: {
-              title: tx.details?.title,
-              method: tx.details?.method,
-              status: tx.details?.status,
-              bounty_id: tx.details?.bounty_id,
-            },
-          }));
-
-          // Merge with local transactions (API transactions take precedence)
-          const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
-          const localOnlyTx = transactions.filter(tx => !apiTxIds.has(tx.id));
-          const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
-          
-          // Sort by date descending
-          mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-          setTransactions(mergedTransactions);
-          await persistTransactions(mergedTransactions);
-        }
-      }
-    } catch (error) {
-      console.error('[wallet] Error refreshing from API:', error);
-      // Fall back to local data
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Non-critical: local state already updated above
     }
-  }, [persist, persistTransactions, transactions]);
+
+    return true;
+  }, [transactions, persistTransactions, logTransaction, persist, refreshFromApi, getAccessToken]);
 
   const value: WalletContextValue = {
     balance,

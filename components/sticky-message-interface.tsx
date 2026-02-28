@@ -3,6 +3,7 @@ import { cn } from 'lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import { colors } from '../lib/theme';
 
 export interface ChatMessage {
   id: string;
@@ -37,7 +38,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   placeholder = 'Message',
   topInset = 0,
   bottomInset = 0,
-  accentColor = '#059669',
+  accentColor = colors.primary[600],
   isOtherUserTyping = false,
   onTypingChange,
   typingTimeout = 2000,
@@ -205,7 +206,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
                   <TouchableOpacity
                     disabled={!text.trim() || isSending}
                     onPress={handleSend}
-                    style={{ backgroundColor: text.trim()? '#10b981':'rgba(16,185,129,0.35)', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
+                    style={{ backgroundColor: text.trim()? colors.primary[500]:'rgba(16,185,129,0.35)', paddingHorizontal:24, height:44, borderRadius:22, alignItems:'center', justifyContent:'center', flexDirection:'row', gap:6 }}>
                     <MaterialIcons name={isSending? 'hourglass-empty':'send'} size={20} color={text.trim()? '#052e1b':'#c7f9d7'} />
                     <Text style={{ fontWeight:'600', color: text.trim()? '#052e1b':'#c7f9d7' }}>{isSending? 'Sending':'Send Message'}</Text>
                   </TouchableOpacity>
@@ -265,7 +266,7 @@ const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }>
         break;
       case 'read':
         iconName = 'done-all';
-        iconColor = '#10b981'; // emerald-500 (brighter for read)
+        iconColor = colors.primary[500]; // emerald-500 (brighter for read)
         break;
       case 'failed':
         iconName = 'error';

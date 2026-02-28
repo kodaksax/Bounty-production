@@ -16,7 +16,7 @@ export const colors = {
     900: '#001d09',
     950: '#000e04',
   },
-  
+
   // Background colors (darker green theme aligned with branding)
   background: {
     primary: '#1a3d2e', // Main background - darker tone of primary
@@ -24,7 +24,7 @@ export const colors = {
     surface: 'rgba(45, 82, 64, 0.75)', // Card surface
     elevated: 'rgba(45, 82, 64, 0.85)', // Modal/elevated surface
   },
-  
+
   // Text colors
   text: {
     primary: '#fffef5', // Off-white for readability
@@ -32,14 +32,14 @@ export const colors = {
     muted: 'rgba(255, 254, 245, 0.6)',
     inverse: '#1a3d2e',
   },
-  
+
   // Border colors
   border: {
     primary: 'rgba(0, 145, 44, 0.4)', // emerald-500
     muted: 'rgba(0, 145, 44, 0.2)',
     strong: 'rgba(0, 145, 44, 0.6)',
   },
-  
+
   // Status colors
   success: '#00912C',
   warning: '#f59e0b',
@@ -196,7 +196,7 @@ export const createButtonStyle = (variant: 'default' | 'outline' | 'ghost' = 'de
       return {
         ...baseStyle,
         backgroundColor: colors.primary[500],
-        ...shadows.lg,
+        ...shadows.emerald,
       };
   }
 };

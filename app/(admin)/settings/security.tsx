@@ -25,7 +25,7 @@ export default function AdminSecuritySettingsScreen() {
   };
 
   const handleSelectOption = (key: keyof typeof security, options: string[], title: string) => {
-    const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = options.map((option) => ({
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
       text: option,
       onPress: () => setSecurity((prev) => ({ ...prev, [key]: option })),
     }));

@@ -16,6 +16,7 @@ import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { supabase } from '../../lib/supabase';
 
+import { colors } from '../../lib/theme';
 interface BlockedUserRelationship {
   id: string;
   blocker_id: string;
@@ -126,17 +127,17 @@ export default function AdminBlockedUsersScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor="#10b981" />
+          <RefreshControl refreshing={isLoading} onRefresh={fetchBlockedUsers} tintColor={colors.primary[500]} />
         }
       >
         {isLoading && blocks.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
+            <ActivityIndicator size="large" color={colors.primary[500]} />
             <Text style={styles.loadingText}>Loading blocked users...</Text>
           </View>
         ) : blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="check-circle" size={64} color="#10b981" />
+            <MaterialIcons name="check-circle" size={64} color={colors.primary[500]} />
             <Text style={styles.emptyText}>No Blocked Users</Text>
             <Text style={styles.emptySubtext}>
               There are currently no active block relationships in the system.
@@ -187,7 +188,7 @@ export default function AdminBlockedUsersScreen() {
                   style={styles.unblockButton}
                   onPress={() => handleUnblock(block.id)}
                 >
-                  <MaterialIcons name="check" size={16} color="#10b981" />
+                  <MaterialIcons name="check" size={16} color={colors.primary[500]} />
                   <Text style={styles.unblockButtonText}>Remove Block</Text>
                 </TouchableOpacity>
               </View>
@@ -202,7 +203,7 @@ export default function AdminBlockedUsersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   scrollView: {
     flex: 1,
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     borderRadius: 8,
   },
   retryButtonText: {
@@ -319,6 +320,6 @@ const styles = StyleSheet.create({
   unblockButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
   },
 });

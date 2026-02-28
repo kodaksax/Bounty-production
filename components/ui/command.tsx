@@ -1,5 +1,7 @@
 import * as React from "react"
 import { FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { theme } from "../../lib/theme"
+
 
 type CommandItemType = {
   label: string
@@ -85,12 +87,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+    ...theme.shadows.lg,
   },
+
   input: {
     height: 44,
     borderColor: "#ddd",

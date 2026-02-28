@@ -3,7 +3,7 @@
  * Tests session restoration, token refresh, and graceful expiration
  */
 
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, act } from '@testing-library/react-native';
 import React from 'react';
 import AuthProvider from '../../providers/auth-provider';
 import { supabase } from '../../lib/supabase';
@@ -120,7 +120,9 @@ describe('Authentication State Persistence', () => {
       });
 
       // Unmount the component
-      unmount();
+      act(() => {
+        unmount();
+      });
 
       // Verify unsubscribe was called
       expect(unsubscribeMock).toHaveBeenCalled();
@@ -487,7 +489,9 @@ describe('Authentication State Persistence', () => {
 
       // Simulate signed out event
       if (authStateCallback) {
-        await authStateCallback('SIGNED_OUT', null);
+        await act(async () => {
+          await authStateCallback('SIGNED_OUT', null);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
@@ -539,7 +543,9 @@ describe('Authentication State Persistence', () => {
 
       // Simulate sign in
       if (authStateCallback) {
-        await authStateCallback('SIGNED_IN', mockSession);
+        await act(async () => {
+          await authStateCallback('SIGNED_IN', mockSession);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
@@ -588,10 +594,116 @@ describe('Authentication State Persistence', () => {
 
       // Simulate token refresh event
       if (authStateCallback) {
-        await authStateCallback('TOKEN_REFRESHED', mockRefreshedSession);
+        await act(async () => {
+          await authStateCallback('TOKEN_REFRESHED', mockRefreshedSession);
+        });
       }
 
       expect(authStateCallback).toBeDefined();
+    });
+  });
+
+  describe('PASSWORD_RECOVERY event handling', () => {
+    const setupAuthStateListener = async () => {
+      let authStateCallback: any;
+
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+        authStateCallback = callback;
+        return { data: { subscription: { unsubscribe: jest.fn() } } };
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const { useContext } = require('react');
+      const { AuthContext } = require('../../hooks/use-auth-context');
+
+      let capturedContext: any;
+      const ContextCapture = () => {
+        capturedContext = useContext(AuthContext);
+        return null;
+      };
+
+      render(
+        <AuthProvider>
+          <ContextCapture />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(supabase.auth.onAuthStateChange).toHaveBeenCalled();
+      });
+
+      return { authStateCallback, getContext: () => capturedContext };
+    };
+
+    const mockRecoverySession = {
+      access_token: 'recovery_token',
+      refresh_token: 'refresh_token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: {
+        id: 'user123',
+        email: 'user@example.com',
+        email_confirmed_at: '2024-01-01T00:00:00Z',
+      },
+    };
+
+    it('should set isPasswordRecovery=true on PASSWORD_RECOVERY event', async () => {
+      const { authStateCallback, getContext } = await setupAuthStateListener();
+
+      await act(async () => {
+        await authStateCallback('PASSWORD_RECOVERY', mockRecoverySession);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isPasswordRecovery).toBe(true);
+      });
+    });
+
+    it('should clear isPasswordRecovery on USER_UPDATED after password change', async () => {
+      const { authStateCallback, getContext } = await setupAuthStateListener();
+
+      // Enter recovery mode
+      await act(async () => {
+        await authStateCallback('PASSWORD_RECOVERY', mockRecoverySession);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isPasswordRecovery).toBe(true);
+      });
+
+      // User updates their password — Supabase fires USER_UPDATED
+      await act(async () => {
+        await authStateCallback('USER_UPDATED', mockRecoverySession);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isPasswordRecovery).toBe(false);
+      });
+    });
+
+    it('should clear isPasswordRecovery on SIGNED_OUT', async () => {
+      const { authStateCallback, getContext } = await setupAuthStateListener();
+
+      // Enter recovery mode
+      await act(async () => {
+        await authStateCallback('PASSWORD_RECOVERY', mockRecoverySession);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isPasswordRecovery).toBe(true);
+      });
+
+      // User signs out
+      await act(async () => {
+        await authStateCallback('SIGNED_OUT', null);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isPasswordRecovery).toBe(false);
+      });
     });
   });
 });

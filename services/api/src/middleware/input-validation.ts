@@ -17,16 +17,16 @@ import { z, ZodError, ZodSchema } from 'zod';
  */
 export function sanitizeText(input: string, maxLength: number = 10000): string {
   if (!input || typeof input !== 'string') return '';
-  
+
   // Remove null bytes
   let sanitized = input.replace(/\0/g, '');
-  
+
   // Remove control characters except newlines and tabs
   sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  
+
   // Remove zero-width characters
   sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF]/g, '');
-  
+
   // Trim and enforce max length
   return sanitized.trim().substring(0, maxLength);
 }
@@ -36,7 +36,7 @@ export function sanitizeText(input: string, maxLength: number = 10000): string {
  */
 export function sanitizeHTML(input: string): string {
   if (!input || typeof input !== 'string') return '';
-  
+
   return input
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
@@ -52,13 +52,13 @@ export function sanitizeHTML(input: string): string {
  */
 export function sanitizeEmail(email: string): string {
   if (!email || typeof email !== 'string') return '';
-  
+
   let sanitized = email.toLowerCase().trim();
   sanitized = sanitized.replace(/[^a-z0-9@.\-_+]/g, '');
-  
+
   const atCount = (sanitized.match(/@/g) || []).length;
   if (atCount !== 1) return '';
-  
+
   return sanitized;
 }
 
@@ -67,10 +67,10 @@ export function sanitizeEmail(email: string): string {
  */
 export function sanitizeURL(url: string): string {
   if (!url || typeof url !== 'string') return '';
-  
+
   const trimmed = url.trim();
   const lowerURL = trimmed.toLowerCase();
-  
+
   // Block dangerous protocols
   const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:'];
   for (const protocol of dangerousProtocols) {
@@ -78,14 +78,14 @@ export function sanitizeURL(url: string): string {
       return '';
     }
   }
-  
+
   // Only allow http, https, and mailto
-  if (!lowerURL.startsWith('http://') && 
-      !lowerURL.startsWith('https://') && 
-      !lowerURL.startsWith('mailto:')) {
+  if (!lowerURL.startsWith('http://') &&
+    !lowerURL.startsWith('https://') &&
+    !lowerURL.startsWith('mailto:')) {
     return `https://${trimmed}`;
   }
-  
+
   return trimmed;
 }
 
@@ -93,38 +93,57 @@ export function sanitizeURL(url: string): string {
  * Zod schemas for common data types
  */
 
+// Common amount validation (in cents)
+export const amountCentsSchema = z.number()
+  .int('Amount must be an integer (in cents)')
+  .min(0, 'Amount cannot be negative')
+  .max(1000000, 'Amount cannot exceed $10,000.00 (1,000,000 cents)');
+
+// Common amount validation (in dollars)
+export const amountDollarsSchema = z.number()
+  .min(0, 'Amount cannot be negative')
+  .max(10000, 'Amount cannot exceed $10,000.00');
+
 // Bounty validation schema
 export const bountySchema = z.object({
   title: z.string()
     .min(1, 'Title is required')
     .max(200, 'Title must be 200 characters or less')
     .transform(val => sanitizeText(val, 200)),
-  
+
   description: z.string()
     .min(1, 'Description is required')
     .max(5000, 'Description must be 5000 characters or less')
     .transform(val => sanitizeText(val, 5000)),
-  
-  amount: z.number()
-    .int('Amount must be an integer (in cents)')
-    .min(50, 'Amount must be at least $0.50 (50 cents)')
-    .max(1000000, 'Amount must be less than $10,000.00 (1,000,000 cents)')
-    .optional(),
-  
+
+  amount: amountDollarsSchema.optional(),
+
   isForHonor: z.boolean().optional(),
-  
+
   location: z.string()
     .max(500, 'Location must be 500 characters or less')
     .transform(val => sanitizeText(val, 500))
     .optional(),
-  
+
   dueDate: z.string()
     .datetime()
     .optional(),
-  
+
   category: z.string()
     .max(100)
     .optional(),
+}).refine(data => {
+  if (data.isForHonor) {
+    return (data.amount || 0) === 0;
+  }
+  // Paid bounties must be at least $1
+  if (data.amount !== undefined && data.amount < 1) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Paid bounties must be at least $1.00, Honor bounties must be $0',
+  path: ['amount']
 });
 
 // Message validation schema
@@ -133,10 +152,10 @@ export const messageSchema = z.object({
     .min(1, 'Message cannot be empty')
     .max(10000, 'Message must be 10,000 characters or less')
     .transform(val => sanitizeText(val, 10000)),
-  
+
   conversationId: z.string()
     .uuid('Invalid conversation ID'),
-  
+
   attachments: z.array(z.object({
     type: z.enum(['image', 'file', 'video']),
     url: z.string().url(),
@@ -151,47 +170,44 @@ export const userProfileSchema = z.object({
     .max(50, 'Username must be 50 characters or less')
     .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
     .transform(val => sanitizeText(val, 50)),
-  
+
   displayName: z.string()
     .max(100, 'Display name must be 100 characters or less')
     .transform(val => sanitizeText(val, 100))
     .optional(),
-  
+
   bio: z.string()
     .max(500, 'Bio must be 500 characters or less')
     .transform(val => sanitizeText(val, 500))
     .optional(),
-  
+
   website: z.string()
     .url('Invalid website URL')
     .transform(val => sanitizeURL(val))
     .optional(),
-  
+
   location: z.string()
     .max(100, 'Location must be 100 characters or less')
     .transform(val => sanitizeText(val, 100))
     .optional(),
-  
+
   skills: z.array(z.string().max(50)).max(20).optional(),
 });
 
 // Payment intent validation schema
 export const paymentIntentSchema = z.object({
-  amount: z.number()
-    .int('Amount must be an integer (in cents)')
-    .min(50, 'Minimum payment amount is $0.50 (50 cents)')
-    .max(1000000, 'Maximum payment amount is $10,000.00 (1,000,000 cents)'),
-  
+  amount: amountCentsSchema,
+
   currency: z.string()
     .length(3, 'Currency must be a 3-letter code')
     .regex(/^[A-Z]{3}$/, 'Currency must be uppercase letters')
     .default('USD'),
-  
+
   description: z.string()
     .max(500, 'Description must be 500 characters or less')
     .transform(val => sanitizeText(val, 500))
     .optional(),
-  
+
   bountyId: z.string()
     .uuid('Invalid bounty ID')
     .optional(),
@@ -219,7 +235,7 @@ export function validateRequest<T extends ZodSchema>(
     try {
       const data = request[source];
       const validated = await schema.parseAsync(data);
-      
+
       // Replace the original data with validated/sanitized version
       // Using Object.assign to maintain type structure
       Object.assign(request[source] || {}, validated);
@@ -234,7 +250,7 @@ export function validateRequest<T extends ZodSchema>(
           })),
         });
       }
-      
+
       return reply.code(400).send({
         error: 'Validation Error',
         message: 'Invalid input data',
@@ -257,13 +273,13 @@ export function validateRequest<T extends ZodSchema>(
  */
 function preventSQLInjection_DEPRECATED_DO_NOT_USE(input: string): string {
   console.error('[Security] preventSQLInjection is DEPRECATED and should NOT be used. Use ORM parameterized queries instead.');
-  
+
   if (!input || typeof input !== 'string') return '';
-  
+
   // Remove null bytes and control characters
   let sanitized = input.replace(/\0/g, '');
   sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
-  
+
   return sanitized.trim();
 }
 
@@ -279,16 +295,16 @@ export function preventXSS(input: string): string {
  */
 export function preventPathTraversal(path: string): string {
   if (!path || typeof path !== 'string') return '';
-  
+
   // Remove path traversal attempts
   let sanitized = path.replace(/\.\.[\\/]/g, '');
-  
+
   // Remove directory separators at the start
   sanitized = sanitized.replace(/^[\/\\]+/, '');
-  
+
   // Remove null bytes
   sanitized = sanitized.replace(/\0/g, '');
-  
+
   return sanitized;
 }
 
@@ -297,7 +313,7 @@ export function preventPathTraversal(path: string): string {
  */
 export function preventCommandInjection(input: string): string {
   if (!input || typeof input !== 'string') return '';
-  
+
   // Remove shell metacharacters
   return input.replace(/[;&|`$(){}[\]<>]/g, '');
 }
@@ -336,12 +352,12 @@ export function checkRateLimit(info: RateLimitInfo): {
   if (process.env.NODE_ENV === 'production') {
     console.warn('[RateLimit] Using in-memory rate limiting in production - consider Redis');
   }
-  
+
   const key = `${info.identifier}:${info.endpoint}`;
   const now = Date.now();
-  
+
   const existing = rateLimitStore.get(key);
-  
+
   if (!existing || now > existing.resetAt) {
     // Create new window
     const resetAt = now + info.windowMs;
@@ -352,7 +368,7 @@ export function checkRateLimit(info: RateLimitInfo): {
       resetAt,
     };
   }
-  
+
   if (existing.count >= info.limit) {
     // Rate limit exceeded
     return {
@@ -361,11 +377,11 @@ export function checkRateLimit(info: RateLimitInfo): {
       resetAt: existing.resetAt,
     };
   }
-  
+
   // Increment count
   existing.count++;
   rateLimitStore.set(key, existing);
-  
+
   return {
     allowed: true,
     remaining: info.limit - existing.count,
@@ -422,7 +438,7 @@ export const validators = {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return regex.test(email);
   },
-  
+
   isURL: (url: string): boolean => {
     try {
       new URL(url);
@@ -431,16 +447,16 @@ export const validators = {
       return false;
     }
   },
-  
+
   isUUID: (id: string): boolean => {
     const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return regex.test(id);
   },
-  
+
   isAlphanumeric: (str: string): boolean => {
     return /^[a-zA-Z0-9]+$/.test(str);
   },
-  
+
   isStrongPassword: (password: string): boolean => {
     // At least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
     return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
@@ -463,7 +479,7 @@ export function generateCSPHeader(): string {
     "base-uri 'self'",
     "form-action 'self'",
   ];
-  
+
   return directives.join('; ');
 }
 

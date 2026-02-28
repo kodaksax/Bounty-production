@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { colors } from '../../lib/theme';
 export default function FollowersScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
@@ -75,7 +76,9 @@ export default function FollowersScreen() {
       <MaterialIcons name="people-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>No followers yet</Text>
       <Text style={styles.emptyText}>
-        When people follow this user, they'll appear here.
+        When people follow this user, they
+        {"'"}
+        ll appear here.
       </Text>
     </View>
   );
@@ -101,7 +104,7 @@ export default function FollowersScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
       ) : (
         <FlatList
@@ -180,7 +183,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#10b981",
+    backgroundColor: colors.primary[500],
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -206,7 +209,7 @@ const styles = StyleSheet.create({
   },
   followerTitle: {
     fontSize: 13,
-    color: "#10b981",
+    color: colors.primary[500],
   },
   emptyState: {
     alignItems: "center",

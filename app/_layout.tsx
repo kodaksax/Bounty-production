@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/react-native';
 import { ThemeProvider } from "components/theme-provider";
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -21,17 +20,34 @@ import { StripeProvider } from '../lib/stripe-context';
 import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
-import BrandedSplash, { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
+import { isInitialNavigationDone, onInitialNavigationDone } from './initial-navigation/initialNavigation';
+
+// Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
+import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
+// Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
+import { initGlobalErrorHandlers } from '../lib/error-handling';
+
+import { registerDeviceSession } from '../lib/services/auth-service';
+
+import { colors } from '../lib/theme';
+// Lazily require Sentry to avoid importing native module at module-evaluation time
+let Sentry: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Sentry = require('@sentry/react-native');
+} catch {
+  // Sentry not available in this runtime (e.g., Expo Go) — we'll fall back to no-op
+  Sentry = null;
+}
+
+// NOTE: Sentry initialization moved into RootLayout startup effect
+// to avoid any chance of native-module access at module-evaluation time.
 
 // Load test utilities in development
 if (__DEV__) {
   require('../lib/utils/test-profile-utils');
 }
-
-// Ensure Sentry is initialized as early as possible so that Sentry.wrap
-// (used at the bottom of this file) is called after initialization.
-import { initializeSentry } from '../lib/services/sentry-init';
-initializeSentry();
 
 if (__DEV__) {
   const originalWarn = console.warn;
@@ -44,14 +60,8 @@ if (__DEV__) {
   };
 }
 
-export const metadata = {
-  title: "Bounty App",
-  description: "Find and complete bounties near you",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no",
-  appleMobileWebAppCapable: "yes",
-  appleStatusBarStyle: "black-translucent",
-    generator: 'v0.dev'
-}
+// Removed `metadata` export: this was a Next.js/web-only export and is a no-op on native.
+// Leaving it in can be misleading; remove to avoid confusion.
 
 // Simple luminance check to pick light/dark content for the status bar
 const getBarStyleForHex = (hex: string): "light" | "dark" => {
@@ -86,31 +96,107 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
   );
 };
 
+// Defined outside RootLayout so the component reference is stable across
+// RootLayout re-renders (e.g. when `phase` or `fontsLoaded` change).
+// If defined inline, React would see a new component type on every render and
+// unmount/remount the entire provider tree, causing cascading state updates
+// that trigger a "Maximum update depth exceeded" error.
+const LayoutContent = () => {
+  const { color } = useBackgroundColor();
+
+  return (
+    <RootFrame bgColor={color}>
+      <AuthProvider>
+          <SessionMonitorGate />
+          <AdminProvider>
+            <StripeProvider>
+              <WalletProvider>
+                <NotificationProvider>
+                  <WebSocketProvider>
+                    <ErrorBoundary
+                      onError={(error, errorInfo) => {
+                        // Add custom breadcrumb for additional context (do not capture exception again)
+                        try {
+                          if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+                            Sentry.addBreadcrumb({
+                              category: 'root_layout',
+                              message: 'Error caught in root layout',
+                              level: 'error',
+                              data: {
+                                componentStack: errorInfo.componentStack,
+                              },
+                            });
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                    >
+                      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                        <View style={styles.inner}>
+                          <Slot />
+                        </View>
+                      </ThemeProvider>
+                    </ErrorBoundary>
+                  </WebSocketProvider>
+                </NotificationProvider>
+              </WalletProvider>
+            </StripeProvider>
+          </AdminProvider>
+        </AuthProvider>
+    </RootFrame>
+  );
+};
+
 function RootLayout({ children }: { children: React.ReactNode }) {
-  const [appIsReady, setAppIsReady] = useState(false);
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
-  const BRANDED_MIN_MS = 1500; // adjust this value to control branded splash visible time
+  const BRANDED_MIN_MS = 800; // kept for compatibility but branded splash disabled
 
-  // Load any custom fonts (add family names if you have them)
+  // Load fonts used by the app (SpaceMono + a couple common icon families).
+  // Adding icon fonts ensures icons render consistently on first mount.
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    MaterialIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
+    Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
   });
 
+  // Single startup gate: perform one-time startup tasks and only transition
+  // to the app UI once both startup tasks and font loading complete. A
+  // safety timeout moves to the app after 8s to avoid indefinite stalls.
   useEffect(() => {
-    // Initialize Mixpanel and send an initial page view once at app start.
-    // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
-    const start = Date.now();
+    const SAFETY_MS = 8000;
+    const NAV_MAX_WAIT_MS = 3000;
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setPhase('app');
+    }, SAFETY_MS);
 
-    (async () => {
+    const startedRef = { started: false } as { started: boolean };
+    const startupDone = { value: false } as { value: boolean };
+
+    const runStartup = async () => {
+      if (startedRef.started) return;
+      startedRef.started = true;
+
       try {
-        await initMixpanel();
-        try {
-          track('Page View', { screen: 'root' });
-        } catch (e) {
-          // ignore analytics failures
-        }
+        initGlobalErrorHandlers();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[ErrorHandling] failed to init global handlers', e);
+      }
+
+      try {
+        initializeSentry();
+        getSentryFromInit();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[Sentry] startup init failed:', e);
+      }
+
+      try {
+        await Promise.race([initMixpanel(), new Promise(r => setTimeout(r, 2000))]);
+        try { track('Page View', { screen: 'root' }); } catch { /* ignore */ }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[Mixpanel] init failed', e);
@@ -118,100 +204,51 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
       try {
         await showNativeSplash();
-        await Asset.loadAsync([ require('../assets/images/icon.png') ]);
+        await Asset.loadAsync([require('../assets/images/icon.png')]);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error('[Splash] preparation error', e);
-      } finally {
-        if (!cancelled) {
-          setAppIsReady(true);
-          setPhase('brand'); // immediately move to branded React splash
-          // Ensure native splash is hidden now that branded phase is active
-          hideNativeSplashSafely();
-          // Enforce minimum branded duration
-          const elapsed = Date.now() - start;
-          const remaining = BRANDED_MIN_MS - elapsed;
-          if (remaining > 0) {
-            setTimeout(() => setPhase(p => p === 'brand' ? 'app' : p), remaining);
-          } else {
-            setPhase('app');
-          }
-        }
       }
-    })();
 
-    return () => { cancelled = true; };
-  }, []);
+      // Wait for initial navigation (short bounded wait) then mark startup done
+      try {
+        if (!isInitialNavigationDone()) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, NAV_MAX_WAIT_MS);
+            const unsub = onInitialNavigationDone(() => {
+              clearTimeout(timer);
+              resolve();
+              if (typeof unsub === 'function') unsub();
+            });
+          });
+        }
+      } catch {
+        // ignore
+      }
 
-  // Safety fallback: if something stalls, move to app after max 8s
-  useEffect(() => {
-    if (phase === 'app') return;
-    const safety = setTimeout(() => setPhase('app'), 8000);
-    return () => clearTimeout(safety);
-  }, [phase]);
+      startupDone.value = true;
 
-  const showBranded = phase === 'brand' || (phase !== 'app' && !fontsLoaded);
-  // Runtime instrumentation: log presence of critical stubs once (development only)
-  if (__DEV__) {
-    try {
-      const slot = require('../stubs/radix-slot')
-      const sonner = require('../stubs/sonner')
-      const themes = require('../stubs/next-themes')
-      // Avoid verbose output; just confirm default/named exports shape.
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] radix-slot keys:', Object.keys(slot), 'default' in slot ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] sonner keys:', Object.keys(sonner), 'default' in sonner ? 'hasDefault' : 'noDefault')
-      // eslint-disable-next-line no-console
-      console.log('[RuntimeCheck] next-themes keys:', Object.keys(themes), 'default' in themes ? 'hasDefault' : 'noDefault')
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[RuntimeCheck] instrumentation failed', e)
+      // If fonts already loaded, finalize transition now
+      if (fontsLoaded && !cancelled) {
+        try { hideNativeSplashSafely(); } catch {}
+        setPhase('app');
+      }
+    };
+
+    runStartup();
+
+    // If startup already finished earlier and fonts just became available,
+    // finalize transition here when both conditions are true.
+    if (startupDone.value && fontsLoaded && !cancelled) {
+      try { hideNativeSplashSafely(); } catch {}
+      setPhase('app');
     }
-  }
-  const LayoutContent = () => {
-    const { color } = useBackgroundColor();
-    
-    return (
-      <RootFrame bgColor={color}>
-        {showBranded ? (
-          <BrandedSplash />
-        ) : (
-          <AuthProvider>
-            <SessionMonitorGate />
-            <AdminProvider>
-              <StripeProvider>
-                <WalletProvider>
-                  <NotificationProvider>
-                    <WebSocketProvider>
-                      <ErrorBoundary
-                        onError={(error, errorInfo) => {
-                          // Add custom breadcrumb for additional context (do not capture exception again)
-                          Sentry.addBreadcrumb({
-                            category: 'root_layout',
-                            message: 'Error caught in root layout',
-                            level: 'error',
-                            data: {
-                              componentStack: errorInfo.componentStack,
-                            },
-                          });
-                        }}
-                      >
-                        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                          <View style={styles.inner}>
-                            <Slot />
-                          </View>
-                        </ThemeProvider>
-                      </ErrorBoundary>
-                    </WebSocketProvider>
-                  </NotificationProvider>
-                </WalletProvider>
-              </StripeProvider>
-            </AdminProvider>
-          </AuthProvider>
-        )}
-      </RootFrame>
-    );
-  };
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
+  }, [fontsLoaded]);
 
   return (
     <SafeAreaProvider>
@@ -228,13 +265,21 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 const SessionMonitorGate = () => {
   const { isLoggedIn } = useAuthContext();
   useSessionMonitor({ enabled: !!isLoggedIn });
+
+  // Register device when logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      registerDeviceSession();
+    }
+  }, [isLoggedIn]);
+
   return null;
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   inner: {
     flex: 1,
@@ -243,4 +288,15 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
 });
 
-export default Sentry.wrap(RootLayout);
+let WrappedRoot = RootLayout;
+try {
+  if (Sentry && typeof Sentry.wrap === 'function') {
+    WrappedRoot = Sentry.wrap(RootLayout);
+  }
+} catch (e) {
+  // ignore; fall back to unwrapped root
+  // eslint-disable-next-line no-console
+  console.error('[Sentry] wrap failed at module-eval:', e);
+}
+
+export default WrappedRoot;

@@ -1,10 +1,17 @@
-import * as Notifications from 'expo-notifications';
+// Lazily require expo-notifications to avoid native import at module evaluation time
 import { useRouter } from 'expo-router';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
+let Notifications: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  Notifications = require('expo-notifications');
+} catch {
+  Notifications = null;
+}
 
 // Delay before navigating to ensure router is ready (milliseconds)
 const ROUTER_READY_DELAY_MS = 100;
@@ -26,11 +33,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const isMountedRef = useRef(true);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const fetchedNotifications = await notificationService.fetchNotifications();
+      if (!isMountedRef.current) return;
       setNotifications(fetchedNotifications);
       
       // Update unread count
@@ -39,15 +48,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   }, []);
 
   const refreshUnreadCount = useCallback(async () => {
     try {
       const count = await notificationService.getUnreadCount();
-      setUnreadCount(count);
-    } catch (error) {
+      if (isMountedRef.current) setUnreadCount(count);
+    } catch {
       // Silent failure - getUnreadCount already handles logging appropriately
       // Don't spam console with additional error messages
     }
@@ -58,6 +67,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       await notificationService.markAsRead(notificationIds);
       
       // Update local state
+      if (!isMountedRef.current) return;
       setNotifications(prev =>
         prev.map(notif =>
           notificationIds.includes(notif.id) ? { ...notif, read: true } : notif
@@ -75,6 +85,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       await notificationService.markAllAsRead();
       
+      if (!isMountedRef.current) return;
       // Update local state
       setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
       setUnreadCount(0);
@@ -84,7 +95,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Handle notification tap navigation
-  const handleNotificationTap = useCallback(async (response: Notifications.NotificationResponse) => {
+  const handleNotificationTap = useCallback(async (response: any) => {
     const data = response.notification.request.content.data;
     
     // Navigate based on notification type and data
@@ -110,12 +121,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (initialNotificationHandled.current) return;
     
     try {
-      const response = await Notifications.getLastNotificationResponseAsync();
+      if (!Notifications) {
+        // try to require at runtime if not already loaded
+        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+      }
+      const response = Notifications ? await Notifications.getLastNotificationResponseAsync() : null;
       if (response) {
         initialNotificationHandled.current = true;
         // Small delay to ensure router is ready
         setTimeout(() => {
-          handleNotificationTap(response);
+          if (isMountedRef.current) {
+            handleNotificationTap(response);
+          }
         }, ROUTER_READY_DELAY_MS);
       }
     } catch (error) {
@@ -131,10 +148,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // Check if app was opened from a notification
     checkInitialNotification();
 
+    // Ensure Notifications is available when setting up listeners
+    if (!Notifications) {
+      try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+    }
+
     // Setup listeners
     const listeners = notificationService.setupNotificationListeners(
       // On notification received (foreground)
-      (notification) => {
+      (notification: any) => {
         // Refresh notifications list
         fetchNotifications();
         refreshUnreadCount();
@@ -154,7 +176,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
   useEffect(() => {
-    let mounted = true;
+    let cleanupFn: (() => void) | undefined;
+
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -172,7 +195,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             })
             .subscribe();
 
-          return () => { try { (supabase as any).removeChannel(channel) } catch {} }
+          cleanupFn = () => { try { (supabase as any).removeChannel(channel) } catch {} };
+          return;
         }
 
         // Fallback: classic .from().on() subscription
@@ -181,15 +205,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
         }).subscribe();
 
-        return () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} }
+        cleanupFn = () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} };
+        return;
       } catch (e) {
         // Non-fatal: we'll still poll every 30s as a fallback
         console.error('Failed to setup realtime notifications subscription', e);
       }
     })();
 
-    return () => { mounted = false }
+    return () => { try { cleanupFn && cleanupFn(); } catch {} }
   }, [fetchNotifications, refreshUnreadCount]);
+
+  // Track mounted state to prevent setState after unmount
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   // Poll for new notifications every 30 seconds when app is active
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, View } from "react-native";
+import { colors } from '../lib/theme';
 
 interface Achievement {
   id: string;
@@ -61,7 +62,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
               height: 40,
               width: 40,
               borderRadius: 20,
-              backgroundColor: achievement.isEarned ? "#059669" : "#064e3b",
+              backgroundColor: achievement.isEarned ? colors.background.secondary : "#064e3b",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 8,

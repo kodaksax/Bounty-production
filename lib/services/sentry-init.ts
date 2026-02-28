@@ -1,5 +1,4 @@
 // lib/services/sentry-init.ts - Sentry initialization for error tracking
-import * as Sentry from '@sentry/react-native';
 import type { Integration } from '@sentry/types';
 import Constants from 'expo-constants';
 
@@ -11,13 +10,24 @@ const ENVIRONMENT = process.env.NODE_ENV || 'development';
  * Initialize Sentry for error tracking
  */
 export function initializeSentry() {
+  // Lazy-require Sentry to avoid importing native module at module-evaluation time
+  // (prevents crashes in Expo Go or non-native runtimes).
+  let Sentry: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    Sentry = require('@sentry/react-native');
+  } catch {
+    // Sentry not available in this runtime
+    return;
+  }
+
   try {
     // Avoid double-initialization: if a Sentry client already exists, skip init.
     const hub = (Sentry as any).getCurrentHub && (Sentry as any).getCurrentHub();
     if (hub && hub.getClient && hub.getClient()) {
       return;
     }
-  } catch (e) {
+  } catch {
     // ignore guard failures
   }
   // Only initialize if DSN is provided and not in development
@@ -28,7 +38,7 @@ export function initializeSentry() {
   try {
     const ReactNativeTracingIntegration = (Sentry as { ReactNativeTracing?: new (options: {
       routingInstrumentation?: unknown;
-      tracingOrigins?: Array<string | RegExp>;
+      tracingOrigins?: (string | RegExp)[];
     }) => Integration }).ReactNativeTracing;
 
     const integrations: Integration[] | undefined = ReactNativeTracingIntegration
@@ -62,7 +72,7 @@ export function initializeSentry() {
       // Debug mode in development
       debug: ENVIRONMENT === 'development',
       // Before send hook to sanitize data
-      beforeSend(event, hint) {
+      beforeSend(event: any, hint: any) {
         // Don't send events in development unless explicitly enabled
         if (ENVIRONMENT === 'development' && !process.env.EXPO_PUBLIC_SENTRY_DEBUG) {
           return null;
@@ -70,7 +80,7 @@ export function initializeSentry() {
 
         // Remove sensitive data from breadcrumbs
         if (event.breadcrumbs) {
-          event.breadcrumbs = event.breadcrumbs.map((breadcrumb) => {
+          event.breadcrumbs = event.breadcrumbs.map((breadcrumb: any) => {
             // Remove Authorization headers
             if (breadcrumb.data?.headers) {
               const { Authorization, ...otherHeaders } = breadcrumb.data.headers;
@@ -98,7 +108,15 @@ export function initializeSentry() {
 }
 
 /**
- * Wrap the root component with Sentry
- * Usage: export default Sentry.wrap(App);
+ * Safe getter for the Sentry SDK. Returns `null` if the package isn't available.
  */
-export { Sentry };
+export function getSentrySafe() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    return require('@sentry/react-native');
+  } catch {
+    return null;
+  }
+}
+
+export { getSentrySafe as getSentry };

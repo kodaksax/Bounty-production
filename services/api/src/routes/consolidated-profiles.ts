@@ -8,17 +8,19 @@
  * - api/server.js (lines 348-418)
  */
 
-import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { 
-  asyncHandler, 
-  ValidationError, 
-  NotFoundError, 
-  AuthorizationError 
-} from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import {
+  asyncHandler,
+  AuthorizationError,
+  NotFoundError,
+  ValidationError
+} from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware, optionalAuthMiddleware } from '../middleware/unified-auth';
+import redisService, { cacheInvalidation, CacheKeyPrefix } from '../services/redis-service';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
@@ -105,11 +107,12 @@ interface Profile {
 /**
  * Supabase admin client singleton
  */
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
-function getSupabaseAdmin() {
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    // Relax typing to avoid PostgREST `never` inference on partial updates
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -189,9 +192,8 @@ export async function registerConsolidatedProfileRoutes(
       schema: {
         tags: ['profiles'],
         description: 'Get public profile by ID',
-        params: z.object({
-          id: z.string().uuid('Invalid profile ID format'),
-        }),
+        // Provide Fastify with JSON Schema converted from Zod for params validation
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid profile ID format') }), 'GetProfileParams'),
         response: {
           200: {
             type: 'object',
@@ -217,6 +219,24 @@ export async function registerConsolidatedProfileRoutes(
       );
 
       try {
+        // Try to get from cache first
+        // Note: We cache the full profile data from the database, then apply
+        // sanitization based on the requester's ownership when serving.
+        // This means the same cached profile can show different fields
+        // depending on who requests it (owner sees sensitive fields, others don't).
+        const cachedProfile = await redisService.get<any>(id, CacheKeyPrefix.PROFILE);
+        
+        if (cachedProfile) {
+          request.log.info({ profileId: id }, 'Profile fetched from cache');
+          
+          // Check if requester is the profile owner
+          const isOwner = request.userId === id;
+          const sanitized = sanitizeProfile(cachedProfile, isOwner);
+          
+          return sanitized;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         const { data: profile, error } = await supabase
@@ -237,13 +257,16 @@ export async function registerConsolidatedProfileRoutes(
           throw new NotFoundError('Profile', id);
         }
 
+        // Store in cache for future requests
+        await redisService.set(id, profile, CacheKeyPrefix.PROFILE);
+
         // Check if requester is the profile owner
         const isOwner = request.userId === id;
 
         const sanitized = sanitizeProfile(profile, isOwner);
 
         request.log.info(
-          { profileId: id, isOwner },
+          { profileId: id, isOwner, cached: false },
           'Profile fetched successfully'
         );
 
@@ -304,6 +327,16 @@ export async function registerConsolidatedProfileRoutes(
       );
 
       try {
+        // Try to get from cache first
+        const cachedProfile = await redisService.get<any>(userId, CacheKeyPrefix.PROFILE);
+        
+        if (cachedProfile) {
+          request.log.info({ userId }, 'Current user profile fetched from cache');
+          const sanitized = sanitizeProfile(cachedProfile, true);
+          return sanitized;
+        }
+
+        // Cache miss - fetch from database
         const supabase = getSupabaseAdmin();
 
         const { data: profile, error } = await supabase
@@ -324,11 +357,14 @@ export async function registerConsolidatedProfileRoutes(
           throw new NotFoundError('Profile', userId);
         }
 
+        // Store in cache for future requests
+        await redisService.set(userId, profile, CacheKeyPrefix.PROFILE);
+
         // Return full profile for owner
         const sanitized = sanitizeProfile(profile, true);
 
         request.log.info(
-          { userId },
+          { userId, cached: false },
           'Current user profile fetched successfully'
         );
 
@@ -369,7 +405,8 @@ export async function registerConsolidatedProfileRoutes(
       schema: {
         tags: ['profiles'],
         description: 'Create or update profile for authenticated user',
-        body: createProfileSchema,
+        // Provide Fastify with JSON Schema converted from Zod for body validation
+        body: toJsonSchema(createProfileSchema, 'CreateProfileBody'),
         response: {
           200: {
             type: 'object',
@@ -412,19 +449,17 @@ export async function registerConsolidatedProfileRoutes(
           });
         }
 
-        // Prepare update data
-        const updateData: any = {
-          updated_at: new Date().toISOString(),
-        };
+        // Prepare update data - don't set `updated_at` here; DB trigger manages timestamps
+        const updateData: any = {};
 
-        updateData.username = body.username;
+        if (body.username !== undefined) updateData.username = body.username;
         if (body.avatar_url !== undefined) updateData.avatar = body.avatar_url;
         if (body.bio !== undefined) updateData.bio = body.bio;
         if (body.about !== undefined) updateData.about = body.about;
         if (body.phone !== undefined) updateData.phone = body.phone;
         if (body.email !== undefined) updateData.email = body.email;
 
-        // Use upsert to create or update
+        // Use upsert to create or update; leave timestamp management to DB triggers
         const { data: profile, error } = await supabase
           .from('profiles')
           .upsert(
@@ -454,6 +489,9 @@ export async function registerConsolidatedProfileRoutes(
           
           throw new Error(error.message);
         }
+
+        // Invalidate cache for this profile
+        await cacheInvalidation.invalidateProfile(userId);
 
         const sanitized = sanitizeProfile(profile, true);
 
@@ -503,10 +541,10 @@ export async function registerConsolidatedProfileRoutes(
       schema: {
         tags: ['profiles'],
         description: 'Update specific profile fields (owner only)',
-        params: z.object({
-          id: z.string().uuid('Invalid profile ID format'),
-        }),
-        body: patchProfileSchema,
+        // Params validated in handler via runtime checks; use generic JSON schema for Fastify
+        params: { type: 'object' },
+        // Validation performed in handler; provide generic JSON schema for Fastify
+        body: { type: 'object' },
         response: {
           200: {
             type: 'object',
@@ -560,10 +598,8 @@ export async function registerConsolidatedProfileRoutes(
           }
         }
 
-        // Prepare update data
-        const updateData: any = {
-          updated_at: new Date().toISOString(),
-        };
+        // Prepare update data - let DB triggers manage `updated_at`
+        const updateData: any = {};
 
         if (body.username !== undefined) updateData.username = body.username;
         if (body.avatar_url !== undefined) updateData.avatar = body.avatar_url;
@@ -601,6 +637,9 @@ export async function registerConsolidatedProfileRoutes(
         if (!profile) {
           throw new NotFoundError('Profile', profileId);
         }
+
+        // Invalidate cache for this profile
+        await cacheInvalidation.invalidateProfile(profileId);
 
         const sanitized = sanitizeProfile(profile, true);
 
@@ -649,9 +688,8 @@ export async function registerConsolidatedProfileRoutes(
       schema: {
         tags: ['profiles'],
         description: 'Delete profile (owner only)',
-        params: z.object({
-          id: z.string().uuid('Invalid profile ID format'),
-        }),
+        // Params validated in handler via runtime checks; use generic JSON schema for Fastify
+        params: { type: 'object' },
         response: {
           200: {
             type: 'object',

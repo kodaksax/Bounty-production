@@ -14,7 +14,7 @@ export default function AdminUsersScreen() {
   const [filters, setFilters] = useState<AdminUserFilters>({ status: 'all' });
   const { users, isLoading, error, refetch } = useAdminUsers(filters);
 
-  const statusOptions: Array<AdminUserFilters['status']> = ['all', 'active', 'suspended', 'banned'];
+  const statusOptions: AdminUserFilters['status'][] = ['all', 'active', 'suspended', 'banned'];
 
   const renderUserItem = ({ item }: { item: AdminUserSummary }) => (
     <TouchableOpacity

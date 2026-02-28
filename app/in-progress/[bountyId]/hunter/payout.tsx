@@ -12,13 +12,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
-import { useWallet } from '../../../../lib/wallet-context';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
+import { useWallet } from '../../../../lib/wallet-context';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -38,10 +38,8 @@ export default function HunterPayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
-  const { balance, deposit } = useWallet();
-
+  const { balance } = useWallet();
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [request, setRequest] = useState<BountyRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -199,19 +197,6 @@ export default function HunterPayoutScreen() {
     );
   };
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
-
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
@@ -315,7 +300,9 @@ export default function HunterPayoutScreen() {
             <Text style={styles.waitingTitle}>Waiting for Payout Release</Text>
             <Text style={styles.waitingText}>
               Your work has been submitted for review. The poster will verify your work and release
-              the payment. You'll be notified when the payout is ready.
+              the payment. You
+              {"'"}
+              ll be notified when the payout is ready.
             </Text>
             <View style={styles.statusBadge}>
               <MaterialIcons name="pending" size={16} color="#fbbf24" />
@@ -326,7 +313,7 @@ export default function HunterPayoutScreen() {
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <MaterialIcons name="check-circle" size={48} color={colors.primary[500]} />
               <Text style={styles.successTitle}>Payout Released!</Text>
               <Text style={styles.successText}>
                 Congratulations! The poster has approved your work and released the payment.
@@ -380,7 +367,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                    <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -436,7 +423,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -491,7 +478,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 20,
     fontWeight: '700',
   },
@@ -520,12 +507,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -540,10 +527,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.primary[600],
   },
   stageLabel: {
     color: '#6ee7b7',
@@ -621,7 +608,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 32,
     fontWeight: '700',
   },
@@ -662,7 +649,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
   },
@@ -680,7 +667,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   archiveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   deleteButton: {
     backgroundColor: '#ef4444',
@@ -738,7 +725,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 12,
     fontWeight: '600',
   },

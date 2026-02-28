@@ -1,11 +1,14 @@
 import { useRouter } from "expo-router"
-import React, { useEffect, useRef } from "react"
+import type { Href } from "expo-router"
+import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
 import { SignInForm } from "./auth/sign-in-form"
+import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
+import 'react-native-get-random-values'; // must run before using tweetnacl
 
-
+import { colors } from '../lib/theme';
 /**
  * Root Index - Auth Gate
  * 
@@ -18,7 +21,7 @@ import { SignInForm } from "./auth/sign-in-form"
  * On cold start, we ensure proper initialization before allowing navigation.
  */
 export default function Index() {
-  const { session, isLoading, profile } = useAuthContext()
+  const { session, isLoading, profile, isPasswordRecovery } = useAuthContext()
   const router = useRouter()
   const latestSessionIdRef = useRef<string | null>(null)
   const hasNavigatedRef = useRef(false)
@@ -60,6 +63,16 @@ export default function Index() {
       }
     }
 
+    // If user is in password recovery mode, route to the update-password screen
+    // (this happens when the app receives a PASSWORD_RECOVERY event from Supabase)
+    if (isPasswordRecovery) {
+      if (!isActive || hasNavigatedRef.current) return () => { isActive = false }
+      hasNavigatedRef.current = true
+      router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href)
+      try { markInitialNavigationDone() } catch {}
+      return () => { isActive = false }
+    }
+
     // If user is authenticated, check their profile status
     if (session?.user) {
       try {
@@ -74,19 +87,35 @@ export default function Index() {
         }
         
         // Check if user needs to complete onboarding
-        // This happens when auth user exists but no profile is found
-        if (profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
+        // This happens when auth user exists but no profile is found, OR
+        // profile fetch failed (null) — treat as needing onboarding to avoid
+        // landing in the main app with no profile data (causes "Profile not found" errors)
+        if (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
           if (__DEV__) {
             console.log('[index] User needs onboarding, redirecting to onboarding flow')
           }
           hasNavigatedRef.current = true
           router.replace('/onboarding')
+          try {
+            markInitialNavigationDone()
+          } catch (error) {
+            if (__DEV__) {
+              console.warn('[index] markInitialNavigationDone failed after onboarding navigation:', error)
+            }
+          }
         } else {
           if (__DEV__) {
             console.log('[index] Authenticated with complete profile, redirecting to main app')
           }
           hasNavigatedRef.current = true
           router.replace(ROUTES.TABS.BOUNTY_APP)
+          try {
+            markInitialNavigationDone()
+          } catch (error) {
+            if (__DEV__) {
+              console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
+            }
+          }
         }
       } catch (navError) {
         console.error('[index] Navigation error:', navError)
@@ -103,7 +132,7 @@ export default function Index() {
     return () => {
       isActive = false
     }
-  }, [session, isLoading, profile, router])
+  }, [session, isLoading, profile, isPasswordRecovery, router])
 
   // Show loading spinner while checking authentication state
   // CRITICAL: This prevents any content flash before auth is determined
@@ -113,7 +142,7 @@ export default function Index() {
     }
     return (
       <View className="flex-1 items-center justify-center bg-emerald-800">
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
         <Text className="text-white mt-4 text-base">Loading...</Text>
       </View>
     )
@@ -133,7 +162,7 @@ export default function Index() {
   }
   return (
     <View className="flex-1 items-center justify-center bg-emerald-800">
-      <ActivityIndicator size="large" color="#10b981" />
+      <ActivityIndicator size="large" color={colors.primary[500]} />
       <Text className="text-white mt-4 text-base">Redirecting...</Text>
     </View>
   )

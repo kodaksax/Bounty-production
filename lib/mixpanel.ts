@@ -14,26 +14,13 @@ export async function initMixpanel() {
   _initialized = true; // mark attempted to avoid repeated noisy logs
 
   try {
-    const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+    // Native modules should generally be required synchronously at the top level or
+    // inside a function using standard `require` to ensure they are bundled correctly.
+    // Dynamic `import()` for native modules is risky in production bundles.
 
-    if (isWeb) {
-      // web/browser environment: prefer `mixpanel-browser` when available
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      const webModule = await import('mixpanel-browser');
-      const webPkg: any = (webModule as any).default ?? webModule;
-      if (typeof webPkg.init === 'function') {
-        webPkg.init(MIXPANEL_TOKEN);
-      }
-      _mixpanel = webPkg;
-      return;
-    }
-
-    // runtime import for native package; use the installed 'mixpanel-react-native'
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const nativeModule = await import('mixpanel-react-native');
-    const nativePkg: any = (nativeModule as any).default ?? nativeModule;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nativeModule = require('mixpanel-react-native');
+    const nativePkg: any = nativeModule.default ?? nativeModule;
 
     if (typeof nativePkg.init === 'function') {
       const instance = await nativePkg.init(MIXPANEL_TOKEN);
@@ -50,7 +37,7 @@ export async function initMixpanel() {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[mixpanel] native init failed or not installed', e);
-    console.error('[mixpanel] To fix: install `@mixpanel/react-native` for native apps and rebuild, or `mixpanel-browser` for web.');
+    console.error('[mixpanel] To fix: install `@mixpanel/react-native` for native apps and rebuild.');
     _mixpanel = null;
   }
 }
@@ -72,7 +59,7 @@ export const identify = (id: string, props?: Record<string, any>) => {
       if (people && typeof people.set === 'function' && props) {
         people.set(props);
       }
-    } catch (e) {
+    } catch {
       // ignore people-set failures
     }
   } catch (e) {

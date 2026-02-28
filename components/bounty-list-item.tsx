@@ -5,20 +5,21 @@ import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import { COLORS, RADIUS, SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
+import { SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+import { colors } from '../lib/theme';
 
 export interface BountyListItemProps {
-  id: number
+  id: string | number
   title: string
   username?: string
   price: number
   distance: number | null
   description?: string
   isForHonor?: boolean
-  user_id?: string
+  user_id?: string | null
   work_type?: 'online' | 'in_person'
   poster_avatar?: string
 }
@@ -31,7 +32,7 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
-  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id)
+  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
 
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
   
@@ -118,7 +119,7 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
             <View style={styles.dot} />
             {work_type === 'online' ? (
               <View style={styles.onlineBadge}>
-                <MaterialIcons name="wifi" size={10} color="#10b981" />
+                <MaterialIcons name="wifi" size={10} color={colors.primary[500]} />
                 <Text style={styles.onlineText}>Online</Text>
               </View>
             ) : distance === null ? (
@@ -144,8 +145,8 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
       </TouchableOpacity>
 
       {showDetail && (
-        <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar }}
+          <BountyDetailModal
+            bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar }}
           onClose={handleCloseDetail}
         />
       )}

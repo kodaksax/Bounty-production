@@ -1,16 +1,40 @@
-import * as ExpoSplash from 'expo-splash-screen';
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Image } from 'expo-image';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
+import type * as ExpoSplashScreen from 'expo-splash-screen';
+import { colors } from '../../lib/theme';
 // Centralized helpers: RootLayout (and any other callers) should use these
 // to show/hide the native splash. Keeping them here ensures "use splash.tsx
 // for any splash things" without scattering imports of expo-splash-screen.
+// Cache the native module reference after the first lazy-load
+let cachedExpoSplash: typeof import('expo-splash-screen') | null = null;
+
+function getExpoSplashModule(): typeof import('expo-splash-screen') | null {
+	if (cachedExpoSplash) return cachedExpoSplash;
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+		cachedExpoSplash = require('expo-splash-screen') as typeof import('expo-splash-screen');
+	} catch (e) {
+		// Log at debug level to aid troubleshooting when the native module isn't available
+		// Do not throw — absence is expected in some runtimes (Expo Go, web, CI)
+		console.debug(
+			'[Splash] expo-splash-screen native module not available (expected in Expo Go, web, or CI environments):',
+			e,
+		);
+		console.debug('[Splash] expo-splash-screen not available:', e);
+		cachedExpoSplash = null;
+	}
+	return cachedExpoSplash;
+}
 
 export async function showNativeSplash() {
 	try {
-		await ExpoSplash.preventAutoHideAsync();
+		const ExpoSplash = getExpoSplashModule();
+		if (ExpoSplash && typeof ExpoSplash.preventAutoHideAsync === 'function') {
+			await ExpoSplash.preventAutoHideAsync();
+		}
 	} catch {
 		// ignore if already prevented or not applicable
 	}
@@ -18,7 +42,10 @@ export async function showNativeSplash() {
 
 export async function hideNativeSplashSafely() {
 	try {
-		await ExpoSplash.hideAsync();
+		const ExpoSplash = getExpoSplashModule();
+		if (ExpoSplash && typeof ExpoSplash.hideAsync === 'function') {
+			await ExpoSplash.hideAsync();
+		}
 	} catch {
 		// ignore when no native splash is registered for current view controller
 	}
@@ -186,7 +213,7 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 6,
-		backgroundColor: '#10b981',
+		backgroundColor: colors.primary[500],
 		marginHorizontal: 6,
 	},
 	devBtnText: {

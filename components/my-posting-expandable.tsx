@@ -9,7 +9,7 @@ import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
 import { userProfileService } from 'lib/services/user-profile-service'
 import type { Attachment, Conversation } from 'lib/types'
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -32,6 +32,7 @@ import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
 import { Stepper } from './ui/stepper'
+import { colors } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -91,18 +92,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   useEffect(() => {
     let mounted = true
+    
     async function load() {
       try {
         const list = await messageService.getConversations()
+        if (!mounted) return
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
-        if (mounted) setConversation(match)
+        setConversation(match)
 
         // Fetch hunter name if available
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
         if (hunterId) {
           try {
             const hunterProfile = await userProfileService.getProfile(hunterId)
-            if (mounted && hunterProfile?.username) {
+            if (!mounted) return
+            if (hunterProfile?.username) {
               setHunterName(hunterProfile.username)
             }
           } catch (error) {
@@ -114,23 +118,23 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
           const submission = await completionService.getSubmission(String(bounty.id))
+          if (!mounted) return
           const foundSubmission = !!submission && submission.status === 'pending'
-          if (mounted) {
-            setHasSubmission(foundSubmission)
-            // Auto-expand Review & Verify section when submission is detected
-            if (foundSubmission) {
-              setReviewExpanded(true)
-              setWipExpanded(false)
-              // Move the visual stepper to Review & Verify so owner sees where action is needed
-              setLocalStageOverride('review_verify')
-            }
+          setHasSubmission(foundSubmission)
+          // Auto-expand Review & Verify section when submission is detected
+          if (foundSubmission) {
+            setReviewExpanded(true)
+            setWipExpanded(false)
+            // Move the visual stepper to Review & Verify so owner sees where action is needed
+            setLocalStageOverride('review_verify')
           }
         }
         // For hunters, initialize revision indicator state from latest submission
         if (bounty.status === 'in_progress' && variant === 'hunter') {
           try {
             const submission = await completionService.getSubmission(String(bounty.id))
-            if (mounted && submission) {
+            if (!mounted) return
+            if (submission) {
               // Only check pending-for-hunter if currentUserId is defined
               let isPendingForHunter = false
               if (currentUserId) {
@@ -166,13 +170,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
           const ready = await completionService.getReady(String(bounty.id))
-          if (mounted) setReadyRecord(ready)
+          if (!mounted) return
+          setReadyRecord(ready)
         } catch {}
         
         // Check for cancellation request
         try {
           const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
-          if (mounted && cancellation && cancellation.status === 'pending') {
+          if (!mounted) return
+          if (cancellation && cancellation.status === 'pending') {
             setHasCancellationRequest(true)
           }
         } catch {}
@@ -180,7 +186,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Check for active dispute
         try {
           const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
-          if (mounted && dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+          if (!mounted) return
+          if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
             setHasDispute(true)
           }
         } catch {}
@@ -190,7 +197,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   // Also load for hunters even when the card is not expanded so revision-requested state
   // is available in the compact card (shows badge) without needing to open the card first.
   if (expanded || variant === 'owner' || variant === 'hunter') load()
-    return () => { mounted = false }
+    return () => { 
+      mounted = false
+    }
   }, [expanded, bounty.id, bounty.status, variant])
   
   // owner detection
@@ -419,21 +428,27 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       const uploaded = await pickAttachment()
       if (!uploaded) return
 
-      const newProof = {
-        id: uploaded.id,
-        type: uploaded.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
-        name: uploaded.name,
-        size: uploaded.size,
-        remoteUri: uploaded.remoteUri,
-        uri: uploaded.uri,
-      } as any
+      // pickAttachment returns an array of Attachment items when successful.
+      const uploadedArray = Array.isArray(uploaded) ? uploaded : [uploaded]
 
-      setProofItems((prev) => [...prev, newProof])
+      // Map each uploaded attachment into our proof item shape and persist
+      const newProofs = uploadedArray.map((u) => ({
+        id: u.id,
+        type: u.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
+        name: u.name,
+        size: u.size,
+        remoteUri: u.remoteUri,
+        uri: u.uri,
+      } as any))
 
-      // Persist to bounty attachments_json
-      const success = await bountyService.addAttachmentToBounty(bounty.id, uploaded)
-      if (!success) {
-        Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
+      setProofItems((prev) => [...prev, ...newProofs])
+
+      // Persist each uploaded attachment to bounty attachments_json
+      for (const u of uploadedArray) {
+        const success = await bountyService.addAttachmentToBounty(bounty.id, u)
+        if (!success) {
+          Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
+        }
       }
       // Trigger parent refresh if provided
       if (onRefresh) onRefresh()
@@ -782,7 +797,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         onPress={handleAddProof}
                         disabled={!(readyToSubmitPressed || !!readyRecord)}
                       >
-                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#10b981" />
+                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color={colors.primary[500]} />
                         <Text style={styles.addFileText}>{(readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}</Text>
                       </TouchableOpacity>
                     </View>
@@ -815,7 +830,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={48} color={colors.primary[500]} />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner 
@@ -867,7 +882,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                        <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -931,13 +946,13 @@ const styles = StyleSheet.create({
   timelineItem: { flexDirection: 'row', alignItems: 'center' },
   bubble: { width: 12, height: 12, borderRadius: 6 },
   bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
-  bubbleActive: { backgroundColor: '#10b981' },
-  bubbleCompleted: { backgroundColor: '#059669' },
+  bubbleActive: { backgroundColor: colors.primary[500] },
+  bubbleCompleted: { backgroundColor: colors.primary[600] },
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
   infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary[500], paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },
   muted: { color: '#a7f3d0', fontSize: 12 },
   honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
@@ -1052,11 +1067,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderStyle: 'dashed',
   },
   addFileText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1099,7 +1114,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 32,
     fontWeight: '700',
   },
@@ -1174,7 +1189,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 12,
     fontWeight: '600',
   },

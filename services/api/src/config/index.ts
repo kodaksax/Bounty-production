@@ -1,17 +1,18 @@
+/* eslint-disable expo/no-dynamic-env-var */
 /**
  * Unified Configuration Management
  * Centralizes all environment variables and configuration for the consolidated backend service
  */
 
 import dotenv from 'dotenv';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 
 // Load environment variables with fallback strategy
 function loadEnvironment() {
   // Try local .env first
   const local = dotenv.config();
-  
+
   // If critical vars missing, try root .env
   if (!process.env.STRIPE_SECRET_KEY && !process.env.DATABASE_URL) {
     const rootEnv = path.resolve(__dirname, '../../../../.env');
@@ -55,7 +56,7 @@ for (const k of dbEnvKeys) {
 function getRequired(name: string, fallbacks: string[] = []): string {
   // Try primary name first
   let value = process.env[name];
-  
+
   // Try fallbacks
   if (!value) {
     for (const fallback of fallbacks) {
@@ -66,11 +67,11 @@ function getRequired(name: string, fallbacks: string[] = []): string {
       }
     }
   }
-  
+
   if (!value) {
     throw new Error(`Missing required environment variable: ${name} (also tried: ${fallbacks.join(', ')})`);
   }
-  
+
   return value;
 }
 
@@ -79,14 +80,14 @@ function getRequired(name: string, fallbacks: string[] = []): string {
  */
 function getOptional(name: string, defaultValue: string, fallbacks: string[] = []): string {
   let value = process.env[name];
-  
+
   if (!value) {
     for (const fallback of fallbacks) {
       value = process.env[fallback];
       if (value) break;
     }
   }
-  
+
   return value || defaultValue;
 }
 
@@ -137,6 +138,39 @@ export const config = {
       connectionTimeoutMillis: getNumber('DB_CONNECTION_TIMEOUT', 2000),
     },
     ssl: getBoolean('DB_SSL', false),
+  },
+
+  // Redis Configuration
+  redis: {
+    host: getOptional('REDIS_HOST', 'localhost'),
+    port: getNumber('REDIS_PORT', 6379),
+    password: getOptional('REDIS_PASSWORD', ''),
+    db: getNumber('REDIS_DB', 0),
+    keyPrefix: getOptional('REDIS_KEY_PREFIX', 'bountyexpo:'),
+    enabled: getBoolean('REDIS_ENABLED', true),
+    ttl: {
+      profile: getNumber('REDIS_TTL_PROFILE', 300), // 5 minutes
+      bounty: getNumber('REDIS_TTL_BOUNTY', 180), // 3 minutes
+      bountyList: getNumber('REDIS_TTL_BOUNTY_LIST', 60), // 1 minute
+    },
+    cluster: {
+      enabled: getBoolean('REDIS_CLUSTER_ENABLED', false),
+      // Comma-separated list of host:port pairs, e.g. "redis-1:6379,redis-2:6380,redis-3:6381"
+      nodes: getOptional('REDIS_CLUSTER_NODES', '').split(',').filter(Boolean).map(node => {
+        const [host, portStr] = node.trim().split(':');
+        // portStr must be explicitly provided; defaulting silently would hide misconfigurations
+        const port = portStr !== undefined ? parseInt(portStr, 10) : NaN;
+        if (!host || isNaN(port) || port < 1 || port > 65535) {
+          throw new Error(
+            `Invalid REDIS_CLUSTER_NODES entry: "${node.trim()}". ` +
+            'Expected format is host:port (e.g. redis-1:6379).\n' +
+            `Current REDIS_CLUSTER_NODES value: "${process.env.REDIS_CLUSTER_NODES ?? ''}"\n` +
+            'Example: REDIS_CLUSTER_NODES=redis-1:6379,redis-2:6380,redis-3:6381'
+          );
+        }
+        return { host, port };
+      }),
+    },
   },
 
   // Supabase Configuration
@@ -230,6 +264,18 @@ export const config = {
       schedule: getOptional('STALE_BOUNTY_CRON_SCHEDULE', '0 0 * * *'), // Daily at midnight
     },
   },
+
+  // Storage and File Upload Configuration
+  storage: {
+    maxFileSize: getNumber('UPLOAD_MAX_FILE_SIZE', 10 * 1024 * 1024), // 10MB default
+    allowedMimeTypes: getOptional(
+      'UPLOAD_ALLOWED_MIME_TYPES',
+      'image/jpeg,image/png,image/gif,application/pdf,video/mp4,video/quicktime,text/plain'
+    ).split(','),
+    // Optional CDN base URL. When set, uploaded asset URLs are rewritten to use
+    // this origin instead of the Supabase storage origin, e.g. https://cdn.example.com
+    cdnUrl: getOptional('STORAGE_CDN_URL', '').replace(/\/+$/, ''),
+  },
 } as const;
 
 /**
@@ -256,7 +302,7 @@ export function validateConfig(): void {
   if (!config.stripe.secretKey) {
     errors.push('Stripe secret key missing');
   }
-  
+
   // Validate security configuration in production
   if (config.service.env === 'production') {
     if (config.security.usingDefaultSecretKey || config.security.secretKey === 'dev-fallback-secret') {
@@ -287,6 +333,13 @@ export function getConfigSummary() {
       name: config.database.name,
       hasUrl: !!config.database.url,
       pool: config.database.pool,
+    },
+    redis: {
+      host: config.redis.host,
+      port: config.redis.port,
+      enabled: config.redis.enabled,
+      hasPassword: !!config.redis.password,
+      ttl: config.redis.ttl,
     },
     supabase: {
       url: config.supabase.url,

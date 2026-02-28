@@ -1,0 +1,10 @@
+## Supabase CLI config
+# This file was intentionally left minimal to avoid CLI parsing errors.
+# The `supabase` CLI can be pointed to a project using `--project-ref`
+# or by running `supabase link --project-ref <ref>` which will create
+# a proper local config. If you need to store a project ref here,
+# ensure it matches the CLI's expected format.
+
+# NOTE: Do not add a top-level [project] table here unless it matches
+# the supabase CLI schema — an invalid key will cause `supabase` to
+# fail with "has invalid keys: project".

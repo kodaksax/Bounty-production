@@ -15,7 +15,9 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import { MfaCodeModal } from '../ui/mfa-code-modal';
 import { supabase } from '../../lib/supabase';
+import { colors } from '../../lib/theme';
 
 interface SecuritySettingsProps {
   onBack: () => void;
@@ -27,6 +29,11 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  // Modal state for cross-platform TOTP code entry
+  const [mfaModalVisible, setMfaModalVisible] = useState(false);
+  const [mfaModalFactorId, setMfaModalFactorId] = useState<string | null>(null);
+  const [mfaModalError, setMfaModalError] = useState<string | null>(null);
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   useEffect(() => {
     loadSecuritySettings();
@@ -112,67 +119,51 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   };
 
   const promptForVerificationCode = (factorId: string) => {
-    Alert.prompt(
-      'Enter Verification Code',
-      'Enter the 6-digit code from your authenticator app',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: async () => {
-            await supabase.auth.mfa.unenroll({ factorId });
-            setIsEnabling2FA(false);
-          },
-        },
-        {
-          text: 'Verify',
-          onPress: async (code?: string) => {
-            if (!code) {
-              setIsEnabling2FA(false);
-              return;
-            }
-            await verifyAndEnable2FA(factorId, code);
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setMfaModalFactorId(factorId);
+    setMfaModalError(null);
+    setMfaModalVisible(true);
   };
 
-  const verifyAndEnable2FA = async (factorId: string, code: string) => {
+  const handleMfaModalVerify = async (code: string) => {
+    if (!mfaModalFactorId) return;
+    setMfaVerifying(true);
+    setMfaModalError(null);
     try {
       const { data, error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId,
+        factorId: mfaModalFactorId,
         code,
       });
-
       if (error) throw error;
-
       if (data) {
         setTwoFactorEnabled(true);
+        setMfaModalVisible(false);
         Alert.alert('Success', 'Two-factor authentication has been enabled!');
       }
     } catch (error: any) {
       console.error('[security-settings] Error verifying 2FA:', error);
-      Alert.alert(
-        'Verification Failed',
-        'Invalid code. Please try again or contact support.',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => promptForVerificationCode(factorId),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: async () => {
-              await supabase.auth.mfa.unenroll({ factorId });
-            },
-          },
-        ]
-      );
+      setMfaModalError('Invalid code. Please try again.');
     } finally {
+      setMfaVerifying(false);
       setIsEnabling2FA(false);
+    }
+  };
+
+  const handleMfaModalCancel = async () => {
+    if (!mfaModalFactorId) {
+      setMfaModalVisible(false);
+      setIsEnabling2FA(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
+      if (error) throw error;
+      setMfaModalVisible(false);
+      setMfaModalFactorId(null);
+      setIsEnabling2FA(false);
+    } catch (error: any) {
+      console.error('[security-settings] Error cancelling 2FA setup:', error);
+      Alert.alert('Error', 'Failed to cancel 2FA setup. Please try again.');
     }
   };
 
@@ -237,13 +228,20 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <MfaCodeModal
+        visible={mfaModalVisible}
+        isLoading={mfaVerifying}
+        error={mfaModalError}
+        onVerify={handleMfaModalVerify}
+        onCancel={handleMfaModalCancel}
+      />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -268,7 +266,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={emailVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={emailVerified ? '#10b981' : '#ef4444'}
+                color={emailVerified ? colors.primary[500] : '#ef4444'}
               />
             </View>
             <View style={styles.divider} />
@@ -282,7 +280,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={phoneVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={phoneVerified ? '#10b981' : '#ef4444'}
+                color={phoneVerified ? colors.primary[500] : '#ef4444'}
               />
             </View>
           </View>
@@ -317,13 +315,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
                 </Text>
               </View>
               {isEnabling2FA ? (
-                <ActivityIndicator size="small" color="#10b981" />
+                <ActivityIndicator size="small" color={colors.primary[500]} />
               ) : (
                 <Switch
                   value={twoFactorEnabled}
                   onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
-                  trackColor={{ false: '#374151', true: '#059669' }}
-                  thumbColor={twoFactorEnabled ? '#10b981' : '#9ca3af'}
+                  trackColor={{ false: '#374151', true: colors.background.secondary }}
+                  thumbColor={twoFactorEnabled ? colors.primary[500] : '#9ca3af'}
                 />
               )}
             </TouchableOpacity>
@@ -475,7 +473,7 @@ const styles = StyleSheet.create({
   enabledBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
   },
   recommendedBadge: {
     backgroundColor: 'rgba(245,158,11,0.2)',

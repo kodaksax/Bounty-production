@@ -24,6 +24,7 @@ import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -43,7 +44,6 @@ export default function HunterReviewAndVerifyScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
   const currentUserId = getCurrentUserId();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
@@ -52,21 +52,15 @@ export default function HunterReviewAndVerifyScreen() {
   const [error, setError] = useState<string | null>(null);
   const [currentStage] = useState<HunterStage>('review_verify');
   const [messageText, setMessageText] = useState('');
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
   const [startTime] = useState(Date.now());
 
   // Attachment upload hook
   const {
-    isUploading,
-    isPicking,
-    progress,
     pickAttachment,
-    error: uploadError,
-    clearError,
   } = useAttachmentUpload({
     bucket: 'bounty-attachments',
     folder: 'proofs',
@@ -172,7 +166,7 @@ export default function HunterReviewAndVerifyScreen() {
       const attachmentsJson = (bounty as any)?.attachments_json
       if (attachmentsJson) {
         let parsed: any[] = []
-        try { parsed = JSON.parse(attachmentsJson) } catch (e) { parsed = [] }
+        try { parsed = JSON.parse(attachmentsJson) } catch { parsed = [] }
         const items: ProofItem[] = parsed.map((a: any) => ({
           id: a.id || String(Date.now()),
           type: a.mimeType?.startsWith('image/') ? 'image' : 'file',
@@ -191,27 +185,6 @@ export default function HunterReviewAndVerifyScreen() {
     } catch (err) {
       console.error('Error loading proof items:', err);
       setProofItems([])
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !conversation) {
-      if (!conversation) {
-        Alert.alert('No Conversation', 'No active conversation found for this bounty.');
-      }
-      return;
-    }
-
-    try {
-      setIsSendingMessage(true);
-      await messageService.sendMessage(conversation.id, messageText.trim());
-      setMessageText('');
-      Alert.alert('Success', 'Message sent successfully!');
-    } catch (err) {
-      console.error('Error sending message:', err);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
-    } finally {
-      setIsSendingMessage(false);
     }
   };
 
@@ -344,19 +317,6 @@ export default function HunterReviewAndVerifyScreen() {
     </View>
   );
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
-
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
@@ -478,6 +438,40 @@ export default function HunterReviewAndVerifyScreen() {
             maxLength={1000}
             textAlignVertical="top"
           />
+          {/* Conversation quick action: use loaded conversation if present */}
+          <View style={{ marginTop: 12 }}>
+            {conversation ? (
+              <TouchableOpacity
+                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                onPress={() => {
+                  // Navigate to conversation view (route param used if available)
+                  try {
+                    (router as any).push(`/messages/${conversation.id}`);
+                  } catch (e) {
+                    console.warn('Unable to open conversation route', e);
+                  }
+                }}
+              >
+                <MaterialIcons name="chat" size={18} color="#fff" />
+                <Text style={styles.addProofText}>Open Conversation</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                onPress={() => {
+                  // No conversation found yet — navigate to create/new messages with bounty context
+                  try {
+                    if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
+                  } catch (e) {
+                    console.warn('Unable to open new message route', e);
+                  }
+                }}
+              >
+                <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
+                <Text style={styles.addProofText}>Message Poster</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Proof of Completion */}
@@ -546,7 +540,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -626,7 +620,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 20,
     fontWeight: '700',
   },
@@ -664,12 +658,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -684,10 +678,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.primary[600],
   },
   stageLabel: {
     color: '#6ee7b7',
@@ -729,7 +723,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -799,7 +793,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   addProofText: {
     color: '#fff',
@@ -807,7 +801,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

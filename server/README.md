@@ -1,5 +1,11 @@
 # BountyExpo Stripe Payment Server
 
+> ⚠️ **Migration Notice**: This Node.js/Express server has been superseded by
+> **Supabase Edge Functions** located in `supabase/functions/`. See the
+> [Edge Functions migration guide](#migrating-to-supabase-edge-functions) below
+> for deployment instructions. The Node server is kept for local development
+> fallback only.
+
 Minimal Node.js/Express server for handling Stripe payment operations for the BountyExpo mobile app.
 
 ## Features
@@ -8,6 +14,96 @@ Minimal Node.js/Express server for handling Stripe payment operations for the Bo
 - **Webhook Handling**: Secure webhook endpoint for Stripe events with signature verification
 - **Connect Onboarding**: Scaffold endpoints for Stripe Connect account linking (for withdrawals)
 - **Transaction Logging**: Local JSON file persistence for demo purposes
+
+## Migrating to Supabase Edge Functions
+
+All endpoints from this server are now available as Supabase Edge Functions:
+
+| Node endpoint | Edge Function |
+|---|---|
+| `POST /payments/create-payment-intent` | `supabase/functions/payments` |
+| `GET/POST/DELETE /payments/methods[/:id]` | `supabase/functions/payments` |
+| `POST /payments/confirm` | `supabase/functions/payments` |
+| `POST /webhooks/stripe` | `supabase/functions/webhooks` |
+| `POST /connect/create-account-link` | `supabase/functions/connect` |
+| `POST /connect/verify-onboarding` | `supabase/functions/connect` |
+| `POST /connect/transfer` | `supabase/functions/connect` |
+| `POST /connect/retry-transfer` | `supabase/functions/connect` |
+| `GET /wallet/balance` | `supabase/functions/wallet` |
+| `GET /wallet/transactions` | `supabase/functions/wallet` |
+| `DELETE /auth/delete-account` | `supabase/functions/auth` |
+| `POST /apple-pay/payment-intent` | `supabase/functions/apple-pay` |
+| `POST /apple-pay/confirm` | `supabase/functions/apple-pay` |
+
+### Deployment steps
+
+1. **Install Supabase CLI** (if not already installed):
+   ```bash
+   npm install -g supabase
+   ```
+
+2. **Link your project**:
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   ```
+
+3. **Set required secrets**:
+   ```bash
+   supabase secrets set \
+     STRIPE_SECRET_KEY=sk_live_... \
+     STRIPE_WEBHOOK_SECRET=whsec_... \
+     SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
+     APP_URL=https://your-app.example.com
+   ```
+   See `supabase/functions/.env.example` for the full list.
+
+4. **Deploy all functions**:
+   ```bash
+   supabase functions deploy payments
+   supabase functions deploy webhooks
+   supabase functions deploy connect
+   supabase functions deploy wallet
+   supabase functions deploy auth
+   supabase functions deploy apple-pay
+   ```
+
+5. **Update the mobile app** — set `EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL` in your
+   `.env` to `https://<project-ref>.supabase.co/functions/v1`. The app will
+   automatically route all API calls through Edge Functions.
+
+6. **Update the Stripe webhook URL** in the Stripe Dashboard to:
+   ```
+   https://<project-ref>.supabase.co/functions/v1/webhooks
+   ```
+
+### Webhook configuration inspection
+
+To inspect your current Stripe webhook configuration:
+
+```bash
+# List all webhook endpoints registered with Stripe
+stripe webhook_endpoints list
+
+# View details of a specific endpoint
+stripe webhook_endpoints retrieve we_...
+
+# Test the Edge Function webhook locally with Stripe CLI
+stripe listen --forward-to https://<project-ref>.supabase.co/functions/v1/webhooks
+
+# Verify signature verification is working
+stripe trigger payment_intent.succeeded
+```
+
+For local Edge Function development:
+```bash
+# Start Supabase locally
+supabase start
+
+# Forward Stripe events to local function
+stripe listen --forward-to http://localhost:54321/functions/v1/webhooks
+```
+
+---
 
 ## Prerequisites
 
@@ -189,18 +285,69 @@ For production:
 
 ## Security Considerations
 
-⚠️ **Important**: This is a minimal implementation for development.
+⚠️ **Important**: This server implements production-grade security measures.
+
+### HTTPS Enforcement (CWE-319 Protection)
+
+**Production Mode**: When `NODE_ENV=production`, the server automatically:
+- ✅ **Rejects all HTTP requests** with 403 Forbidden
+- ✅ **Enforces HTTPS-only connections** (prevents cleartext transmission)
+- ✅ **Adds HSTS header** (Strict-Transport-Security: max-age=31536000)
+- ✅ **Adds security headers** (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection)
+- ✅ **Supports reverse proxy** (detects X-Forwarded-Proto header)
+
+**Development Mode**: HTTPS enforcement is disabled for local development convenience.
+
+### Production Deployment Options
+
+#### Option A: Reverse Proxy (Recommended)
+Deploy behind a reverse proxy that handles SSL/TLS termination:
+- **Nginx**: Configure with SSL certificates and set `proxy_set_header X-Forwarded-Proto $scheme;`
+- **Apache**: Use mod_proxy with SSL and `RequestHeader set X-Forwarded-Proto "https"`
+- **Cloudflare**: Automatically handles HTTPS and sets X-Forwarded-Proto
+- **AWS ALB/ELB**: Configure with SSL certificate and X-Forwarded-Proto
+
+Example nginx configuration:
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name api.yourdomain.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+#### Option B: Direct HTTPS (Advanced)
+For direct HTTPS without a reverse proxy, the server would need modifications to use the `https` module with SSL certificates.
+
+### Additional Security Measures
 
 For production deployment:
-- Use HTTPS only
-- Implement proper authentication (JWT, API keys, etc.)
-- Add rate limiting
-- Store data in a secure database, not JSON files
-- Validate all inputs
-- Add logging and monitoring
-- Use environment-specific configurations
-- Keep dependencies updated
-- Follow Stripe's security best practices
+- ✅ **Authentication**: JWT token validation via Supabase (implemented)
+- ✅ **Rate limiting**: Prevents abuse (implemented)
+- ✅ **Input sanitization**: XSS and injection protection (implemented)
+- ✅ **CORS**: Configurable allowed origins (implemented)
+- ✅ **HTTPS enforcement**: Rejects insecure connections (implemented)
+- ⚠️ **Database security**: Store data in a secure database, not JSON files
+- ⚠️ **Logging**: Add comprehensive security logging and monitoring
+- ⚠️ **Updates**: Keep dependencies updated regularly
+- ⚠️ **Stripe best practices**: Follow all Stripe security guidelines
+
+### Security Headers Explained
+
+When running in production, these headers protect against common attacks:
+- **Strict-Transport-Security (HSTS)**: Forces browsers to use HTTPS for 1 year
+- **X-Content-Type-Options**: Prevents MIME-type sniffing attacks
+- **X-Frame-Options**: Prevents clickjacking attacks
+- **X-XSS-Protection**: Enables browser XSS filtering
 
 ## Troubleshooting
 

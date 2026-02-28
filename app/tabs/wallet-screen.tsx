@@ -2,7 +2,7 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
@@ -10,15 +10,16 @@ import { TransactionHistoryScreen } from "../../components/transaction-history-s
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
-import { WithdrawScreen } from "../../components/withdraw-screen";
+import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
-import { useAuthContext } from '../../hooks/use-auth-context';
 
 
+import { colors } from '../../lib/theme';
 interface WalletScreenProps {
   onBack?: () => void
 }
@@ -29,7 +30,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
   const { balance, transactions, refreshFromApi } = useWallet();
-  const { paymentMethods, isLoading: stripeLoading, loadPaymentMethods } = useStripe();
+  const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
 
@@ -37,9 +38,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   useEffect(() => {
     // Only refresh if we have a valid session with an access token
     // and the user ID is not the fallback ID
-    const hasValidSession = session?.access_token && session?.user?.id && 
-                           session.user.id !== '00000000-0000-0000-0000-000000000001';
-    
+    const hasValidSession = session?.access_token && session?.user?.id &&
+      session.user.id !== '00000000-0000-0000-0000-000000000001';
+
     if (hasValidSession) {
       refreshFromApi(session.access_token);
     }
@@ -49,8 +50,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     // AddMoneyScreen now handles Stripe integration internally
     setShowAddMoney(false);
     // Refresh wallet after adding money, only if we have a valid session
-    const hasValidSession = session?.access_token && session?.user?.id && 
-                           session.user.id !== '00000000-0000-0000-0000-000000000001';
+    const hasValidSession = session?.access_token && session?.user?.id &&
+      session.user.id !== '00000000-0000-0000-0000-000000000001';
     if (hasValidSession) {
       refreshFromApi(session.access_token);
     }
@@ -59,7 +60,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   // Get recent transactions for preview (show all types, not just bounty-related)
   const recentTransactions = useMemo(() => transactions
     .slice(0, 5) // show most recent 5 transactions as preview
-  , [transactions]);
+    , [transactions]);
 
   // Helper function to get transaction label
   const getTransactionLabel = (tx: WalletTransactionRecord): string => {
@@ -86,7 +87,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   };
 
   if (showWithdraw) {
-    return <WithdrawScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
+    return <WithdrawWithBankScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
   }
   if (showAddMoney) {
     return <AddMoneyScreen onBack={() => setShowAddMoney(false)} onAddMoney={handleAddMoney} />;
@@ -95,20 +96,20 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     return <TransactionHistoryScreen onBack={() => setShowTransactionHistory(false)} />;
   }
 
-  
+
 
   return (
     <>
-    <ScrollView 
-      style={styles.container}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <BrandingLogo size="medium" />
+      <ScrollView
+        style={styles.container}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <BrandingLogo size="medium" />
+          </View>
         </View>
-      </View>
-  
+
         {/* Balance Card */}
         <View style={styles.sectionPad}>
           <View style={styles.balanceCard}>
@@ -117,8 +118,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
             </View>
             <View style={styles.balanceActionsRow}>
-              <TouchableOpacity 
-                style={styles.actionButton} 
+              <TouchableOpacity
+                style={styles.actionButton}
                 onPress={() => {
                   triggerHaptic('medium');
                   setShowAddMoney(true);
@@ -130,8 +131,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
                 <Text style={styles.actionButtonText}>Add Money</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.actionButton} 
+              <TouchableOpacity
+                style={styles.actionButton}
                 onPress={() => {
                   triggerHaptic('medium');
                   setShowWithdraw(true);
@@ -152,7 +153,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         <View style={styles.sectionPad}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Linked Accounts</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowPaymentMethods(true)}
               accessibilityRole="button"
               accessibilityLabel="Manage payment methods"
@@ -165,16 +166,40 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           {/* Only the account cards scroll; header remains fixed */}
           <ScrollView
             style={{ maxHeight: 180 }}
-            contentContainerStyle={{ paddingBottom: 8 }}
+            contentContainerStyle={{ paddingBottom: SPACING.COMPACT_GAP }}
             showsVerticalScrollIndicator={false}
           >
             {stripeLoading ? (
-              <View style={{ paddingVertical: 8 }}>
+              <View style={{ paddingVertical: SPACING.COMPACT_GAP }}>
                 <PaymentMethodSkeleton />
                 <PaymentMethodSkeleton />
               </View>
+            ) : stripeError ? (
+              <View
+                style={styles.accountCard}
+                accessible={true}
+                accessibilityRole="alert"
+                accessibilityLabel="Unable to load payment methods. Check your connection."
+              >
+                <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
+                  <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
+                  <Text style={styles.accountSub}>Check your connection</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={loadPaymentMethods}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading payment methods"
+                  accessibilityHint="Double tap to reload payment methods"
+                >
+                  <MaterialIcons name="refresh" size={20} color="#fff" accessibilityElementsHidden={true} />
+                </TouchableOpacity>
+              </View>
             ) : paymentMethods.length === 0 ? (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.accountCard}
                 onPress={() => setShowPaymentMethods(true)}
               >
@@ -205,19 +230,19 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             )}
           </ScrollView>
         </View>
-          
+
 
 
         {/* Transaction History Section */}
-        
-  <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}> 
+
+        <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Transaction History</Text>
             <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
               <Text style={styles.sectionManage}>View All</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={{ minHeight: 200 }}>
             {transactions.length === 0 ? (
               <EmptyState
@@ -225,7 +250,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 title="No Transactions Yet"
                 description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
                 actionLabel="Browse Bounties"
-                onAction={() => {}}
+                onAction={() => { }}
                 style={{ paddingVertical: 40 }}
               />
             ) : (
@@ -233,19 +258,19 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 {recentTransactions.map(tx => (
                   <View key={tx.id} style={styles.bountyCard}>
                     <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
-                    <Text style={[styles.bountyAmount, {color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5'}]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+                    <Text style={[styles.bountyAmount, { color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
                   </View>
                 ))}
               </>
             )}
           </View>
         </View>
-        
-      {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
-    </ScrollView>
 
-    {/* Modals should be rendered outside the main ScrollView to avoid nesting VirtualizedLists */}
-    <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
+        {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
+      </ScrollView>
+
+      {/* Modals should be rendered outside the main ScrollView to avoid nesting VirtualizedLists */}
+      <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />
     </>
   );
 
@@ -256,7 +281,7 @@ export default WalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   header: {
     flexDirection: 'row',
@@ -264,13 +289,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: '#059669',
-    gap: 8,
+    backgroundColor: colors.background.secondary,
+    gap: SPACING.COMPACT_GAP,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.COMPACT_GAP,
     transform: [
       { translateY: -2 },
       { translateX: -2 },
@@ -296,7 +321,7 @@ const styles = StyleSheet.create({
   balanceCard: {
     backgroundColor: '#047857',
     borderRadius: SPACING.SCREEN_HORIZONTAL,
-    padding: 20,
+    padding: SPACING.CARD_PADDING,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -367,7 +392,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#047857cc',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
-    marginBottom: 10,
+    marginBottom: SPACING.COMPACT_GAP,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -398,7 +423,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#047857cc',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
-    marginBottom: 10,
+    marginBottom: SPACING.COMPACT_GAP,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,

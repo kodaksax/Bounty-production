@@ -15,8 +15,9 @@ import { cancellationService } from 'lib/services/cancellation-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import type { Bounty } from 'lib/services/database.types';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+import { SUPPORT_EMAIL, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
+import { colors } from '../../../lib/theme';
 export default function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -117,7 +118,7 @@ export default function CancellationRequestScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
       </View>
     );
   }
@@ -129,7 +130,7 @@ export default function CancellationRequestScreen() {
         <Text className="text-lg font-semibold text-gray-900 mt-4">Bounty not found</Text>
         <TouchableOpacity
           onPress={() => router.back()}
-          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
+          className="mt-6 bg-background-secondary px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Go Back</Text>
         </TouchableOpacity>
@@ -149,14 +150,14 @@ export default function CancellationRequestScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Email Support</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleCallSupport}
-            className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-primary-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Phone size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Call Support</Text>
@@ -183,7 +184,7 @@ export default function CancellationRequestScreen() {
         </Text>
         <TouchableOpacity
           onPress={() => router.back()}
-          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
+          className="mt-6 bg-background-secondary px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Go Back</Text>
         </TouchableOpacity>
@@ -203,7 +204,7 @@ export default function CancellationRequestScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <HelpCircle size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -229,7 +230,7 @@ export default function CancellationRequestScreen() {
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-emerald-600 px-4 py-6 pt-12">
+        <View className="bg-background-secondary px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -304,7 +305,7 @@ export default function CancellationRequestScreen() {
             className={`rounded-lg py-4 ${
               submitting || !reason.trim()
                 ? 'bg-gray-300'
-                : 'bg-emerald-600'
+                : 'bg-background-secondary'
             }`}
           >
             {submitting ? (

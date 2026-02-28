@@ -9,25 +9,26 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { usePortfolio } from "hooks/usePortfolio";
 import { useRatings } from "hooks/useRatings";
 import { OptimizedImage } from "lib/components/OptimizedImage";
-import { MAX_PORTFOLIO_ITEMS, portfolioService } from "lib/services/portfolio-service";
 import { blockingService } from "lib/services/blocking-service";
+import { MAX_PORTFOLIO_ITEMS, portfolioService } from "lib/services/portfolio-service";
 import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { showReportAlert } from "./ReportModal";
+import { ReputationScoreCompact } from "./ui/reputation-score";
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton-loaders";
 import { VerificationBadge, type VerificationLevel } from "./ui/verification-badge";
-import { ReputationScoreCompact } from "./ui/reputation-score";
-import { showReportAlert } from "./ReportModal";
+import { colors } from '../lib/theme';
 
 /**
  * Progress bar component for upload progress
@@ -70,6 +71,7 @@ interface EnhancedProfileSectionProps {
   isOwnProfile?: boolean;
   showPortfolio?: boolean; // control whether to render the portfolio list here
   activityStats?: { jobsAccepted: number; bountiesPosted: number; badgesEarned: number };
+  hideActions?: boolean; // when true, do not render the internal more-actions button/modal (useful when actions are handled by the parent component)
 }
 
 function usePortfolioVideoPlayer(item: PortfolioItem | null) {
@@ -111,6 +113,7 @@ export function EnhancedProfileSection({
   isOwnProfile = true,
   showPortfolio = true,
   activityStats,
+  hideActions = false,
 }: EnhancedProfileSectionProps) {
   const { profile: normalizedFromHookOrLocal, loading: profileLoading } = useNormalizedProfile(userId);
   const resolvedUserId = userId || 'current-user'
@@ -336,8 +339,8 @@ export function EnhancedProfileSection({
             </TouchableOpacity>
           )}
           
-          {/* More actions button for other user profiles */}
-          {!isOwnProfile && (
+          {/* More actions button for other user profiles (can be hidden by parent) */}
+          {!isOwnProfile && !hideActions && (
             <TouchableOpacity 
               onPress={() => setShowMoreActions(true)}
               className="ml-2 p-2 rounded-lg bg-emerald-700/50"
@@ -349,8 +352,8 @@ export function EnhancedProfileSection({
           )}
         </View>
         
-        {/* More Actions Modal */}
-        {!isOwnProfile && (
+        {/* More Actions Modal (hidden when `hideActions` is true) */}
+        {!isOwnProfile && !hideActions && (
           <Modal
             visible={showMoreActions}
             transparent
@@ -384,9 +387,9 @@ export function EnhancedProfileSection({
                     {blockLoading ? (
                       <ActivityIndicator size="small" color="#fca5a5" />
                     ) : (
-                      <MaterialIcons name={isBlocked ? 'check-circle' : 'block'} size={22} color={isBlocked ? '#10b981' : '#fca5a5'} />
+                      <MaterialIcons name={isBlocked ? 'check-circle' : 'block'} size={22} color={isBlocked ? colors.primary[500] : '#fca5a5'} />
                     )}
-                    <Text style={{ fontSize: 16, color: isBlocked ? '#10b981' : '#fca5a5', fontWeight: '500' }}>
+                    <Text style={{ fontSize: 16, color: isBlocked ? colors.primary[500] : '#fca5a5', fontWeight: '500' }}>
                       {isBlocked ? 'Unblock User' : 'Block User'}
                     </Text>
                   </TouchableOpacity>

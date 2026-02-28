@@ -1,11 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
+import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
 import type { Attachment } from '../../../lib/types';
 
 interface StepDetailsProps {
@@ -34,6 +34,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
     bucket: 'bounty-attachments',
     folder: 'bounties',
     maxSizeMB: 10,
+    allowsMultiple: true,
     onUploaded: (attachment) => {
       const currentAttachments = draft.attachments || [];
       onUpdate({ attachments: [...currentAttachments, attachment] });
@@ -85,7 +86,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
 
   const handleNext = () => {
     const descriptionError = validateDescription(draft.description);
-    
+
     if (descriptionError) {
       setErrors({ description: descriptionError });
       setTouched({ description: true });
@@ -177,7 +178,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           <Text className="text-emerald-100 text-base font-semibold mb-2">
             Attachments (optional)
           </Text>
-          
+
           {/* Upload Button */}
           <TouchableOpacity
             className="bg-emerald-700/50 border-2 border-dashed border-emerald-500/50 rounded-lg py-6 flex items-center justify-center mb-3"
@@ -238,10 +239,10 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
                         attachment.mimeType?.startsWith('image/')
                           ? 'image'
                           : attachment.mimeType?.startsWith('video/')
-                          ? 'videocam'
-                          : attachment.mimeType?.includes('pdf')
-                          ? 'picture-as-pdf'
-                          : 'insert-drive-file'
+                            ? 'videocam'
+                            : attachment.mimeType?.includes('pdf')
+                              ? 'picture-as-pdf'
+                              : 'insert-drive-file'
                       }
                       size={24}
                       color="#6ee7b7"
@@ -296,17 +297,15 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           <TouchableOpacity
             onPress={handleNext}
             disabled={!isValid}
-            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${
-              isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
-            }`}
+            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
+              }`}
             accessibilityLabel="Continue to next step"
             accessibilityRole="button"
             accessibilityState={{ disabled: !isValid }}
           >
             <Text
-              className={`font-semibold mr-2 ${
-                isValid ? 'text-white' : 'text-emerald-400/40'
-              }`}
+              className={`font-semibold mr-2 ${isValid ? 'text-white' : 'text-emerald-400/40'
+                }`}
             >
               Next
             </Text>

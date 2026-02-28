@@ -3,9 +3,10 @@
  * Displays comprehensive payment receipt information
  */
 
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
-import { Check, Download, Share2, Mail } from 'lucide-react-native';
+import { Check, Download, Mail, Share2 } from 'lucide-react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { colors, theme } from '../lib/theme';
+
 
 // Support email - configurable via environment variable
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@bountyexpo.com';
@@ -69,7 +70,7 @@ export function PaymentReceipt({
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'succeeded':
-        return '#10b981'; // emerald-500
+        return colors.primary[500]; // emerald-500
       case 'pending':
         return '#f59e0b'; // amber-500
       case 'failed':
@@ -125,7 +126,7 @@ export function PaymentReceipt({
         {/* Transaction Details */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Transaction Details</Text>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Transaction ID</Text>
             <Text style={styles.detailValue}>{receipt.id}</Text>
@@ -152,7 +153,7 @@ export function PaymentReceipt({
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Payment Method</Text>
               <Text style={styles.detailValue}>
-                {receipt.paymentMethod.brand?.toUpperCase() || receipt.paymentMethod.type} 
+                {receipt.paymentMethod.brand?.toUpperCase() || receipt.paymentMethod.type}
                 {receipt.paymentMethod.last4 && ` •••• ${receipt.paymentMethod.last4}`}
               </Text>
             </View>
@@ -163,7 +164,7 @@ export function PaymentReceipt({
         {receipt.fees && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Fee Breakdown</Text>
-            
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Subtotal</Text>
               <Text style={styles.detailValue}>
@@ -290,12 +291,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...theme.shadows.sm,
   },
+
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',

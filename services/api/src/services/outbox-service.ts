@@ -10,7 +10,8 @@ import { outboxEvents } from '../db/schema';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const useSupabase = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
-const supabase = useSupabase ? createClient(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string) : null;
+// Relax typing to avoid PostgREST `never` inference when table models are partial
+const supabase = useSupabase ? createClient<any>(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string) : null;
 
 // Define types directly here to avoid import issues
 export type OutboxEventType = 

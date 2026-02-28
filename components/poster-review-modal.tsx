@@ -2,26 +2,28 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    FlatList,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
+import { colors, theme } from '../lib/theme';
 import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { RatingStars } from './ui/rating-stars';
+
 
 interface PosterReviewModalProps {
   visible: boolean;
@@ -234,24 +236,24 @@ export function PosterReviewModal({
       await completionService.approveSubmission(bountyId);
 
       // Release escrow if paid bounty
-        if (!isForHonor && bountyAmount > 0) {
-          try {
-            // Pass bountyId through as string (wallet now accepts string|number)
-            await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
-            // Trigger success haptic for successful payment release
-            triggerHaptic('success');
-          } catch (escrowError) {
-            console.error('Error releasing escrow:', escrowError);
-            Alert.alert(
-              'Payment Issue',
-              'Work approved but payment release failed. Please contact support.',
-              [{ text: 'OK' }]
-            );
-          }
-        } else {
-          // For honor bounties, still trigger success haptic for approval
+      if (!isForHonor && bountyAmount > 0) {
+        try {
+          // Pass bountyId through as string (wallet now accepts string|number)
+          await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
+          // Trigger success haptic for successful payment release
           triggerHaptic('success');
+        } catch (escrowError) {
+          console.error('Error releasing escrow:', escrowError);
+          Alert.alert(
+            'Payment Issue',
+            'Work approved but payment release failed. Please contact support.',
+            [{ text: 'OK' }]
+          );
         }
+      } else {
+        // For honor bounties, still trigger success haptic for approval
+        triggerHaptic('success');
+      }
 
       // Show rating form
       setShowPayoutWarning(false);
@@ -407,20 +409,20 @@ export function PosterReviewModal({
         accessibilityLabel={`View attachment ${displayName}`}
         accessibilityHint="Opens the attachment in a viewer"
       >
-      <View style={styles.proofIcon}>
-        <MaterialIcons
-          name={item.type === 'image' ? 'image' : 'insert-drive-file'}
-          size={32}
-          color="#6ee7b7"
-        />
-      </View>
-      <View style={styles.proofInfo}>
-        <Text style={styles.proofName} numberOfLines={1}>
-          {displayName}
-        </Text>
-        <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
-      </View>
-      <MaterialIcons name="open-in-new" size={20} color="#a7f3d0" />
+        <View style={styles.proofIcon}>
+          <MaterialIcons
+            name={item.type === 'image' ? 'image' : 'insert-drive-file'}
+            size={32}
+            color="#6ee7b7"
+          />
+        </View>
+        <View style={styles.proofInfo}>
+          <Text style={styles.proofName} numberOfLines={1}>
+            {displayName}
+          </Text>
+          <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
+        </View>
+        <MaterialIcons name="open-in-new" size={20} color="#a7f3d0" />
       </TouchableOpacity>
     );
   };
@@ -451,7 +453,7 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#10b981" />
+              <ActivityIndicator size="large" color={colors.primary[500]} />
               <Text style={styles.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
@@ -507,172 +509,172 @@ export function PosterReviewModal({
               </View>
             </ScrollView>
           ) : showRatingForm ? (
-          /* Rating Form */
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
-          >
-            <View style={styles.ratingFormContainer}>
-              <MaterialIcons name="star" size={64} color="#fbbf24" />
-              <Text style={styles.ratingTitle}>Rate {hunterName}</Text>
-              <Text style={styles.ratingSubtitle}>
-                How would you rate their work on this bounty?
-              </Text>
+            /* Rating Form */
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={styles.ratingFormContainer}>
+                <MaterialIcons name="star" size={64} color="#fbbf24" />
+                <Text style={styles.ratingTitle}>Rate {hunterName}</Text>
+                <Text style={styles.ratingSubtitle}>
+                  How would you rate their work on this bounty?
+                </Text>
 
-              <View style={styles.ratingStarsContainer}>
-                <RatingStars
-                  rating={rating}
-                  onRatingChange={setRating}
-                  size="large"
+                <View style={styles.ratingStarsContainer}>
+                  <RatingStars
+                    rating={rating}
+                    onRatingChange={setRating}
+                    size="large"
+                  />
+                </View>
+
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add an optional comment (visible to hunter)..."
+                  placeholderTextColor="rgba(255,254,245,0.4)"
+                  value={ratingComment}
+                  onChangeText={setRatingComment}
+                  multiline
+                  numberOfLines={4}
+                  maxLength={500}
+                  textAlignVertical="top"
                 />
-              </View>
-
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add an optional comment (visible to hunter)..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
-                value={ratingComment}
-                onChangeText={setRatingComment}
-                multiline
-                numberOfLines={4}
-                maxLength={500}
-                textAlignVertical="top"
-              />
-
-              <TouchableOpacity
-                style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
-                onPress={handleSubmitRating}
-                disabled={isProcessing || rating === 0}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.buttonText}>Complete Bounty & Rate Hunter</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        ) : showRevisionForm ? (
-          /* Revision Request Form */
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
-          >
-            <View style={styles.revisionFormContainer}>
-              <MaterialIcons name="feedback" size={64} color="#fbbf24" />
-              <Text style={styles.revisionTitle}>Request Changes</Text>
-              <Text style={styles.revisionSubtitle}>
-                Explain what needs to be improved or changed.
-              </Text>
-
-              <TextInput
-                style={styles.feedbackInput}
-                placeholder="Describe the changes needed..."
-                placeholderTextColor="rgba(255,254,245,0.4)"
-                value={revisionFeedback}
-                onChangeText={setRevisionFeedback}
-                multiline
-                numberOfLines={6}
-                maxLength={1000}
-                textAlignVertical="top"
-              />
-
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setShowRevisionForm(false)}
-                >
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
-                  onPress={handleRequestRevision}
+                  onPress={handleSubmitRating}
+                  disabled={isProcessing || rating === 0}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Complete Bounty & Rate Hunter</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          ) : showRevisionForm ? (
+            /* Revision Request Form */
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={styles.revisionFormContainer}>
+                <MaterialIcons name="feedback" size={64} color="#fbbf24" />
+                <Text style={styles.revisionTitle}>Request Changes</Text>
+                <Text style={styles.revisionSubtitle}>
+                  Explain what needs to be improved or changed.
+                </Text>
+
+                <TextInput
+                  style={styles.feedbackInput}
+                  placeholder="Describe the changes needed..."
+                  placeholderTextColor="rgba(255,254,245,0.4)"
+                  value={revisionFeedback}
+                  onChangeText={setRevisionFeedback}
+                  multiline
+                  numberOfLines={6}
+                  maxLength={1000}
+                  textAlignVertical="top"
+                />
+
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => setShowRevisionForm(false)}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
+                    onPress={handleRequestRevision}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.buttonText}>Send Feedback</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          ) : (
+            /* Submission Review */
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={styles.hunterInfo}>
+                <View style={styles.hunterAvatar}>
+                  <MaterialIcons name="person" size={32} color="#6ee7b7" />
+                </View>
+                <View style={styles.hunterDetails}>
+                  <Text style={styles.hunterName}>{hunterName}</Text>
+                  <Text style={styles.submittedText}>
+                    Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Message */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Message from Hunter</Text>
+                <View style={styles.messageBox}>
+                  <Text style={styles.messageText}>{submission.message}</Text>
+                </View>
+              </View>
+
+              {/* Proof Items */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Proof of Completion</Text>
+                {submission.proof_items && submission.proof_items.length > 0 ? (
+                  <FlatList
+                    data={submission.proof_items}
+                    renderItem={renderProofItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    contentContainerStyle={styles.proofList}
+                  />
+                ) : (
+                  <View style={styles.emptyProof}>
+                    <Text style={styles.emptyProofText}>No proof attached</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.rejectButton}
+                  onPress={() => setShowRevisionForm(true)}
+                  disabled={isProcessing}
+                >
+                  <MaterialIcons name="feedback" size={20} color="#fff" />
+                  <Text style={styles.rejectButtonText}>Request Changes</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.approveButton, isProcessing && styles.buttonDisabled]}
+                  onPress={() => setShowPayoutWarning(true)}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.buttonText}>Send Feedback</Text>
+                    <>
+                      <MaterialIcons name="check-circle" size={20} color="#fff" />
+                      <Text style={styles.approveButtonText}>Proceed to Payout</Text>
+                    </>
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
-        ) : (
-          /* Submission Review */
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
-          >
-            <View style={styles.hunterInfo}>
-              <View style={styles.hunterAvatar}>
-                <MaterialIcons name="person" size={32} color="#6ee7b7" />
-              </View>
-              <View style={styles.hunterDetails}>
-                <Text style={styles.hunterName}>{hunterName}</Text>
-                <Text style={styles.submittedText}>
-                  Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
-                </Text>
-              </View>
-            </View>
-
-            {/* Message */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Message from Hunter</Text>
-              <View style={styles.messageBox}>
-                <Text style={styles.messageText}>{submission.message}</Text>
-              </View>
-            </View>
-
-            {/* Proof Items */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Proof of Completion</Text>
-              {submission.proof_items && submission.proof_items.length > 0 ? (
-                <FlatList
-                  data={submission.proof_items}
-                  renderItem={renderProofItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  contentContainerStyle={styles.proofList}
-                />
-              ) : (
-                <View style={styles.emptyProof}>
-                  <Text style={styles.emptyProofText}>No proof attached</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.rejectButton}
-                onPress={() => setShowRevisionForm(true)}
-                disabled={isProcessing}
-              >
-                <MaterialIcons name="feedback" size={20} color="#fff" />
-                <Text style={styles.rejectButtonText}>Request Changes</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.approveButton, isProcessing && styles.buttonDisabled]}
-                onPress={() => setShowPayoutWarning(true)}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <MaterialIcons name="check-circle" size={20} color="#fff" />
-                    <Text style={styles.approveButtonText}>Proceed to Payout</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        )}
-      </View>
-    </Modal>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
 
       <AttachmentViewerModal
         visible={viewerVisible}
@@ -863,10 +865,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingVertical: 16,
     borderRadius: 12,
+    ...theme.shadows.emerald,
   },
+
   approveButtonText: {
     color: '#fff',
     fontSize: 15,
@@ -905,13 +909,15 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
     width: '100%',
     alignItems: 'center',
+    ...theme.shadows.emerald,
   },
+
   buttonText: {
     color: '#fff',
     fontSize: 16,
@@ -955,10 +961,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: colors.primary[500],
   },
   secondaryButtonText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1046,17 +1052,14 @@ const styles = StyleSheet.create({
     width: SLIDER_HANDLE_WIDTH,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
     top: 2,
     left: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadows.emerald,
   },
+
   warningActions: {
     alignItems: 'center',
     marginTop: 8,

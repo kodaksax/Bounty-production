@@ -10,18 +10,20 @@
  * Bounty requests = applications from hunters to accept bounties
  */
 
-import { FastifyInstance, FastifyReply } from 'fastify';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/unified-auth';
-import { 
-  asyncHandler, 
-  ValidationError, 
-  NotFoundError, 
-  AuthorizationError,
-  ConflictError
-} from '../middleware/error-handler';
-import { config } from '../config';
-import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config';
+import {
+  asyncHandler,
+  AuthorizationError,
+  ConflictError,
+  NotFoundError,
+  ValidationError
+} from '../middleware/error-handler';
+import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
+import { toJsonSchema } from '../utils/zod-json';
+import { notificationService } from '../services/notification-service';
 
 /**
  * Validation schemas using Zod
@@ -77,15 +79,11 @@ interface BountyRequest {
   hunter_id: string;  // user_id in old code
   poster_id?: string | null;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
-  message?: string | null;
+  message: string;
   proposed_completion_date?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
-
-/**
- * Bounty interface for status checks
- */
 interface Bounty {
   id: string;
   user_id: string;  // poster
@@ -98,11 +96,12 @@ interface Bounty {
 /**
  * Supabase admin client singleton
  */
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
-function getSupabaseAdmin() {
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(
+    // Relax typing to avoid PostgREST `never` inference on selects/inserts/updates
+    supabaseAdmin = createClient<any>(
       config.supabase.url,
       config.supabase.serviceRoleKey,
       {
@@ -130,7 +129,7 @@ function getBountyPosterId(bounty: Bounty): string | null {
 export async function registerConsolidatedBountyRequestRoutes(
   fastify: FastifyInstance
 ): Promise<void> {
-  
+
   /**
    * GET /api/bounty-requests
    * List bounty requests with optional filters
@@ -161,7 +160,8 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'List bounty requests with filters and pagination',
-        querystring: listRequestsSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        querystring: toJsonSchema(listRequestsSchema, 'ListBountyRequestsQuery'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -169,9 +169,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       const query = listRequestsSchema.parse(request.query);
 
       request.log.info(
-        { 
-          userId, 
-          filters: query 
+        {
+          userId,
+          filters: query
         },
         'Listing bounty requests'
       );
@@ -182,8 +182,13 @@ export async function registerConsolidatedBountyRequestRoutes(
         // Build query with joins to get bounty and profile data
         let dbQuery = supabase
           .from('bounty_requests')
-          .select(`
-            *,
+          .select(
+            `
+            id,
+            bounty_id,
+            hunter_id,
+            status,
+            created_at,
             bounties:bounty_id (
               id,
               title,
@@ -198,7 +203,9 @@ export async function registerConsolidatedBountyRequestRoutes(
               username,
               avatar_url
             )
-          `, { count: 'exact' });
+            `,
+            { count: 'exact' }
+          );
 
         // Apply filters
         if (query.status) {
@@ -216,7 +223,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Authorization filter: users can only see requests for their bounties or their own applications
         // We'll filter this in application code after fetching since complex OR conditions in Supabase can be tricky
-        
+
         // Apply sorting
         dbQuery = dbQuery.order('created_at', { ascending: false });
 
@@ -236,7 +243,7 @@ export async function registerConsolidatedBountyRequestRoutes(
         // User can see requests if:
         // 1. They are the bounty poster (need to check bounty ownership)
         // 2. They are the hunter (applicant)
-        
+
         // Fetch bounty ownership for authorization
         if (requests && requests.length > 0) {
           const bountyIds = [...new Set(requests.map(r => r.bounty_id))];
@@ -244,7 +251,7 @@ export async function registerConsolidatedBountyRequestRoutes(
             .from('bounties')
             .select('id, user_id, poster_id')
             .in('id', bountyIds);
-          
+
           const bountyOwnership = new Map<string, string>();
           bounties?.forEach(b => {
             const posterId = b.poster_id || b.user_id;
@@ -270,7 +277,7 @@ export async function registerConsolidatedBountyRequestRoutes(
           // even though authorization filtering may reduce the returned items.
           // For large datasets, consider implementing database-level filtering with RLS.
           const total = typeof count === 'number' && Number.isFinite(count) ? count : 0;
-          
+
           return {
             requests: authorizedRequests,
             pagination: {
@@ -319,9 +326,7 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Get bounty request details by ID',
-        params: z.object({
-          id: z.string().uuid('Invalid request ID format'),
-        }),
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid request ID format') }), 'GetBountyRequestParams'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -356,14 +361,14 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Authorization: Check if user is the hunter or the bounty owner
         const isHunter = bountyRequest.hunter_id === userId;
-        
+
         // Fetch bounty to check ownership
         const { data: bounty } = await supabase
           .from('bounties')
           .select('user_id, poster_id')
           .eq('id', bountyRequest.bounty_id)
           .single();
-        
+
         const posterId = bounty ? (bounty.poster_id || bounty.user_id) : null;
         const isPoster = posterId === userId;
 
@@ -411,9 +416,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Get bounty requests by user ID',
-        params: z.object({
+        params: toJsonSchema(z.object({
           userId: z.string().uuid('Invalid user ID format'),
-        }),
+        }), 'GetBountyRequestsByUserParams'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -449,13 +454,13 @@ export async function registerConsolidatedBountyRequestRoutes(
               .from('bounties')
               .select('id, user_id, poster_id')
               .in('id', bountyIds);
-            
+
             // Filter to only requests for this user's bounties
             const userBountyIds = new Set(
               bounties?.filter(b => (b.poster_id || b.user_id) === userId).map(b => b.id) || []
             );
-            
-            const authorizedRequests = requests.filter(req => 
+
+            const authorizedRequests = requests.filter(req =>
               userBountyIds.has(req.bounty_id)
             );
 
@@ -509,7 +514,8 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Create a new bounty request/application',
-        body: createRequestSchema,
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(createRequestSchema, 'CreateBountyRequestBody'),
         response: {
           201: {
             type: 'object',
@@ -539,7 +545,7 @@ export async function registerConsolidatedBountyRequestRoutes(
         // Lookup bounty to validate it exists and is open
         const { data: bounty, error: bountyError } = await supabase
           .from('bounties')
-          .select('id, user_id, poster_id, status')
+          .select('id, user_id, poster_id, status, title')
           .eq('id', body.bounty_id)
           .single();
 
@@ -556,7 +562,7 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         // Get the poster_id (with fallback to user_id)
         const posterId = getBountyPosterId(bounty);
-        
+
         if (!posterId) {
           throw new ValidationError('Bounty missing poster information');
         }
@@ -620,12 +626,32 @@ export async function registerConsolidatedBountyRequestRoutes(
           'Bounty request created successfully'
         );
 
+        // Send notification to the bounty poster
+        try {
+          await notificationService.notifyBountyApplication(
+            userId,           // hunterId - the applicant
+            posterId,         // posterId - receives the notification
+            body.bounty_id,   // bountyId
+            bounty.title      // bountyTitle
+          );
+          request.log.info(
+            { posterId, bountyId: body.bounty_id },
+            'Application notification sent to poster'
+          );
+        } catch (notificationError) {
+          // Log error but don't fail the request - notification failure shouldn't block application
+          request.log.error(
+            { error: notificationError, posterId, bountyId: body.bounty_id },
+            'Failed to send application notification'
+          );
+        }
+
         reply.code(201);
         return bountyRequest;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof ValidationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof ValidationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(
@@ -670,10 +696,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Update bounty request status',
-        params: z.object({
-          id: z.string().uuid('Invalid request ID format'),
-        }),
-        body: updateRequestSchema,
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid request ID format') }), 'UpdateBountyRequestParams'),
+        // Provide Fastify with JSON Schema converted from Zod
+        body: toJsonSchema(updateRequestSchema, 'UpdateBountyRequestBody'),
       },
     },
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
@@ -879,10 +904,10 @@ export async function registerConsolidatedBountyRequestRoutes(
 
         return updatedRequest;
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError ||
-            error instanceof ValidationError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError ||
+          error instanceof ValidationError) {
           throw error;
         }
         request.log.error(
@@ -918,9 +943,9 @@ export async function registerConsolidatedBountyRequestRoutes(
       schema: {
         tags: ['bounty-requests'],
         description: 'Delete bounty request (applicant only, pending status only)',
-        params: z.object({
+        params: toJsonSchema(z.object({
           id: z.string().uuid('Invalid request ID format'),
-        }),
+        }), 'DeleteBountyRequestParams'),
         response: {
           200: {
             type: 'object',
@@ -1005,9 +1030,9 @@ export async function registerConsolidatedBountyRequestRoutes(
           message: 'Bounty request deleted successfully',
         };
       } catch (error) {
-        if (error instanceof NotFoundError || 
-            error instanceof AuthorizationError || 
-            error instanceof ConflictError) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError) {
           throw error;
         }
         request.log.error(

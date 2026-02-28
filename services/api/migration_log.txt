@@ -1,0 +1,21 @@
+Checking for root .env at C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\.env
+Loaded root .env
+DATABASE_URL length: 88
+DATABASE_URL host: db.xwlwqzzphmmhghiqvkeu.supabase.co:5432
+[db] Using connection string: (built from env)
+Reading migration from C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\supabase\migrations\20260115_enhance_webhook_tracking.sql...
+C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\pg-pool\index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+Error: getaddrinfo ENOTFOUND db.xwlwqzzphmmhghiqvkeu.supabase.co
+    at C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async applyMigration (C:\Users\Kodak\Desktop\BOUNTYv0\Code Files\Bounty-production\services\api\src\apply-migration.ts:32:20) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'db.xwlwqzzphmmhghiqvkeu.supabase.co'
+}
+
+Node.js v20.19.6
