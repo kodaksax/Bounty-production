@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router'
 import { useBounties } from '../hooks/useBounties'
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useValidUserId } from '../hooks/useValidUserId'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
@@ -19,7 +20,6 @@ import { locationService } from '../lib/services/location-service'
 import { searchService } from '../lib/services/search-service'
 import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
-import { CURRENT_USER_ID } from '../lib/utils/data-utils'
 
 export type BountyFeedHandle = {
   /** Reload the first page of bounties (reset pagination). */
@@ -80,6 +80,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   // Location hook for calculating real distances
   const { location: userLocation, permission } = useLocation()
+
+  const validUserId = useValidUserId()
 
   // Collapsing header config (using standardized constants)
   const HEADER_EXPANDED = HEADER_LAYOUT.expandedHeight
@@ -196,12 +198,13 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   // Load user's bounty applications (to filter out applied/rejected bounties from feed)
   const loadUserApplications = useCallback(async () => {
-    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+    const uid = validUserId ?? currentUserId
+    if (!uid) {
       setApplicationsLoaded(true)
       return
     }
     try {
-      const requests = await bountyRequestService.getAll({ userId: currentUserId })
+      const requests = await bountyRequestService.getAll({ userId: uid })
       const ids = new Set<string>(
         requests
           .filter(r => r.bounty_id != null)

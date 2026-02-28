@@ -11,7 +11,6 @@ import { TrustBadges } from "components/ui/trust-badges";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
-;
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
@@ -208,7 +207,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     }
     load()
     // Only depend on primitive identity fields to avoid repeated triggers when objects change by ref
-  }, [showSettings, userProfile?.username, authProfile?.id, authUserId])
+  }, [authProfile?.id, authProfile?.username, userProfile?.id, userProfile?.username, authUserId, showSettings]);
 
   const handleSaveSkills = (updatedSkills: { id: string; icon: string; text: string; credentialUrl?: string }[]) => {
     setSkills(updatedSkills)
@@ -307,7 +306,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            className="p-2"
             onPress={() => setShowSettings(true)}
             accessibilityRole="button"
             accessibilityLabel="Open settings"

@@ -10,7 +10,6 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
-import { CURRENT_USER_ID, getCurrentUserId } from "lib/utils/data-utils"
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
@@ -21,6 +20,7 @@ import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
+import { useValidUserId } from '../../hooks/useValidUserId'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -83,7 +83,8 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
 
 export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
   const { isEmailVerified } = useAuthContext()
-  const currentUserId = getCurrentUserId()
+  const rawUserId = useValidUserId()
+  const currentUserId = rawUserId ?? undefined
   const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("new")
@@ -211,8 +212,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [])
 
   const loadMyBounties = React.useCallback(async () => {
-    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
-    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+    // Guard: don't load if no valid user
+    if (!currentUserId) {
       // Immediately clear loading flags and empty data to avoid stuck skeletons
       setIsLoading((prev) => ({ ...prev, myBounties: false, requests: false }))
       setMyBounties([])
@@ -238,8 +239,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   }, [loadRequestsForMyBounties, currentUserId])
 
   const loadInProgress = React.useCallback(async () => {
-    // Guard: don't load if no valid user (including sentinel/fallback user IDs)
-    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+    // Guard: don't load if no valid user
+    if (!currentUserId) {
       // Immediately clear loading flags and empty data to avoid stuck skeletons
       setIsLoading((prev) => ({ ...prev, inProgress: false }))
       setInProgressBounties([])
@@ -290,8 +291,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   // Fetch data from the API
   useEffect(() => {
-    // Only load data if we have a valid authenticated user (including sentinel/fallback user IDs)
-    if (!currentUserId || currentUserId === CURRENT_USER_ID) {
+    // Only load data if we have a valid authenticated user
+    if (!currentUserId) {
       // Immediately clear loading flags and empty data arrays to avoid stuck skeletons
       setIsLoading({ myBounties: false, inProgress: false, requests: false })
       setMyBounties([])
