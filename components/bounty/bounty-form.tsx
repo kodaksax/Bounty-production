@@ -18,6 +18,7 @@ import type { z } from "zod";
 // This schema was previously in lib/supabase/schema.
 // You should keep validation, so we define it here or in a shared types file.
 import { z as zod } from "zod";
+import { colors } from '../../lib/theme';
 export const bountySchema = zod.object({
   title: zod.string().min(5, "Title must be at least 5 characters"),
   description: zod.string().min(20, "Description must be at least 20 characters"),
@@ -132,7 +133,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       {/* Safety Tips Banner */}
       <View className="bg-emerald-700/30 rounded-lg p-3 border border-emerald-500/30">
         <View className="flex-row items-center mb-2">
-          <MaterialIcons name="security" size={18} color="#10b981" />
+          <MaterialIcons name="security" size={18} color={colors.primary[500]} />
           <Text className="text-sm font-medium text-white ml-2">Safety Tips</Text>
         </View>
         <Text className="text-xs text-emerald-200 leading-5">

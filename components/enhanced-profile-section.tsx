@@ -28,6 +28,7 @@ import { showReportAlert } from "./ReportModal";
 import { ReputationScoreCompact } from "./ui/reputation-score";
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from "./ui/skeleton-loaders";
 import { VerificationBadge, type VerificationLevel } from "./ui/verification-badge";
+import { colors } from '../lib/theme';
 
 /**
  * Progress bar component for upload progress
@@ -386,9 +387,9 @@ export function EnhancedProfileSection({
                     {blockLoading ? (
                       <ActivityIndicator size="small" color="#fca5a5" />
                     ) : (
-                      <MaterialIcons name={isBlocked ? 'check-circle' : 'block'} size={22} color={isBlocked ? '#10b981' : '#fca5a5'} />
+                      <MaterialIcons name={isBlocked ? 'check-circle' : 'block'} size={22} color={isBlocked ? colors.primary[500] : '#fca5a5'} />
                     )}
-                    <Text style={{ fontSize: 16, color: isBlocked ? '#10b981' : '#fca5a5', fontWeight: '500' }}>
+                    <Text style={{ fontSize: 16, color: isBlocked ? colors.primary[500] : '#fca5a5', fontWeight: '500' }}>
                       {isBlocked ? 'Unblock User' : 'Block User'}
                     </Text>
                   </TouchableOpacity>

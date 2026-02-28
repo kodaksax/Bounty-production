@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
+import { colors } from '../lib/theme';
 
 interface AttachmentViewerModalProps {
   visible: boolean;
@@ -309,7 +310,7 @@ export function AttachmentViewerModal({
       case 'document':
         return (
           <View style={styles.documentPreview}>
-            <MaterialIcons name="description" size={80} color="#10b981" />
+            <MaterialIcons name="description" size={80} color={colors.primary[500]} />
             <Text style={styles.documentName}>{displayName}</Text>
             <Text style={styles.documentHint}>Tap download to view this document</Text>
           </View>

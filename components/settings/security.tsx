@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { MfaCodeModal } from '../ui/mfa-code-modal';
 import { supabase } from '../../lib/supabase';
+import { colors } from '../../lib/theme';
 
 interface SecuritySettingsProps {
   onBack: () => void;
@@ -227,7 +228,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
       </View>
     );
   }
@@ -265,7 +266,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={emailVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={emailVerified ? '#10b981' : '#ef4444'}
+                color={emailVerified ? colors.primary[500] : '#ef4444'}
               />
             </View>
             <View style={styles.divider} />
@@ -279,7 +280,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={phoneVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={phoneVerified ? '#10b981' : '#ef4444'}
+                color={phoneVerified ? colors.primary[500] : '#ef4444'}
               />
             </View>
           </View>
@@ -314,13 +315,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
                 </Text>
               </View>
               {isEnabling2FA ? (
-                <ActivityIndicator size="small" color="#10b981" />
+                <ActivityIndicator size="small" color={colors.primary[500]} />
               ) : (
                 <Switch
                   value={twoFactorEnabled}
                   onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
-                  trackColor={{ false: '#374151', true: '#059669' }}
-                  thumbColor={twoFactorEnabled ? '#10b981' : '#9ca3af'}
+                  trackColor={{ false: '#374151', true: colors.background.secondary }}
+                  thumbColor={twoFactorEnabled ? colors.primary[500] : '#9ca3af'}
                 />
               )}
             </TouchableOpacity>
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
   enabledBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
   },
   recommendedBadge: {
     backgroundColor: 'rgba(245,158,11,0.2)',

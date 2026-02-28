@@ -8,6 +8,7 @@ import { deviceService, UserDevice } from '../../lib/services/device-service';
 import { supabase } from '../../lib/supabase';
 import { validateNewPassword } from '../../lib/utils/password-validation';
 import { getSecureJSON, SecureKeys, setSecureJSON } from '../../lib/utils/secure-storage';
+import { colors } from '../../lib/theme';
 
 interface PrivacySecurityScreenProps { onBack: () => void }
 
@@ -364,7 +365,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
               <Text className="text-emerald-100 text-xs mb-1">Require a second factor when signing in on a new device.</Text>
               {twoFactorEnabled && (
                 <View className="flex-row items-center mt-1">
-                  <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={14} color={colors.primary[500]} />
                   <Text className="text-emerald-400 text-[10px] ml-1">Enabled</Text>
                 </View>
               )}
@@ -373,7 +374,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
               )}
             </View>
             {isEnabling2FA ? (
-              <ActivityIndicator size="small" color="#10b981" />
+              <ActivityIndicator size="small" color={colors.primary[500]} />
             ) : (
               <Switch
                 value={twoFactorEnabled}

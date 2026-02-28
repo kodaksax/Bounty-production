@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SUPPORT_EMAIL, SUPPORT_PHONE, EMAIL_SUBJECTS, createSupportTel } from "../lib/constants/support";
+import { colors } from '../lib/theme';
 
 interface DisputeModalProps {
   visible: boolean;
@@ -134,7 +135,7 @@ export function DisputeModal({
 
                 {/* Support contact */}
                 <View style={styles.supportCard}>
-                  <MaterialIcons name="support-agent" size={20} color="#10b981" />
+                  <MaterialIcons name="support-agent" size={20} color={colors.primary[500]} />
                   <View style={styles.supportTextContainer}>
                     <Text style={styles.supportLabel}>Need help now?</Text>
                     <TouchableOpacity onPress={handleContactSupport}>
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#059669",
+    borderBottomColor: colors.background.secondary,
     gap: 8,
   },
   title: {
@@ -295,7 +296,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#10b981",
+    backgroundColor: colors.primary[500],
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
   supportEmail: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#10b981",
+    color: colors.primary[500],
     textDecorationLine: "underline",
   },
   supportPhone: {
@@ -376,7 +377,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: colors.primary[500],
     padding: 16,
     borderRadius: 12,
     alignItems: "center",

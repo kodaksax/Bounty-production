@@ -16,6 +16,7 @@ import { LocationSettingsScreen } from "./settings/location-settings-screen"
 import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
 import { PrivacySecurityScreen } from "./settings/privacy-security-screen"
 import { TermsPrivacyScreen } from "./settings/terms-privacy-screen"
+import { colors } from '../lib/theme';
 
 interface SettingsScreenProps {
   onBack?: () => void
@@ -133,7 +134,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
               <Switch
                 value={isAdminTabEnabled}
                 onValueChange={handleAdminTabToggle}
-                trackColor={{ false: '#374151', true: '#10b981' }}
+                trackColor={{ false: '#374151', true: colors.primary[500] }}
                 thumbColor={isAdminTabEnabled ? '#34d399' : '#9ca3af'}
                 accessibilityLabel="Toggle admin tab visibility"
                 accessibilityHint={isAdminTabEnabled ? 'Disable to hide admin tab' : 'Enable to show admin tab in navigation'}

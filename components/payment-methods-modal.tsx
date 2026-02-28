@@ -5,7 +5,7 @@ import React, { useRef, useState } from "react"
 import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
-import { theme } from '../lib/theme'
+import { colors, theme } from '../lib/theme'
 import { AddBankAccountModal } from "./add-bank-account-modal"
 import { AddCardModal } from "./add-card-modal"
 
@@ -148,7 +148,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
       <View
         ref={modalRef}
         style={{
-          backgroundColor: '#059669', // emerald-600
+          backgroundColor: colors.background.secondary, // emerald-600
           width: '100%',
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
@@ -238,7 +238,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                   flex: 1,
                   paddingVertical: 10,
                   borderRadius: 8,
-                  backgroundColor: selectedMethodType === 'card' ? '#059669' : 'transparent',
+                  backgroundColor: selectedMethodType === 'card' ? colors.background.secondary : 'transparent',
                 }}
                 onPress={() => setSelectedMethodType('card')}
                 accessibilityRole="tab"
@@ -259,7 +259,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
                   flex: 1,
                   paddingVertical: 10,
                   borderRadius: 8,
-                  backgroundColor: selectedMethodType === 'bank_account' ? '#059669' : 'transparent',
+                  backgroundColor: selectedMethodType === 'bank_account' ? colors.background.secondary : 'transparent',
                 }}
                 onPress={() => setSelectedMethodType('bank_account')}
                 accessibilityRole="tab"
