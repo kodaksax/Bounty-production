@@ -3,7 +3,7 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import * as React from "react"
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { theme, colors} from '../../lib/theme'
+import { theme, colors } from '../../lib/theme'
 
 
 // Enhanced RN Tooltip with mobile-friendly modal presentation

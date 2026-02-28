@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
-import { theme, colors} from '../../lib/theme';
+import { theme, colors } from '../../lib/theme';
 
 
 interface RetryButtonProps {

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native"
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
-import { theme, colors} from '../../lib/theme'
+import { theme, colors } from '../../lib/theme'
 
 
 interface InputProps extends TextInputProps {
