@@ -12,8 +12,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAdmin } from '../../lib/admin-context'
-import { colors } from '../../lib/theme'
-import { WalletProvider } from '../../lib/wallet-context'
 
 function BountyAppInner() {
   const router = useRouter()
@@ -49,8 +47,8 @@ function BountyAppInner() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background-secondary">
-        <ActivityIndicator size="large" color={colors.primary[500]} />
+      <View className="flex-1 items-center justify-center bg-emerald-600">
+        <ActivityIndicator size="large" color="#10b981" />
         <Text className="text-white mt-4 text-base">Loading...</Text>
       </View>
     )
@@ -122,7 +120,7 @@ export function BountyApp() {
 
 // Styles
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary, position: 'relative' },
+  container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
 })
 export default function BountyAppRoute() {
   return <BountyApp />

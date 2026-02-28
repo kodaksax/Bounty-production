@@ -35,7 +35,6 @@ import { useWallet } from '../../lib/wallet-context'
 
 
 
-import { colors } from '../../lib/theme';
 interface PostingsScreenProps {
   onBack?: () => void
   activeScreen: string
@@ -580,7 +579,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-      <View className="flex-1 bg-background-secondary">
+      <View className="flex-1 bg-emerald-600">
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -591,7 +590,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               left: 0,
               right: 0,
               zIndex: 20,
-              backgroundColor: colors.background.secondary, // emerald-600
+              backgroundColor: "#059669", // emerald-600
               paddingTop: insets.top, // ensure content starts right under the status bar safe area
             },
             showShadow
@@ -653,7 +652,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
 
           {/* Tabs - Segmented Control Style */}
-          <View className="px-4 mb-4 bg-background-secondary">
+          <View className="px-4 mb-4 bg-emerald-600">
             <View className="flex-row items-center rounded-full bg-emerald-700/40 p-1 border border-emerald-500/30">
               {tabs.map((tab, idx) => {
                 const isActive = activeTab === tab.id
@@ -708,7 +707,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
           {/* Success message */}
           {postSuccess && (
-            <View className="mx-4 mb-4 p-3 bg-primary-500/70 rounded-lg">
+            <View className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg">
               <Text className="text-white text-sm">Bounty posted successfully!</Text>
             </View>
           )}
@@ -794,7 +793,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={[colors.primary[500]]}
+                      colors={['#10b981']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -850,7 +849,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={[colors.primary[500]]}
+                      colors={['#10b981']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -923,7 +922,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={[colors.primary[500]]}
+                      colors={['#10b981']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -951,7 +950,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
         {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
         {activeTab === "new" && !showMultiStepFlow && (
           <View
-            className="absolute left-0 right-0 bottom-0 bg-background-secondary/95 border-t border-emerald-500/30"
+            className="absolute left-0 right-0 bottom-0 bg-emerald-600/95 border-t border-emerald-500/30"
             style={{
               paddingHorizontal: 12,
               paddingTop: 8,

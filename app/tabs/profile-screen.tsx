@@ -22,7 +22,6 @@ import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from "../../hooks/useAuthProfile";
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
-import { colors } from '../../lib/theme';
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
@@ -274,7 +273,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-background-secondary text-white">
+    <View className="flex flex-col h-screen bg-emerald-600 text-white">
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
@@ -330,7 +329,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={[colors.primary[500]]}
+            colors={['#10b981']}
           />
         }
       >
@@ -432,7 +431,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: colors.primary[500],
+    borderColor: "#10b981",
     borderRadius: 4,
   },
   editButtonText: {

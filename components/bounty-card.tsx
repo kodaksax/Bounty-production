@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 // 1. Update imports
-import { colors, theme } from "lib/theme";
+import { theme } from "lib/theme";
 import { shareBounty } from "lib/utils/share-utils";
 
 interface BountyCardProps {
@@ -58,7 +58,7 @@ export function BountyCard({
     if (submittedForReview) return '#38bdf8'
     switch (bounty.status) {
       case "open":
-        return colors.primary[500]; // emerald-500
+        return "#10b981"; // emerald-500
       case "in_progress":
         return "#fbbf24"; // amber-400
       case "completed":
@@ -70,7 +70,7 @@ export function BountyCard({
       case "cancellation_requested":
         return "#f97316"; // orange-500
       default:
-        return colors.primary[500];
+        return "#10b981";
     }
   };
 
@@ -207,7 +207,7 @@ export function BountyCard({
                   onEdit();
                 }}
               >
-                <MaterialIcons name="edit" size={16} color={colors.primary[500]} />
+                <MaterialIcons name="edit" size={16} color="#10b981" />
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}

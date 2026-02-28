@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { colors } from "../lib/theme";
 
 interface RatingPromptModalProps {
   visible: boolean;
@@ -188,7 +187,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.primary[600],
+    borderBottomColor: "#059669",
   },
   title: {
     fontSize: 18,
@@ -249,7 +248,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
     borderWidth: 1,
-    borderColor: colors.primary[600],
+    borderColor: "#059669",
   },
   charCount: {
     fontSize: 12,
@@ -272,7 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   submitButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",

@@ -6,7 +6,6 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native
 import { BrandingLogo } from "components/ui/branding-logo"
 import { InfoTooltip } from "components/ui/tooltip"
 import { useHapticFeedback } from '../lib/haptic-feedback'
-import { colors } from '../lib/theme'
 
 interface AddBountyAmountScreenProps {
   onBack: () => void
@@ -90,7 +89,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background.secondary, // emerald-600
+      backgroundColor: '#059669', // emerald-600
     },
     header: {
       flexDirection: 'row',
@@ -318,7 +317,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               title="What are Honor Bounties?"
               content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
               iconSize={16}
-              iconColor={colors.primary[500]}
+              iconColor="#10b981"
             />
           </View>
         </View>

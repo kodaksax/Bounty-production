@@ -23,7 +23,6 @@ import {
   View,
 } from 'react-native';
 import { DEEP_LINK_SCHEME } from '../lib/config/app';
-import { colors } from '../lib/theme';
 
 // Types for the payment element wrapper
 export interface PaymentElementWrapperProps {
@@ -272,7 +271,7 @@ export function PaymentElementWrapper({
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary[600]} />
+          <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Preparing payment...</Text>
         </View>
       </View>
@@ -298,7 +297,7 @@ export function PaymentElementWrapper({
     <View style={styles.container}>
       {/* Payment Sheet Info */}
       <View style={styles.infoContainer}>
-        <MaterialIcons name="lock" size={20} color={colors.primary[600]} />
+        <MaterialIcons name="lock" size={20} color="#059669" />
         <Text style={styles.infoText}>
           Secure payment powered by Stripe
         </Text>
@@ -359,11 +358,11 @@ export function PaymentElementWrapper({
       {/* Trust Indicators */}
       <View style={styles.trustContainer}>
         <View style={styles.trustItem}>
-          <MaterialIcons name="verified" size={16} color={colors.primary[600]} />
+          <MaterialIcons name="verified" size={16} color="#059669" />
           <Text style={styles.trustText}>256-bit SSL Encryption</Text>
         </View>
         <View style={styles.trustItem}>
-          <MaterialIcons name="shield" size={16} color={colors.primary[600]} />
+          <MaterialIcons name="shield" size={16} color="#059669" />
           <Text style={styles.trustText}>PCI DSS Compliant</Text>
         </View>
       </View>
@@ -411,7 +410,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: colors.primary[600],
+    color: '#059669',
     marginLeft: 8,
   },
   methodIconsContainer: {
@@ -444,7 +443,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,

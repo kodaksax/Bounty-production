@@ -20,7 +20,6 @@ import { Animated,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 
-import { colors } from '../../lib/theme';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
@@ -64,14 +63,14 @@ const slides: SlideData[] = [
     icon: 'chat-bubble',
     title: 'Step 3: Chat & Coordinate',
     description: 'Message your hunter directly in the app. Share details, coordinate timing, and track progress. Everything stays organized in one place.',
-    color: colors.primary[500],
+    color: '#10b981',
   },
   {
     id: '5',
     icon: 'verified-user',
     title: 'Step 4: Complete & Pay',
     description: 'Once the work is done, confirm completion. Payment is released from escrow to the hunter. Rate your experience to help others.',
-    color: colors.primary[600],
+    color: '#059669',
   },
   {
     id: '6',
@@ -278,7 +277,7 @@ export default function OnboardingCarousel() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <MaterialIcons name="info-outline" size={48} color={colors.primary[600]} />
+            <MaterialIcons name="info-outline" size={48} color="#059669" />
             <Text style={styles.modalTitle}>Skip Tutorial?</Text>
             <Text style={styles.modalDescription}>
               This quick tour helps you understand how Bounty works. You can always come back to it later in settings.
@@ -307,7 +306,7 @@ export default function OnboardingCarousel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   brandingHeader: {
     flexDirection: 'row',
@@ -454,7 +453,7 @@ const styles = StyleSheet.create({
   },
   modalButtonPrimary: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

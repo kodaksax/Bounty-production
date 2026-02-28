@@ -21,7 +21,6 @@ import { navigationIntent } from '../../lib/services/navigation-intent'
 import { generateInitials } from '../../lib/services/supabase-messaging'
 import type { Conversation } from "../../lib/types"
 import { ChatDetailScreen } from "./chat-detail-screen"
-import { colors } from '../../lib/theme';
 
 // Helper to format conversation time
 function formatConversationTime(updatedAt?: string): string {
@@ -241,7 +240,7 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-background-secondary text-white" style={{ marginTop: -20 }}>
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ marginTop: -20 }}>
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
@@ -296,7 +295,7 @@ export function MessengerScreen({
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor="#ffffff"
-            colors={[colors.primary[500]]}
+            colors={['#10b981']}
           />
         }
         // Performance optimizations
@@ -391,7 +390,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
       overshootRight={false}
       friction={2}
     >
-      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-background-secondary" onPress={onPress}>
+      <TouchableOpacity className="flex-row items-center p-3 rounded-lg bg-emerald-600" onPress={onPress}>
         <TouchableOpacity onPress={handleAvatarPress} disabled={!otherUserId || conversation.isGroup}>
           <View className="relative">
             {conversation.isGroup ? (

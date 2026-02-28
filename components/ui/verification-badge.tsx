@@ -3,7 +3,6 @@ import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 
-import { colors } from '../../lib/theme';
 export type VerificationLevel = 'unverified' | 'pending' | 'verified';
 
 interface VerificationBadgeProps {
@@ -25,7 +24,7 @@ interface VerificationConfig {
 const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
   verified: {
     icon: 'verified',
-    color: colors.primary[500], // emerald-500
+    color: '#10b981', // emerald-500
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     label: 'Verified',
     title: 'Verified Account',
@@ -134,15 +133,15 @@ export function VerificationBadge({
             {status === 'verified' && (
               <View style={styles.verificationDetails}>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
                   <Text style={styles.detailText}>Email confirmed</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
                   <Text style={styles.detailText}>Payment method validated</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
                   <Text style={styles.detailText}>Identity verified</Text>
                 </View>
               </View>
@@ -255,7 +254,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: colors.primary[500], // emerald-500
+    backgroundColor: '#10b981', // emerald-500
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

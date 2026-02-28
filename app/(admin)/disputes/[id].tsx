@@ -22,7 +22,6 @@ import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/
 import type { BountyDispute, BountyCancellation } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
 
-import { colors } from '../../../lib/theme';
 interface DisputeDetailData {
   dispute: BountyDispute;
   bounty: Bounty | null;
@@ -152,7 +151,7 @@ export default function AdminDisputeDetailScreen() {
   //     case 'under_review':
   //       return '#3b82f6';
   //     case 'resolved':
-  //       return colors.primary[500];
+  //       return '#10b981';
   //     case 'closed':
   //       return '#6b7280';
   //     default:
@@ -181,7 +180,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary[600]} />
+          <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Loading dispute...</Text>
         </View>
       </View>
@@ -227,7 +226,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Bounty Information */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="work" size={20} color={colors.primary[600]} />
+            <MaterialIcons name="work" size={20} color="#059669" />
             <Text style={styles.sectionTitle}>Bounty Information</Text>
           </View>
           <View style={styles.infoRow}>
@@ -249,7 +248,7 @@ export default function AdminDisputeDetailScreen() {
         {/* Dispute Details */}
         <AdminCard>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="report-problem" size={20} color={colors.primary[600]} />
+            <MaterialIcons name="report-problem" size={20} color="#059669" />
             <Text style={styles.sectionTitle}>Dispute Details</Text>
           </View>
           <View style={styles.infoRow}>
@@ -268,7 +267,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.evidence && dispute.evidence.length > 0 && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="attach-file" size={20} color={colors.primary[600]} />
+              <MaterialIcons name="attach-file" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>
                 Evidence ({dispute.evidence.length})
               </Text>
@@ -287,7 +286,7 @@ export default function AdminDisputeDetailScreen() {
                         : 'text-fields'
                     }
                     size={16}
-                    color={colors.primary[600]}
+                    color="#059669"
                   />
                   <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
                   <Text style={styles.evidenceDate}>
@@ -309,7 +308,7 @@ export default function AdminDisputeDetailScreen() {
         {cancellation && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="info-outline" size={20} color={colors.primary[600]} />
+              <MaterialIcons name="info-outline" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>Cancellation Context</Text>
             </View>
             <View style={styles.infoRow}>
@@ -337,7 +336,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.resolution && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="check-circle" size={20} color={colors.primary[500]} />
+              <MaterialIcons name="check-circle" size={20} color="#10b981" />
               <Text style={styles.sectionTitle}>Resolution</Text>
             </View>
             <View style={styles.infoRow}>
@@ -359,7 +358,7 @@ export default function AdminDisputeDetailScreen() {
         {dispute.status !== 'resolved' && dispute.status !== 'closed' && (
           <AdminCard>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="admin-panel-settings" size={20} color={colors.primary[600]} />
+              <MaterialIcons name="admin-panel-settings" size={20} color="#059669" />
               <Text style={styles.sectionTitle}>Admin Actions</Text>
             </View>
 
@@ -558,7 +557,7 @@ const styles = StyleSheet.create({
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.primary[600],
+    color: '#059669',
   },
   evidenceDate: {
     fontSize: 11,
@@ -595,7 +594,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,145,44,0.5)',
   },
   resolveButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
   },
   closeButton: {
     backgroundColor: '#dc2626',

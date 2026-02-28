@@ -6,7 +6,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
 import { useStripe } from '../lib/stripe-context';
-import { colors, theme } from '../lib/theme';
+import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
 
@@ -506,14 +506,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   backButton: {
     marginRight: 12,
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     backgroundColor: '#047857',
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
     borderWidth: 1,
     borderRadius: 8,
     color: '#fff',
@@ -647,9 +647,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     borderTopWidth: 1,
-    borderTopColor: colors.primary[500],
+    borderTopColor: '#10b981',
     ...theme.shadows.lg,
   },
 
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomButtonActive: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
   },
   bottomButtonInactive: {
     backgroundColor: '#04785799',

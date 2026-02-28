@@ -13,7 +13,6 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { colors } from '../lib/theme';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -186,7 +185,7 @@ export function TransactionHistory({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'succeeded':
-        return <CheckCircle2 size={20} color={colors.primary[500]} />;
+        return <CheckCircle2 size={20} color="#10b981" />;
       case 'pending':
       case 'processing':
         return <Clock size={20} color="#f59e0b" />;
@@ -202,7 +201,7 @@ export function TransactionHistory({
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'succeeded':
-        return colors.primary[500];
+        return '#10b981';
       case 'pending':
       case 'processing':
         return '#f59e0b';
@@ -268,7 +267,7 @@ export function TransactionHistory({
             {
               color:
                 item.type === 'deposit' || item.type === 'refund'
-                  ? colors.primary[500]
+                  ? '#10b981'
                   : '#111827',
             },
           ]}

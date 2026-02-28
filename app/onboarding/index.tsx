@@ -9,7 +9,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { colors } from '../../lib/theme';
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 export default function OnboardingIndex() {
@@ -47,7 +46,7 @@ export default function OnboardingIndex() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
   },

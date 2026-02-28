@@ -15,7 +15,6 @@ import { bountyService } from '../../../lib/services/bounty-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
-import { colors } from '../../../lib/theme';
 export default function BountyDetailRouter() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -175,7 +174,7 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,

@@ -17,7 +17,6 @@ import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
-import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -329,7 +328,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -407,7 +406,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -450,12 +449,12 @@ const styles = StyleSheet.create({
   },
   stageItemActive: {
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
     borderWidth: 2,
   },
   stageItemCompleted: {
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -470,10 +469,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: colors.primary[600],
+    backgroundColor: '#059669',
   },
   stageLabel: {
     color: '#6ee7b7',

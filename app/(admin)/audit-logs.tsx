@@ -23,7 +23,6 @@ import { AdminHeader } from '../../components/admin/AdminHeader';
 import { auditLogService } from '../../lib/services/audit-log-service';
 import type { AuditLogCategory, AuditLogEntry } from '../../lib/types-admin';
 
-import { colors } from '../../lib/theme';
 type CategoryFilter = AuditLogCategory | 'all';
 type SeverityFilter = 'all' | 'info' | 'warning' | 'critical';
 
@@ -145,7 +144,7 @@ export default function AuditLogsScreen() {
       case 'user':
         return { icon: 'person', color: '#3b82f6', label: 'User' };
       case 'bounty':
-        return { icon: 'work', color: colors.primary[500], label: 'Bounty' };
+        return { icon: 'work', color: '#10b981', label: 'Bounty' };
       case 'payment':
         return { icon: 'account-balance-wallet', color: '#8b5cf6', label: 'Payment' };
       case 'moderation':
@@ -168,7 +167,7 @@ export default function AuditLogsScreen() {
         return { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
       case 'info':
       default:
-        return { color: colors.primary[500], bg: 'rgba(16,185,129,0.15)', label: 'Info' };
+        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: 'Info' };
     }
   };
 
@@ -325,7 +324,7 @@ export default function AuditLogsScreen() {
           <Text style={styles.statLabel}>Warnings</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.primary[500] }]}>
+          <Text style={[styles.statValue, { color: '#10b981' }]}>
             {stats.bySeverity?.info ?? 0}
           </Text>
           <Text style={styles.statLabel}>Info</Text>
@@ -622,7 +621,7 @@ export default function AuditLogsScreen() {
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcons name="history" size={64} color={colors.primary[500]} />
+        <MaterialIcons name="history" size={64} color="#10b981" />
       </View>
       <Text style={styles.emptyTitle}>No Logs Found</Text>
       <Text style={styles.emptySubtitle}>
@@ -703,8 +702,8 @@ export default function AuditLogsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchLogs}
-            tintColor={colors.primary[500]}
-            colors={[colors.primary[500]]}
+            tintColor="#10b981"
+            colors={['#10b981']}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -808,7 +807,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   filterChipActive: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
   },
   filterChipText: {
     fontSize: 12,

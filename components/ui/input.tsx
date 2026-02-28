@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native"
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
-import { theme, colors } from '../../lib/theme'
+import { theme } from '../../lib/theme'
 
 
 interface InputProps extends TextInputProps {
@@ -110,14 +110,14 @@ const Input = React.forwardRef<TextInput, InputProps>(
     // Determine border color based on state
     const getBorderColor = () => {
       if (error) return '#ef4444' // red-500
-      if (isValid) return colors.primary[500] // emerald-500
-      if (isFocused) return colors.primary[600] // emerald-600
+      if (isValid) return '#10b981' // emerald-500
+      if (isFocused) return '#059669' // emerald-600
       return variant === 'outline' ? '#3b82f6' : '#d1d5db'
     }
 
     const animatedBorderColor = borderAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: ['#d1d5db', colors.primary[600]],
+      outputRange: ['#d1d5db', '#059669'],
     })
 
     // Generate unique ID for accessibility
@@ -144,7 +144,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             error && inputStyles.errorBorder,
             isValid && inputStyles.validBorder,
             {
-              borderColor: error ? '#ef4444' : isValid ? colors.primary[500] :
+              borderColor: error ? '#ef4444' : isValid ? '#10b981' :
                 prefersReducedMotion ? getBorderColor() : animatedBorderColor
             },
           ]}
@@ -153,7 +153,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={leftIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
+              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
               style={inputStyles.leftIcon}
             />
           )}
@@ -188,7 +188,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
               <MaterialIcons
                 name={rightIcon}
                 size={20}
-                color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
+                color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
               />
             </TouchableOpacity>
           )}
@@ -197,7 +197,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name={rightIcon}
               size={20}
-              color={error ? '#ef4444' : isFocused ? colors.primary[600] : '#9ca3af'}
+              color={error ? '#ef4444' : isFocused ? '#059669' : '#9ca3af'}
               style={inputStyles.rightIcon}
               accessibilityElementsHidden={true}
             />
@@ -207,7 +207,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name="check-circle"
               size={20}
-              color={colors.primary[500]}
+              color="#10b981"
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />
@@ -288,7 +288,7 @@ const inputStyles = StyleSheet.create({
     borderColor: 'transparent',
   },
   focused: {
-    borderColor: colors.primary[600], // emerald-600
+    borderColor: '#059669', // emerald-600
     ...theme.shadows.sm,
   },
 
@@ -296,7 +296,7 @@ const inputStyles = StyleSheet.create({
     borderColor: '#ef4444',
   },
   validBorder: {
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
   },
   leftIcon: {
     marginLeft: SPACING.ELEMENT_GAP,

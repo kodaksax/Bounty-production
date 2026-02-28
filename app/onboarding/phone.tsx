@@ -26,7 +26,6 @@ import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { sendPhoneOTP } from '../../lib/services/phone-verification-service';
 
-import { colors } from '../../lib/theme';
 export default function PhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -158,7 +157,7 @@ export default function PhoneScreen() {
         {/* Trust Badge Header */}
         <View style={styles.trustBadgeHeader}>
           <View style={styles.trustBadge}>
-            <MaterialIcons name="verified" size={20} color={colors.primary[500]} />
+            <MaterialIcons name="verified" size={20} color="#10b981" />
             <Text style={styles.trustBadgeText}>Build Your Trust Score</Text>
           </View>
         </View>
@@ -257,7 +256,7 @@ export default function PhoneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   scrollContent: {
     flexGrow: 1,
@@ -299,7 +298,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16,185,129,0.4)',
   },
   trustBadgeText: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,

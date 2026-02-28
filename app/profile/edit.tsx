@@ -24,7 +24,6 @@ import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
 
-import { colors } from '../../lib/theme';
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -229,7 +228,7 @@ export default function EditProfileScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <ActivityIndicator size="large" color="#10b981" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -542,7 +541,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   saveButton: {
-    backgroundColor: colors.primary[500], // emerald-500
+    backgroundColor: "#10b981", // emerald-500
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -628,7 +627,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 5,
@@ -651,7 +650,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 4,
@@ -682,7 +681,7 @@ const styles = StyleSheet.create({
   },
   fieldContainerFocused: {
     backgroundColor: "rgba(16, 185, 129, 0.12)",
-    borderLeftColor: colors.primary[500],
+    borderLeftColor: "#10b981",
   },
   label: {
     fontSize: 12,

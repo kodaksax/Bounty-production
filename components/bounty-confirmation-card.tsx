@@ -6,7 +6,6 @@ import {
     View
 } from "react-native"
 
-import { colors } from '../lib/theme';
 interface BountyConfirmationCardProps {
   bountyData: {
     title: string
@@ -76,7 +75,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
         className="flex items-center justify-center w-full h-full px-4"
         onStartShouldSetResponder={() => true}
       >
-        <View className="bg-background-secondary rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
+        <View className="bg-emerald-600 rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
           {/* Header */}
           <View className="p-4 bg-emerald-700 flex items-center justify-center">
             <MaterialIcons name="place" size={20} color="#ffffff" style={{ marginRight: 8 }} />
@@ -118,7 +117,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
                   <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: 'rgba(4,120,87,0.3)', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
 
                   {/* Progress bar fill */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: colors.primary[500] }} />
+                  <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: '#10b981' }} />
 
                   {/* Chevron indicators */}
                   <View className="absolute inset-0 flex flex-col items-center justify-center space-y-1 overflow-hidden max-w-48 mx-auto">
@@ -132,7 +131,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
           {/* Confirmation state */}
           {isConfirming && (
-            <View className="absolute inset-0 bg-background-secondary flex items-center justify-center flex-col">
+            <View className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
               <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
               <Text className="text-white font-medium text-lg">Posting your bounty...</Text>
             </View>

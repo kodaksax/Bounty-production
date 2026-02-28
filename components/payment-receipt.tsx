@@ -5,7 +5,7 @@
 
 import { Check, Download, Mail, Share2 } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, theme } from '../lib/theme';
+import { theme } from '../lib/theme';
 
 
 // Support email - configurable via environment variable
@@ -70,7 +70,7 @@ export function PaymentReceipt({
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'succeeded':
-        return colors.primary[500]; // emerald-500
+        return '#10b981'; // emerald-500
       case 'pending':
         return '#f59e0b'; // amber-500
       case 'failed':

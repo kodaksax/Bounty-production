@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { receiptService } from "lib/services/receipt-service"
-import { colors, theme } from "lib/theme"
+import { theme } from "lib/theme"
 import { useEffect, useRef, useState } from "react"
 import { Alert, Animated, Easing, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import type { Transaction } from "./transaction-history-screen"
@@ -166,7 +166,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         {(transaction as any).escrowStatus && (
           <View style={styles.escrowBlock}>
             <View style={styles.escrowHeaderRow}>
-              <MaterialIcons name="lock" size={18} color={colors.primary[500]} />
+              <MaterialIcons name="lock" size={18} color="#10b981" />
               <Text style={styles.escrowTitle}>Escrow Information</Text>
             </View>
             <Text style={styles.escrowText}>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   sheet: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,

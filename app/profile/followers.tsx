@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors } from '../../lib/theme';
 export default function FollowersScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
@@ -104,7 +103,7 @@ export default function FollowersScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : (
         <FlatList
@@ -183,7 +182,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -209,7 +208,7 @@ const styles = StyleSheet.create({
   },
   followerTitle: {
     fontSize: 13,
-    color: colors.primary[500],
+    color: "#10b981",
   },
   emptyState: {
     alignItems: "center",

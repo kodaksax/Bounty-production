@@ -32,7 +32,6 @@ import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
 import { Stepper } from './ui/stepper'
-import { colors } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -797,7 +796,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         onPress={handleAddProof}
                         disabled={!(readyToSubmitPressed || !!readyRecord)}
                       >
-                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color={colors.primary[500]} />
+                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#10b981" />
                         <Text style={styles.addFileText}>{(readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}</Text>
                       </TouchableOpacity>
                     </View>
@@ -830,7 +829,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner 
@@ -882,7 +881,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
+                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -946,13 +945,13 @@ const styles = StyleSheet.create({
   timelineItem: { flexDirection: 'row', alignItems: 'center' },
   bubble: { width: 12, height: 12, borderRadius: 6 },
   bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
-  bubbleActive: { backgroundColor: colors.primary[500] },
-  bubbleCompleted: { backgroundColor: colors.primary[600] },
+  bubbleActive: { backgroundColor: '#10b981' },
+  bubbleCompleted: { backgroundColor: '#059669' },
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
   infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary[500], paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },
   muted: { color: '#a7f3d0', fontSize: 12 },
   honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
@@ -1067,11 +1066,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
     borderStyle: 'dashed',
   },
   addFileText: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1114,7 +1113,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -1189,7 +1188,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   statusPillText: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 12,
     fontWeight: '600',
   },

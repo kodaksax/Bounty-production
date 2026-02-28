@@ -19,7 +19,7 @@ import { API_BASE_URL } from "../lib/config/api"
 import { API_TIMEOUTS } from "../lib/config/network"
 import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
 import { stripeService } from "../lib/services/stripe-service"
-import { colors, theme } from "../lib/theme"
+import { theme } from "../lib/theme"
 import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 
 interface AddBankAccountModalProps {
@@ -223,7 +223,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
 
         <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color={colors.primary[500]} />
+            <MaterialIcons name="info-outline" size={20} color="#10b981" />
             <Text style={styles.infoText}>
               Bank accounts are verified via micro-deposits. This typically takes 1-2 business days.
             </Text>
@@ -397,7 +397,7 @@ export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBan
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color={colors.primary[500]} />
+            <MaterialIcons name="info-outline" size={20} color="#10b981" />
             <Text style={styles.infoText}>
               Bank accounts are verified via micro-deposits. This typically takes 1-2 business days.
             </Text>
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 12,
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
   accountTypeButtonActive: {
     backgroundColor: '#047857',
     borderWidth: 2,
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
   },
   accountTypeText: {
     color: '#fff',

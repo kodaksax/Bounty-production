@@ -19,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
-import { colors } from '../../lib/theme';
 export default function EmailConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -144,7 +143,7 @@ export default function EmailConfirmationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
   },
   brandingHeader: {

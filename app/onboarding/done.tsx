@@ -25,7 +25,6 @@ import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { supabase } from '../../lib/supabase';
 
-import { colors } from '../../lib/theme';
 const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
 
 export default function DoneScreen() {
@@ -319,7 +318,7 @@ export default function DoneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
   },
   brandingHeader: {

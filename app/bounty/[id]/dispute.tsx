@@ -22,7 +22,6 @@ import type { BountyDispute, LocalDisputeEvidence, BountyCancellation } from 'li
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
-import { colors } from '../../../lib/theme';
 export default function DisputeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -160,7 +159,7 @@ export default function DisputeScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary[600]} />
+        <ActivityIndicator size="large" color="#059669" />
       </View>
     );
   }
@@ -178,7 +177,7 @@ export default function DisputeScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -198,7 +197,7 @@ export default function DisputeScreen() {
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-background-secondary px-4 py-6 pt-12">
+        <View className="bg-emerald-600 px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -227,7 +226,7 @@ export default function DisputeScreen() {
                 <View className="flex-row items-start">
                   <AlertCircle 
                     size={20} 
-                    color={dispute.status === 'resolved' ? colors.primary[600] : '#f59e0b'} 
+                    color={dispute.status === 'resolved' ? '#059669' : '#f59e0b'} 
                   />
                   <View className="flex-1 ml-3">
                     <Text className={`font-semibold mb-1 ${
@@ -288,7 +287,7 @@ export default function DisputeScreen() {
                   </Text>
                   <TouchableOpacity
                     onPress={() => setShowEvidenceModal(true)}
-                    className="flex-row items-center justify-center rounded-lg py-3 bg-background-secondary"
+                    className="flex-row items-center justify-center rounded-lg py-3 bg-emerald-600"
                   >
                     <Text className="text-white font-medium">
                       + Add Evidence
@@ -312,7 +311,7 @@ export default function DisputeScreen() {
           {/* Support Contact Section - Always visible */}
           <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mt-6">
             <View className="flex-row items-start">
-              <HelpCircle size={20} color={colors.primary[600]} />
+              <HelpCircle size={20} color="#059669" />
               <View className="flex-1 ml-3">
                 <Text className="text-emerald-900 font-semibold mb-1">
                   Dispute Mediation Support
@@ -323,14 +322,14 @@ export default function DisputeScreen() {
                 <View className="flex-row flex-wrap gap-2">
                   <TouchableOpacity
                     onPress={handleContactSupport}
-                    className="flex-row items-center bg-background-secondary px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-emerald-600 px-3 py-2 rounded-lg"
                   >
                     <Mail size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_EMAIL}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleCallSupport}
-                    className="flex-row items-center bg-primary-500 px-3 py-2 rounded-lg"
+                    className="flex-row items-center bg-emerald-500 px-3 py-2 rounded-lg"
                   >
                     <Phone size={14} color="white" />
                     <Text className="text-white text-sm font-medium ml-1">{SUPPORT_PHONE}</Text>
@@ -455,7 +454,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonPrimary: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   modalButtonSecondary: {
     backgroundColor: 'transparent',

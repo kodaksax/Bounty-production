@@ -31,7 +31,7 @@ describe('Button Accessibility', () => {
     const fs = require('fs');
     const path = require('path');
     
-    const accessibilityGuide = path.join(__dirname, '../../docs/ui-ux/ACCESSIBILITY_GUIDE.md');
+    const accessibilityGuide = path.join(__dirname, '../../ACCESSIBILITY_GUIDE.md');
     const exists = fs.existsSync(accessibilityGuide);
     
     expect(exists).toBe(true);

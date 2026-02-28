@@ -877,7 +877,7 @@ export const bountyService = {
   /**
    * Update a bounty
    */
-  async update(id: string | number, updates: Partial<Omit<Bounty, "id" | "created_at">>): Promise<Bounty | null> {
+  async update(id: any, updates: Partial<Omit<Bounty, "id" | "created_at">>): Promise<Bounty | null> {
     try {
       // Defensive: ensure id is present and not null/undefined/empty
       if (id === null || id === undefined || id === '') {

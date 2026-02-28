@@ -3,7 +3,7 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import * as React from "react"
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { theme, colors } from '../../lib/theme'
+import { theme } from '../../lib/theme'
 
 
 // Enhanced RN Tooltip with mobile-friendly modal presentation
@@ -101,7 +101,7 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
             <View style={styles.content}>
               {title && (
                 <View style={styles.header}>
-                  <MaterialIcons name="info-outline" size={24} color={colors.primary[600]} />
+                  <MaterialIcons name="info-outline" size={24} color="#059669" />
                   <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                   <TouchableOpacity
                     onPress={() => setIsOpen?.(false)}
@@ -138,7 +138,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   title,
   content,
   iconSize = 18,
-  iconColor = colors.primary[500],
+  iconColor = '#10b981',
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
 
@@ -172,7 +172,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
           <View style={styles.contentContainer}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <MaterialIcons name="info-outline" size={24} color={colors.primary[600]} />
+                <MaterialIcons name="info-outline" size={24} color="#059669" />
                 <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                 <TouchableOpacity
                   onPress={() => setIsOpen(false)}

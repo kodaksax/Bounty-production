@@ -3,7 +3,6 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 
-import { colors } from '../../lib/theme';
 interface ReputationScoreProps {
   averageRating: number;
   ratingCount: number;
@@ -38,7 +37,7 @@ function getReputationLevel(averageRating: number, ratingCount: number): {
   if (weightedScore >= 4.5) {
     return {
       level: 'Excellent',
-      color: colors.primary[500], // emerald-500
+      color: '#10b981', // emerald-500
       description: 'Top-rated user with consistently excellent feedback from multiple transactions.',
     };
   } else if (weightedScore >= 4.0) {
@@ -474,7 +473,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

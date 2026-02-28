@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { stripeService } from '../lib/services/stripe-service';
 import { openUrlInBrowser } from '../lib/utils/browser';
-import { colors } from '../lib/theme';
 
 interface Props {
   userId: string;
@@ -48,7 +47,7 @@ export const ConnectOnboardingButton: React.FC<Props> = ({
         onPress={startOnboarding}
         disabled={loading}
         style={{
-          backgroundColor: colors.background.secondary, // emerald-600
+          backgroundColor: '#059669', // emerald-600
           paddingVertical: 12,
           paddingHorizontal: 16,
           borderRadius: 8,

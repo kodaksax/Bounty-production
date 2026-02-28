@@ -19,7 +19,6 @@ import { useStripe } from '../../lib/stripe-context';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
 
-import { colors } from '../../lib/theme';
 interface WalletScreenProps {
   onBack?: () => void
 }
@@ -281,7 +280,7 @@ export default WalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   header: {
     flexDirection: 'row',
@@ -289,7 +288,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     gap: SPACING.COMPACT_GAP,
   },
   headerTitleRow: {

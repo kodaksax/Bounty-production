@@ -16,7 +16,6 @@ import { useAuthContext } from '../../hooks/use-auth-context';
 import { searchService } from '../../lib/services/search-service';
 import type { SavedSearch } from '../../lib/types';
 
-import { colors } from '../../lib/theme';
 export default function SavedSearchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -281,7 +280,7 @@ export default function SavedSearchesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   header: {
     flexDirection: 'row',

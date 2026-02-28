@@ -19,7 +19,6 @@ import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
 
-import { colors } from '../../../lib/theme';
 export default function CancellationResponseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -179,7 +178,7 @@ export default function CancellationResponseScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary[600]} />
+        <ActivityIndicator size="large" color="#059669" />
       </View>
     );
   }
@@ -197,7 +196,7 @@ export default function CancellationResponseScreen() {
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -221,7 +220,7 @@ export default function CancellationResponseScreen() {
     
     return (
       <View className="flex-1 bg-white items-center justify-center p-6">
-        {isAccepted && <CheckCircle size={48} color={colors.primary[600]} />}
+        {isAccepted && <CheckCircle size={48} color="#059669" />}
         {isRejected && <XCircle size={48} color="#dc2626" />}
         {isDisputed && <Flag size={48} color="#f59e0b" />}
         <Text className="text-lg font-semibold text-gray-900 mt-4">
@@ -247,7 +246,7 @@ export default function CancellationResponseScreen() {
           {isDisputed && (
             <TouchableOpacity
               onPress={handleContactSupport}
-              className="bg-background-secondary px-6 py-3 rounded-lg flex-row items-center justify-center"
+              className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
               <Mail size={18} color="white" />
               <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -271,7 +270,7 @@ export default function CancellationResponseScreen() {
     <View className="flex-1 bg-white">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-background-secondary px-4 py-6 pt-12">
+        <View className="bg-emerald-600 px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -353,7 +352,7 @@ export default function CancellationResponseScreen() {
               onPress={handleAccept}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 ${
-                submitting ? 'bg-gray-300' : 'bg-background-secondary'
+                submitting ? 'bg-gray-300' : 'bg-emerald-600'
               }`}
             >
               {submitting && action === 'accept' ? (

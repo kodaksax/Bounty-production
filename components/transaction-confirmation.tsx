@@ -3,7 +3,6 @@ import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { BrandingLogo } from 'components/ui/branding-logo';
 import { useHapticFeedback } from "../lib/haptic-feedback";
-import { colors } from '../lib/theme';
 
 interface TransactionConfirmationProps {
   type: 'deposit' | 'withdrawal';
@@ -40,7 +39,7 @@ export function TransactionConfirmation({
       {/* Success Icon */}
       <View style={styles.iconContainer}>
         <View style={styles.successCircle}>
-          <MaterialIcons name="check" size={48} color={colors.primary[600]} />
+          <MaterialIcons name="check" size={48} color="#059669" />
         </View>
       </View>
 
@@ -70,7 +69,7 @@ export function TransactionConfirmation({
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Status:</Text>
-            <Text style={[styles.detailValue, { color: isDeposit ? colors.primary[500] : '#f59e0b' }]}>
+            <Text style={[styles.detailValue, { color: isDeposit ? '#10b981' : '#f59e0b' }]}>
               {isDeposit ? 'Completed' : 'Processing'}
             </Text>
           </View>
@@ -111,13 +110,13 @@ export function TransactionConfirmation({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   header: {
     alignItems: 'center',
     paddingTop: 32,
     paddingHorizontal: 16,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -207,7 +206,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.primary[600],
+    color: '#059669',
   },
   secondaryButton: {
     backgroundColor: 'rgba(255,255,255,0.1)',

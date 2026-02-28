@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AttachmentViewerModal } from '../attachment-viewer-modal';
 
-import { colors } from '../../lib/theme';
 interface AttachmentsListProps {
   attachments: Attachment[];
   onAttachmentPress?: (attachment: Attachment) => void;
@@ -72,7 +71,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
         accessibilityLabel={`Attachment: ${item.name}, ${sizeText}`}
       >
         <View style={styles.iconContainer}>
-          <MaterialIcons name={icon as any} size={24} color={colors.primary[500]} />
+          <MaterialIcons name={icon as any} size={24} color="#10b981" />
         </View>
         <View style={styles.attachmentInfo}>
           <Text style={styles.attachmentName} numberOfLines={1}>

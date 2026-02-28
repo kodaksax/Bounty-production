@@ -14,7 +14,6 @@ import type { WalletTransaction } from "lib/types";
 import { bountyService } from "lib/services/bounty-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { useWallet } from "lib/wallet-context";
-import { colors } from '../lib/theme';
 
 interface HistoryScreenProps {
   onBack: () => void;
@@ -152,7 +151,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : (
         <FlatList
@@ -164,7 +163,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor={colors.primary[500]}
+              tintColor="#10b981"
             />
           }
           ListEmptyComponent={
@@ -185,7 +184,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary, // emerald-600
+    backgroundColor: "#059669", // emerald-600
   },
   header: {
     flexDirection: "row",
@@ -287,7 +286,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   positiveAmount: {
-    color: colors.primary[500],
+    color: "#10b981",
   },
   negativeAmount: {
     color: "#ef4444",

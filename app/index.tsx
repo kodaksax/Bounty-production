@@ -8,7 +8,6 @@ import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 import 'react-native-get-random-values'; // must run before using tweetnacl
 
-import { colors } from '../lib/theme';
 /**
  * Root Index - Auth Gate
  * 
@@ -142,7 +141,7 @@ export default function Index() {
     }
     return (
       <View className="flex-1 items-center justify-center bg-emerald-800">
-        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text className="text-white mt-4 text-base">Loading...</Text>
       </View>
     )
@@ -162,7 +161,7 @@ export default function Index() {
   }
   return (
     <View className="flex-1 items-center justify-center bg-emerald-800">
-      <ActivityIndicator size="large" color={colors.primary[500]} />
+      <ActivityIndicator size="large" color="#10b981" />
       <Text className="text-white mt-4 text-base">Redirecting...</Text>
     </View>
   )

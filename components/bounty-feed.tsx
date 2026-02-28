@@ -8,8 +8,7 @@ import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { WalletBalanceButton } from 'components/ui/wallet-balance-button'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
-import { useBounties } from '../hooks/useBounties'
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
@@ -20,8 +19,6 @@ import { locationService } from '../lib/services/location-service'
 import { searchService } from '../lib/services/search-service'
 import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
-import { CURRENT_USER_ID } from '../lib/utils/data-utils'
-import { colors } from '../lib/theme';
 
 export type BountyFeedHandle = {
   /** Reload the first page of bounties (reset pagination). */
@@ -44,28 +41,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 ) {
   const router = useRouter()
 
-  // useBounties provides SWR-like caching, WebSocket real-time updates, and optimistic UI
-  const { bounties: firstPageBounties, loading: isLoadingBounties, error: bountyErrorMsg, refreshBounties } = useBounties({ status: 'open', autoRefresh: true })
-  const [extraBounties, setExtraBounties] = useState<Bounty[]>([])
-  // Merge first page (from useBounties) with additional paginated pages:
-  // first-page items appear first (in API sort order) and take precedence on overlap;
-  // extra-page items that are not already in the first page are appended.
-  const bounties = useMemo(() => {
-    const firstPageIds = new Set(firstPageBounties.map((b) => String(b.id)))
-    return [
-      ...firstPageBounties,
-      ...extraBounties.filter((b) => !firstPageIds.has(String(b.id))),
-    ]
-  }, [firstPageBounties, extraBounties])
-  const loadError = bountyErrorMsg ? new Error(bountyErrorMsg) : null
+  const [bounties, setBounties] = useState<Bounty[]>([])
+  const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  // Track the raw backend offset for pagination (independent of client-side deduplication)
-  const paginationOffsetRef = useRef(PAGE_SIZE)
   // Track bounty IDs the user has applied to (pending, accepted, or rejected)
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // Track whether user applications have been loaded (prevents flash of unfiltered content)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
+  // Track error state to show offline/error UI instead of perpetual loading
+  const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   // Trending bounties state
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
@@ -78,6 +63,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const scrollY = useRef(new Animated.Value(0)).current
   const bountyListRef = useRef<FlatList>(null)
+  const offsetRef = useRef(0)
   const distanceChipRef = useRef<any>(null)
 
   // Location hook for calculating real distances
@@ -220,34 +206,46 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [currentUserId])
 
-  // Load additional pages of bounties (pagination beyond the first page from useBounties)
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || isLoadingBounties) return
-    setLoadingMore(true)
+  // Load bounties from backend
+  const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
+    if (reset) {
+      setIsLoadingBounties(true)
+      setLoadError(null)
+    } else {
+      setLoadingMore(true)
+    }
     try {
-      const fetched = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: paginationOffsetRef.current })
-      paginationOffsetRef.current += fetched.length
-      setExtraBounties(prev => {
+      const pageOffset = reset ? 0 : offsetRef.current
+      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+
+      const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
-        prev.forEach(b => map.set(String(b.id), b))
-        fetched.forEach(b => map.set(String(b.id), b))
+        existing.concat(incoming).forEach(b => {
+          map.set(String(b.id), b)
+        })
         return Array.from(map.values())
-      })
-      setHasMore(fetched.length === PAGE_SIZE)
+      }
+
+      if (reset) {
+        setBounties(mergeUniqueById([], fetchedBounties))
+      } else {
+        setBounties(prev => mergeUniqueById(prev, fetchedBounties))
+      }
+      offsetRef.current = pageOffset + fetchedBounties.length
+      setHasMore(fetchedBounties.length === PAGE_SIZE)
+      setLoadError(null)
     } catch (error) {
-      console.error('Error loading more bounties:', error)
+      console.error('Error loading bounties:', error)
+      if (reset) {
+        setLoadError(error as Error)
+        setBounties(prev => prev.length === 0 ? [] : prev)
+        setHasMore(false)
+      }
     } finally {
+      setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMore, isLoadingBounties])
-
-  // Reset pagination state and refresh from the first page via useBounties
-  const resetAndRefresh = useCallback(() => {
-    setExtraBounties([])
-    setHasMore(true)
-    paginationOffsetRef.current = PAGE_SIZE
-    refreshBounties()
-  }, [refreshBounties])
+  }, [])
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -267,11 +265,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      setExtraBounties([])
+      offsetRef.current = 0
       setHasMore(true)
-      paginationOffsetRef.current = PAGE_SIZE
       await Promise.all([
-        refreshBounties(),
+        loadBounties({ reset: true }),
         loadUserApplications().catch(err => {
           console.error('Failed to refresh user applications:', err)
         }),
@@ -284,37 +281,41 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     } finally {
       setRefreshing(false)
     }
-  }, [refreshBounties, loadUserApplications, loadTrendingBounties])
+  }, [loadBounties, loadUserApplications, loadTrendingBounties])
 
   // Expose refresh and tab-repress handlers to parent via ref
   useImperativeHandle(ref, () => ({
     refresh: () => {
-      resetAndRefresh()
+      offsetRef.current = 0
+      setHasMore(true)
+      loadBounties({ reset: true })
     },
     handleTabRepress: () => {
       bountyListRef.current?.scrollToOffset({ offset: 0, animated: true })
       onRefresh()
     },
-  }), [resetAndRefresh, onRefresh])
+  }), [loadBounties, onRefresh])
 
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
   }, [loadUserApplications])
 
-  // Load initial trending bounties on mount (first-page bounties loaded by useBounties)
+  // Load initial data on mount only
   useEffect(() => {
+    loadBounties({ reset: true })
     loadTrendingBounties()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Reload user data when returning to bounty screen from other screens
+  // Reload bounties when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === 'bounty') {
+      loadBounties({ reset: false })
       loadUserApplications()
       loadTrendingBounties()
     }
-  }, [activeScreen, loadUserApplications, loadTrendingBounties])
+  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
 
   // Restore last-selected chip on mount
   useEffect(() => {
@@ -372,9 +373,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) {
-      loadMore()
+      loadBounties()
     }
-  }, [isLoadingBounties, loadingMore, hasMore, loadMore])
+  }, [isLoadingBounties, loadingMore, hasMore, loadBounties])
 
   const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, [])
 
@@ -394,7 +395,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           title="Unable to load bounties"
           description="Check your internet connection and try again"
           actionLabel="Try Again"
-          onAction={resetAndRefresh}
+          onAction={() => loadBounties({ reset: true })}
         />
       )
     }
@@ -407,7 +408,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </TouchableOpacity>
       </>
     )
-  }, [isLoadingBounties, applicationsLoaded, loadError, resetAndRefresh])
+  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties])
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
@@ -683,7 +684,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
-        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', colors.background.secondary]}
+        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', '#059669']}
         style={styles.bottomFade}
         pointerEvents="none"
       />
@@ -693,7 +694,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
 const styles = StyleSheet.create({
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: colors.background.secondary },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

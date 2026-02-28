@@ -4,7 +4,6 @@ import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import type * as ExpoSplashScreen from 'expo-splash-screen';
-import { colors } from '../../lib/theme';
 // Centralized helpers: RootLayout (and any other callers) should use these
 // to show/hide the native splash. Keeping them here ensures "use splash.tsx
 // for any splash things" without scattering imports of expo-splash-screen.
@@ -213,7 +212,7 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 6,
-		backgroundColor: colors.primary[500],
+		backgroundColor: '#10b981',
 		marginHorizontal: 6,
 	},
 	devBtnText: {

@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextIn
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
-import { colors, theme } from '../lib/theme';
+import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
@@ -396,13 +396,13 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               accessibilityLabel="Add bank account"
               accessibilityRole="button"
             >
-              <MaterialIcons name="add" size={18} color={colors.primary[500]} />
+              <MaterialIcons name="add" size={18} color="#10b981" />
               <Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
           </View>
 
           {isLoadingAccounts ? (
-            <ActivityIndicator size="small" color={colors.primary[500]} style={{ marginVertical: 20 }} />
+            <ActivityIndicator size="small" color="#10b981" style={{ marginVertical: 20 }} />
           ) : bankAccounts.length === 0 ? (
             <View style={styles.emptyState}>
               <MaterialIcons name="account-balance" size={48} color="rgba(255,255,255,0.3)" />
@@ -431,7 +431,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               >
                 <View style={styles.radioButton}>
                   {selectedBankAccount === account.id ? (
-                    <MaterialIcons name="radio-button-checked" size={24} color={colors.primary[500]} />
+                    <MaterialIcons name="radio-button-checked" size={24} color="#10b981" />
                   ) : (
                     <MaterialIcons name="radio-button-unchecked" size={24} color="rgba(255,255,255,0.4)" />
                   )}
@@ -492,7 +492,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <MaterialIcons name="info-outline" size={20} color={colors.primary[500]} />
+          <MaterialIcons name="info-outline" size={20} color="#10b981" />
           <Text style={styles.infoText}>
             Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank transfers.
           </Text>
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primary[500],
+    color: '#10b981',
     marginLeft: 4,
   },
   amountInputContainer: {
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   bankAccountCardSelected: {
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
     backgroundColor: 'rgba(16,185,129,0.2)',
   },
   radioButton: {
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   defaultBadge: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyStateButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -777,7 +777,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     borderRadius: 12,
     paddingVertical: 16,
     ...theme.shadows.emerald,

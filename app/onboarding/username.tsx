@@ -27,7 +27,6 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
 
-import { colors } from '../../lib/theme';
 export default function UsernameScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -290,7 +289,7 @@ export default function UsernameScreen() {
               <ActivityIndicator size="small" color="#a7f3d0" style={styles.indicator} />
             )}
             {!checking && username && isValid && (
-              <MaterialIcons name="check-circle" size={24} color={colors.primary[500]} style={styles.indicator} />
+              <MaterialIcons name="check-circle" size={24} color="#10b981" style={styles.indicator} />
             )}
           </View>
           
@@ -381,7 +380,7 @@ export default function UsernameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
   },
   content: {
     flex: 1,

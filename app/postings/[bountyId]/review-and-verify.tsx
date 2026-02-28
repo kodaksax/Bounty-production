@@ -25,7 +25,6 @@ import { profileService } from '../../../lib/services/profile-service';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
-import { colors } from '../../../lib/theme';
 interface ProofItem {
   id: string;
   type: 'image' | 'file';
@@ -285,7 +284,7 @@ export default function ReviewAndVerifyScreen() {
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color={colors.primary[500]}
+          color="#10b981"
         />
       </View>
       <View style={styles.proofInfo}>
@@ -303,7 +302,7 @@ export default function ReviewAndVerifyScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Loading review...</Text>
       </View>
     );
@@ -514,7 +513,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -582,7 +581,7 @@ const styles = StyleSheet.create({
   avatarFallbackText: {
     fontSize: 20,
     fontWeight: '600',
-    color: colors.primary[500],
+    color: '#10b981',
   },
   hunterDetails: {
     flex: 1,
@@ -618,7 +617,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bountyAmount: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -741,7 +740,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

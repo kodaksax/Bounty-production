@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
-import { theme, colors} from '../lib/theme';
+import { theme } from '../lib/theme';
 
 
 interface OfflineModeBannerProps {
@@ -65,7 +65,7 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
     return null;
   }
 
-  const backgroundColor = !isOnline ? '#f59e0b' : queuedItemsCount > 0 ? '#3b82f6' : colors.primary[500];
+  const backgroundColor = !isOnline ? '#f59e0b' : queuedItemsCount > 0 ? '#3b82f6' : '#10b981';
   const icon = !isOnline ? 'cloud-off' : isChecking ? 'sync' : 'cloud-done';
 
   return (

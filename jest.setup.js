@@ -358,8 +358,7 @@ global.console = {
       firstArg.includes('Error creating onboarding link:') ||
       firstArg.includes('Error refunding PaymentIntent:') ||
       firstArg.includes('Error validating payment capability:') ||
-      firstArg.includes('Error in Stripe webhook handler:') ||
-      firstArg.includes('[Redis] Redis client error:')
+      firstArg.includes('Error in Stripe webhook handler:')
     ) {
       return;
     }

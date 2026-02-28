@@ -8,7 +8,6 @@ import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, Sty
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
-import { colors } from '../lib/theme';
 
 // Constants for transaction display
 const DEFAULT_TITLE = 'Transaction'
@@ -112,7 +111,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "escrow":
         return <MaterialIcons name="lock" size={20} color="#f59e0b" />
       case "release":
-        return <MaterialIcons name="lock-open" size={20} color={colors.primary[500]} />
+        return <MaterialIcons name="lock-open" size={20} color="#10b981" />
       case "refund":
         return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
@@ -460,7 +459,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   dateHeader: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#059669',
     paddingVertical: 8,
   },
   dateText: {

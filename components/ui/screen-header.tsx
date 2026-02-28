@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { colors } from '../../lib/theme';
 interface ScreenHeaderProps {
     title?: string;
     showBack?: boolean;
@@ -52,7 +51,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: colors.background.secondary, // emerald-600
+        backgroundColor: '#059669', // emerald-600
     },
     transparent: {
         backgroundColor: 'transparent',

@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
-import { colors, theme } from '../lib/theme';
+import { theme } from '../lib/theme';
 import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
@@ -453,7 +453,7 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary[500]} />
+              <ActivityIndicator size="large" color="#10b981" />
               <Text style={styles.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingVertical: 16,
     borderRadius: 12,
     ...theme.shadows.emerald,
@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -961,10 +961,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
   },
   secondaryButtonText: {
-    color: colors.primary[500],
+    color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
     width: SLIDER_HANDLE_WIDTH,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
     top: 2,

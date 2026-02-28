@@ -14,7 +14,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from '../lib/theme';
 
 interface EditPostingModalProps {
   visible: boolean;
@@ -167,7 +166,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
               >
                 <View style={styles.toggleLeft}>
-                  <MaterialIcons name="favorite" size={20} color={colors.primary[500]} />
+                  <MaterialIcons name="favorite" size={20} color="#10b981" />
                   <Text style={styles.toggleLabel}>For Honor</Text>
                 </View>
                 <View
@@ -280,7 +279,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.primary[600],
+    borderBottomColor: "#059669",
   },
   title: {
     fontSize: 20,
@@ -312,7 +311,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     borderWidth: 1,
-    borderColor: colors.border.primary,
+    borderColor: "#059669",
   },
   textArea: {
     minHeight: 100,
@@ -346,7 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toggleActive: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
   },
   toggleThumb: {
     width: 24,
@@ -372,7 +371,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   saveButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: "#10b981",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",

@@ -2,7 +2,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { colors } from '../../lib/theme';
 interface EscrowExplainerProps {
   amount?: number;
   variant?: 'inline' | 'card' | 'banner';
@@ -30,7 +29,7 @@ export function EscrowExplainer({
       variant === 'banner' && styles.bannerContainer,
     ]}>
       <View style={styles.iconContainer}>
-        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color={colors.primary[500]} />
+        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#10b981" />
       </View>
       
       <View style={styles.textContainer}>
@@ -85,7 +84,7 @@ export function EscrowExplainer({
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalIconCircle}>
-                  <MaterialIcons name="lock" size={40} color={colors.primary[500]} />
+                  <MaterialIcons name="lock" size={40} color="#10b981" />
                 </View>
                 <Text style={styles.modalTitle}>Escrow Protection</Text>
                 <Text style={styles.modalSubtitle}>
@@ -157,28 +156,28 @@ export function EscrowExplainer({
                 <Text style={styles.sectionTitle}>Your Guarantees</Text>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
                   <Text style={styles.guaranteeText}>
                     Funds never released without your approval
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
                   <Text style={styles.guaranteeText}>
                     Full refund if work isn't completed
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
                   <Text style={styles.guaranteeText}>
                     Dispute resolution support available
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color={colors.primary[500]} />
+                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
                   <Text style={styles.guaranteeText}>
                     Bank-level encryption on all transactions
                   </Text>
@@ -217,11 +216,11 @@ export function EscrowExplainer({
 export function EscrowProtectionBanner({ amount }: { amount?: number }) {
   return (
     <View style={styles.protectionBanner}>
-      <MaterialIcons name="lock" size={14} color={colors.primary[500]} />
+      <MaterialIcons name="lock" size={14} color="#10b981" />
       <Text style={styles.protectionBannerText}>
         {amount ? `$${amount.toFixed(2)} protected` : 'Escrow protected'}
       </Text>
-      <MaterialIcons name="verified-user" size={12} color={colors.primary[500]} />
+      <MaterialIcons name="verified-user" size={12} color="#10b981" />
     </View>
   );
 }
@@ -245,7 +244,7 @@ const styles = StyleSheet.create({
   },
   bannerContainer: {
     backgroundColor: '#065f46',
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
   },
   iconContainer: {
     width: 48,
@@ -301,7 +300,7 @@ const styles = StyleSheet.create({
   protectionBannerText: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.primary[500],
+    color: '#10b981',
   },
   modalOverlay: {
     flex: 1,
@@ -362,7 +361,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -425,7 +424,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   closeButton: {
-    backgroundColor: colors.primary[500],
+    backgroundColor: '#10b981',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

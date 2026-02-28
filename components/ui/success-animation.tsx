@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { hapticFeedback } from '../../lib/haptic-feedback';
-import { theme, colors } from '../../lib/theme';
+import { theme } from '../../lib/theme';
 
 
 interface SuccessAnimationProps {
@@ -45,7 +45,7 @@ export function SuccessAnimation({
   visible,
   icon = 'check-circle',
   size = 80,
-  color = colors.primary[500],
+  color = '#10b981',
   onComplete,
 }: SuccessAnimationProps) {
   const scale = useSharedValue(0);
@@ -167,7 +167,7 @@ export function ConfettiAnimation({ visible, onComplete }: { visible: boolean; o
     Array.from({ length: 20 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
-      color: [colors.primary[500], '#6ee7b7', colors.primary[600], '#34d399'][Math.floor(Math.random() * 4)],
+      color: ['#10b981', '#6ee7b7', '#059669', '#34d399'][Math.floor(Math.random() * 4)],
     }))
   );
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: colors.primary[500],
+    borderColor: '#10b981',
     ...theme.shadows.emerald,
   },
 

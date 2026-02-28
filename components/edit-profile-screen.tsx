@@ -17,7 +17,6 @@ import { OptimizedImage } from "../lib/components/OptimizedImage"
 import { attachmentService } from '../lib/services/attachment-service'
 import { processAvatarImage } from '../lib/utils/image-utils'
 import { useWallet } from '../lib/wallet-context'
-import { colors } from '../lib/theme'
 
 interface EditProfileScreenProps {
   onBack: () => void
@@ -456,7 +455,7 @@ export function EditProfileScreen({
   if (isLoading) {
     return (
       <View className="flex-1 bg-emerald-600 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text className="text-white text-sm mt-4">Loading profile...</Text>
       </View>
     )
@@ -517,7 +516,7 @@ export function EditProfileScreen({
           accessibilityLabel="Update Profile"
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color={colors.primary[600]} />
+            <ActivityIndicator size="small" color="#059669" />
           ) : (
             <Text className="text-emerald-700 font-extrabold">Update Profile</Text>
           )}
@@ -560,7 +559,7 @@ export function EditProfileScreen({
                 )}
               </View>
               <TouchableOpacity
-                style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center' }}
+                style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
                 onPress={handleAvatarClick}
                 disabled={isUploadingAvatar}
               >
