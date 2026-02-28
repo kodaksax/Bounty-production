@@ -1,9 +1,9 @@
-import { BountyFeed } from 'components/bounty-feed'
-import type { BountyFeedHandle } from 'components/bounty-feed'
 import { MessengerScreen } from "app/tabs/messenger-screen"
 import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
+import type { BountyFeedHandle } from 'components/bounty-feed'
+import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
@@ -117,11 +117,7 @@ function BountyAppInner() {
 }
 
 export function BountyApp() {
-  return (
-    <WalletProvider>
-      <BountyAppInner />
-    </WalletProvider>
-  )
+  return <BountyAppInner />
 }
 
 // Styles

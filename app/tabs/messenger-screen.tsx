@@ -7,7 +7,6 @@ import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
-import { getCurrentUserId } from "lib/utils/data-utils"
 import React, { useCallback, useMemo, useState } from "react"
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
@@ -15,6 +14,7 @@ import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile'
+import { useValidUserId } from '../../hooks/useValidUserId'
 import { messageService } from '../../lib/services/message-service'
 import { logClientError as _logClientError } from '../../lib/services/monitoring'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -329,7 +329,7 @@ const ConversationItem = React.memo<ConversationItemProps>(function Conversation
   onDelete 
 }) {
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
+  const currentUserId = useValidUserId()
   
   // Memoize time formatting
   const time = useMemo(

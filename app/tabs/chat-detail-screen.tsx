@@ -3,7 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
-import React, { useCallback, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageActions } from "../../components/MessageActions"
@@ -14,9 +14,9 @@ import { TypingIndicator } from "../../components/TypingIndicator"
 import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
+import { useValidUserId } from '../../hooks/useValidUserId'
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
-import { getCurrentUserId } from "../../lib/utils/data-utils"
 
 import { colors } from '../../lib/theme';
 interface ChatDetailScreenProps {
@@ -31,7 +31,7 @@ export function ChatDetailScreen({
   onNavigate,
 }: ChatDetailScreenProps) {
   const router = useRouter()
-  const currentUserId = getCurrentUserId()
+  const currentUserId = useValidUserId()
   const { 
     messages, 
     loading, 

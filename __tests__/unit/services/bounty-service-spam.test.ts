@@ -302,6 +302,38 @@ describe('Bounty Service - Spam Prevention', () => {
     });
   });
 
+  describe('update', () => {
+    it('should update bounty with a string id', async () => {
+      const mockBounty = { id: 'bounty-1', title: 'Updated', status: 'in_progress' };
+      const mockChain: any = {};
+      mockChain.update = jest.fn().mockReturnValue(mockChain);
+      mockChain.eq = jest.fn().mockReturnValue(mockChain);
+      mockChain.select = jest.fn().mockReturnValue(mockChain);
+      mockChain.single = jest.fn().mockResolvedValue({ data: mockBounty, error: null });
+      supabase.from.mockReturnValue(mockChain);
+
+      const result = await bountyService.update('bounty-1', { status: 'in_progress' });
+
+      expect(result).toEqual(mockBounty);
+      expect(mockChain.eq).toHaveBeenCalledWith('id', 'bounty-1');
+    });
+
+    it('should update bounty with a numeric id', async () => {
+      const mockBounty = { id: 42, title: 'Updated', status: 'in_progress' };
+      const mockChain: any = {};
+      mockChain.update = jest.fn().mockReturnValue(mockChain);
+      mockChain.eq = jest.fn().mockReturnValue(mockChain);
+      mockChain.select = jest.fn().mockReturnValue(mockChain);
+      mockChain.single = jest.fn().mockResolvedValue({ data: mockBounty, error: null });
+      supabase.from.mockReturnValue(mockChain);
+
+      const result = await bountyService.update(42, { status: 'in_progress' });
+
+      expect(result).toEqual(mockBounty);
+      expect(mockChain.eq).toHaveBeenCalledWith('id', 42);
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should skip spam checks when poster_id is not provided', async () => {
       const insertChain = createMockQueryChain({ 

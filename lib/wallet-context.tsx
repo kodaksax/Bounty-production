@@ -36,6 +36,10 @@ export interface WalletTransactionRecord {
   escrowStatus?: "funded" | "pending" | "released";
 }
 
+// Shape stored in SecureStore — identical to WalletTransactionRecord except `date` is
+// serialized as an ISO string by JSON.stringify and must be re-hydrated on load.
+type PersistedWalletTransaction = Omit<WalletTransactionRecord, 'date'> & { date: string };
+
 interface WalletContextValue {
   balance: number;
   isLoading: boolean;
@@ -209,9 +213,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // Load transactions from SecureStore
-      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
+      const storedTx = await getSecureJSON<PersistedWalletTransaction[]>(SecureKeys.WALLET_TRANSACTIONS);
       if (storedTx && Array.isArray(storedTx)) {
-        setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
+        setTransactions(storedTx.map((t): WalletTransactionRecord => ({ ...t, date: new Date(t.date) })));
       }
     } catch (error) {
       console.error('[wallet] Error refreshing from storage:', error);
