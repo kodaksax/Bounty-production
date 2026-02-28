@@ -839,6 +839,23 @@ When using AI assistance:
 - Prefer async updates in PR descriptions vs. large speculative refactors.
 - Document new domain fields directly in `lib/types.ts` first.
 
+## 🧪 Beta Testing & Deployment
+
+### Internal Beta Program
+
+For information on deploying to TestFlight and Google Play Console beta testing:
+
+- **[Beta Deployment Guide](./BETA_DEPLOYMENT_GUIDE.md)** - Complete guide for internal beta testing
+- **[TestFlight Setup](./TESTFLIGHT_SETUP.md)** - iOS-specific deployment instructions
+- **[Google Play Beta Setup](./GOOGLE_PLAY_BETA_SETUP.md)** - Android-specific deployment instructions
+- **[Beta Testing Checklist](./BETA_TESTING_CHECKLIST.md)** - Comprehensive testing checklist for testers
+
+### Beta Resources
+
+- **Templates**: Email templates, release notes, and feedback forms in `docs/templates/`
+- **Deployment Guide**: Full production deployment in [DEPLOYMENT.md](./DEPLOYMENT.md)
+- **Contributing**: See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines
+
 ## 📜 License
 (Choose a license—currently unspecified. Consider MIT for openness.)
 
