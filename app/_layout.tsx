@@ -59,14 +59,8 @@ if (__DEV__) {
   };
 }
 
-export const metadata = {
-  title: "Bounty App",
-  description: "Find and complete bounties near you",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no",
-  appleMobileWebAppCapable: "yes",
-  appleStatusBarStyle: "black-translucent",
-  generator: 'v0.dev',
-}
+// Removed `metadata` export: this was a Next.js/web-only export and is a no-op on native.
+// Leaving it in can be misleading; remove to avoid confusion.
 
 // Simple luminance check to pick light/dark content for the status bar
 const getBarStyleForHex = (hex: string): "light" | "dark" => {
@@ -158,100 +152,102 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 800; // kept for compatibility but branded splash disabled
 
-  // Load any custom fonts (add family names if you have them)
+  // Load fonts used by the app (SpaceMono + a couple common icon families).
+  // Adding icon fonts ensures icons render consistently on first mount.
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    MaterialIcons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf'),
+    Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
   });
 
+  // Single startup gate: perform one-time startup tasks and only transition
+  // to the app UI once both startup tasks and font loading complete. A
+  // safety timeout moves to the app after 8s to avoid indefinite stalls.
   useEffect(() => {
-    // Register global JS error handlers as early as possible so we capture
-    // uncaught JS exceptions and unhandled promise rejections that may
-    // trigger native ErrorRecovery flows.
-    try {
-      initGlobalErrorHandlers();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[ErrorHandling] failed to init global handlers', e);
-    }
-    // Initialize Sentry, Mixpanel and send an initial page view once at app start.
-    // We await initMixpanel so early events are not dropped if init is async.
     let cancelled = false;
-    const start = Date.now();
+    const SAFETY_MS = 8000;
+    const NAV_MAX_WAIT_MS = 3000;
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setPhase('app');
+    }, SAFETY_MS);
 
-    (async () => {
-      // Initialize Sentry safely at startup (avoid module-eval native access).
+    const startedRef = { started: false } as { started: boolean };
+    const startupDone = { value: false } as { value: boolean };
+
+    const runStartup = async () => {
+      if (startedRef.started) return;
+      startedRef.started = true;
+
+      try {
+        initGlobalErrorHandlers();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[ErrorHandling] failed to init global handlers', e);
+      }
+
       try {
         initializeSentry();
-        // Ensure Sentry is loaded/required without mutating any module-scope variable.
-        getSentryFromInit(); // intentionally ignore return; this call is only to force module load
+        getSentryFromInit();
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[Sentry] startup init failed:', e);
       }
 
       try {
-        // Race Mixpanel init against a 2-second timeout to prevent it from blocking app start
-        await Promise.race([
-          initMixpanel(),
-          new Promise(resolve => setTimeout(resolve, 2000))
-        ]);
-        try {
-          track('Page View', { screen: 'root' });
-        } catch {
-          // ignore analytics failures
-        }
-      } catch (_e) {
+        await Promise.race([initMixpanel(), new Promise(r => setTimeout(r, 2000))]);
+        try { track('Page View', { screen: 'root' }); } catch { /* ignore */ }
+      } catch (e) {
         // eslint-disable-next-line no-console
-        console.error('[Mixpanel] init failed', _e);
+        console.error('[Mixpanel] init failed', e);
       }
 
       try {
         await showNativeSplash();
         await Asset.loadAsync([require('../assets/images/icon.png')]);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error('[Splash] preparation error', e);
-      } finally {
-        if (!cancelled) {
-          // Wait briefly for the app's initial navigation to complete so we
-          // don't reveal the main UI while a redirect to onboarding is in-flight.
-          const MAX_WAIT_MS = 3000;
-          try {
-            if (!isInitialNavigationDone()) {
-              let unsub: (() => void) | undefined;
-              await new Promise<void>((resolve) => {
-                const timer = setTimeout(() => {
-                  if (unsub) {
-                    unsub();
-                  }
-                  resolve();
-                }, MAX_WAIT_MS);
-
-                unsub = onInitialNavigationDone(() => {
-                  clearTimeout(timer);
-                  resolve();
-                });
-              });
-            }
-          } catch (_e) {
-            // ignore waiting errors and proceed to show app
-          }
-
-          // Hide the native splash now that either navigation completed or timeout elapsed
-          try { hideNativeSplashSafely(); } catch {}
-          setPhase('app');
-        }
       }
-    })();
 
-    return () => { cancelled = true; };
-  }, []);
+      // Wait for initial navigation (short bounded wait) then mark startup done
+      try {
+        if (!isInitialNavigationDone()) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, NAV_MAX_WAIT_MS);
+            const unsub = onInitialNavigationDone(() => {
+              clearTimeout(timer);
+              resolve();
+              if (typeof unsub === 'function') unsub();
+            });
+          });
+        }
+      } catch {
+        // ignore
+      }
 
-  // Safety fallback: if something stalls, move to app after max 8s
-  useEffect(() => {
-    if (phase === 'app') return;
-    const safety = setTimeout(() => setPhase('app'), 8000);
-    return () => clearTimeout(safety);
-  }, [phase]);
+      startupDone.value = true;
+
+      // If fonts already loaded, finalize transition now
+      if (fontsLoaded && !cancelled) {
+        try { hideNativeSplashSafely(); } catch {}
+        setPhase('app');
+      }
+    };
+
+    runStartup();
+
+    // If startup already finished earlier and fonts just became available,
+    // finalize transition here when both conditions are true.
+    if (startupDone.value && fontsLoaded && !cancelled) {
+      try { hideNativeSplashSafely(); } catch {}
+      setPhase('app');
+    }
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
+  }, [fontsLoaded]);
 
   return (
     <SafeAreaProvider>
