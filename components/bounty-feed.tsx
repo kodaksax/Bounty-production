@@ -20,6 +20,8 @@ import { locationService } from '../lib/services/location-service'
 import { searchService } from '../lib/services/search-service'
 import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
+import { CURRENT_USER_ID } from '../lib/utils/data-utils'
+import { colors } from '../lib/theme';
 
 export type BountyFeedHandle = {
   /** Reload the first page of bounties (reset pagination). */
@@ -681,7 +683,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
-        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', '#059669']}
+        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', colors.background.secondary]}
         style={styles.bottomFade}
         pointerEvents="none"
       />
@@ -691,7 +693,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
 const styles = StyleSheet.create({
   dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
+  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: colors.background.secondary },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

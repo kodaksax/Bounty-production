@@ -22,6 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../components/attachment-viewer-modal';
 import type { Attachment } from '../lib/types';
+import { colors } from '../lib/theme';
 
 export function AttachmentViewerTestScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -112,7 +113,7 @@ export function AttachmentViewerTestScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="attach-file" size={24} color="#10b981" />
+          <MaterialIcons name="attach-file" size={24} color={colors.primary[500]} />
           <Text style={styles.headerTitle}>Attachment Viewer Test</Text>
         </View>
 
@@ -139,7 +140,7 @@ export function AttachmentViewerTestScreen() {
                 <MaterialIcons
                   name={getFileIcon(attachment.mimeType || '') as any}
                   size={32}
-                  color="#10b981"
+                  color={colors.primary[500]}
                 />
               </View>
               <View style={styles.attachmentInfo}>
@@ -185,27 +186,27 @@ export function AttachmentViewerTestScreen() {
           <View style={styles.featuresCard}>
             <Text style={styles.featuresTitle}>Features to Test</Text>
             <View style={styles.featureItem}>
-              <MaterialIcons name="image" size={18} color="#10b981" />
+              <MaterialIcons name="image" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Image viewing with zoom</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="videocam" size={18} color="#10b981" />
+              <MaterialIcons name="videocam" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Video playback</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="file-download" size={18} color="#10b981" />
+              <MaterialIcons name="file-download" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Download & save</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="share" size={18} color="#10b981" />
+              <MaterialIcons name="share" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Share functionality</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="security" size={18} color="#10b981" />
+              <MaterialIcons name="security" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Security validations</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="accessibility" size={18} color="#10b981" />
+              <MaterialIcons name="accessibility" size={18} color={colors.primary[500]} />
               <Text style={styles.featureText}>Accessibility support</Text>
             </View>
           </View>
@@ -273,7 +274,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -321,7 +322,7 @@ const styles = StyleSheet.create({
   instructionsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
     marginBottom: 12,
   },
   checklistItem: {
@@ -344,7 +345,7 @@ const styles = StyleSheet.create({
   featuresTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: colors.primary[500],
     marginBottom: 12,
   },
   featureItem: {

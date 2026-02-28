@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { resendVerification } from '../../lib/services/auth-service';
 
+import { colors } from '../../lib/theme';
 interface EmailVerificationBannerProps {
   email?: string;
   onDismiss?: () => void;
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: 13,
-    color: '#10b981',
+    color: colors.primary[500],
     fontWeight: '600',
   },
   dismissButton: {

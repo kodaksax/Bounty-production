@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { colors } from '../lib/theme';
 
 interface NotFoundScreenProps {
   title?: string;
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   button: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

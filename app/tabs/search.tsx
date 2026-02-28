@@ -20,6 +20,7 @@ import { userSearchService } from '../../lib/services/user-search-service';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
 
+import { colors } from '../../lib/theme';
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
@@ -772,7 +773,7 @@ function timeAgo(ts?: string) {
 
 // Styles
 const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
+  container: { flex: 1, backgroundColor: colors.background.secondary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { LocalDisputeEvidence } from '../lib/types';
 import { generateEvidenceId } from '../lib/utils/dispute-helpers';
 
+import { colors } from '../lib/theme';
 interface DisputeSubmissionFormProps {
   bountyTitle: string;
   onSubmit: (reason: string, evidence: LocalDisputeEvidence[]) => Promise<void>;
@@ -209,7 +210,7 @@ export function DisputeSubmissionForm({
                           : 'text-fields'
                       }
                       size={16}
-                      color="#059669"
+                      color={colors.primary[600]}
                     />
                     <Text className="text-xs text-gray-500 ml-2 uppercase">
                       {item.type}
@@ -248,7 +249,7 @@ export function DisputeSubmissionForm({
             onPress={handleAddTextEvidence}
             disabled={isSubmitting || !textEvidence.trim()}
             className={`rounded-lg py-2 px-4 flex-row items-center justify-center ${
-              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-emerald-600'
+              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-background-secondary'
             }`}
           >
             <MaterialIcons
@@ -278,7 +279,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="photo-library"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#9ca3af' : colors.primary[600]}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -299,7 +300,7 @@ export function DisputeSubmissionForm({
             <MaterialIcons
               name="attach-file"
               size={18}
-              color={isSubmitting ? '#9ca3af' : '#059669'}
+              color={isSubmitting ? '#9ca3af' : colors.primary[600]}
             />
             <Text
               className={`ml-2 font-medium ${
@@ -318,7 +319,7 @@ export function DisputeSubmissionForm({
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}
           className={`rounded-lg py-4 ${
-            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-emerald-600'
+            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-background-secondary'
           }`}
         >
           {isSubmitting ? (

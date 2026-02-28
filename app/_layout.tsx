@@ -30,6 +30,7 @@ import { initGlobalErrorHandlers } from '../lib/error-handling';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
+import { colors } from '../lib/theme';
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
 try {
@@ -278,7 +279,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   inner: {
     flex: 1,

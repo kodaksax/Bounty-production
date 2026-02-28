@@ -8,7 +8,7 @@ import { API_BASE_URL } from "../lib/config/api"
 import { API_TIMEOUTS } from "../lib/config/network"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
-import { theme } from "../lib/theme"
+import { colors, theme } from "../lib/theme"
 import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 12,

@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { colors } from '../../lib/theme';
 
 interface MessageBarProps {
   conversationId: string | null;
@@ -110,7 +111,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary[500],
     width: 48,
     height: 48,
     borderRadius: 24,

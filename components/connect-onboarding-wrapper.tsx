@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 
 import { API_BASE_URL } from '../lib/config/api';
-import { theme } from '../lib/theme';
+import { colors, theme } from '../lib/theme';
 
 
 export interface ConnectOnboardingWrapperProps {
@@ -244,7 +244,7 @@ export function ConnectOnboardingWrapper({
     if (status.payoutsEnabled) {
       return {
         icon: 'check-circle' as const,
-        color: '#059669',
+        color: colors.primary[600],
         text: 'Account verified and ready for payouts',
       };
     }
@@ -284,7 +284,7 @@ export function ConnectOnboardingWrapper({
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
         <Text style={styles.loadingText}>Checking account status...</Text>
       </View>
     );
@@ -358,7 +358,7 @@ export function ConnectOnboardingWrapper({
           accessibilityRole="button"
           accessibilityLabel="Refresh account status"
         >
-          <MaterialIcons name="refresh" size={20} color="#059669" />
+          <MaterialIcons name="refresh" size={20} color={colors.primary[600]} />
           <Text style={styles.refreshButtonText}>Refresh Status</Text>
         </TouchableOpacity>
       )}
@@ -379,15 +379,15 @@ export function ConnectOnboardingWrapper({
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Why connect a bank account?</Text>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Receive earnings from completed bounties</Text>
         </View>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Fast withdrawals in 1-2 business days</Text>
         </View>
         <View style={styles.infoItem}>
-          <MaterialIcons name="check" size={16} color="#059669" />
+          <MaterialIcons name="check" size={16} color={colors.primary[600]} />
           <Text style={styles.infoText}>Secure transfers powered by Stripe</Text>
         </View>
       </View>
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   refreshButtonText: {
-    color: '#059669',
+    color: colors.primary[600],
     fontSize: 14,
     marginLeft: 4,
   },

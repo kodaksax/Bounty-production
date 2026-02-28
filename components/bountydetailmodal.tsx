@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
-import { theme } from "lib/theme"
+import { colors, theme } from "lib/theme"
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useRef, useState } from "react"
 import {
@@ -495,7 +495,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
-                        <MaterialIcons name="wifi" size={14} color="#10b981" />
+                        <MaterialIcons name="wifi" size={14} color={colors.primary[500]} />
                         <Text style={styles.onlineText}>Online</Text>
                       </View>
                     ) : bounty.distance === null ? (
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   // Inner rounded card
   card: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   scrollContent: {
     padding: 16,
@@ -898,14 +898,14 @@ const styles = StyleSheet.create({
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: colors.primary[500], // emerald-500
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     ...theme.shadows.emerald,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: colors.background.secondary, // emerald-600 (darker)
     opacity: 0.6,
   },
   acceptButtonText: {

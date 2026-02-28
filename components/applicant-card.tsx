@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ReputationScoreCompact } from './ui/reputation-score';
 import TextGuard from './ui/TextGuard';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+import { colors } from '../lib/theme';
 
 interface ApplicantCardProps {
   request: BountyRequestWithDetails;
@@ -210,7 +211,7 @@ export function ApplicantCard({
               onPress={handleRequestInfo}
               disabled={isProcessing || request.status !== 'pending'}
             >
-              <MaterialIcons name="chat" size={18} color="#10b981" />
+              <MaterialIcons name="chat" size={18} color={colors.primary[500]} />
               <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
             </TouchableOpacity>
           )}
@@ -373,10 +374,10 @@ const styles = StyleSheet.create({
   infoButton: {
     backgroundColor: '#047857', // emerald-700
     borderWidth: 1,
-    borderColor: '#10b981', // emerald-500
+    borderColor: colors.primary[500], // emerald-500
   },
   acceptButton: {
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: colors.primary[500], // emerald-500
   },
   buttonText: {
     color: '#fff',
@@ -384,7 +385,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   infoButtonText: {
-    color: '#10b981', // emerald-500
+    color: colors.primary[500], // emerald-500
   },
   statusBadge: {
     marginTop: 12,
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   statusAccepted: {
-    color: '#10b981', // emerald-500
+    color: colors.primary[500], // emerald-500
   },
   statusRejected: {
     color: '#dc2626', // red-600

@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useOfflineMode } from '../hooks/useOfflineMode';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
-import { theme } from '../lib/theme';
+import { colors, theme } from '../lib/theme';
 
 
 interface ConnectionStatusProps {
@@ -80,7 +80,7 @@ export function ConnectionStatus({
 
   if (!showStatus) return null;
 
-  const backgroundColor = isOnline ? '#10b981' : '#ef4444'; // green-500 : red-500
+  const backgroundColor = isOnline ? colors.primary[500] : '#ef4444'; // green-500 : red-500
   const icon = isOnline ? 'wifi' : 'wifi-off';
   const message = isOnline
     ? 'Back online'

@@ -12,6 +12,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
 import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
+import { colors } from '../../lib/theme';
 
 export default function SignUpRoute() {
   return <SignUpForm />
@@ -308,7 +309,7 @@ export function SignUpForm() {
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: ageVerified }}
               >
-                <MaterialIcons name={ageVerified ? 'check-box' : 'check-box-outline-blank'} size={22} color={ageVerified ? '#10b981' : '#fff'} />
+                <MaterialIcons name={ageVerified ? 'check-box' : 'check-box-outline-blank'} size={22} color={ageVerified ? colors.primary[500] : '#fff'} />
               </TouchableOpacity>
               <Text className="text-white/90">I confirm I am 18 years or older</Text>
             </View>
@@ -322,7 +323,7 @@ export function SignUpForm() {
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: termsAccepted }}
                 >
-                  <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? '#10b981' : '#fff'} />
+                  <MaterialIcons name={termsAccepted ? 'check-box' : 'check-box-outline-blank'} size={22} color={termsAccepted ? colors.primary[500] : '#fff'} />
                 </TouchableOpacity>
                 <View className="flex-1 flex-row flex-wrap">
                   <Text className="text-white/90">I accept the </Text>
@@ -342,7 +343,7 @@ export function SignUpForm() {
               ) : null}
             </View>
 
-            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-background-secondary rounded py-3 items-center flex-row justify-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-medium">Create Account</Text>}
             </TouchableOpacity>
 

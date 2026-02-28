@@ -9,6 +9,7 @@ import { SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/acc
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+import { colors } from '../lib/theme';
 
 export interface BountyListItemProps {
   id: string | number
@@ -118,7 +119,7 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
             <View style={styles.dot} />
             {work_type === 'online' ? (
               <View style={styles.onlineBadge}>
-                <MaterialIcons name="wifi" size={10} color="#10b981" />
+                <MaterialIcons name="wifi" size={10} color={colors.primary[500]} />
                 <Text style={styles.onlineText}>Online</Text>
               </View>
             ) : distance === null ? (
