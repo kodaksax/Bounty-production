@@ -8,7 +8,8 @@ import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { WalletBalanceButton } from 'components/ui/wallet-balance-button'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { useBounties } from '../hooks/useBounties'
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
@@ -41,16 +42,28 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 ) {
   const router = useRouter()
 
-  const [bounties, setBounties] = useState<Bounty[]>([])
-  const [isLoadingBounties, setIsLoadingBounties] = useState(true)
+  // useBounties provides SWR-like caching, WebSocket real-time updates, and optimistic UI
+  const { bounties: firstPageBounties, loading: isLoadingBounties, error: bountyErrorMsg, refreshBounties } = useBounties({ status: 'open', autoRefresh: true })
+  const [extraBounties, setExtraBounties] = useState<Bounty[]>([])
+  // Merge first page (from useBounties) with additional paginated pages:
+  // first-page items appear first (in API sort order) and take precedence on overlap;
+  // extra-page items that are not already in the first page are appended.
+  const bounties = useMemo(() => {
+    const firstPageIds = new Set(firstPageBounties.map((b) => String(b.id)))
+    return [
+      ...firstPageBounties,
+      ...extraBounties.filter((b) => !firstPageIds.has(String(b.id))),
+    ]
+  }, [firstPageBounties, extraBounties])
+  const loadError = bountyErrorMsg ? new Error(bountyErrorMsg) : null
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
+  // Track the raw backend offset for pagination (independent of client-side deduplication)
+  const paginationOffsetRef = useRef(PAGE_SIZE)
   // Track bounty IDs the user has applied to (pending, accepted, or rejected)
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
   // Track whether user applications have been loaded (prevents flash of unfiltered content)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
-  // Track error state to show offline/error UI instead of perpetual loading
-  const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   // Trending bounties state
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
@@ -63,7 +76,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const scrollY = useRef(new Animated.Value(0)).current
   const bountyListRef = useRef<FlatList>(null)
-  const offsetRef = useRef(0)
   const distanceChipRef = useRef<any>(null)
 
   // Location hook for calculating real distances
@@ -206,46 +218,34 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [currentUserId])
 
-  // Load bounties from backend
-  const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
-    if (reset) {
-      setIsLoadingBounties(true)
-      setLoadError(null)
-    } else {
-      setLoadingMore(true)
-    }
+  // Load additional pages of bounties (pagination beyond the first page from useBounties)
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || isLoadingBounties) return
+    setLoadingMore(true)
     try {
-      const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
-
-      const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
+      const fetched = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: paginationOffsetRef.current })
+      paginationOffsetRef.current += fetched.length
+      setExtraBounties(prev => {
         const map = new Map<string, Bounty>()
-        existing.concat(incoming).forEach(b => {
-          map.set(String(b.id), b)
-        })
+        prev.forEach(b => map.set(String(b.id), b))
+        fetched.forEach(b => map.set(String(b.id), b))
         return Array.from(map.values())
-      }
-
-      if (reset) {
-        setBounties(mergeUniqueById([], fetchedBounties))
-      } else {
-        setBounties(prev => mergeUniqueById(prev, fetchedBounties))
-      }
-      offsetRef.current = pageOffset + fetchedBounties.length
-      setHasMore(fetchedBounties.length === PAGE_SIZE)
-      setLoadError(null)
+      })
+      setHasMore(fetched.length === PAGE_SIZE)
     } catch (error) {
-      console.error('Error loading bounties:', error)
-      if (reset) {
-        setLoadError(error as Error)
-        setBounties(prev => prev.length === 0 ? [] : prev)
-        setHasMore(false)
-      }
+      console.error('Error loading more bounties:', error)
     } finally {
-      setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, [])
+  }, [loadingMore, hasMore, isLoadingBounties])
+
+  // Reset pagination state and refresh from the first page via useBounties
+  const resetAndRefresh = useCallback(() => {
+    setExtraBounties([])
+    setHasMore(true)
+    paginationOffsetRef.current = PAGE_SIZE
+    refreshBounties()
+  }, [refreshBounties])
 
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
@@ -265,10 +265,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      offsetRef.current = 0
+      setExtraBounties([])
       setHasMore(true)
+      paginationOffsetRef.current = PAGE_SIZE
       await Promise.all([
-        loadBounties({ reset: true }),
+        refreshBounties(),
         loadUserApplications().catch(err => {
           console.error('Failed to refresh user applications:', err)
         }),
@@ -281,41 +282,37 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications, loadTrendingBounties])
+  }, [refreshBounties, loadUserApplications, loadTrendingBounties])
 
   // Expose refresh and tab-repress handlers to parent via ref
   useImperativeHandle(ref, () => ({
     refresh: () => {
-      offsetRef.current = 0
-      setHasMore(true)
-      loadBounties({ reset: true })
+      resetAndRefresh()
     },
     handleTabRepress: () => {
       bountyListRef.current?.scrollToOffset({ offset: 0, animated: true })
       onRefresh()
     },
-  }), [loadBounties, onRefresh])
+  }), [resetAndRefresh, onRefresh])
 
   // Load user applications when component mounts or user changes
   useEffect(() => {
     loadUserApplications()
   }, [loadUserApplications])
 
-  // Load initial data on mount only
+  // Load initial trending bounties on mount (first-page bounties loaded by useBounties)
   useEffect(() => {
-    loadBounties({ reset: true })
     loadTrendingBounties()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Reload bounties when returning to bounty screen from other screens
+  // Reload user data when returning to bounty screen from other screens
   useEffect(() => {
     if (activeScreen === 'bounty') {
-      loadBounties({ reset: false })
       loadUserApplications()
       loadTrendingBounties()
     }
-  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
+  }, [activeScreen, loadUserApplications, loadTrendingBounties])
 
   // Restore last-selected chip on mount
   useEffect(() => {
@@ -373,9 +370,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) {
-      loadBounties()
+      loadMore()
     }
-  }, [isLoadingBounties, loadingMore, hasMore, loadBounties])
+  }, [isLoadingBounties, loadingMore, hasMore, loadMore])
 
   const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, [])
 
@@ -395,7 +392,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           title="Unable to load bounties"
           description="Check your internet connection and try again"
           actionLabel="Try Again"
-          onAction={() => loadBounties({ reset: true })}
+          onAction={resetAndRefresh}
         />
       )
     }
@@ -408,7 +405,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </TouchableOpacity>
       </>
     )
-  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties])
+  }, [isLoadingBounties, applicationsLoaded, loadError, resetAndRefresh])
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
