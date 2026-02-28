@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[500],
   },
   bubbleCompleted: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.primary[600],
   },
   connector: {
     width: 18,

@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[500],
   },
   stageIconCompleted: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.primary[600],
   },
   stageLabel: {
     color: '#6ee7b7',

@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.background.secondary,
+    borderBottomColor: colors.border.primary,
     gap: 8,
   },
   title: {

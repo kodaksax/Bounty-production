@@ -947,7 +947,7 @@ const styles = StyleSheet.create({
   bubble: { width: 12, height: 12, borderRadius: 6 },
   bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
   bubbleActive: { backgroundColor: colors.primary[500] },
-  bubbleCompleted: { backgroundColor: colors.background.secondary },
+  bubbleCompleted: { backgroundColor: colors.primary[600] },
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
   infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },

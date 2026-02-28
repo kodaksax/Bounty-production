@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.background.secondary,
+    borderBottomColor: colors.primary[600],
   },
   title: {
     fontSize: 20,
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     borderWidth: 1,
-    borderColor: colors.background.secondary,
+    borderColor: colors.border.primary,
   },
   textArea: {
     minHeight: 100,
