@@ -130,11 +130,9 @@ export function useAcceptRequest({
       }
       if (bountyId != null) {
         try {
-          const updated = await (bountyService as any).update(bountyId, {
-            status: 'in_progress',
-          })
+          const updated = await bountyService.updateStatus(bountyId, 'in_progress')
           if (!updated) {
-            console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
+            console.error('bountyService.updateStatus returned null for', bountyId)
             // Diagnostic: fetch server bounty and log its current state
             try {
               await bountyService.getById(bountyId)

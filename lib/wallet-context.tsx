@@ -209,7 +209,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // Load transactions from SecureStore
-      const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
+      const storedTx = await getSecureJSON<WalletTransactionRecord[]>(SecureKeys.WALLET_TRANSACTIONS);
       if (storedTx && Array.isArray(storedTx)) {
         setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
       }
