@@ -234,10 +234,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
   );
 
   // Subscribe to WebSocket events for real-time updates
-  // Memoize the handler to prevent unnecessary subscription cycles
-  useEffect(() => {
-    useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
-  }, [handleBountyStatusUpdate]);
+  useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
 
   return {
     bounties,
