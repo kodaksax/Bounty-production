@@ -248,7 +248,7 @@ STRIPE_WEBHOOK_SECRET=whsec_your_secret_here
 PORT=3001
 ```
 
-📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./STRIPE_INTEGRATION_BACKEND.md)
+📖 **Full documentation:** See [STRIPE_INTEGRATION_BACKEND.md](./docs/STRIPE_INTEGRATION_BACKEND.md)
 
 ### Testing payments from a physical device (Expo Go)
 
