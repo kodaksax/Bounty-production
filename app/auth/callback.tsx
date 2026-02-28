@@ -23,6 +23,7 @@ import { ROUTES } from '../../lib/routes';
 import { supabase } from '../../lib/supabase';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
+import { colors } from '../../lib/theme';
 type CallbackStatus = 'loading' | 'success' | 'error' | 'expired';
 
 export default function AuthCallbackScreen() {
@@ -309,7 +310,7 @@ export default function AuthCallbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: 24,
   },
   brandingHeader: {

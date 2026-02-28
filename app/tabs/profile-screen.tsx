@@ -274,7 +274,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-background-secondary text-white">
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>

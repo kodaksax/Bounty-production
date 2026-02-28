@@ -24,6 +24,7 @@ import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
 
+import { colors } from '../../lib/theme';
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -228,7 +229,7 @@ export default function EditProfileScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>

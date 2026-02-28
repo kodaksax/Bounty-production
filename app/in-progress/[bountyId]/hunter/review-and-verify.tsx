@@ -24,6 +24,7 @@ import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -619,7 +620,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 20,
     fontWeight: '700',
   },
@@ -680,7 +681,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   stageLabel: {
     color: '#6ee7b7',

@@ -18,6 +18,7 @@ import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
 import { getCurrentUserId } from "../../lib/utils/data-utils"
 
+import { colors } from '../../lib/theme';
 interface ChatDetailScreenProps {
   conversation: Conversation
   onBack?: () => void
@@ -151,7 +152,7 @@ export function ChatDetailScreen({
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-background-secondary text-white">
       {/* Header */}
       <View
         className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
@@ -347,8 +348,8 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 12,
     // Make the area outside the rounded message box match the main screen
-    // (use emerald-600 to match `bg-emerald-600` on the root View)
-    backgroundColor: '#059669', // emerald-600
+    // (use emerald-600 to match `bg-background-secondary` on the root View)
+    backgroundColor: colors.background.secondary, // emerald-600
     borderTopWidth: 1,
     // use a slightly darker border so the input area still reads as separate
     borderTopColor: '#047857', // emerald-700

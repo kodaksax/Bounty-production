@@ -20,6 +20,7 @@ import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 
+import { colors } from '../../../lib/theme';
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -212,7 +213,7 @@ export default function BountyDashboard() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
         <Text style={styles.loadingText}>Loading bounty...</Text>
       </SafeAreaView>
     );
@@ -360,7 +361,7 @@ export default function BountyDashboard() {
                   </Text>
                   {isCompleted && (
                     <View style={styles.completedCheckmark}>
-                      <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                      <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -664,7 +665,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   stageLabel: {
     color: '#6ee7b7',

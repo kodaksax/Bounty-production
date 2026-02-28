@@ -21,6 +21,7 @@ import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -376,7 +377,7 @@ export default function HunterWorkInProgressScreen() {
               <MaterialIcons
                 name={showProgressForm ? 'remove' : 'add'}
                 size={20}
-                color="#10b981"
+                color={colors.primary[500]}
               />
               <Text style={styles.addUpdateText}>
                 {showProgressForm ? 'Hide' : 'Add Update'}
@@ -572,7 +573,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
   },
@@ -638,7 +639,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   stageLabel: {
     color: '#6ee7b7',
@@ -663,7 +664,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
   },
   addUpdateText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 13,
     fontWeight: '600',
   },
@@ -783,7 +784,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   expandText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,

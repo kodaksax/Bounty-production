@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
-import { theme } from '../../lib/theme';
+import { theme, colors} from '../../lib/theme';
 
 
 interface RetryButtonProps {
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
     paddingHorizontal: SPACING.SECTION_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
     borderRadius: 12,

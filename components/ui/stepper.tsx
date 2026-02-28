@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { colors } from '../../lib/theme';
 export interface StepperStage {
   id: string;
   label: string;
@@ -82,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   bubbleCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   connector: {
     width: 18,

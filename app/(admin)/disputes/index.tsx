@@ -20,6 +20,7 @@ import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/
 import type { BountyDispute } from '../../../lib/types';
 import { ROUTES } from '../../../lib/routes';
 
+import { colors } from '../../../lib/theme';
 interface DisputeWithBounty extends BountyDispute {
   bountyTitle?: string;
   bountyAmount?: number;
@@ -110,7 +111,7 @@ export default function AdminDisputesScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Resolution" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={colors.primary[600]} />
           <Text style={styles.loadingText}>Loading disputes...</Text>
         </View>
       </View>
@@ -153,7 +154,7 @@ export default function AdminDisputesScreen() {
                 <Text style={styles.statLabel}>Reviewing</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#10b981' }]}>
+                <Text style={[styles.statValue, { color: colors.primary[500] }]}>
                   {stats.resolved}
                 </Text>
                 <Text style={styles.statLabel}>Resolved</Text>

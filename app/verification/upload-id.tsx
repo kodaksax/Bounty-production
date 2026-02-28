@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { SPACING } from '../../lib/constants/accessibility';
 
+import { colors } from '../../lib/theme';
 type DocumentType = 'passport' | 'driversLicense' | 'nationalId';
 
 export default function UploadIDScreen() {
@@ -172,7 +173,7 @@ export default function UploadIDScreen() {
             <Text style={styles.benefitText}>Premium verified badge on profile</Text>
           </View>
           <View style={styles.benefit}>
-            <MaterialIcons name="attach-money" size={18} color="#10b981" />
+            <MaterialIcons name="attach-money" size={18} color={colors.primary[500]} />
             <Text style={styles.benefitText}>Higher transaction limits</Text>
           </View>
           <View style={styles.benefit}>
@@ -333,7 +334,7 @@ export default function UploadIDScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -435,7 +436,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   docTypeTextActive: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontWeight: '600',
   },
   uploadLabel: {

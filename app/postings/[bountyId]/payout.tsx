@@ -19,6 +19,7 @@ import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { useWallet } from '../../../lib/wallet-context';
 
+import { colors } from '../../../lib/theme';
 export default function PayoutScreen() {
   const { bountyId } = useLocalSearchParams<{ bountyId?: string }>();
   const router = useRouter();
@@ -252,7 +253,7 @@ export default function PayoutScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color={colors.primary[500]} />
         <Text style={styles.loadingText}>Loading payout...</Text>
       </View>
     );
@@ -305,13 +306,13 @@ export default function PayoutScreen() {
         {/* Payout Amount Card */}
         <View style={styles.payoutCard}>
           <View style={styles.payoutHeader}>
-            <MaterialIcons name="account-balance-wallet" size={32} color="#10b981" />
+            <MaterialIcons name="account-balance-wallet" size={32} color={colors.primary[500]} />
             <Text style={styles.payoutTitle}>Payout Amount</Text>
           </View>
 
           {bounty.is_for_honor ? (
             <View style={styles.honorContainer}>
-              <MaterialIcons name="favorite" size={48} color="#10b981" />
+              <MaterialIcons name="favorite" size={48} color={colors.primary[500]} />
               <Text style={styles.honorLabel}>For Honor</Text>
               <Text style={styles.honorSubtext}>
                 This bounty was created for honor, no payout amount.
@@ -352,7 +353,7 @@ export default function PayoutScreen() {
         {bounty.status === 'completed' && (
           <>
             <View style={styles.completedCard}>
-              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <MaterialIcons name="check-circle" size={48} color={colors.primary[500]} />
               <Text style={styles.completedTitle}>Bounty Completed</Text>
               <Text style={styles.completedSubtext}>
                 This bounty has already been completed and archived.
@@ -370,7 +371,7 @@ export default function PayoutScreen() {
                 );
               }}
             >
-              <MaterialIcons name="receipt" size={20} color="#10b981" />
+              <MaterialIcons name="receipt" size={20} color={colors.primary[500]} />
               <Text style={styles.receiptButtonText}>Download Receipt</Text>
             </TouchableOpacity>
           </>
@@ -444,7 +445,7 @@ export default function PayoutScreen() {
         visible={showSuccessAnimation}
         icon="check-circle"
         size={80}
-        color="#10b981"
+        color={colors.primary[500]}
       />
       <ConfettiAnimation visible={showConfetti} />
     </View>
@@ -582,7 +583,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   payoutAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 48,
     fontWeight: '700',
     marginBottom: 12,
@@ -606,7 +607,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   honorLabel: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
     marginTop: 12,
@@ -658,7 +659,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   completedTitle: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 20,
     fontWeight: '700',
     marginTop: 12,
@@ -682,7 +683,7 @@ const styles = StyleSheet.create({
     borderColor: '#10b981',
   },
   receiptButtonText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 15,
     fontWeight: '600',
   },
@@ -705,7 +706,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completeButton: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

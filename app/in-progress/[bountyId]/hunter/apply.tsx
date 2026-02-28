@@ -17,6 +17,7 @@ import { bountyService } from '../../../../lib/services/bounty-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
   },
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   stageLabel: {
     color: '#6ee7b7',

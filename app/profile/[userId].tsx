@@ -31,6 +31,7 @@ import { bountyRequestService } from "../../lib/services/bounty-request-service"
 import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
+import { colors } from '../../lib/theme';
 ;
 
 export default function UserProfileScreen() {
@@ -483,7 +484,7 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   header: {
     flexDirection: "row",
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: colors.background.secondary, // emerald-600
   },
   headerCenter: {
     flexDirection: "row",
@@ -659,7 +660,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(167, 243, 208, 0.1)",
   },
   followingButtonText: {
-    color: "#10b981",
+    color: colors.primary[500],
   },
   statsContainer: {
     flexDirection: "row",

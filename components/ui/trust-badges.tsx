@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 
+import { colors } from '../../lib/theme';
 // Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -28,7 +29,7 @@ const PLATFORM_BADGES: TrustBadge[] = [
     icon: 'lock',
     title: 'Escrow Protected',
     description: 'All payments are held securely in escrow until work is verified and approved. Your funds are never released without your explicit approval.',
-    color: '#10b981', // emerald-500
+    color: colors.primary[500], // emerald-500
   },
   {
     id: 'secure-payments',

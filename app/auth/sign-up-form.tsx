@@ -342,7 +342,7 @@ export function SignUpForm() {
               ) : null}
             </View>
 
-            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+            <TouchableOpacity onPress={handleSubmit} disabled={isLoading} className="w-full bg-background-secondary rounded py-3 items-center flex-row justify-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-medium">Create Account</Text>}
             </TouchableOpacity>
 

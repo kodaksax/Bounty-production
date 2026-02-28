@@ -75,7 +75,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
         className="flex items-center justify-center w-full h-full px-4"
         onStartShouldSetResponder={() => true}
       >
-        <View className="bg-emerald-600 rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
+        <View className="bg-background-secondary rounded-2xl overflow-hidden shadow-xl w-full max-w-md mx-auto" style={{ maxHeight: windowHeight * 0.8 }}>
           {/* Header */}
           <View className="p-4 bg-emerald-700 flex items-center justify-center">
             <MaterialIcons name="place" size={20} color="#ffffff" style={{ marginRight: 8 }} />
@@ -131,7 +131,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
           {/* Confirmation state */}
           {isConfirming && (
-            <View className="absolute inset-0 bg-emerald-600 flex items-center justify-center flex-col">
+            <View className="absolute inset-0 bg-background-secondary flex items-center justify-center flex-col">
               <View className="h-16 w-16 rounded-full border-4 border-white border-t-transparent animate-spin mb-4"></View>
               <Text className="text-white font-medium text-lg">Posting your bounty...</Text>
             </View>

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native"
 import { SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility'
-import { theme } from '../../lib/theme'
+import { theme, colors} from '../../lib/theme'
 
 
 interface InputProps extends TextInputProps {
@@ -207,7 +207,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name="check-circle"
               size={20}
-              color="#10b981"
+              color={colors.primary[500]}
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />

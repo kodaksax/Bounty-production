@@ -18,6 +18,7 @@ import type { Bounty, BountyRequest } from '../../../../lib/services/database.ty
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
 import { useWallet } from '../../../../lib/wallet-context';
 
+import { colors } from '../../../../lib/theme';
 type HunterStage = 'apply' | 'work_in_progress' | 'review_verify' | 'payout';
 
 interface StageInfo {
@@ -312,7 +313,7 @@ export default function HunterPayoutScreen() {
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <MaterialIcons name="check-circle" size={48} color={colors.primary[500]} />
               <Text style={styles.successTitle}>Payout Released!</Text>
               <Text style={styles.successText}>
                 Congratulations! The poster has approved your work and released the payment.
@@ -366,7 +367,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                    <MaterialIcons name="check-circle" size={16} color={colors.primary[500]} />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -477,7 +478,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 20,
     fontWeight: '700',
   },
@@ -529,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   stageIconCompleted: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   stageLabel: {
     color: '#6ee7b7',
@@ -607,7 +608,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 32,
     fontWeight: '700',
   },
@@ -648,7 +649,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 24,
     fontWeight: '700',
   },
@@ -666,7 +667,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   archiveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   deleteButton: {
     backgroundColor: '#ef4444',
@@ -724,7 +725,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: colors.primary[500],
     fontSize: 12,
     fontWeight: '600',
   },

@@ -31,6 +31,7 @@ import { attachmentService } from '../../lib/services/attachment-service';
 import { Profile } from '../../lib/services/database.types';
 import { supabase } from '../../lib/supabase';
 
+import { colors } from '../../lib/theme';
 const COMMON_SKILLS = [
   'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
   'Gardening', 'Photography', 'Tutoring', 'Tech Support', 'Design',
@@ -578,7 +579,7 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: colors.background.secondary,
   },
   scrollContent: {
     flexGrow: 1,

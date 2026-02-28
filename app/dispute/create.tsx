@@ -16,6 +16,7 @@ import { disputeService } from '../../lib/services/dispute-service';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { generateEvidenceId } from '../../lib/utils/dispute-helpers';
 
+import { colors } from '../../lib/theme';
 type LocalEvidenceItem = {
   id: string;
   type: 'text' | 'image' | 'document' | 'link';
@@ -220,7 +221,7 @@ export default function CreateDisputeScreen() {
                           : 'text-fields'
                       }
                       size={18}
-                      color="#059669"
+                      color={colors.primary[600]}
                     />
                     <Text style={styles.evidenceType}>{item.type.toUpperCase()}</Text>
                     <TouchableOpacity
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
   evidenceType: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#059669',
+    color: colors.primary[600],
     flex: 1,
   },
   removeButton: {

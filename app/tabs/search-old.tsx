@@ -6,6 +6,7 @@ import { ActivityIndicator, FlatList, Text, TextInput, TouchableOpacity, View } 
 import { bountyService } from '../../lib/services/bounty-service'
 import type { Bounty } from '../../lib/services/database.types'
 
+import { colors } from '../../lib/theme';
 // Minimal, self-contained search screen to replace the prior complex implementation.
 // Goals: stable navigation context usage, no external tailwind class dependencies beyond basic ones already in project, and clear states.
 
@@ -191,7 +192,7 @@ function highlight(text: string, q: string) {
 
 // Basic inline styles (avoid tailwind complexity for this recovery implementation)
 const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
+  container: { flex: 1, backgroundColor: colors.background.secondary },
   header: { flexDirection: 'row', alignItems: 'center', paddingTop: 54, paddingHorizontal: 12, paddingBottom: 12 },
   backBtn: { padding: 8, marginRight: 4 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: 4 },
