@@ -8,6 +8,7 @@ import { SkillsetChips } from "components/skillset-chips";
 import { BrandingLogo } from "components/ui/branding-logo";
 import { EnhancedProfileSectionSkeleton } from "components/ui/skeleton-loaders";
 import { TrustBadges } from "components/ui/trust-badges";
+import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
@@ -370,6 +371,22 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
         {/* Portfolio (standalone, after skillsets) */}
         <PortfolioSection userId={isOwnProfile ? undefined : profileUuid} isOwnProfile={isOwnProfile} />
+
+        {/* Verification Badges */}
+        <View style={styles.section}>
+          <VerificationBadgeChips
+            input={{
+              email_confirmed: authProfile?.email_confirmed ?? false,
+              phone_verified: authProfile?.phone_verified ?? false,
+              id_verification_status: authProfile?.id_verification_status,
+              selfie_submitted_at: authProfile?.selfie_submitted_at,
+              age_verified: authProfile?.age_verified,
+              display_name: authProfile?.display_name || authProfile?.username,
+              avatar_url: authProfile?.avatar,
+              bio: authProfile?.about,
+            }}
+          />
+        </View>
 
         {/* Platform Security & Trust Badges */}
         <View style={styles.section}>

@@ -32,6 +32,12 @@ export interface AuthProfile {
   updated_at?: string;
   onboarding_completed?: boolean; // Track if user has completed onboarding flow
   needs_onboarding?: boolean; // Flag to indicate user needs to complete onboarding (no profile exists)
+  // Phase 1 verification fields
+  email_confirmed?: boolean;
+  phone_verified?: boolean;
+  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  selfie_submitted_at?: string;
+  display_name?: string;
 }
 
 interface CachedProfile {
