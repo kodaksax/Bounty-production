@@ -20,7 +20,7 @@ export interface AdminUserSummary {
   email?: string;
   avatar?: string;
   joinDate: string;
-  verificationStatus?: 'unverified' | 'pending' | 'verified';
+  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'trusted';
   bountiesPosted: number;
   bountiesAccepted: number;
   bountiesCompleted: number;

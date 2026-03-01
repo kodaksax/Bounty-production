@@ -96,24 +96,27 @@ export function sanitizePhone(phone?: string): string {
 
 /**
  * Check if profile is complete
+ * Requires username, displayName, avatar, and bio to be non-empty.
  */
 export function checkProfileCompleteness(profile: ProfileData | null): ProfileCompleteness {
-  if (!profile) {
-    return {
-      isComplete: false,
-      missingFields: ['username', 'displayName', 'location', 'phone'],
-    };
-  }
-
   const missingFields: string[] = [];
-  
-  if (!profile.username) {
+
+  if (!profile?.username) {
     missingFields.push('username');
   }
 
-  // Username is the only required field for basic completion
-  // Other fields are optional but we track them
-  
+  if (!profile?.displayName?.trim()) {
+    missingFields.push('displayName');
+  }
+
+  if (!profile?.avatar?.trim()) {
+    missingFields.push('avatar');
+  }
+
+  if (!profile?.bio?.trim()) {
+    missingFields.push('bio');
+  }
+
   return {
     isComplete: missingFields.length === 0,
     missingFields,
@@ -198,7 +201,7 @@ export const userProfileService = {
           try {
             const res = await supabase
               .from('profiles')
-              .select('id,username,displayName:display_name,avatar,location')
+              .select('id,username,displayName:display_name,avatar,location,about')
               .eq('id', resolvedUserId)
               .single();
             remoteData = res.data ?? null;
@@ -213,13 +216,13 @@ export const userProfileService = {
             try {
               const pub = await supabase
                 .from('public_profiles')
-                .select('id,username,displayName:display_name,avatar,location')
+                .select('id,username,displayName:display_name,avatar,location,about')
                 .eq('id', resolvedUserId)
                 .single();
               if (pub.error) {
                 // Both attempts failed; log and return null. Include error details and the select used.
                 console.error('[userProfile] public_profiles fetch error for user', resolvedUserId, {
-                  select: 'id,username,displayName:display_name,avatar,location',
+                  select: 'id,username,displayName:display_name,avatar,location,about',
                   errorCode: pub.error?.code,
                   errorMessage: pub.error?.message || pub.error,
                 });
@@ -242,6 +245,7 @@ export const userProfileService = {
             displayName: remoteData.display_name || remoteData.displayName || undefined,
             avatar: remoteData.avatar || undefined,
             location: remoteData.location || undefined,
+            bio: remoteData.about || undefined,
           } as ProfileData;
 
           // Cache locally under the per-user key so future reads are fast

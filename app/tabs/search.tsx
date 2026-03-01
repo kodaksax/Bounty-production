@@ -306,7 +306,7 @@ export default function EnhancedSearchScreen() {
   }, [router]);
 
   const renderUserItem = useCallback(({ item }: { item: UserProfile }) => {
-    const verifiedLabel = item.verificationStatus === 'verified' ? ', verified user' : '';
+    const verifiedLabel = (item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') ? ', verified user' : '';
     const skillsLabel = item.skills && item.skills.length > 0 ? `, skills: ${item.skills.slice(0, 3).join(', ')}` : '';
     const accessibilityLabel = `${item.username}${verifiedLabel}${skillsLabel}`;
 
@@ -320,7 +320,7 @@ export default function EnhancedSearchScreen() {
       >
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{item.username}</Text>
-          {item.verificationStatus === 'verified' && (
+          {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
             <MaterialIcons name="verified" size={16} color="#6ee7b7" accessibilityElementsHidden={true} />
           )}
         </View>

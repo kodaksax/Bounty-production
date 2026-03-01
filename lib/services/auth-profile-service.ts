@@ -32,6 +32,12 @@ export interface AuthProfile {
   updated_at?: string;
   onboarding_completed?: boolean; // Track if user has completed onboarding flow
   needs_onboarding?: boolean; // Flag to indicate user needs to complete onboarding (no profile exists)
+  // Phase 1 verification fields
+  email_confirmed?: boolean;
+  phone_verified?: boolean;
+  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  selfie_submitted_at?: string;
+  display_name?: string;
 }
 
 interface CachedProfile {
@@ -195,6 +201,12 @@ export class AuthProfileService {
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
         onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+        // Phase 1 verification fields
+        email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+        phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+        id_verification_status: data.id_verification_status || undefined,
+        selfie_submitted_at: data.selfie_submitted_at || undefined,
+        display_name: data.display_name || undefined,
       };
 
       console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
@@ -378,6 +390,12 @@ export class AuthProfileService {
           created_at: data.created_at,
           updated_at: data.updated_at,
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          // Phase 1 verification fields
+          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          id_verification_status: data.id_verification_status || undefined,
+          selfie_submitted_at: data.selfie_submitted_at || undefined,
+          display_name: data.display_name || undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
@@ -498,12 +516,21 @@ export class AuthProfileService {
           avatar: data.avatar,
           about: data.about,
           phone: data.phone,
+          title: data.title || undefined,
+          location: data.location || undefined,
+          skills: Array.isArray(data.skills) ? data.skills : undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          // Phase 1 verification fields
+          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          id_verification_status: data.id_verification_status || undefined,
+          selfie_submitted_at: data.selfie_submitted_at || undefined,
+          display_name: data.display_name || undefined,
         };
 
         console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');

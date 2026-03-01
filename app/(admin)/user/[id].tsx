@@ -73,9 +73,9 @@ export default function AdminUserDetailScreen() {
           {user.verificationStatus && (
             <View style={styles.verificationBadge}>
               <MaterialIcons
-                name={user.verificationStatus === 'verified' ? 'verified' : 'pending'}
+                name={(user.verificationStatus === 'verified' || user.verificationStatus === 'trusted') ? 'verified' : 'pending'}
                 size={16}
-                color={user.verificationStatus === 'verified' ? '#4caf50' : '#ffc107'}
+                color={(user.verificationStatus === 'verified' || user.verificationStatus === 'trusted') ? '#4caf50' : '#ffc107'}
               />
               <Text style={styles.verificationText}>{user.verificationStatus}</Text>
             </View>
