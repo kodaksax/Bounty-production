@@ -193,6 +193,18 @@ export async function verifyPhoneOTP(
       },
     });
 
+    // Mirror phone_verified status to profiles table
+    const verifiedAt = new Date().toISOString();
+    const userId = data.session.user.id;
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ phone_verified: true, phone_verified_at: verifiedAt })
+      .eq('id', userId);
+
+    if (profileError) {
+      console.error('[phone-verification] Failed to mirror phone_verified to profiles:', profileError);
+    }
+
     return {
       success: true,
       message: 'Phone number verified successfully!',

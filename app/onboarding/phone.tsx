@@ -1,8 +1,7 @@
 /**
  * Phone Onboarding Screen
- * Third step: collect optional phone number (private, never displayed)
+ * Third step: collect phone number (required for verification)
  * Enhanced with trust-building messaging to encourage verification
- * Note: Phone will eventually be mandatory for verification
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -49,9 +48,9 @@ export default function PhoneScreen() {
   }, [phone]);
 
   const handleNext = async () => {
-    // If phone is empty, just skip
+    // Phone is required — prompt if empty
     if (!phone.trim()) {
-      router.push('/onboarding/done');
+      Alert.alert('Phone required', 'Please enter your phone number to continue.');
       return;
     }
 
@@ -90,21 +89,17 @@ export default function PhoneScreen() {
       setSaving(false);
       Alert.alert(
         'Unable to Send Code',
-        `${otpResult.message}\n\nYou can still continue without verification.`,
+        `${otpResult.message}\n\nPlease check your number and try again.`,
         [
           { text: 'Try Again', style: 'cancel' },
-          { 
-            text: 'Continue Anyway', 
-            onPress: () => router.push('/onboarding/done'),
-          },
         ]
       );
     }
   };
 
-  const handleSkip = () => {
-    router.push('/onboarding/done');
-  };
+  const handleSkip = __DEV__
+    ? () => router.push('/onboarding/done')
+    : undefined;
 
   const handleBack = () => {
     router.back();
@@ -112,8 +107,7 @@ export default function PhoneScreen() {
 
   const getButtonText = (): string => {
     if (saving) return 'Saving...';
-    if (phone.trim()) return 'Save & Continue';
-    return 'Continue';
+    return 'Save & Continue';
   };
 
   const formatPhoneDisplay = (text: string) => {
@@ -232,13 +226,13 @@ export default function PhoneScreen() {
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-            <Text style={styles.skipButtonText}>
-              I
-              {"'"}
-              ll do this later
-            </Text>
-          </TouchableOpacity>
+          {__DEV__ && handleSkip && (
+            <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+              <Text style={styles.skipButtonText}>
+                [DEV] Skip for now
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Progress indicator */}
