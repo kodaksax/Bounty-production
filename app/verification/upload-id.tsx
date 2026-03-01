@@ -196,8 +196,13 @@ export default function UploadIDScreen() {
         'Your ID has been submitted. Next, please take a selfie to complete identity verification.',
         [
           {
+            text: 'Later',
+            style: 'cancel',
+            onPress: () => router.back(),
+          },
+          {
             text: 'Take Selfie',
-            onPress: () => router.push('/verification/selfie'),
+            onPress: () => router.replace('/verification/selfie'),
           },
         ]
       );

@@ -76,6 +76,11 @@ export default function SelfieScreen() {
       });
 
       if (!uploadResult.success || uploadResult.fallbackToLocal) {
+        // If the service fell back to local AsyncStorage, remove the cached artifact
+        // so sensitive selfie data is not persisted on-device.
+        if (uploadResult.fallbackToLocal) {
+          await storageService.deleteFile('verification-docs', `${userId}/selfie.jpg`);
+        }
         throw new Error(uploadResult.error ?? 'Failed to upload selfie to secure storage');
       }
 
