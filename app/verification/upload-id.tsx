@@ -1,7 +1,6 @@
 /**
  * ID Verification Upload Screen
- * Future implementation for identity verification
- * Placeholder for integration with Onfido, Stripe Identity, or similar
+ * Uploads government-issued ID photos to Supabase Storage and triggers review.
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,13 +18,20 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { SPACING } from '../../lib/constants/accessibility';
+import { storageService } from '../../lib/services/storage-service';
+import { supabase } from '../../lib/supabase';
+
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/heic'];
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 type DocumentType = 'passport' | 'driversLicense' | 'nationalId';
 
 export default function UploadIDScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuthContext();
 
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('driversLicense');
   const [frontImage, setFrontImage] = useState<string | null>(null);
@@ -50,6 +56,18 @@ export default function UploadIDScreen() {
       return;
     }
 
+    const applyAsset = (asset: ImagePicker.ImagePickerAsset) => {
+      if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
+        Alert.alert('File Too Large', 'Please choose an image under 10 MB.');
+        return;
+      }
+      if (side === 'front') {
+        setFrontImage(asset.uri);
+      } else {
+        setBackImage(asset.uri);
+      }
+    };
+
     Alert.alert(
       'Choose Method',
       'How would you like to provide your ID?',
@@ -65,11 +83,7 @@ export default function UploadIDScreen() {
             });
 
             if (!result.canceled && result.assets[0]) {
-              if (side === 'front') {
-                setFrontImage(result.assets[0].uri);
-              } else {
-                setBackImage(result.assets[0].uri);
-              }
+              applyAsset(result.assets[0]);
             }
           },
         },
@@ -84,11 +98,7 @@ export default function UploadIDScreen() {
             });
 
             if (!result.canceled && result.assets[0]) {
-              if (side === 'front') {
-                setFrontImage(result.assets[0].uri);
-              } else {
-                setBackImage(result.assets[0].uri);
-              }
+              applyAsset(result.assets[0]);
             }
           },
         },
@@ -107,19 +117,74 @@ export default function UploadIDScreen() {
       return;
     }
 
+    const userId = session?.user?.id;
+    if (!userId) {
+      Alert.alert('Not Signed In', 'Please sign in to verify your identity.');
+      return;
+    }
+
+    // Helper: validate a picked image URI for allowed MIME type and size.
+    // We use file extension as a best-effort check since mimeType from picker
+    // is not always available.
+    const uriToMime = (uri: string): string => {
+      const ext = uri.split('.').pop()?.toLowerCase() ?? '';
+      const map: Record<string, string> = {
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        heic: 'image/heic',
+      };
+      return map[ext] ?? 'image/jpeg'; // default to jpeg for camera captures
+    };
+
+    const frontMime = uriToMime(frontImage);
+    if (!ALLOWED_MIME_TYPES.includes(frontMime)) {
+      Alert.alert('Invalid File', 'Front image must be a JPEG, PNG, or HEIC file.');
+      return;
+    }
+    if (backImage) {
+      const backMime = uriToMime(backImage);
+      if (!ALLOWED_MIME_TYPES.includes(backMime)) {
+        Alert.alert('Invalid File', 'Back image must be a JPEG, PNG, or HEIC file.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
-    // TODO (Post-Launch): Integrate with actual verification service
-    // Options:
-    // 1. Onfido: https://onfido.com/
-    // 2. Stripe Identity: https://stripe.com/identity
-    // 3. Supabase Edge Function + Manual Review
+    try {
+      // Upload front image
+      const frontResult = await storageService.uploadFile(frontImage, {
+        bucket: 'verification-docs',
+        path: `${userId}/id-front.jpg`,
+      });
+      if (!frontResult.success) {
+        throw new Error(frontResult.error ?? 'Failed to upload front image');
+      }
 
-    // Placeholder implementation - in production this would call a real API
-    // Use a simple timeout without the Promise wrapper pattern
-    setTimeout(() => {
-      // In production, check if component is still mounted using a ref
-      setIsSubmitting(false);
+      // Upload back image (not needed for passport)
+      if (selectedDocType !== 'passport' && backImage) {
+        const backResult = await storageService.uploadFile(backImage, {
+          bucket: 'verification-docs',
+          path: `${userId}/id-back.jpg`,
+        });
+        if (!backResult.success) {
+          throw new Error(backResult.error ?? 'Failed to upload back image');
+        }
+      }
+
+      // Invoke the review-id Edge Function
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      const { error: fnError } = await supabase.functions.invoke('review-id', {
+        body: { userId, docType: selectedDocType },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message ?? 'Verification submission failed');
+      }
+
       Alert.alert(
         'Verification Submitted',
         'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
@@ -130,7 +195,12 @@ export default function UploadIDScreen() {
           },
         ]
       );
-    }, 2000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      Alert.alert('Submission Failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const canSubmit = frontImage && (selectedDocType === 'passport' || backImage);
@@ -318,13 +388,6 @@ export default function UploadIDScreen() {
           {!isSubmitting && <MaterialIcons name="check-circle" size={20} color="#052e1b" accessibilityElementsHidden={true} />}
         </TouchableOpacity>
 
-        {/* Implementation Note (for developers) */}
-        <View style={styles.devNote}>
-          <MaterialIcons name="code" size={16} color="#f59e0b" />
-          <Text style={styles.devNoteText}>
-            Note: This is a placeholder UI. Production integration requires implementing with Onfido, Stripe Identity, or similar service.
-          </Text>
-        </View>
       </ScrollView>
     </View>
   );
@@ -506,22 +569,5 @@ const styles = StyleSheet.create({
     color: '#052e1b',
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  devNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(245,158,11,0.15)',
-    borderRadius: 8,
-    padding: SPACING.ELEMENT_GAP,
-    marginBottom: SPACING.SCREEN_HORIZONTAL,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
-  devNoteText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 18,
   },
 });
