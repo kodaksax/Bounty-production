@@ -88,9 +88,16 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   portfolio?: string;
-  verificationStatus?: 'unverified' | 'pending' | 'verified';
+  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'trusted';
   followerCount?: number;
   followingCount?: number;
+  // Phase 1 verification fields
+  phone_verified?: boolean;
+  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  selfie_submitted_at?: string;
+  age_verified?: boolean;
+  email_confirmed?: boolean;
+  display_name?: string;
 }
 
 /**

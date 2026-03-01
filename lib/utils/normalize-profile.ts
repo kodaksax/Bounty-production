@@ -18,6 +18,13 @@ export type NormalizedProfile = {
   // counts
   followerCount?: number;
   followingCount?: number;
+  // Phase 1 verification fields
+  phone_verified?: boolean;
+  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  selfie_submitted_at?: string;
+  age_verified?: boolean;
+  email_confirmed?: boolean;
+  display_name?: string;
   // raw - keep original for debugging
   _raw?: any;
 };
@@ -56,6 +63,12 @@ export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile |
     verificationStatus: p.verificationStatus,
     followerCount: p.followerCount,
     followingCount: p.followingCount,
+    phone_verified: p.phone_verified,
+    id_verification_status: p.id_verification_status,
+    selfie_submitted_at: p.selfie_submitted_at,
+    age_verified: p.age_verified,
+    email_confirmed: p.email_confirmed,
+    display_name: p.display_name,
     _raw: p,
   };
 }
@@ -80,6 +93,12 @@ export function mergeNormalized(primary: NormalizedProfile | null, fallback: Nor
     verificationStatus: primary.verificationStatus || fallback.verificationStatus,
     followerCount: primary.followerCount ?? fallback.followerCount,
     followingCount: primary.followingCount ?? fallback.followingCount,
+    phone_verified: primary.phone_verified ?? fallback.phone_verified,
+    id_verification_status: primary.id_verification_status ?? fallback.id_verification_status,
+    selfie_submitted_at: primary.selfie_submitted_at ?? fallback.selfie_submitted_at,
+    age_verified: primary.age_verified ?? fallback.age_verified,
+    email_confirmed: primary.email_confirmed ?? fallback.email_confirmed,
+    display_name: primary.display_name || fallback.display_name,
     _raw: primary._raw || fallback._raw,
   };
 }

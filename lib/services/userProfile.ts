@@ -96,24 +96,27 @@ export function sanitizePhone(phone?: string): string {
 
 /**
  * Check if profile is complete
+ * Requires username, displayName, avatar, and bio to be non-empty.
  */
 export function checkProfileCompleteness(profile: ProfileData | null): ProfileCompleteness {
-  if (!profile) {
-    return {
-      isComplete: false,
-      missingFields: ['username', 'displayName', 'location', 'phone'],
-    };
-  }
-
   const missingFields: string[] = [];
-  
-  if (!profile.username) {
+
+  if (!profile?.username) {
     missingFields.push('username');
   }
 
-  // Username is the only required field for basic completion
-  // Other fields are optional but we track them
-  
+  if (!profile?.displayName?.trim()) {
+    missingFields.push('displayName');
+  }
+
+  if (!profile?.avatar?.trim()) {
+    missingFields.push('avatar');
+  }
+
+  if (!profile?.bio?.trim()) {
+    missingFields.push('bio');
+  }
+
   return {
     isComplete: missingFields.length === 0,
     missingFields,
