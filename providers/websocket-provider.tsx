@@ -16,6 +16,7 @@ const WebSocketContext = createContext<WebSocketContextValue | undefined>(undefi
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuthContext();
   const webSocketState = useWebSocket();
+  const { reconnect } = webSocketState;
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'disconnected'>('disconnected');
   const [lastConnectedAt, setLastConnectedAt] = useState<Date | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,7 +32,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   /**
    * Enhanced reconnect with exponential backoff.
-   * Only depends on isLoggedIn and the stable webSocketState.reconnect callback
+   * Depends on isLoggedIn and the destructured stable reconnect callback
    * (not the whole webSocketState object) to avoid a new function reference on
    * every render, which would cause the monitoring useEffect below to fire
    * continuously and produce a "Maximum update depth exceeded" error.
@@ -66,7 +67,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     
     reconnectTimeoutRef.current = setTimeout(async () => {
       try {
-        await webSocketState.reconnect();
+        await reconnect();
         reconnectAttemptsRef.current = 0; // Reset on successful reconnect
         setConnectionQuality('good');
         setLastConnectedAt(new Date());
@@ -80,9 +81,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         enhancedReconnectRef.current();
       }
     }, delay);
-  // webSocketState.reconnect is a stable useCallback([]) — safe to use as dep
-  // without referencing the whole webSocketState object.
-  }, [isLoggedIn, webSocketState.reconnect]);
+  // webSocketState.reconnect is a stable useCallback([]) — safe to destructure
+  // and use as dep without referencing the whole webSocketState object.
+  }, [isLoggedIn, reconnect]);
 
   // Keep the ref in sync so the self-recursive retry always calls the latest version
   useEffect(() => {
