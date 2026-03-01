@@ -20,9 +20,21 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [lastConnectedAt, setLastConnectedAt] = useState<Date | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  // Ref to always hold the latest enhancedReconnect without being a dep of itself.
+  // Initialized to a dev-only warning stub; the sync effect below replaces it
+  // before any async reconnect timer could fire.
+  const enhancedReconnectRef = useRef<() => Promise<void>>(
+    __DEV__
+      ? async () => { console.warn('[WebSocketProvider] enhancedReconnectRef called before initialization'); }
+      : async () => {}
+  );
 
   /**
-   * Enhanced reconnect with exponential backoff
+   * Enhanced reconnect with exponential backoff.
+   * Only depends on isLoggedIn and the stable webSocketState.reconnect callback
+   * (not the whole webSocketState object) to avoid a new function reference on
+   * every render, which would cause the monitoring useEffect below to fire
+   * continuously and produce a "Maximum update depth exceeded" error.
    */
   const enhancedReconnect = useCallback(async () => {
     if (!isLoggedIn) {
@@ -64,11 +76,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         reconnectAttemptsRef.current = attempts + 1;
         setConnectionQuality('poor');
         reconnectTimeoutRef.current = null;
-        // Schedule next retry
-        enhancedReconnect();
+        // Use ref to avoid stale-closure issues on self-recursive retry
+        enhancedReconnectRef.current();
       }
     }, delay);
-  }, [isLoggedIn, webSocketState]);
+  // webSocketState.reconnect is a stable useCallback([]) — safe to use as dep
+  // without referencing the whole webSocketState object.
+  }, [isLoggedIn, webSocketState.reconnect]);
+
+  // Keep the ref in sync so the self-recursive retry always calls the latest version
+  useEffect(() => {
+    enhancedReconnectRef.current = enhancedReconnect;
+  }, [enhancedReconnect]);
 
   /**
    * Monitor connection state and update quality
