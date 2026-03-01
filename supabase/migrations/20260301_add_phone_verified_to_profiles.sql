@@ -33,8 +33,10 @@ WHERE p.id = u.id
   AND (p.phone_verified IS NULL OR p.phone_verified = false)
   AND (u.raw_user_meta_data->>'phone_verified')::boolean = true;
 
--- Create an index on phone_verified for efficient filtering queries
-CREATE INDEX IF NOT EXISTS idx_profiles_phone_verified ON profiles(phone_verified);
+-- Create a partial index on phone_verified for efficient filtering of verified users
+CREATE INDEX IF NOT EXISTS idx_profiles_phone_verified
+  ON profiles(phone_verified)
+  WHERE phone_verified = true;
 
 COMMIT;
 
