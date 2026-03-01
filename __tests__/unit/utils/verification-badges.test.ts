@@ -12,6 +12,7 @@ const fullyVerifiedInput: VerificationBadgeInput = {
   email_confirmed: true,
   phone_verified: true,
   id_verification_status: 'approved',
+  age_verified: true,
   username: 'alice',
   display_name: 'Alice',
   avatar_url: 'https://example.com/avatar.jpg',
@@ -67,14 +68,23 @@ describe('getVerificationBadges', () => {
     expect(missingBio.find((b) => b.id === 'profile_complete')?.earned).toBe(false);
   });
 
+  it('age_verified badge is earned only when age_verified is true', () => {
+    const earned = getVerificationBadges({ ...fullyVerifiedInput, age_verified: true });
+    expect(earned.find((b) => b.id === 'age_verified')?.earned).toBe(true);
+    expect(earned.find((b) => b.id === 'age_verified')?.label).toBe('✓ 18+');
+
+    const unearned = getVerificationBadges({ ...fullyVerifiedInput, age_verified: false });
+    expect(unearned.find((b) => b.id === 'age_verified')?.earned).toBe(false);
+  });
+
   it('trusted badge is not earned if any step is incomplete', () => {
     const noPhone = getVerificationBadges({ ...fullyVerifiedInput, phone_verified: false });
     expect(noPhone.find((b) => b.id === 'trusted')?.earned).toBe(false);
   });
 
-  it('returns 5 badges', () => {
+  it('returns 6 badges', () => {
     const badges = getVerificationBadges({});
-    expect(badges).toHaveLength(5);
+    expect(badges).toHaveLength(6);
   });
 });
 

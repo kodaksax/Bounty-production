@@ -9,6 +9,7 @@ export type VerificationBadgeId =
   | 'email_confirmed'
   | 'phone_verified'
   | 'id_verified'
+  | 'age_verified'
   | 'profile_complete'
   | 'trusted';
 
@@ -39,21 +40,23 @@ export interface VerificationBadge {
  * - Email Confirmed  : email_confirmed === true
  * - Phone Verified   : phone_verified === true
  * - ID Verified      : id_verification_status === 'approved'
+ * - Age Verified     : age_verified === true (set automatically when ID is approved by admin)
  * - Profile Complete : username, display_name, avatar_url, and bio are all non-empty
  *                      (aligned with checkProfileCompleteness in userProfile.ts)
- * - Trusted          : all four above badges are earned
+ * - Trusted          : all five above badges are earned
  */
 export function getVerificationBadges(input: VerificationBadgeInput): VerificationBadge[] {
   const emailEarned = input.email_confirmed === true;
   const phoneEarned = input.phone_verified === true;
   const idEarned = input.id_verification_status === 'approved';
+  const ageEarned = input.age_verified === true;
   const profileEarned =
     !!input.username?.trim() &&
     !!input.display_name?.trim() &&
     !!input.avatar_url?.trim() &&
     !!input.bio?.trim();
 
-  const trustedEarned = emailEarned && phoneEarned && idEarned && profileEarned;
+  const trustedEarned = emailEarned && phoneEarned && idEarned && ageEarned && profileEarned;
 
   return [
     {
@@ -73,6 +76,12 @@ export function getVerificationBadges(input: VerificationBadgeInput): Verificati
       label: 'ID Verified',
       description: 'Government-issued ID has been approved.',
       earned: idEarned,
+    },
+    {
+      id: 'age_verified',
+      label: '✓ 18+',
+      description: 'Age verified as 18 or older via approved government ID.',
+      earned: ageEarned,
     },
     {
       id: 'profile_complete',
