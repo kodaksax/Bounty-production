@@ -192,12 +192,17 @@ export default function UploadIDScreen() {
       }
 
       Alert.alert(
-        'Verification Submitted',
-        'Your ID has been submitted for review. We will notify you once verification is complete (typically within 24-48 hours).',
+        'ID Submitted',
+        'Your ID has been submitted. Next, please take a selfie to complete identity verification.',
         [
           {
-            text: 'OK',
+            text: 'Later',
+            style: 'cancel',
             onPress: () => router.back(),
+          },
+          {
+            text: 'Take Selfie',
+            onPress: () => router.replace('/verification/selfie'),
           },
         ]
       );
