@@ -136,19 +136,9 @@ export default function VerifyPhoneScreen() {
     router.back();
   };
 
-  const handleSkip = () => {
-    Alert.alert(
-      'Skip Verification?',
-      'You can verify your phone number later from settings. Phone verification helps build trust with other users.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Skip for Now',
-          onPress: () => router.push('/onboarding/done'),
-        },
-      ]
-    );
-  };
+  const handleSkip = __DEV__
+    ? () => router.push('/onboarding/done')
+    : undefined;
 
   const formatPhoneDisplay = (phone: string) => {
     if (!phone) return 'Invalid number';
@@ -284,19 +274,21 @@ export default function VerifyPhoneScreen() {
           )}
         </View>
 
-        {/* Skip Button */}
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={handleSkip}
-        >
-          <Text style={styles.skipButtonText}>Skip for Now</Text>
-        </TouchableOpacity>
+        {/* Skip Button (dev only) */}
+        {__DEV__ && handleSkip && (
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={handleSkip}
+          >
+            <Text style={styles.skipButtonText}>[DEV] Skip for Now</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Info Box */}
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            Phone verification is optional but recommended. It helps build trust with other users and can be completed later from settings.
+            Phone verification is required to complete onboarding. It helps build trust with other users.
           </Text>
         </View>
       </ScrollView>
