@@ -201,6 +201,12 @@ export class AuthProfileService {
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
         onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+        // Phase 1 verification fields
+        email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+        phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+        id_verification_status: data.id_verification_status || undefined,
+        selfie_submitted_at: data.selfie_submitted_at || undefined,
+        display_name: data.display_name || undefined,
       };
 
       console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
@@ -384,6 +390,12 @@ export class AuthProfileService {
           created_at: data.created_at,
           updated_at: data.updated_at,
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          // Phase 1 verification fields
+          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          id_verification_status: data.id_verification_status || undefined,
+          selfie_submitted_at: data.selfie_submitted_at || undefined,
+          display_name: data.display_name || undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
@@ -510,6 +522,12 @@ export class AuthProfileService {
           created_at: data.created_at,
           updated_at: data.updated_at,
           onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          // Phase 1 verification fields
+          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          id_verification_status: data.id_verification_status || undefined,
+          selfie_submitted_at: data.selfie_submitted_at || undefined,
+          display_name: data.display_name || undefined,
         };
 
         console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');

@@ -18,7 +18,8 @@ export interface VerificationBadgeInput {
   id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
   selfie_submitted_at?: string | null;
   age_verified?: boolean;
-  // Profile completeness fields
+  // Profile completeness fields (aligned with checkProfileCompleteness)
+  username?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
   bio?: string | null;
@@ -38,7 +39,8 @@ export interface VerificationBadge {
  * - Email Confirmed  : email_confirmed === true
  * - Phone Verified   : phone_verified === true
  * - ID Verified      : id_verification_status === 'approved'
- * - Profile Complete : display_name, avatar_url, and bio are all non-empty
+ * - Profile Complete : username, display_name, avatar_url, and bio are all non-empty
+ *                      (aligned with checkProfileCompleteness in userProfile.ts)
  * - Trusted          : all four above badges are earned
  */
 export function getVerificationBadges(input: VerificationBadgeInput): VerificationBadge[] {
@@ -46,6 +48,7 @@ export function getVerificationBadges(input: VerificationBadgeInput): Verificati
   const phoneEarned = input.phone_verified === true;
   const idEarned = input.id_verification_status === 'approved';
   const profileEarned =
+    !!input.username?.trim() &&
     !!input.display_name?.trim() &&
     !!input.avatar_url?.trim() &&
     !!input.bio?.trim();
@@ -74,7 +77,7 @@ export function getVerificationBadges(input: VerificationBadgeInput): Verificati
     {
       id: 'profile_complete',
       label: 'Profile Complete',
-      description: 'Display name, avatar, and bio are all set.',
+      description: 'Username, display name, avatar, and bio are all set.',
       earned: profileEarned,
     },
     {

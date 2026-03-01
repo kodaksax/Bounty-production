@@ -201,7 +201,7 @@ export const userProfileService = {
           try {
             const res = await supabase
               .from('profiles')
-              .select('id,username,displayName:display_name,avatar,location')
+              .select('id,username,displayName:display_name,avatar,location,about')
               .eq('id', resolvedUserId)
               .single();
             remoteData = res.data ?? null;
@@ -216,13 +216,13 @@ export const userProfileService = {
             try {
               const pub = await supabase
                 .from('public_profiles')
-                .select('id,username,displayName:display_name,avatar,location')
+                .select('id,username,displayName:display_name,avatar,location,about')
                 .eq('id', resolvedUserId)
                 .single();
               if (pub.error) {
                 // Both attempts failed; log and return null. Include error details and the select used.
                 console.error('[userProfile] public_profiles fetch error for user', resolvedUserId, {
-                  select: 'id,username,displayName:display_name,avatar,location',
+                  select: 'id,username,displayName:display_name,avatar,location,about',
                   errorCode: pub.error?.code,
                   errorMessage: pub.error?.message || pub.error,
                 });
@@ -245,6 +245,7 @@ export const userProfileService = {
             displayName: remoteData.display_name || remoteData.displayName || undefined,
             avatar: remoteData.avatar || undefined,
             location: remoteData.location || undefined,
+            bio: remoteData.about || undefined,
           } as ProfileData;
 
           // Cache locally under the per-user key so future reads are fast

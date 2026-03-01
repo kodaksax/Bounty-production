@@ -12,6 +12,7 @@ const fullyVerifiedInput: VerificationBadgeInput = {
   email_confirmed: true,
   phone_verified: true,
   id_verification_status: 'approved',
+  username: 'alice',
   display_name: 'Alice',
   avatar_url: 'https://example.com/avatar.jpg',
   bio: 'Experienced developer',
@@ -49,9 +50,12 @@ describe('getVerificationBadges', () => {
     }
   });
 
-  it('profile_complete badge requires display_name, avatar_url, and bio', () => {
+  it('profile_complete badge requires username, display_name, avatar_url, and bio', () => {
     const complete = getVerificationBadges(fullyVerifiedInput);
     expect(complete.find((b) => b.id === 'profile_complete')?.earned).toBe(true);
+
+    const missingUsername = getVerificationBadges({ ...fullyVerifiedInput, username: '' });
+    expect(missingUsername.find((b) => b.id === 'profile_complete')?.earned).toBe(false);
 
     const missingName = getVerificationBadges({ ...fullyVerifiedInput, display_name: '' });
     expect(missingName.find((b) => b.id === 'profile_complete')?.earned).toBe(false);

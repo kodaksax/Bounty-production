@@ -63,6 +63,8 @@ function BadgeChip({ badge }: { badge: VerificationBadge }) {
     return (
       <View
         style={[styles.chip, { backgroundColor: `${color}22`, borderColor: color }]}
+        accessible={true}
+        accessibilityRole="text"
         accessibilityLabel={`${badge.label} earned`}
       >
         <MaterialIcons name={iconName} size={14} color={color} />
@@ -74,6 +76,8 @@ function BadgeChip({ badge }: { badge: VerificationBadge }) {
   return (
     <View
       style={[styles.chip, styles.chipUnearned]}
+      accessible={true}
+      accessibilityRole="text"
       accessibilityLabel={`${badge.label} not yet earned`}
     >
       <MaterialIcons name={iconName} size={14} color="#6b7280" />

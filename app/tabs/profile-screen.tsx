@@ -381,7 +381,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               id_verification_status: authProfile?.id_verification_status,
               selfie_submitted_at: authProfile?.selfie_submitted_at,
               age_verified: authProfile?.age_verified,
-              display_name: authProfile?.display_name || authProfile?.username,
+              username: authProfile?.username,
+              display_name: authProfile?.display_name,
               avatar_url: authProfile?.avatar,
               bio: authProfile?.about,
             }}

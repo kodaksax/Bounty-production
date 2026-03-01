@@ -42,6 +42,12 @@ export function normalizeAuthProfile(p: AuthProfile | null): NormalizedProfile |
     verificationStatus: (p as any).verificationStatus as string | undefined,
     followerCount: (p as any).followerCount,
     followingCount: (p as any).followingCount,
+    phone_verified: p.phone_verified,
+    id_verification_status: p.id_verification_status,
+    selfie_submitted_at: p.selfie_submitted_at,
+    age_verified: p.age_verified,
+    email_confirmed: p.email_confirmed,
+    display_name: p.display_name,
     _raw: p,
   };
 }
