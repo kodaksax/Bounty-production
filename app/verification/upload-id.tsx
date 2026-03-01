@@ -46,16 +46,6 @@ export default function UploadIDScreen() {
   };
 
   const pickImage = async (side: 'front' | 'back') => {
-    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permissionResult.granted) {
-      Alert.alert(
-        'Permission Required',
-        'Camera permission is required to take photos of your ID.'
-      );
-      return;
-    }
-
     const applyAsset = (asset: ImagePicker.ImagePickerAsset) => {
       if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
         Alert.alert('File Too Large', 'Please choose an image under 10 MB.');
@@ -75,6 +65,14 @@ export default function UploadIDScreen() {
         {
           text: 'Take Photo',
           onPress: async () => {
+            const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!cameraPermission.granted) {
+              Alert.alert(
+                'Permission Required',
+                'Camera permission is required to take photos of your ID.'
+              );
+              return;
+            }
             const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ['images'],
               allowsEditing: true,
@@ -90,6 +88,14 @@ export default function UploadIDScreen() {
         {
           text: 'Choose from Library',
           onPress: async () => {
+            const libraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!libraryPermission.granted) {
+              Alert.alert(
+                'Permission Required',
+                'Photo library permission is required to select photos of your ID.'
+              );
+              return;
+            }
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
               allowsEditing: true,
@@ -158,8 +164,8 @@ export default function UploadIDScreen() {
         bucket: 'verification-docs',
         path: `${userId}/id-front.jpg`,
       });
-      if (!frontResult.success) {
-        throw new Error(frontResult.error ?? 'Failed to upload front image');
+      if (!frontResult.success || frontResult.fallbackToLocal) {
+        throw new Error(frontResult.error ?? 'Failed to upload front image to secure storage');
       }
 
       // Upload back image (not needed for passport)
@@ -168,8 +174,8 @@ export default function UploadIDScreen() {
           bucket: 'verification-docs',
           path: `${userId}/id-back.jpg`,
         });
-        if (!backResult.success) {
-          throw new Error(backResult.error ?? 'Failed to upload back image');
+        if (!backResult.success || backResult.fallbackToLocal) {
+          throw new Error(backResult.error ?? 'Failed to upload back image to secure storage');
         }
       }
 

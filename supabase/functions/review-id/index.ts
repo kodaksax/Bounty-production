@@ -66,15 +66,21 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: `docType must be one of: ${validDocTypes.join(', ')}` }, 400)
   }
 
-  const { error: updateError } = await supabaseAdmin
+  const { data: _updatedProfile, error: updateError } = await supabaseAdmin
     .from('profiles')
     .update({
       id_verification_status: 'pending',
       id_submitted_at: new Date().toISOString(),
     })
     .eq('id', userId)
+    .select('id')
+    .single()
 
   if (updateError) {
+    // PGRST116 = no rows matched (profile does not exist)
+    if ((updateError as any).code === 'PGRST116') {
+      return jsonResponse({ error: 'Profile not found' }, 404)
+    }
     console.error('[review-id] Failed to update profile:', updateError)
     return jsonResponse({ error: 'Failed to update verification status' }, 500)
   }

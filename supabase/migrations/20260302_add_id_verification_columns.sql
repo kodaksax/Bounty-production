@@ -48,6 +48,10 @@ CREATE POLICY "Users can update own verification docs"
   USING (
     bucket_id = 'verification-docs'
     AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'verification-docs'
+    AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
 CREATE POLICY "Users can delete own verification docs"
