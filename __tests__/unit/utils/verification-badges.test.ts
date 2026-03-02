@@ -11,7 +11,7 @@ import {
 const fullyVerifiedInput: VerificationBadgeInput = {
   email_confirmed: true,
   phone_verified: true,
-  id_verification_status: 'approved',
+  id_verification_status: 'verified',
   age_verified: true,
   username: 'alice',
   display_name: 'Alice',
@@ -41,13 +41,13 @@ describe('getVerificationBadges', () => {
     expect(unearned.find((b) => b.id === 'phone_verified')?.earned).toBe(false);
   });
 
-  it('id_verified badge is earned only when id_verification_status is approved', () => {
-    const approved = getVerificationBadges({ ...fullyVerifiedInput, id_verification_status: 'approved' });
-    expect(approved.find((b) => b.id === 'id_verified')?.earned).toBe(true);
+  it('id_verified badge is earned only when id_verification_status is verified', () => {
+    const verified = getVerificationBadges({ ...fullyVerifiedInput, id_verification_status: 'verified' });
+    expect(verified.find((b) => b.id === 'id_verified')?.earned).toBe(true);
 
-    for (const status of ['none', 'pending', 'rejected'] as const) {
-      const notApproved = getVerificationBadges({ ...fullyVerifiedInput, id_verification_status: status });
-      expect(notApproved.find((b) => b.id === 'id_verified')?.earned).toBe(false);
+    for (const status of ['unverified', 'pending', 'rejected'] as const) {
+      const notVerified = getVerificationBadges({ ...fullyVerifiedInput, id_verification_status: status });
+      expect(notVerified.find((b) => b.id === 'id_verified')?.earned).toBe(false);
     }
   });
 

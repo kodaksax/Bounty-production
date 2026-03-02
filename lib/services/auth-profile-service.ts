@@ -35,7 +35,7 @@ export interface AuthProfile {
   // Phase 1 verification fields
   email_confirmed?: boolean;
   phone_verified?: boolean;
-  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string;
   display_name?: string;
 }

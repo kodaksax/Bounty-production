@@ -16,7 +16,7 @@ export type VerificationBadgeId =
 export interface VerificationBadgeInput {
   email_confirmed?: boolean;
   phone_verified?: boolean;
-  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string | null;
   age_verified?: boolean;
   // Profile completeness fields (aligned with checkProfileCompleteness)
@@ -39,7 +39,7 @@ export interface VerificationBadge {
  * Badge criteria:
  * - Email Confirmed  : email_confirmed === true
  * - Phone Verified   : phone_verified === true
- * - ID Verified      : id_verification_status === 'approved'
+ * - ID Verified      : id_verification_status === 'verified'
  * - Age Verified     : age_verified === true (set automatically when ID is approved by admin)
  * - Profile Complete : username, display_name, avatar_url, and bio are all non-empty
  *                      (aligned with checkProfileCompleteness in userProfile.ts)
@@ -48,7 +48,7 @@ export interface VerificationBadge {
 export function getVerificationBadges(input: VerificationBadgeInput): VerificationBadge[] {
   const emailEarned = input.email_confirmed === true;
   const phoneEarned = input.phone_verified === true;
-  const idEarned = input.id_verification_status === 'approved';
+  const idEarned = input.id_verification_status === 'verified';
   const ageEarned = input.age_verified === true;
   const profileEarned =
     !!input.username?.trim() &&

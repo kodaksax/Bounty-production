@@ -1,7 +1,7 @@
 // Supabase Edge Function: admin-review-id
 // Allows admins to approve or reject a pending ID verification.
 // On approval, also sets age_verified = true and age_verified_at = now().
-// Must be called with the service-role key or a JWT belonging to an admin user.
+// Must be called with an Authorization: Bearer <JWT> belonging to an admin user.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -44,10 +44,15 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Invalid or expired token' }, 401)
   }
 
-  // Only service-role callers or users with admin role may use this endpoint.
+  // Only users with admin role may use this endpoint.
   // We check for an 'admin' claim in app_metadata (set server-side via the Admin API).
-  const isAdmin = (adminUser.app_metadata?.role === 'admin') ||
-    (adminUser.app_metadata?.roles as string[] | undefined)?.includes('admin')
+  const roles = adminUser.app_metadata?.roles
+  const hasAdminRole = Array.isArray(roles)
+    ? roles.includes('admin')
+    : typeof roles === 'string'
+      ? roles === 'admin'
+      : false
+  const isAdmin = (adminUser.app_metadata?.role === 'admin') || hasAdminRole
   if (!isAdmin) {
     return jsonResponse({ error: 'Forbidden: admin access required' }, 403)
   }
@@ -72,8 +77,11 @@ Deno.serve(async (req: Request) => {
 
   const now = new Date().toISOString()
 
+  // Map API-level decision values to DB-allowed id_verification_status values.
+  const dbStatus = decision === 'approved' ? 'verified' : 'rejected'
+
   const profileUpdate: Record<string, unknown> = {
-    id_verification_status: decision,
+    id_verification_status: dbStatus,
     id_reviewed_at: now,
     id_reviewer_id: adminUser.id,
   }
@@ -101,7 +109,7 @@ Deno.serve(async (req: Request) => {
 
   console.log(
     `[admin-review-id] ID ${decision} for userId=${userId} by adminId=${adminUser.id}` +
-    (notes ? ` notes="${notes}"` : ''),
+    (notes ? ` notes_present=true notes_length=${String(notes).length}` : ''),
   )
 
   return jsonResponse({ success: true, userId, decision })
