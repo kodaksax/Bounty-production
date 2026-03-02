@@ -702,8 +702,10 @@ export class AuthProfileService {
       // Use Supabase SDK's built-in network handling and timeouts
       const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
-        .eq('id', userId)
+        .upsert(
+          { id: userId, ...updates },
+          { onConflict: 'id' }
+        )
         .select()
         .single();
 
