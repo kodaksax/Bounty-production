@@ -74,7 +74,7 @@ const getBarStyleForHex = (hex: string): "light" | "dark" => {
   return lum > 0.5 ? "dark" : "light";
 };
 
-const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
+const RootFrame = ({ children, bgColor = COLORS.BG_DARK }: { children: React.ReactNode; bgColor?: string }) => {
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
 
@@ -278,7 +278,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0a0f0d', // dark base
   },
   inner: {
     flex: 1,

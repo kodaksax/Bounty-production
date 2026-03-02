@@ -8,7 +8,7 @@ type BGContext = {
   setColor: (c: string) => void;
 };
 
-export const DEFAULT = "#059669"; // Bounty app default (emerald-600) fallback
+export const DEFAULT = "#0a0f0d"; // Bounty app default (dark base) fallback
 
 const BackgroundColorContext = createContext<BGContext | undefined>(undefined);
 

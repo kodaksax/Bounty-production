@@ -23,16 +23,16 @@ module.exports = {
           950: '#000e04',
         },
         background: {
-          primary: '#1a3d2e',
-          secondary: '#2d5240',
-          surface: 'rgba(45, 82, 64, 0.75)',
-          elevated: 'rgba(45, 82, 64, 0.85)',
+          primary: '#0a0f0d',
+          secondary: '#141e1a',
+          surface: 'rgba(20, 40, 32, 0.85)',
+          elevated: 'rgba(20, 40, 32, 0.95)',
         },
         text: {
           primary: '#fffef5',
           secondary: 'rgba(255, 254, 245, 0.8)',
           muted: 'rgba(255, 254, 245, 0.6)',
-          inverse: '#1a3d2e',
+          inverse: '#0a0f0d',
         },
         border: {
           primary: 'rgba(0, 145, 44, 0.4)',

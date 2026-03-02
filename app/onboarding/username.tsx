@@ -380,7 +380,7 @@ export default function UsernameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0a0f0d',
   },
   content: {
     flex: 1,

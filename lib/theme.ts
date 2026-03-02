@@ -17,12 +17,12 @@ export const colors = {
     950: '#000e04',
   },
 
-  // Background colors (darker green theme aligned with branding)
+  // Background colors (dark foundation with green as accent only)
   background: {
-    primary: '#1a3d2e', // Main background - darker tone of primary
-    secondary: '#2d5240', // Header background - complementary to primary
-    surface: 'rgba(45, 82, 64, 0.75)', // Card surface
-    elevated: 'rgba(45, 82, 64, 0.85)', // Modal/elevated surface
+    primary: '#0a0f0d', // Near-black base
+    secondary: '#141e1a', // Deep dark surface
+    surface: 'rgba(20, 40, 32, 0.85)', // Card surface
+    elevated: 'rgba(20, 40, 32, 0.95)', // Modal/elevated surface
   },
 
   // Text colors
@@ -30,7 +30,7 @@ export const colors = {
     primary: '#fffef5', // Off-white for readability
     secondary: 'rgba(255, 254, 245, 0.8)',
     muted: 'rgba(255, 254, 245, 0.6)',
-    inverse: '#1a3d2e',
+    inverse: '#0a0f0d',
   },
 
   // Border colors
@@ -136,15 +136,15 @@ export const shadows = {
 // Glass morphism effects
 export const glassMorphism = {
   light: {
-    backgroundColor: 'rgba(45, 82, 64, 0.6)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     backdropFilter: 'blur(10px)',
   },
   medium: {
-    backgroundColor: 'rgba(45, 82, 64, 0.75)',
+    backgroundColor: 'rgba(20, 40, 32, 0.75)',
     backdropFilter: 'blur(20px)',
   },
   heavy: {
-    backgroundColor: 'rgba(45, 82, 64, 0.85)',
+    backgroundColor: 'rgba(20, 40, 32, 0.85)',
     backdropFilter: 'blur(30px)',
   },
 } as const;

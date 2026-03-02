@@ -277,7 +277,7 @@ export function BountyCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(5, 150, 105, 0.3)", // emerald-600/30
+    backgroundColor: "rgba(20, 40, 32, 0.85)", // dark surface
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,

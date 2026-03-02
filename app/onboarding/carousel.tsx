@@ -306,7 +306,7 @@ export default function OnboardingCarousel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0a0f0d',
   },
   brandingHeader: {
     flexDirection: 'row',

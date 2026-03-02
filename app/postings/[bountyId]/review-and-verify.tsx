@@ -486,11 +486,11 @@ export default function ReviewAndVerifyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
@@ -554,11 +554,11 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   content: {
     padding: 16,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   hunterCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
