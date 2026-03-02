@@ -64,8 +64,10 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
     // Format to E.164
     const e164Phone = formatToE164(phone);
 
-    // Use Supabase phone auth to send OTP
-    const { error } = await supabase.auth.signInWithOtp({
+    // Use Supabase updateUser to set the phone number and trigger OTP delivery.
+    // signInWithOtp is for passwordless sign-in; updateUser is the correct method
+    // for adding/changing a phone on an already-authenticated user.
+    const { error } = await supabase.auth.updateUser({
       phone: e164Phone,
     });
 
@@ -154,11 +156,12 @@ export async function verifyPhoneOTP(
     // Format phone to E.164
     const e164Phone = formatToE164(phone);
 
-    // Verify OTP with Supabase
+    // Verify OTP with Supabase — use 'phone_change' type to match the OTP
+    // sent by updateUser (not 'sms' which is for signInWithOtp sign-in flows).
     const { data, error } = await supabase.auth.verifyOtp({
       phone: e164Phone,
       token,
-      type: 'sms',
+      type: 'phone_change',
     });
 
     if (error) {
@@ -189,7 +192,7 @@ export async function verifyPhoneOTP(
       };
     }
 
-    if (!data.session) {
+    if (!data.user && !data.session) {
       return {
         success: false,
         message: 'Could not establish verified session.',
@@ -207,7 +210,7 @@ export async function verifyPhoneOTP(
 
     // Mirror phone_verified status to profiles table when the DB client is available
     const verifiedAt = new Date().toISOString();
-    const userId = data.session.user.id;
+    const userId = data.user?.id || data.session?.user?.id;
 
     // Some test environments may provide a partial Supabase mock without `.from`.
     // In those cases, skip the mirror step instead of throwing.

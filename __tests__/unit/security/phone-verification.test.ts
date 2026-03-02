@@ -30,31 +30,32 @@ describe('Phone Verification Service', () => {
   describe('sendPhoneOTP', () => {
     it('should successfully send OTP to valid phone number', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+      supabase.auth.updateUser.mockResolvedValue({ data: { user: { id: '123' } }, error: null });
 
       const result = await sendPhoneOTP('+15551234567');
       
       expect(result.success).toBe(true);
       expect(result.message).toContain('sent');
-      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      expect(supabase.auth.updateUser).toHaveBeenCalledWith({
         phone: '+15551234567',
       });
     });
 
     it('should format US phone numbers to E.164', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+      supabase.auth.updateUser.mockResolvedValue({ data: { user: { id: '123' } }, error: null });
 
       await sendPhoneOTP('5551234567');
       
-      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      expect(supabase.auth.updateUser).toHaveBeenCalledWith({
         phone: '+15551234567',
       });
     });
 
     it('should handle rate limiting errors', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({
+      supabase.auth.updateUser.mockResolvedValue({
+        data: null,
         error: { message: 'Rate limit exceeded' },
       });
 
@@ -75,7 +76,7 @@ describe('Phone Verification Service', () => {
 
     it('should handle network errors gracefully', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockRejectedValue(new Error('Network error'));
+      supabase.auth.updateUser.mockRejectedValue(new Error('Network error'));
 
       const result = await sendPhoneOTP('+15551234567');
       
@@ -85,29 +86,30 @@ describe('Phone Verification Service', () => {
 
     it('should format international phone numbers with + prefix to clean E.164', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+      supabase.auth.updateUser.mockResolvedValue({ data: { user: { id: '123' } }, error: null });
 
       await sendPhoneOTP('+441234567890');
       
-      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      expect(supabase.auth.updateUser).toHaveBeenCalledWith({
         phone: '+441234567890',
       });
     });
 
     it('should clean spaces and dashes from international numbers', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+      supabase.auth.updateUser.mockResolvedValue({ data: { user: { id: '123' } }, error: null });
 
       await sendPhoneOTP('+44 1234 567890');
       
-      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      expect(supabase.auth.updateUser).toHaveBeenCalledWith({
         phone: '+441234567890',
       });
     });
 
     it('should handle database errors with friendly message', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({
+      supabase.auth.updateUser.mockResolvedValue({
+        data: null,
         error: { message: 'Database error saving new user' },
       });
 
@@ -120,11 +122,11 @@ describe('Phone Verification Service', () => {
 
     it('should handle leading whitespace before + in international numbers', async () => {
       const { supabase } = require('../../../lib/supabase');
-      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+      supabase.auth.updateUser.mockResolvedValue({ data: { user: { id: '123' } }, error: null });
 
       await sendPhoneOTP(' +44 1234 567890');
       
-      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      expect(supabase.auth.updateUser).toHaveBeenCalledWith({
         phone: '+441234567890',
       });
     });
@@ -141,7 +143,7 @@ describe('Phone Verification Service', () => {
     it('should successfully verify valid OTP', async () => {
       const { supabase } = require('../../../lib/supabase');
       supabase.auth.verifyOtp.mockResolvedValue({
-        data: { session: { user: { id: '123' } } },
+        data: { user: { id: '123' }, session: { user: { id: '123' } } },
         error: null,
       });
       supabase.auth.updateUser.mockResolvedValue({ error: null });

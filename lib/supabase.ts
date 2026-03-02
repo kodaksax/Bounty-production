@@ -100,8 +100,12 @@ if (isSupabaseConfigured) {
     auth: {
       onAuthStateChange: (_cb: any) => ({ data: null, error: null }),
       getUser: async () => ({ data: null, error: { message: msg } }),
+      getSession: async () => ({ data: { session: null }, error: { message: msg } }),
       signInWithPassword: async () => ({ data: null, error: { message: msg } }),
+      signInWithOtp: async () => ({ data: null, error: { message: msg } }),
       signOut: async () => ({ data: null, error: { message: msg } }),
+      updateUser: async () => ({ data: null, error: { message: msg } }),
+      verifyOtp: async () => ({ data: null, error: { message: msg } }),
     },
     __unsafe__: chain,
   } as unknown as SupabaseClient
