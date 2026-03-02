@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   item: {
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
+    backgroundColor: "rgba(20, 40, 32, 0.7)",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,

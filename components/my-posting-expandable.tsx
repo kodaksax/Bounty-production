@@ -925,7 +925,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: 'rgba(5, 150, 105, 0.25)',
+    backgroundColor: 'rgba(20, 40, 32, 0.55)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
     gap: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 12,
   },
   timerLabel: {
@@ -1010,7 +1010,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   messageTextArea: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',
@@ -1022,7 +1022,7 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 12,
     gap: 12,
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1098,7 +1098,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -1141,7 +1141,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   receiptCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 12,
     padding: 16,
     gap: 12,

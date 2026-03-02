@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0f0d',
   },
   hunterCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
   proofItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   emptyProof: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   commentInput: {
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 12,
     padding: 12,
     color: '#fff',

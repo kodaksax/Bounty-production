@@ -261,7 +261,7 @@ export function TrustBadgesCompact() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   compactBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,

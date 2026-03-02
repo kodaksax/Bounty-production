@@ -55,7 +55,7 @@ export function SkeletonCardList({ count = 3 }: { count?: number }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,

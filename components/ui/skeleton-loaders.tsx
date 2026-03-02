@@ -444,7 +444,7 @@ export function HunterDashboardSkeleton() {
 
 const styles = StyleSheet.create({
   postingCard: {
-    backgroundColor: 'rgba(4, 120, 87, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: 'rgba(4, 120, 87, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 8,
     marginBottom: 8,
   },
@@ -488,18 +488,18 @@ const styles = StyleSheet.create({
   },
   chatMessageUser: {
     alignSelf: 'flex-end',
-    backgroundColor: 'rgba(4, 120, 87, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     marginRight: 8,
   },
   chatMessageOther: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(4, 120, 87, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     marginLeft: 8,
   },
   transactionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4, 120, 87, 0.8)',
+    backgroundColor: 'rgba(20, 40, 32, 0.9)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4, 120, 87, 0.8)',
+    backgroundColor: 'rgba(20, 40, 32, 0.9)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   applicantCard: {
-    backgroundColor: 'rgba(4, 120, 87, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4, 120, 87, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hunterBountyCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -703,12 +703,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     minWidth: 120,
     gap: 8,
   },
   hunterPanel: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(20, 40, 32, 0.4)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   hunterDetailsCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 12,
     padding: 16,
     gap: 12,

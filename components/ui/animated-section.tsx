@@ -72,7 +72,7 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(20, 40, 32, 0.4)',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.2)',

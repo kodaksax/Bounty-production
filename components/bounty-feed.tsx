@@ -649,7 +649,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           )}
         </Animated.View>
         <LinearGradient
-          colors={['rgba(5,150,105,0.0)', 'rgba(5,150,105,0.25)', 'rgba(5,150,105,0.55)']}
+          colors={['rgba(10,15,13,0.0)', 'rgba(10,15,13,0.25)', 'rgba(10,15,13,0.55)']}
           style={styles.gradientSeparator}
           pointerEvents="none"
         />
@@ -684,7 +684,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       />
       {/* Subtle gradient fade behind BottomNav to imply depth */}
       <LinearGradient
-        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', '#059669']}
+        colors={['rgba(10,15,13,0)', 'rgba(10,15,13,0.5)', '#0a0f0d']}
         style={styles.bottomFade}
         pointerEvents="none"
       />

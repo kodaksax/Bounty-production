@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(16, 185, 129, 0.2)',
   },
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   summaryCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   payoutCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   confirmationCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,

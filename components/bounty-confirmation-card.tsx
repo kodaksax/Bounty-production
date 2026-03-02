@@ -114,7 +114,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
 
                 <View className="relative h-16 w-full flex justify-center">
                   {/* Progress bar background */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: 'rgba(4,120,87,0.3)', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
+                  <View style={{ position: 'absolute', left: 0, right: 0, backgroundColor: 'rgba(20,40,32,0.6)', borderRadius: 999, height: 16, alignSelf: 'center', width: 192 }} />
 
                   {/* Progress bar fill */}
                   <View style={{ position: 'absolute', left: 0, right: 0, borderRadius: 999, height: 16, alignSelf: 'center', width: (dragProgress * 192), backgroundColor: '#10b981' }} />

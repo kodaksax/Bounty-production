@@ -302,7 +302,7 @@ export function ReputationScoreCompact({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',

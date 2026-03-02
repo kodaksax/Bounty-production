@@ -277,7 +277,7 @@ export function BountyCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(20, 40, 32, 0.85)", // dark surface
+    backgroundColor: theme.colors.background.surface, // dark surface
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   ratingChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
+    backgroundColor: "rgba(20, 40, 32, 0.7)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
+    backgroundColor: "rgba(20, 40, 32, 0.7)",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,

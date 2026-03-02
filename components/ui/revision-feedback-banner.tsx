@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   feedbackBox: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(20, 40, 32, 0.4)',
     padding: 10,
     borderRadius: 8,
   },

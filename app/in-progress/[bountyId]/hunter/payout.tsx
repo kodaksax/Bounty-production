@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   bountyInfoCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderWidth: 1,
     borderColor: 'transparent',
     minWidth: 120,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
+    backgroundColor: 'rgba(20, 40, 32, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   payoutAmountCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: 'rgba(20, 40, 32, 0.5)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   balanceCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   receiptCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 12,
     padding: 16,
     gap: 12,

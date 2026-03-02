@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   formFieldBlock: { marginBottom: 18 },
   fieldLabel: { color: '#d1fae5', fontSize: 13, marginBottom: 6, fontWeight: '500' },
   textInput: {
-    backgroundColor: 'rgba(4,120,87,0.55)',
+    backgroundColor: 'rgba(20,40,32,0.75)',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(4,120,87,0.55)',
+    backgroundColor: 'rgba(20,40,32,0.75)',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,

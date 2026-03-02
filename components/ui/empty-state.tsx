@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     paddingVertical: SIZING.AVATAR_MEDIUM,
   },
   cardContainer: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: 'rgba(20, 40, 32, 0.3)',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.2)',

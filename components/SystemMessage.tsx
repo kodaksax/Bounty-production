@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageBox: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
+    backgroundColor: 'rgba(20, 40, 32, 0.4)',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',

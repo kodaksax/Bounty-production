@@ -115,7 +115,7 @@ export const COLORS = {
   // Background colors
   BG_DARK: '#0a0f0d',          // Near-black base background
   BG_DARK_SECONDARY: '#141e1a', // Deep dark secondary bg
-  BG_CARD: 'rgba(5, 150, 105, 0.1)', // Card background
+  BG_CARD: 'rgba(20, 40, 32, 0.3)', // Card background
   
   // Text colors (all AA compliant on dark backgrounds)
   TEXT_PRIMARY: '#fffef5',     // Off-white (>15:1 contrast on dark)

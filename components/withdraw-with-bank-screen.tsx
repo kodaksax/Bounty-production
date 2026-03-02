@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   balanceCard: {
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: 'rgba(20,40,32,0.8)',
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: 'rgba(20,40,32,0.8)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   },
   quickAmountButton: {
     flex: 1,
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: 'rgba(20,40,32,0.8)',
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   bankAccountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: 'rgba(20,40,32,0.8)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
