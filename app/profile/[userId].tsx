@@ -74,7 +74,12 @@ export default function UserProfileScreen() {
 
   const handleResendVerification = async () => {
     const email = session?.user?.email;
-    if (!email) return;
+    if (!email) {
+      setResendMessage(
+        "We don't have an email associated with your account. Please add an email address in your account settings to receive a verification link."
+      );
+      return;
+    }
     setResendLoading(true);
     setResendMessage(null);
     try {
