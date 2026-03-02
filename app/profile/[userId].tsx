@@ -69,7 +69,7 @@ export default function UserProfileScreen() {
 
   const isOwnProfile = userId === currentUserId;
   const isEmailVerified = Boolean(
-    session?.user?.email_confirmed_at || session?.user?.confirmed_at
+    session?.user?.email_confirmed_at && session?.user?.email
   );
 
   const handleResendVerification = async () => {
