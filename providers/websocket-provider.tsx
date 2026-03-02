@@ -16,13 +16,26 @@ const WebSocketContext = createContext<WebSocketContextValue | undefined>(undefi
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuthContext();
   const webSocketState = useWebSocket();
+  const { reconnect } = webSocketState;
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'disconnected'>('disconnected');
   const [lastConnectedAt, setLastConnectedAt] = useState<Date | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  // Ref to always hold the latest enhancedReconnect without being a dep of itself.
+  // Initialized to a dev-only warning stub; the sync effect below replaces it
+  // before any async reconnect timer could fire.
+  const enhancedReconnectRef = useRef<() => Promise<void>>(
+    __DEV__
+      ? async () => { console.warn('[WebSocketProvider] enhancedReconnectRef called before initialization'); }
+      : async () => {}
+  );
 
   /**
-   * Enhanced reconnect with exponential backoff
+   * Enhanced reconnect with exponential backoff.
+   * Depends on isLoggedIn and the destructured stable reconnect callback
+   * (not the whole webSocketState object) to avoid a new function reference on
+   * every render, which would cause the monitoring useEffect below to fire
+   * continuously and produce a "Maximum update depth exceeded" error.
    */
   const enhancedReconnect = useCallback(async () => {
     if (!isLoggedIn) {
@@ -54,7 +67,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     
     reconnectTimeoutRef.current = setTimeout(async () => {
       try {
-        await webSocketState.reconnect();
+        await reconnect();
         reconnectAttemptsRef.current = 0; // Reset on successful reconnect
         setConnectionQuality('good');
         setLastConnectedAt(new Date());
@@ -64,11 +77,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         reconnectAttemptsRef.current = attempts + 1;
         setConnectionQuality('poor');
         reconnectTimeoutRef.current = null;
-        // Schedule next retry
-        enhancedReconnect();
+        // Use ref to avoid stale-closure issues on self-recursive retry
+        enhancedReconnectRef.current();
       }
     }, delay);
-  }, [isLoggedIn, webSocketState]);
+  // webSocketState.reconnect is a stable useCallback([]) — safe to destructure
+  // and use as dep without referencing the whole webSocketState object.
+  }, [isLoggedIn, reconnect]);
+
+  // Keep the ref in sync so the self-recursive retry always calls the latest version
+  useEffect(() => {
+    enhancedReconnectRef.current = enhancedReconnect;
+  }, [enhancedReconnect]);
 
   /**
    * Monitor connection state and update quality
@@ -88,6 +108,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnectionQuality('disconnected');
       }
     }
+    // Clear any pending reconnect timeout on unmount to avoid state updates
+    // on an unmounted component (e.g. during hot-reload or error-boundary recovery).
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
   }, [webSocketState.isConnected, lastConnectedAt, enhancedReconnect]);
 
   /**
