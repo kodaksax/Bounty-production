@@ -200,6 +200,16 @@ export async function verifyPhoneOTP(
       };
     }
 
+    // Extract user ID from whichever response field is available
+    const userId = data.user?.id || data.session?.user?.id;
+    if (!userId) {
+      return {
+        success: false,
+        message: 'Could not identify verified user.',
+        error: 'no_user_id',
+      };
+    }
+
     // Update user metadata to mark phone as verified
     await supabase.auth.updateUser({
       data: {
@@ -210,7 +220,6 @@ export async function verifyPhoneOTP(
 
     // Mirror phone_verified status to profiles table when the DB client is available
     const verifiedAt = new Date().toISOString();
-    const userId = data.user?.id || data.session?.user?.id;
 
     // Some test environments may provide a partial Supabase mock without `.from`.
     // In those cases, skip the mirror step instead of throwing.
