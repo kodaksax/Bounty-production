@@ -16,7 +16,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  Platform
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -68,7 +69,8 @@ interface BountyDetailModalProps {
 
 export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateToChat }: BountyDetailModalProps) {
   const router = useRouter()
-  const { isEmailVerified } = useAuthContext()
+  const { isEmailVerified, session } = useAuthContext()
+  const currentUserId = session?.user?.id ?? null
   const { triggerHaptic } = useHapticFeedback()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -78,7 +80,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [showReportModal, setShowReportModal] = useState(false)
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
-  const currentUserId = getCurrentUserId()
   // Local state to hold a fuller bounty object if we need to fetch details
   const [detailBounty, setDetailBounty] = useState<typeof initialBounty | null>(initialBounty as any)
 
@@ -361,28 +362,30 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
         // Defer Alert to allow React to process state updates and re-render
         // Only show alert if component is still mounted
-        alertTimeoutRef.current = setTimeout(() => {
-          if (!isMountedRef.current) return
+        if (Platform.OS === 'web') {
+          // Alert.alert is a no-op on web — navigate directly
+          router.push(`/in-progress/${bounty.id}/hunter`)
+          setTimeout(() => handleClose(), 50)
+        } else {
+          alertTimeoutRef.current = setTimeout(() => {
+            if (!isMountedRef.current) return
 
-          Alert.alert(
-            'Application Submitted',
-            'Your application has been submitted. The bounty poster will review it soon.',
-            [
-              {
-                text: 'View In Progress',
-                onPress: () => {
-                  // Navigate first, then close modal to ensure navigation completes
-                  router.push(`/in-progress/${bounty.id}/hunter`)
-                  // Small delay to let navigation start before closing modal
-                  setTimeout(() => {
-                    handleClose()
-                  }, 50)
+            Alert.alert(
+              'Application Submitted',
+              'Your application has been submitted. The bounty poster will review it soon.',
+              [
+                {
+                  text: 'View In Progress',
+                  onPress: () => {
+                    router.push(`/in-progress/${bounty.id}/hunter`)
+                    setTimeout(() => handleClose(), 50)
+                  },
                 },
-              },
-              { text: 'OK' },
-            ]
-          )
-        }, ALERT_DEFER_DELAY)
+                { text: 'OK' },
+              ]
+            )
+          }, ALERT_DEFER_DELAY)
+        }
       } else {
         setIsApplying(false)
         // Defer Alert to allow React to process state updates
@@ -491,7 +494,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   {/* Price and distance / Online badge */}
                   <View style={styles.priceDistanceContainer}>
                     <View style={styles.priceContainer}>
-                      <Text style={styles.priceText}>${bounty.price}</Text>
+                      {(bounty as any).is_for_honor ? (
+                        <Text style={styles.priceText}>♥ For Honor</Text>
+                      ) : (
+                        <Text style={styles.priceText}>${bounty.price}</Text>
+                      )}
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
@@ -914,3 +921,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
+
