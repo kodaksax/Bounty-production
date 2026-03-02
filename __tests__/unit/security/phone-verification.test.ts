@@ -82,6 +82,41 @@ describe('Phone Verification Service', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('unexpected error');
     });
+
+    it('should format international phone numbers with + prefix to clean E.164', async () => {
+      const { supabase } = require('../../../lib/supabase');
+      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+
+      await sendPhoneOTP('+441234567890');
+      
+      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+        phone: '+441234567890',
+      });
+    });
+
+    it('should clean spaces and dashes from international numbers', async () => {
+      const { supabase } = require('../../../lib/supabase');
+      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+
+      await sendPhoneOTP('+44 1234 567890');
+      
+      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+        phone: '+441234567890',
+      });
+    });
+
+    it('should handle database errors with friendly message', async () => {
+      const { supabase } = require('../../../lib/supabase');
+      supabase.auth.signInWithOtp.mockResolvedValue({
+        error: { message: 'Database error saving new user' },
+      });
+
+      const result = await sendPhoneOTP('+15551234567');
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('database_error');
+      expect(result.message).toContain('check the format');
+    });
   });
 
   describe('verifyPhoneOTP', () => {

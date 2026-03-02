@@ -13,7 +13,7 @@ export interface PhoneVerificationResult {
 }
 
 // Constants for phone validation
-const MIN_PHONE_LENGTH = 10; // Minimum digits for most countries
+const MIN_PHONE_LENGTH = 7; // Minimum digits (including country code) for international support
 const OTP_LENGTH = 6; // Standard OTP length
 const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
 
@@ -28,14 +28,12 @@ const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
 function formatToE164(phone: string): string {
   const cleanPhone = phone.replace(/\D/g, '');
   
-  // If already has country code (starts with +), return as-is
+  // If already has country code (starts with +), clean and return
   if (phone.startsWith('+')) {
-    return phone;
+    return `+${cleanPhone}`;
   }
   
   // Default to +1 (US/Canada) for backwards compatibility
-  // TODO (Post-Launch - international-phone-support): Add country code selection in UI for international support
-  // Track this enhancement: https://github.com/kodaksax/bountyexpo/issues/TBD
   return `+1${cleanPhone}`;
 }
 
@@ -94,6 +92,15 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
           success: false,
           message: `Too many attempts. Please wait ${waitTime} before trying again.`,
           error: 'rate_limited',
+        };
+      }
+
+      // Handle database errors (e.g. invalid phone format reaching DB)
+      if (errorMsg.includes('database')) {
+        return {
+          success: false,
+          message: 'Could not process this phone number. Please check the format and try again.',
+          error: 'database_error',
         };
       }
 
