@@ -20,7 +20,7 @@ export type NormalizedProfile = {
   followingCount?: number;
   // Phase 1 verification fields
   phone_verified?: boolean;
-  id_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string;
   age_verified?: boolean;
   email_confirmed?: boolean;
