@@ -13,7 +13,8 @@ export interface PhoneVerificationResult {
 }
 
 // Constants for phone validation
-const MIN_PHONE_LENGTH = 10; // Minimum digits for most countries
+const MIN_PHONE_LENGTH = 10; // Minimum digits for local numbers (US/Canada default +1 path)
+const MIN_INTL_PHONE_LENGTH = 7; // Minimum digits for international numbers with + prefix
 const OTP_LENGTH = 6; // Standard OTP length
 const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
 
@@ -26,16 +27,15 @@ const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
  * @returns E.164 formatted phone number
  */
 function formatToE164(phone: string): string {
-  const cleanPhone = phone.replace(/\D/g, '');
+  const trimmedPhone = phone.trimStart();
+  const cleanPhone = trimmedPhone.replace(/\D/g, '');
   
-  // If already has country code (starts with +), return as-is
-  if (phone.startsWith('+')) {
-    return phone;
+  // If already has country code (starts with +), clean and return
+  if (trimmedPhone.startsWith('+')) {
+    return `+${cleanPhone}`;
   }
   
   // Default to +1 (US/Canada) for backwards compatibility
-  // TODO (Post-Launch - international-phone-support): Add country code selection in UI for international support
-  // Track this enhancement: https://github.com/kodaksax/bountyexpo/issues/TBD
   return `+1${cleanPhone}`;
 }
 
@@ -49,8 +49,11 @@ function formatToE164(phone: string): string {
 export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResult> {
   try {
     // Validate phone format (basic validation)
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < MIN_PHONE_LENGTH) {
+    const trimmedPhone = phone.trimStart();
+    const cleanPhone = trimmedPhone.replace(/\D/g, '');
+    const isInternational = trimmedPhone.startsWith('+');
+    const minLength = isInternational ? MIN_INTL_PHONE_LENGTH : MIN_PHONE_LENGTH;
+    if (cleanPhone.length < minLength) {
       return {
         success: false,
         message: 'Please enter a valid phone number',
@@ -94,6 +97,15 @@ export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResu
           success: false,
           message: `Too many attempts. Please wait ${waitTime} before trying again.`,
           error: 'rate_limited',
+        };
+      }
+
+      // Handle database errors (e.g. invalid phone format reaching DB)
+      if (errorMsg.includes('database')) {
+        return {
+          success: false,
+          message: 'Could not process this phone number. Please check the format and try again.',
+          error: 'database_error',
         };
       }
 

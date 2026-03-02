@@ -111,21 +111,32 @@ export default function PhoneScreen() {
   };
 
   const formatPhoneDisplay = (text: string) => {
-    // Remove all non-digit characters for clean storage
+    // Preserve leading + for international numbers, remove other non-digit chars
+    const trimmed = text.trimStart();
+    const hasLeadingPlus = trimmed.startsWith('+');
     const digits = text.replace(/\D/g, '');
-    setPhone(digits);
+    setPhone(hasLeadingPlus ? `+${digits}` : digits);
   };
 
   const getDisplayPhone = () => {
     // Format for display only (not stored this way)
-    const digits = phone;
-    if (digits.length === 0) return '';
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-    if (digits.length <= 10) {
+    const raw = phone;
+    const hasPlus = raw.startsWith('+');
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 0) return hasPlus ? '+' : '';
+    // US-style formatting for local numbers without +
+    if (!hasPlus && digits.length <= 3) return digits;
+    if (!hasPlus && digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    if (!hasPlus && digits.length <= 10) {
       return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
     }
-    return `+${digits.slice(0, digits.length - 10)} (${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`;
+    // International or long number with country code
+    if (digits.length > 10) {
+      return `+${digits.slice(0, digits.length - 10)} (${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`;
+    }
+    // 10-digit number (with or without +)
+    if (hasPlus) return `+${digits}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   };
 
   return (
