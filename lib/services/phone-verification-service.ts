@@ -210,16 +210,18 @@ export async function verifyPhoneOTP(
       };
     }
 
+    // Use a single timestamp for both auth metadata and profiles mirror
+    const verifiedAt = new Date().toISOString();
+
     // Update user metadata to mark phone as verified
     await supabase.auth.updateUser({
       data: {
         phone_verified: true,
-        phone_verified_at: new Date().toISOString(),
+        phone_verified_at: verifiedAt,
       },
     });
 
     // Mirror phone_verified status to profiles table when the DB client is available
-    const verifiedAt = new Date().toISOString();
 
     // Some test environments may provide a partial Supabase mock without `.from`.
     // In those cases, skip the mirror step instead of throwing.

@@ -152,6 +152,11 @@ describe('Phone Verification Service', () => {
       
       expect(result.success).toBe(true);
       expect(result.message).toContain('verified successfully');
+      expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
+        phone: '+15551234567',
+        token: '123456',
+        type: 'phone_change',
+      });
     });
 
     it('should reject invalid OTP format', async () => {
