@@ -43,11 +43,13 @@ export default function CreateDisputeScreen() {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   // Web-only: inline confirmation step replaces Alert.alert confirmation dialog
   const [showWebConfirm, setShowWebConfirm] = useState(false);
+  // Web-only: inline error message replacing Alert.alert error dialogs
+  const [webError, setWebError] = useState<string | null>(null);
 
   const handleAddEvidence = () => {
     if (!newEvidenceContent.trim()) {
       if (Platform.OS === 'web') {
-        // Alert.alert is a no-op on web — use inline state instead
+        setWebError('Please provide evidence content');
         return;
       }
       Alert.alert('Error', 'Please provide evidence content');
@@ -79,6 +81,7 @@ export default function CreateDisputeScreen() {
   const executeSubmit = async () => {
     setIsSubmitting(true);
     setShowWebConfirm(false);
+    setWebError(null);
     try {
       const dispute = await disputeService.createDispute(
         cancellationId,
@@ -107,13 +110,17 @@ export default function CreateDisputeScreen() {
           );
         }
       } else {
-        if (Platform.OS !== 'web') {
+        if (Platform.OS === 'web') {
+          setWebError('Failed to create dispute. Please try again.');
+        } else {
           Alert.alert('Error', 'Failed to create dispute');
         }
       }
     } catch (error) {
       console.error('Error creating dispute:', error);
-      if (Platform.OS !== 'web') {
+      if (Platform.OS === 'web') {
+        setWebError('An unexpected error occurred. Please try again.');
+      } else {
         Alert.alert('Error', 'An unexpected error occurred');
       }
     } finally {
@@ -122,20 +129,37 @@ export default function CreateDisputeScreen() {
   };
 
   const handleSubmit = async () => {
+    setWebError(null);
     if (!userId) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'You must be logged in to create a dispute');
+      if (Platform.OS === 'web') {
+        setWebError('You must be logged in to create a dispute');
+      } else {
+        Alert.alert('Error', 'You must be logged in to create a dispute');
+      }
       return;
     }
     if (!reason.trim()) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a reason for the dispute');
+      if (Platform.OS === 'web') {
+        setWebError('Please provide a reason for the dispute');
+      } else {
+        Alert.alert('Error', 'Please provide a reason for the dispute');
+      }
       return;
     }
     if (reason.trim().length < 20) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
+      if (Platform.OS === 'web') {
+        setWebError('Please provide a more detailed reason (at least 20 characters)');
+      } else {
+        Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
+      }
       return;
     }
     if (!cancellationId) {
-      if (Platform.OS !== 'web') Alert.alert('Error', 'Missing cancellation information');
+      if (Platform.OS === 'web') {
+        setWebError('Missing cancellation information');
+      } else {
+        Alert.alert('Error', 'Missing cancellation information');
+      }
       return;
     }
 
@@ -174,6 +198,17 @@ export default function CreateDisputeScreen() {
             provided.
           </Text>
         </View>
+
+        {/* Web: inline error banner */}
+        {Platform.OS === 'web' && webError && (
+          <View style={styles.webErrorBanner}>
+            <MaterialIcons name="error-outline" size={20} color="#fffef5" />
+            <Text style={styles.webErrorText}>{webError}</Text>
+            <TouchableOpacity onPress={() => setWebError(null)} style={styles.webErrorDismiss}>
+              <MaterialIcons name="close" size={18} color="#fffef5" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Reason Section */}
         <View style={styles.section}>
@@ -654,5 +689,23 @@ const styles = StyleSheet.create({
   webConfirmNoText: {
     color: 'rgba(255,254,245,0.8)',
     fontSize: 14,
+  },
+  webErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  webErrorText: {
+    flex: 1,
+    color: '#fffef5',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  webErrorDismiss: {
+    padding: 2,
   },
 });
