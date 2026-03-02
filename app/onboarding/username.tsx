@@ -171,17 +171,26 @@ export default function UsernameScreen() {
         console.error('[onboarding] Local profile save error:', localError);
       });
 
-      // Supabase upsert: single round trip; only update username on conflict to
-      // avoid overwriting balance/onboarding_completed for existing profiles
-      const supabaseResult = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            id: userId,
-            username,
-          },
-          { onConflict: 'id', ignoreDuplicates: false }
-        );
+      // Update username in existing profile (auto-created on signup via database trigger).
+      // Use update() + eq() instead of upsert() to avoid INSERT-path issues
+      // that can cause the request to hang indefinitely on conflict resolution.
+      // Wrapped in Promise.race with a timeout so a slow/stuck network request
+      // surfaces an error instead of blocking the user forever.
+      const SAVE_TIMEOUT_MS = 15000;
+      let saveTimerId: ReturnType<typeof setTimeout> | undefined;
+
+      const supabaseResult = await Promise.race([
+        supabase
+          .from('profiles')
+          .update({ username })
+          .eq('id', userId),
+        new Promise<never>((_, reject) => {
+          saveTimerId = setTimeout(
+            () => reject(new Error('Save timed out. Please check your connection and try again.')),
+            SAVE_TIMEOUT_MS,
+          );
+        }),
+      ]).finally(() => clearTimeout(saveTimerId));
 
       // Check Supabase result
       if (supabaseResult.error) {
@@ -191,7 +200,7 @@ export default function UsernameScreen() {
           setSubmitTick((t) => t + 1);
           return;
         }
-        console.error('[onboarding] Supabase upsert error:', supabaseResult.error);
+        console.error('[onboarding] Supabase update error:', supabaseResult.error);
         setError('Failed to save profile. Please try again.');
         submittingRef.current = false;
         setSubmitTick((t) => t + 1);
@@ -217,7 +226,7 @@ export default function UsernameScreen() {
       }
     } catch (err) {
       console.error('[onboarding] Error:', err);
-      setError('Failed to save username. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to save username. Please try again.');
       submittingRef.current = false;
       setSubmitTick((t) => t + 1);
     }
