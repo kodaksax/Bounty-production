@@ -1,10 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAuthContext } from "hooks/use-auth-context";
 import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
+import { resendVerification } from "lib/services/auth-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
 import { useEffect, useState } from "react";
@@ -38,6 +40,7 @@ export default function UserProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
+  const { session } = useAuthContext();
 
   const { profile, loading, error } = useNormalizedProfile(userId);
   const {
@@ -53,6 +56,8 @@ export default function UserProfileScreen() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
   const [stats, setStats] = useState({
     jobsAccepted: 0,
@@ -63,6 +68,24 @@ export default function UserProfileScreen() {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const isOwnProfile = userId === currentUserId;
+  const isEmailVerified = Boolean(
+    session?.user?.email_confirmed_at || session?.user?.confirmed_at
+  );
+
+  const handleResendVerification = async () => {
+    const email = session?.user?.email;
+    if (!email) return;
+    setResendLoading(true);
+    setResendMessage(null);
+    try {
+      const result = await resendVerification(email);
+      setResendMessage(result.message);
+    } catch {
+      setResendMessage('Failed to send verification email. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   // Check if user is blocked
   useEffect(() => {
@@ -437,6 +460,36 @@ export default function UserProfileScreen() {
           )}
         </View>
 
+        {/* Email Verification Badge + Resend Prompt (own profile only) */}
+        {isOwnProfile && (
+          <View style={styles.verificationSection}>
+            {isEmailVerified ? (
+              <View style={styles.emailBadge}>
+                <Text style={styles.emailBadgeText}>✓ Email</Text>
+              </View>
+            ) : (
+              <View style={styles.resendPrompt}>
+                <MaterialIcons name="warning" size={16} color="#fbbf24" />
+                <Text style={styles.resendPromptText}>Email not verified</Text>
+                <TouchableOpacity
+                  style={[styles.resendButton, resendLoading && styles.resendButtonDisabled]}
+                  onPress={handleResendVerification}
+                  disabled={resendLoading}
+                >
+                  {resendLoading ? (
+                    <ActivityIndicator size="small" color="#065f46" />
+                  ) : (
+                    <Text style={styles.resendButtonText}>Resend email</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+            {resendMessage ? (
+              <Text style={styles.resendMessageText}>{resendMessage}</Text>
+            ) : null}
+          </View>
+        )}
+
         {/* Stats */}
         {FOLLOW_FEATURE_ENABLED && (
           <View style={styles.statsContainer}>
@@ -696,5 +749,57 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#ffffff",
     marginBottom: 12,
+  },
+  verificationSection: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 6,
+  },
+  emailBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#a7f3d0", // emerald-200
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 4,
+  },
+  emailBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#065f46", // emerald-800
+  },
+  resendPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  resendPromptText: {
+    fontSize: 12,
+    color: "#fbbf24", // amber-400
+    fontWeight: "500",
+  },
+  resendButton: {
+    backgroundColor: "#a7f3d0",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  resendButtonDisabled: {
+    opacity: 0.6,
+  },
+  resendButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#065f46",
+  },
+  resendMessageText: {
+    fontSize: 12,
+    color: "#a7f3d0",
+    fontStyle: "italic",
   },
 });
