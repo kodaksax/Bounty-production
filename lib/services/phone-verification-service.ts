@@ -13,7 +13,8 @@ export interface PhoneVerificationResult {
 }
 
 // Constants for phone validation
-const MIN_PHONE_LENGTH = 7; // Minimum total digits for valid E.164 (e.g. +354 XXXXXXX)
+const MIN_PHONE_LENGTH = 10; // Minimum digits for local numbers (US/Canada default +1 path)
+const MIN_INTL_PHONE_LENGTH = 7; // Minimum digits for international numbers with + prefix
 const OTP_LENGTH = 6; // Standard OTP length
 const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
 
@@ -26,10 +27,11 @@ const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
  * @returns E.164 formatted phone number
  */
 function formatToE164(phone: string): string {
-  const cleanPhone = phone.replace(/\D/g, '');
+  const trimmedPhone = phone.trimStart();
+  const cleanPhone = trimmedPhone.replace(/\D/g, '');
   
   // If already has country code (starts with +), clean and return
-  if (phone.startsWith('+')) {
+  if (trimmedPhone.startsWith('+')) {
     return `+${cleanPhone}`;
   }
   
@@ -47,8 +49,11 @@ function formatToE164(phone: string): string {
 export async function sendPhoneOTP(phone: string): Promise<PhoneVerificationResult> {
   try {
     // Validate phone format (basic validation)
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < MIN_PHONE_LENGTH) {
+    const trimmedPhone = phone.trimStart();
+    const cleanPhone = trimmedPhone.replace(/\D/g, '');
+    const isInternational = trimmedPhone.startsWith('+');
+    const minLength = isInternational ? MIN_INTL_PHONE_LENGTH : MIN_PHONE_LENGTH;
+    if (cleanPhone.length < minLength) {
       return {
         success: false,
         message: 'Please enter a valid phone number',

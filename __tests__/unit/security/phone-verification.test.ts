@@ -117,6 +117,24 @@ describe('Phone Verification Service', () => {
       expect(result.error).toBe('database_error');
       expect(result.message).toContain('check the format');
     });
+
+    it('should handle leading whitespace before + in international numbers', async () => {
+      const { supabase } = require('../../../lib/supabase');
+      supabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+
+      await sendPhoneOTP(' +44 1234 567890');
+      
+      expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+        phone: '+441234567890',
+      });
+    });
+
+    it('should reject short local numbers that are invalid for US +1 path', async () => {
+      const result = await sendPhoneOTP('5551234');
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('invalid_phone');
+    });
   });
 
   describe('verifyPhoneOTP', () => {
