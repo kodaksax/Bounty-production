@@ -108,6 +108,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnectionQuality('disconnected');
       }
     }
+    // Clear any pending reconnect timeout on unmount to avoid state updates
+    // on an unmounted component (e.g. during hot-reload or error-boundary recovery).
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
   }, [webSocketState.isConnected, lastConnectedAt, enhancedReconnect]);
 
   /**
