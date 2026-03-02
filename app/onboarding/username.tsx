@@ -99,13 +99,23 @@ export default function UsernameScreen() {
       return;
     }
 
+    // Skip uniqueness check until userId is resolved
+    if (!userId) {
+      setChecking(false);
+      return;
+    }
+
+    // Cancellation guard: prevents stale in-flight checks from updating state
+    let cancelled = false;
+
     // Debounced uniqueness check
     setChecking(true);
     setError(null);
 
     const timer = setTimeout(async () => {
       try {
-        const unique = await isUsernameUnique(username, userId ?? 'current-user');
+        const unique = await isUsernameUnique(username, userId);
+        if (cancelled) return;
         if (!unique) {
           setError('Username is already taken');
           setIsValid(false);
@@ -114,15 +124,19 @@ export default function UsernameScreen() {
           setIsValid(true);
         }
       } catch {
+        if (cancelled) return;
         // Optimistic — allow if check fails
         setIsValid(true);
       } finally {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     }, 500);
 
-    return () => clearTimeout(timer);
-  }, [username]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [username, userId]);
 
   const handleNext = async () => {
     // Validate prerequisites - guard against disabled state
@@ -145,7 +159,7 @@ export default function UsernameScreen() {
       // Fire-and-forget: persist legal acceptance (non-blocking)
       AsyncStorage.setItem('BE:acceptedLegal', 'true').catch(() => {});
 
-      // Save to Supabase (upsert) and local profile in parallel
+      // Fire-and-forget: save to local profile (non-blocking — Supabase is source of truth)
       const localProfileData = {
         username,
         displayName: normalized?.name || localProfile?.displayName,
@@ -153,23 +167,21 @@ export default function UsernameScreen() {
         location: (normalized?._raw && (normalized as any)._raw.location) || localProfile?.location,
         phone: (normalized?._raw && (normalized as any)._raw.phone) || localProfile?.phone,
       };
+      updateProfile(localProfileData).catch((localError) => {
+        console.error('[onboarding] Local profile save error:', localError);
+      });
 
-      const [supabaseResult, localResult] = await Promise.all([
-        // Supabase upsert: single round trip instead of select + update/insert
-        supabase
-          .from('profiles')
-          .upsert(
-            {
-              id: userId,
-              username,
-              balance: 0,
-              onboarding_completed: false,
-            },
-            { onConflict: 'id' }
-          ),
-        // Local profile save
-        updateProfile(localProfileData),
-      ]);
+      // Supabase upsert: single round trip; only update username on conflict to
+      // avoid overwriting balance/onboarding_completed for existing profiles
+      const supabaseResult = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: userId,
+            username,
+          },
+          { onConflict: 'id', ignoreDuplicates: false }
+        );
 
       // Check Supabase result
       if (supabaseResult.error) {
@@ -184,12 +196,6 @@ export default function UsernameScreen() {
         submittingRef.current = false;
         setSubmitTick((t) => t + 1);
         return;
-      }
-
-      // Check local result (non-blocking for navigation)
-      if (!localResult.success) {
-        console.error('[onboarding] Local profile save error:', localResult.error);
-        // Don't block navigation since Supabase profile was saved
       }
 
       // Fire-and-forget: sync auth profile cache (non-blocking)
