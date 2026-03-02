@@ -13,7 +13,7 @@ export interface PhoneVerificationResult {
 }
 
 // Constants for phone validation
-const MIN_PHONE_LENGTH = 7; // Minimum digits (including country code) for international support
+const MIN_PHONE_LENGTH = 7; // Minimum total digits for valid E.164 (e.g. +354 XXXXXXX)
 const OTP_LENGTH = 6; // Standard OTP length
 const OTP_PATTERN = /^\d{6}$/; // Regex for 6-digit numeric OTP
 

@@ -111,10 +111,11 @@ export default function PhoneScreen() {
   };
 
   const formatPhoneDisplay = (text: string) => {
-    // Preserve + prefix for international numbers, remove other non-digit chars
-    const hasPlus = text.trimStart().startsWith('+');
+    // Preserve leading + for international numbers, remove other non-digit chars
+    const trimmed = text.trimStart();
+    const hasLeadingPlus = trimmed.startsWith('+');
     const digits = text.replace(/\D/g, '');
-    setPhone(hasPlus ? `+${digits}` : digits);
+    setPhone(hasLeadingPlus ? `+${digits}` : digits);
   };
 
   const getDisplayPhone = () => {
