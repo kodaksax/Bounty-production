@@ -224,7 +224,7 @@ export default function AdminFeedbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   keyboardView: {
     flex: 1,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   typeCard: {
     width: '48%',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.6)',
   },
   textInput: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     fontSize: 15,

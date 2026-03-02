@@ -225,7 +225,7 @@ export default function AdminHelpCenterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   scrollView: {
     flex: 1,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     color: '#fffef5',
   },
   articleContent: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   feedbackButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,

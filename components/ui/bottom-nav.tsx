@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center", // Center the three sections
     height: 110, // Slightly reduced for cleaner mobile look
-    backgroundColor: "#1a3d2e", // Primary background
+    backgroundColor: "#0a0f0d", // Primary background
     paddingHorizontal: 16, // Reduced padding for more icon space
     paddingBottom: 12,
     borderTopLeftRadius: 28, // Increased radius for modern look

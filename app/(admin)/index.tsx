@@ -132,7 +132,7 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   scrollView: {
     flex: 1,
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   quickLinkCard: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',

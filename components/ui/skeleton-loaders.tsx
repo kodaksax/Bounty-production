@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
   // Hunter dashboard skeleton styles
   hunterDashboard: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     padding: 16,
   },
   hunterHeader: {

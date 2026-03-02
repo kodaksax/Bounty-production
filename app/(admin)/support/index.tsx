@@ -163,7 +163,7 @@ export default function AdminSupportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   scrollView: {
     flex: 1,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   },
   resourceCard: {
     width: '48%',
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,

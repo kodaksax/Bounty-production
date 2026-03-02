@@ -814,7 +814,7 @@ export default function AdminReportsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   headerAction: {
     padding: 6,
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   segmentButtonActive: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
   },
   segmentButtonText: {
     fontSize: 13,

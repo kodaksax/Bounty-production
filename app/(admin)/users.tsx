@@ -139,10 +139,10 @@ function formatDate(dateString: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   filtersContainer: {
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,145,44,0.2)',
   },
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   userCard: {
-    backgroundColor: '#2d5240',
+    backgroundColor: '#141e1a',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,

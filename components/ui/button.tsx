@@ -175,7 +175,7 @@ const buttonStyles = StyleSheet.create({
     borderColor: 'rgba(0, 145, 44, 0.5)', // emerald outline
   },
   secondary: {
-    backgroundColor: '#2d5240', // secondary emerald tone
+    backgroundColor: '#141e1a', // secondary emerald tone
     borderWidth: 1,
     borderColor: 'rgba(0, 145, 44, 0.3)',
     ...theme.shadows.sm,

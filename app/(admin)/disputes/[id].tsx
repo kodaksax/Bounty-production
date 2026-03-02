@@ -455,7 +455,7 @@ export default function AdminDisputeDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
   },
   scrollView: {
     flex: 1,

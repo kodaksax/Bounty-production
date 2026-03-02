@@ -62,7 +62,7 @@ export function AdminHeader({ title, onBack, actions, showBack }: AdminHeaderPro
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0a0f0d',
     paddingBottom: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
