@@ -6,7 +6,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -31,7 +31,7 @@ export default function PhoneScreen() {
   const { updateProfile } = useUserProfile();
   const { updateProfile: updateAuthProfile } = useAuthProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
-  
+
   const [phone, setPhone] = useState(onboardingData.phone);
   const [saving, setSaving] = useState(false);
 
@@ -55,10 +55,10 @@ export default function PhoneScreen() {
     }
 
     setSaving(true);
-    
+
     // Trim phone once for consistency
     const trimmedPhone = phone.trim();
-    
+
     // Save to local storage
     const result = await updateProfile({
       phone: trimmedPhone || undefined,
@@ -97,9 +97,7 @@ export default function PhoneScreen() {
     }
   };
 
-  const handleSkip = __DEV__
-    ? () => router.push('/onboarding/done')
-    : undefined;
+  const handleSkip = () => router.push('/onboarding/done');
 
   const handleBack = () => {
     router.back();
@@ -174,7 +172,7 @@ export default function PhoneScreen() {
           </View>
           <Text style={styles.title}>Verify Your Phone</Text>
           <Text style={styles.subtitle}>
-            Verified users get more bounty matches and build trust faster. Your number stays private.
+            Verified users get more bounty matches and build trust faster. Your number stays private. You can also skip this step and verify later.
           </Text>
         </View>
 
@@ -237,13 +235,11 @@ export default function PhoneScreen() {
             <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
           </TouchableOpacity>
 
-          {__DEV__ && handleSkip && (
-            <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-              <Text style={styles.skipButtonText}>
-                [DEV] Skip for now
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+            <Text style={styles.skipButtonText}>
+              Skip for now
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Progress indicator */}

@@ -5,18 +5,18 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -26,10 +26,10 @@ export default function VerifyPhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
-  
+
   // Phone number passed from previous screen
   const phoneNumber = (params.phone as string) || '';
-  
+
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -41,13 +41,13 @@ export default function VerifyPhoneScreen() {
   // Handle resend cooldown
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    
+
     if (resendCooldown > 0) {
       timer = setTimeout(() => {
         setResendCooldown(prev => Math.max(0, prev - 1));
       }, 1000);
     }
-    
+
     return () => {
       if (timer) {
         clearTimeout(timer as any);
@@ -84,7 +84,7 @@ export default function VerifyPhoneScreen() {
 
   const handleVerify = async (code?: string) => {
     const otpCode = code || otp.join('');
-    
+
     if (otpCode.length !== 6) {
       setError('Please enter all 6 digits');
       return;
@@ -136,35 +136,33 @@ export default function VerifyPhoneScreen() {
     router.back();
   };
 
-  const handleSkip = __DEV__
-    ? () => router.push('/onboarding/done')
-    : undefined;
+  const handleSkip = () => router.push('/onboarding/done');
 
   const formatPhoneDisplay = (phone: string) => {
     if (!phone) return 'Invalid number';
-    
+
     const hasPlus = phone.trim().startsWith('+');
     const digits = phone.replace(/\D/g, '');
-    
+
     if (digits.length < 7) {
       return 'Invalid number';
     }
-    
+
     // Show last 4 digits, mask the rest for security
     const visibleDigits = digits.slice(-4);
     const maskedLength = digits.length - visibleDigits.length;
-    
+
     // For US numbers (10 digits without country code)
     if (!hasPlus && digits.length === 10) {
       return `(***) ***-${visibleDigits}`;
     }
-    
+
     // For international numbers
     if (hasPlus && digits.length > 10) {
       const countryCode = digits.slice(0, digits.length - 10);
       return `+${countryCode} (***) ***-${visibleDigits}`;
     }
-    
+
     // Default: mask all but last 4 digits
     const masked = '*'.repeat(Math.max(0, maskedLength));
     return masked + visibleDigits;
@@ -274,21 +272,19 @@ export default function VerifyPhoneScreen() {
           )}
         </View>
 
-        {/* Skip Button (dev only) */}
-        {__DEV__ && handleSkip && (
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={handleSkip}
-          >
-            <Text style={styles.skipButtonText}>[DEV] Skip for Now</Text>
-          </TouchableOpacity>
-        )}
+        {/* Skip Button */}
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkip}
+        >
+          <Text style={styles.skipButtonText}>Skip for Now</Text>
+        </TouchableOpacity>
 
         {/* Info Box */}
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            Phone verification is required to complete onboarding. It helps build trust with other users.
+            Phone verification is recommended and helps build trust with other users. You can always verify later from your profile.
           </Text>
         </View>
       </ScrollView>
