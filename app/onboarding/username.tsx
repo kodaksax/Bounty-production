@@ -81,29 +81,31 @@ export default function UsernameScreen() {
     updateOnboardingData({ accepted });
   }, [accepted]);
 
-  // Validate username on change
+  // Validate username on change (debounced uniqueness check)
   useEffect(() => {
-    const checkUsername = async () => {
-      if (!username) {
-        setError(null);
-        setIsValid(false);
-        return;
-      }
-
-      // Format validation
-      const validation = validateUsername(username);
-      if (!validation.valid) {
-        setError(validation.error ?? null);
-        setIsValid(false);
-        return;
-      }
-
-      // Uniqueness check (debounced)
-      setChecking(true);
+    if (!username) {
       setError(null);
-      
-      const timer = setTimeout(async () => {
-        const unique = await isUsernameUnique(username, 'current-user');
+      setIsValid(false);
+      setChecking(false);
+      return;
+    }
+
+    // Format validation (synchronous — no debounce needed)
+    const validation = validateUsername(username);
+    if (!validation.valid) {
+      setError(validation.error ?? null);
+      setIsValid(false);
+      setChecking(false);
+      return;
+    }
+
+    // Debounced uniqueness check
+    setChecking(true);
+    setError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const unique = await isUsernameUnique(username, userId ?? 'current-user');
         if (!unique) {
           setError('Username is already taken');
           setIsValid(false);
@@ -111,13 +113,15 @@ export default function UsernameScreen() {
           setError(null);
           setIsValid(true);
         }
+      } catch {
+        // Optimistic — allow if check fails
+        setIsValid(true);
+      } finally {
         setChecking(false);
-      }, 500);
+      }
+    }, 500);
 
-      return () => clearTimeout(timer);
-    };
-
-    checkUsername();
+    return () => clearTimeout(timer);
   }, [username]);
 
   const handleNext = async () => {
@@ -138,100 +142,62 @@ export default function UsernameScreen() {
     setSubmitTick((t) => t + 1);
 
     try {
-      // persist acceptance
-      try { await AsyncStorage.setItem('BE:acceptedLegal', 'true'); } catch {}
-      
-      // Save username to local profile service
-      const result = await updateProfile({ 
+      // Fire-and-forget: persist legal acceptance (non-blocking)
+      AsyncStorage.setItem('BE:acceptedLegal', 'true').catch(() => {});
+
+      // Save to Supabase (upsert) and local profile in parallel
+      const localProfileData = {
         username,
         displayName: normalized?.name || localProfile?.displayName,
         avatar: normalized?.avatar || localProfile?.avatar,
         location: (normalized?._raw && (normalized as any)._raw.location) || localProfile?.location,
         phone: (normalized?._raw && (normalized as any)._raw.phone) || localProfile?.phone,
-      });
+      };
 
-      if (!result.success) {
-        setError(result.error || 'Failed to save username');
+      const [supabaseResult, localResult] = await Promise.all([
+        // Supabase upsert: single round trip instead of select + update/insert
+        supabase
+          .from('profiles')
+          .upsert(
+            {
+              id: userId,
+              username,
+              balance: 0,
+              onboarding_completed: false,
+            },
+            { onConflict: 'id' }
+          ),
+        // Local profile save
+        updateProfile(localProfileData),
+      ]);
+
+      // Check Supabase result
+      if (supabaseResult.error) {
+        if (supabaseResult.error.code === '23505') {
+          setError('This username is already taken. Please choose another.');
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
+          return;
+        }
+        console.error('[onboarding] Supabase upsert error:', supabaseResult.error);
+        setError('Failed to save profile. Please try again.');
         submittingRef.current = false;
         setSubmitTick((t) => t + 1);
         return;
       }
 
-      // Also save to Supabase profiles table via AuthProfileService
-      const { data: existingProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .single();
-
-      // Handle case where profile doesn't exist (not an error)
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('[onboarding] Error fetching profile:', fetchError);
-        // Continue anyway - we'll try to create it
+      // Check local result (non-blocking for navigation)
+      if (!localResult.success) {
+        console.error('[onboarding] Local profile save error:', localResult.error);
+        // Don't block navigation since Supabase profile was saved
       }
 
-      if (existingProfile) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ username })
-          .eq('id', userId);
-        
-        if (updateError) {
-          // Handle unique constraint violation (username already taken)
-            if (updateError.code === '23505') {
-            setError('This username is already taken. Please choose another.');
-            submittingRef.current = false;
-            setSubmitTick((t) => t + 1);
-            return;
-          }
-          console.error('[onboarding] Error updating profile:', updateError);
-          setError('Failed to update profile. Please try again.');
-          submittingRef.current = false;
-          setSubmitTick((t) => t + 1);
-          return;
-        }
-        
-        try {
-          await updateAuthProfile({ username });
-        } catch (authError) {
-          console.error('[onboarding] Error updating auth profile:', authError);
-          // Don't block navigation since Supabase profile was updated
-        }
-      } else {
-        // Create new profile during onboarding - set onboarding_completed = false
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            username,
-            balance: 0,
-            onboarding_completed: false, // User is in onboarding, not yet completed
-          });
+      // Fire-and-forget: sync auth profile cache (non-blocking)
+      updateAuthProfile({ username }).catch((authError) => {
+        console.error('[onboarding] Error updating auth profile:', authError);
+      });
 
-        if (insertError) {
-          // Handle unique constraint violation (username already taken)
-          if (insertError.code === '23505') {
-            setError('This username is already taken. Please choose another.');
-            submittingRef.current = false;
-            setSubmitTick((t) => t + 1);
-            return;
-          }
-          console.error('[onboarding] Error creating profile:', insertError);
-          setError('Failed to save profile. Please try again.');
-          submittingRef.current = false;
-          setSubmitTick((t) => t + 1);
-          return;
-        }
-
-        try {
-          await updateAuthProfile({ username });
-        } catch (authError) {
-          console.error('[onboarding] Error updating auth profile:', authError);
-          // Don't block navigation since Supabase profile was created
-        }
-      }
-
-      // Navigate to next onboarding step and then clear submitting guard so the UI can recover
+      // Navigate to next onboarding step
       try {
         router.push('/onboarding/details');
       } catch (navError) {
