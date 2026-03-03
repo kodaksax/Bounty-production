@@ -261,46 +261,6 @@ export const disputeService = {
   },
 
   /**
-   * Add evidence to an existing dispute
-   */
-  async addEvidence(
-    disputeId: string,
-    evidence: DisputeEvidence
-  ): Promise<boolean> {
-    try {
-      if (!isSupabaseConfigured) {
-        throw new Error('Supabase not configured');
-      }
-
-      // Get current dispute
-      const dispute = await this.getDisputeById(disputeId);
-      if (!dispute) {
-        throw new Error('Dispute not found');
-      }
-
-      // Add new evidence to existing evidence array
-      const updatedEvidence = [...(dispute.evidence || []), evidence];
-
-      // Update the dispute
-      const { error } = await supabase
-        .from('bounty_disputes')
-        .update({ evidence_json: JSON.stringify(updatedEvidence) })
-        .eq('id', disputeId);
-
-      if (error) {
-        logger.error('Error adding evidence', { error, disputeId });
-        throw error;
-      }
-
-      return true;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in addEvidence', { disputeId, error: { message: error.message } });
-      return false;
-    }
-  },
-
-  /**
    * Update dispute status
    */
   async updateDisputeStatus(
