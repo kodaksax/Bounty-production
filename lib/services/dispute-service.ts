@@ -340,12 +340,14 @@ export const disputeService = {
 
   /**
    * Resolve a dispute
+   * @param prefetchedBounty - Optional pre-fetched bounty to avoid redundant DB call
    */
   async resolveDispute(
     disputeId: string,
     resolution: string,
     resolvedBy: string,
-    winner?: 'hunter' | 'poster' | null
+    winner?: 'hunter' | 'poster' | null,
+    prefetchedBounty?: any
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
@@ -379,8 +381,8 @@ export const disputeService = {
         throw error;
       }
 
-      // Fetch bounty once for escrow action and notifications
-      const bounty = await bountyService.getById(dispute.bountyId);
+      // Use pre-fetched bounty if provided, otherwise fetch
+      const bounty = prefetchedBounty || await bountyService.getById(dispute.bountyId);
 
       // Determine winner label for notifications
       const winnerLabel = winner === 'hunter'
@@ -390,6 +392,7 @@ export const disputeService = {
         : '';
 
       // Execute escrow action based on winner
+      let escrowActionExecuted = false;
       if (winner) {
         try {
           const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
@@ -404,6 +407,8 @@ export const disputeService = {
                   escrowId: bounty.payment_intent_id,
                   error: releaseResult.error,
                 });
+              } else {
+                escrowActionExecuted = true;
               }
             } else if (winner === 'poster') {
               const refundResult = await paymentService.refundEscrow(bounty.payment_intent_id);
@@ -414,8 +419,16 @@ export const disputeService = {
                   escrowId: bounty.payment_intent_id,
                   error: refundResult.error,
                 });
+              } else {
+                escrowActionExecuted = true;
               }
             }
+          } else if (bounty && !isHonorBounty && !bounty.payment_intent_id) {
+            logger.warning('Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped', {
+              disputeId,
+              bountyId: dispute.bountyId,
+              winner,
+            });
           }
         } catch (escrowError) {
           // Log but don't fail the resolution if escrow action fails
@@ -430,7 +443,8 @@ export const disputeService = {
       // Send notifications to involved parties
       try {
         if (bounty) {
-          const outcomeMessage = winnerLabel
+          // Only include funds outcome if escrow action actually executed
+          const outcomeMessage = escrowActionExecuted && winnerLabel
             ? ` Outcome: ${winnerLabel}`
             : '';
 
@@ -814,7 +828,7 @@ export const disputeService = {
       const winner = decision.outcome === 'release' ? 'hunter' as const
         : decision.outcome === 'refund' ? 'poster' as const
         : null;
-      await this.resolveDispute(disputeId, decision.rationale, adminId, winner);
+      await this.resolveDispute(disputeId, decision.rationale, adminId, winner, bounty);
 
       // Log audit event
       await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {

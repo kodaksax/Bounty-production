@@ -103,11 +103,12 @@ export default function AdminDisputeDetailScreen() {
       return;
     }
 
-    const winnerLabel = winner === 'hunter' ? 'Release to Hunter' : 'Refund to Poster';
+    const winnerAction = winner === 'hunter' ? 'Release to Hunter' : 'Refund to Poster';
+    const winnerOutcome = winner === 'hunter' ? 'Funds released to hunter.' : 'Funds refunded to poster.';
 
     Alert.alert(
       'Confirm Resolution',
-      `Are you sure you want to resolve this dispute?\n\nOutcome: ${winnerLabel}\n\nThis action cannot be undone.`,
+      `Are you sure you want to resolve this dispute?\n\nOutcome: ${winnerAction}\n\nThis action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -126,7 +127,7 @@ export default function AdminDisputeDetailScreen() {
               if (success) {
                 Alert.alert(
                   'Success',
-                  `Dispute has been resolved successfully. ${winnerLabel}.`,
+                  `Dispute has been resolved successfully. ${winnerOutcome}`,
                   [
                     {
                       text: 'OK',
@@ -437,7 +438,7 @@ export default function AdminDisputeDetailScreen() {
                     disabled={resolving}
                     style={[
                       styles.winnerButton,
-                      winner === 'poster' && styles.winnerButtonActive,
+                      winner === 'poster' && styles.winnerButtonActivePoster,
                     ]}
                   >
                     <MaterialIcons
@@ -716,6 +717,10 @@ const styles = StyleSheet.create({
   winnerButtonActive: {
     backgroundColor: '#059669',
     borderColor: '#059669',
+  },
+  winnerButtonActivePoster: {
+    backgroundColor: '#d97706',
+    borderColor: '#d97706',
   },
   winnerButtonText: {
     fontSize: 13,

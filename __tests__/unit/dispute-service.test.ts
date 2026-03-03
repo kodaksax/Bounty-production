@@ -26,6 +26,7 @@ jest.mock('../../lib/utils/error-logger', () => ({
   logger: {
     error: jest.fn(),
     warn: jest.fn(),
+    warning: jest.fn(),
     info: jest.fn(),
     debug: jest.fn(),
   },
@@ -374,6 +375,67 @@ describe('DisputeService', () => {
       // No escrow action for honor bounties
       expect(mockPaymentService.releaseEscrow).not.toHaveBeenCalled();
       expect(mockPaymentService.refundEscrow).not.toHaveBeenCalled();
+    });
+
+    it('should resolve without escrow action for monetary bounties missing payment_intent_id', async () => {
+      const mockDispute = {
+        id: 'dispute-456',
+        cancellation_id: 'cancel-456',
+        bounty_id: 'bounty-456',
+        initiator_id: 'user-456',
+        reason: 'Test dispute - no payment intent',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-456',
+        user_id: 'poster-456',
+        title: 'Monetary Bounty Without Payment Intent',
+        amount: 50000,
+        // intentionally no payment_intent_id
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-456',
+        'Resolved for monetary bounty without payment intent',
+        'admin-456',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      // No escrow action should be attempted when payment_intent_id is missing
+      expect(mockPaymentService.releaseEscrow).not.toHaveBeenCalled();
+      expect(mockPaymentService.refundEscrow).not.toHaveBeenCalled();
+      // Should log a warning about missing payment_intent_id
+      expect(logger.warning).toHaveBeenCalled();
     });
   });
 
