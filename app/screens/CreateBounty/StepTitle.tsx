@@ -31,10 +31,10 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
     if (!value || value.trim().length === 0) {
       return 'Title is required';
     }
-    if (value.length < 5) {
+    if (value.trim().length < 5) {
       return 'Title must be at least 5 characters';
     }
-    if (value.length > 120) {
+    if (value.trim().length > 120) {
       return 'Title must not exceed 120 characters';
     }
     return null;

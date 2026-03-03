@@ -2,9 +2,51 @@
  * Unit tests for Bounty Validation Utilities
  */
 
-import { validateBalance, getInsufficientBalanceMessage, validateAmount } from '../../../lib/utils/bounty-validation';
+import { validateBalance, getInsufficientBalanceMessage, validateAmount, validateTitle } from '../../../lib/utils/bounty-validation';
 
 describe('Bounty Validation Utils', () => {
+  describe('validateTitle', () => {
+    it('should reject empty string', () => {
+      expect(validateTitle('')).toBe('Title is required');
+    });
+
+    it('should reject null and undefined', () => {
+      expect(validateTitle(null)).toBe('Title is required');
+      expect(validateTitle(undefined)).toBe('Title is required');
+    });
+
+    it('should reject whitespace-only string', () => {
+      expect(validateTitle('   ')).toBe('Title is required');
+    });
+
+    it('should reject title shorter than 5 trimmed characters', () => {
+      expect(validateTitle('abcd')).toBe('Title must be at least 5 characters');
+    });
+
+    it('should reject whitespace-padded title with fewer than 5 real characters', () => {
+      // "  ab " is 5 raw chars but only 2 trimmed
+      expect(validateTitle('  ab ')).toBe('Title must be at least 5 characters');
+    });
+
+    it('should accept valid title', () => {
+      expect(validateTitle('Help me move furniture')).toBeNull();
+    });
+
+    it('should accept title with exactly 5 trimmed characters', () => {
+      expect(validateTitle('abcde')).toBeNull();
+    });
+
+    it('should reject title exceeding 120 trimmed characters', () => {
+      const longTitle = 'a'.repeat(121);
+      expect(validateTitle(longTitle)).toBe('Title must not exceed 120 characters');
+    });
+
+    it('should accept title with exactly 120 trimmed characters', () => {
+      const title = 'a'.repeat(120);
+      expect(validateTitle(title)).toBeNull();
+    });
+  });
+
   describe('validateBalance', () => {
     it('should return true when amount is within balance', () => {
       const result = validateBalance(50, 100, false);
