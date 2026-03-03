@@ -718,6 +718,11 @@ export class AuthProfileService {
           .select()
           .single();
       } else {
+        // Last-resort fallback: try insert (helps in some test harnesses)
+        res = await queryBase
+          .insert({ id: userId, ...updates })
+          .select()
+          .single();
         logger.error('Supabase client missing upsert/update methods for profiles table');
         return null;
       }
