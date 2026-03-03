@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -34,21 +35,21 @@ export default function DoneScreen() {
   const { profile: normalized } = useNormalizedProfile();
   const { userId } = useAuthProfile();
   const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
-  
+
   // Use onboarding data primarily, fallback to normalized/local
   const displayUsername = onboardingData.username || normalized?.username || (localProfile as any)?.username;
   const displayName = onboardingData.displayName || normalized?.name || (localProfile as any)?.displayName;
   const displayTitle = onboardingData.title || normalized?.title || (localProfile as any)?.title;
   const displayBio = onboardingData.bio || normalized?.bio || (localProfile as any)?.bio;
   const displayLocation = onboardingData.location || normalized?.location || (localProfile as any)?.location;
-  const displaySkills = onboardingData.skills.length > 0 
-    ? onboardingData.skills 
+  const displaySkills = onboardingData.skills.length > 0
+    ? onboardingData.skills
     : normalized?.skills || (localProfile as any)?.skills || [];
   const hasPhone = !!onboardingData.phone || !!(normalized?._raw && (normalized as any)._raw.phone) || !!(localProfile as any)?.phone;
-  
+
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
-  
+
   // Use ref to ensure markComplete runs only once per screen mount
   const hasMarkedComplete = useRef(false);
 
@@ -67,18 +68,18 @@ export default function DoneScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     // Mark onboarding as complete and sync all profile data
     // Use ref guard to prevent duplicate saves if component re-renders
     const markComplete = async () => {
       // Skip if already marked complete
       if (hasMarkedComplete.current) return;
       hasMarkedComplete.current = true;
-      
+
       try {
         // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
-        
+
         // IMPORTANT: Update the Supabase profile with ALL onboarding data
         // This ensures profile data persists and is available across all screens
         if (userId) {
@@ -86,12 +87,12 @@ export default function DoneScreen() {
           const profileUpdate: Partial<Profile> = {
             onboarding_completed: true,
           };
-          
+
           // Add username if available
           if (onboardingData.username) {
             profileUpdate.username = onboardingData.username;
           }
-          
+
           // Add optional fields from onboarding
           if (onboardingData.displayName) {
             profileUpdate.display_name = onboardingData.displayName;
@@ -116,12 +117,12 @@ export default function DoneScreen() {
           if (onboardingData.phone) {
             profileUpdate.phone = onboardingData.phone;
           }
-          
+
           const { error } = await supabase
             .from('profiles')
             .update(profileUpdate)
             .eq('id', userId);
-            
+
           if (error) {
             console.error('[Onboarding] Error saving profile data to Supabase:', error);
             // Don't throw - we still want to proceed
@@ -129,12 +130,8 @@ export default function DoneScreen() {
             console.log('[Onboarding] Successfully saved all profile data to database');
           }
         }
-        
-        // Note: @bounty_onboarding_complete is intentionally kept so the carousel
-        // is not shown again if the user re-enters the onboarding flow.
-        
+
         // Request notification permissions at the end of onboarding
-        // This is a good time to ask as the user has just completed setup
         try {
           const token = await notificationService.requestPermissionsAndRegisterToken();
           if (token) {
@@ -149,18 +146,17 @@ export default function DoneScreen() {
         console.error('[Onboarding] Error marking onboarding as complete:', error);
       }
     };
-    
+
     markComplete();
-  }, [scaleAnim, fadeAnim, userId, onboardingData]); 
+  }, [scaleAnim, fadeAnim, userId, onboardingData]);
   // Note: onboardingData is intentionally in deps to use latest values.
   // The hasMarkedComplete ref guard prevents duplicate execution on re-renders.
 
   const handleContinue = async () => {
     // Clear onboarding data from context as it's now saved to profile
     await clearOnboardingData();
-    
+
     // Refresh the auth profile service to pick up the completed profile
-    // This ensures the profile with onboarding_completed=true is loaded
     try {
       const { authProfileService } = await import('../../lib/services/auth-profile-service');
       await authProfileService.refreshProfile();
@@ -170,8 +166,8 @@ export default function DoneScreen() {
       // Don't block navigation
     }
 
-    // Also refresh the cached user profile so other hooks (useUserProfile/useNormalizedProfile)
-    // immediately pick up fields like `location` saved during onboarding.
+    // Also refresh the cached user profile so other hooks immediately pick up
+    // fields like `location` saved during onboarding.
     try {
       const { cachedDataService, CACHE_KEYS } = await import('../../lib/services/cached-data-service');
       const { userProfileService } = await import('../../lib/services/userProfile');
@@ -184,20 +180,26 @@ export default function DoneScreen() {
     } catch (cacheErr) {
       console.error('[Onboarding] Error refreshing cached user profile:', cacheErr);
     }
-    
+
     // Navigate to the Bounty app dashboard
     router.replace('/tabs/bounty-app');
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 100 }]}>
-      {/* Branding Header */}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Branding Header — fixed at top, never pushed by content */}
       <View style={styles.brandingHeader}>
         <BrandingLogo size="medium" />
       </View>
 
-      {/* Success Animation */}
-      <View style={styles.content}>
+      {/* Scrollable content area */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Success Animation */}
         <Animated.View
           style={[
             styles.checkCircle,
@@ -218,16 +220,16 @@ export default function DoneScreen() {
           <Text style={styles.subtitle}>
             Welcome to Bounty, @{displayUsername || 'user'}!
           </Text>
-          
+
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Your Profile Summary</Text>
-            
+
             <View style={styles.summaryItem}>
               <MaterialIcons name="person" size={18} color="#a7f3d0" />
               <Text style={styles.summaryLabel}>Username</Text>
               <Text style={styles.summaryValue}>@{displayUsername}</Text>
             </View>
-            
+
             {displayName && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="badge" size={18} color="#a7f3d0" />
@@ -243,7 +245,7 @@ export default function DoneScreen() {
                 <Text style={styles.summaryValue}>{displayTitle}</Text>
               </View>
             )}
-            
+
             {displayLocation && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="location-on" size={18} color="#a7f3d0" />
@@ -280,7 +282,7 @@ export default function DoneScreen() {
                 </View>
               </View>
             )}
-            
+
             {hasPhone && (
               <View style={styles.summaryItem}>
                 <MaterialIcons name="phone" size={18} color="#a7f3d0" />
@@ -294,22 +296,24 @@ export default function DoneScreen() {
             You can update your profile anytime from the Profile tab
           </Text>
         </Animated.View>
-      </View>
+      </ScrollView>
 
-      {/* Continue Button */}
-      <Animated.View style={{ opacity: fadeAnim }}>
-        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>Start Exploring</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Continue Button — pinned to bottom, always tappable */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+            <Text style={styles.continueButtonText}>Start Exploring</Text>
+            <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          </TouchableOpacity>
+        </Animated.View>
 
-      {/* Progress indicator */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
-        <View style={[styles.progressDot, styles.progressDotActive]} />
+        {/* Progress indicator */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressDot} />
+          <View style={styles.progressDot} />
+          <View style={styles.progressDot} />
+          <View style={[styles.progressDot, styles.progressDotActive]} />
+        </View>
       </View>
     </View>
   );
@@ -319,25 +323,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#059669',
-    paddingHorizontal: 24,
   },
   brandingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 24,
+    // Explicit height keeps it from shifting when content grows
+    zIndex: 1,
   },
-  brandingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 2,
-    marginLeft: 8,
-  },
-  content: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
+  },
+  scrollContent: {
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   checkCircle: {
     width: 120,
@@ -415,7 +418,7 @@ const styles = StyleSheet.create({
   skillBadge: {
     backgroundColor: 'rgba(167,243,208,0.2)',
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   skillBadgeText: {
@@ -434,6 +437,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  bottomBar: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    backgroundColor: '#059669',
+  },
   continueButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -442,7 +450,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   continueButtonText: {
     color: '#052e1b',
@@ -453,7 +461,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    paddingTop: 8,
+    paddingBottom: 4,
   },
   progressDot: {
     width: 8,
