@@ -145,7 +145,7 @@ describe('Edit Profile Integration Flow', () => {
           data: mockProfile,
           error: null,
         }),
-        update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
       });
 
       authProfileService.setSession({
@@ -165,8 +165,7 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -186,8 +185,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle validation errors', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -213,8 +211,7 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -270,8 +267,7 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -588,8 +584,7 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -625,8 +620,7 @@ describe('Edit Profile Integration Flow', () => {
 
       // Try to update but fail
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockRejectedValue(new Error('Update failed')),
       });
@@ -653,8 +647,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle simultaneous profile updates', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: { ...mockProfile, username: 'updated' },
