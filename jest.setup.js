@@ -118,6 +118,7 @@ jest.mock('react-native', () => {
     Alert: {
       alert: jest.fn(),
     },
+    Modal: 'Modal',
     Image: 'Image',
   };
 });

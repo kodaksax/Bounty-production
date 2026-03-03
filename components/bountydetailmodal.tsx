@@ -61,6 +61,7 @@ interface BountyDetailModalProps {
     is_time_sensitive?: boolean
     deadline?: string
     status?: string
+    is_for_honor?: boolean
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -490,9 +491,16 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
                   {/* Price and distance / Online badge */}
                   <View style={styles.priceDistanceContainer}>
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.priceText}>${bounty.price}</Text>
-                    </View>
+                    {bounty.is_for_honor ? (
+                      <View style={styles.honorBadge}>
+                        <MaterialIcons name="favorite" size={14} color="#052e1b" />
+                        <Text style={styles.honorText}>For Honor</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.priceContainer}>
+                        <Text style={styles.priceText}>${bounty.price}</Text>
+                      </View>
+                    )}
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
                         <MaterialIcons name="wifi" size={14} color="#10b981" />
@@ -797,6 +805,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  honorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#a7f3d0', // emerald-200
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  honorText: {
+    color: '#052e1b', // emerald-950
+    fontWeight: '800',
+    fontSize: 13,
   },
   descriptionContainer: {
     marginBottom: 16,
