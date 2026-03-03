@@ -360,7 +360,9 @@ global.console = {
       firstArg.includes('Error refunding PaymentIntent:') ||
       firstArg.includes('Error validating payment capability:') ||
       firstArg.includes('Error in Stripe webhook handler:') ||
-      firstArg.includes('[Redis]')
+      firstArg.includes('[Redis]') ||
+      firstArg.includes('[WebSocket]') ||
+      firstArg.includes('[AuthProvider]')
     ) {
       return;
     }
