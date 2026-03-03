@@ -24,6 +24,7 @@ const RECONNECT_DELAY_MS = 3000;
 
 class WebSocketAdapter {
   private appChannel: RealtimeChannel | null = null;
+  private connecting: boolean = false;
   private conversationChannels: Map<string, RealtimeChannel> = new Map();
   private listeners: Map<string, EventHandler[]> = new Map();
   private connected: boolean = false;
@@ -32,12 +33,13 @@ class WebSocketAdapter {
 
   /** Connect to Supabase Realtime (replaces raw WebSocket connect). */
   async connect(_url?: string): Promise<void> {
-    if (this.appChannel) {
-      // Already connected or connecting — no-op.
+    if (this.appChannel || this.connecting) {
+      // Already connected or a connect is in-flight — no-op.
       return;
     }
 
     this.intentionalDisconnect = false;
+    this.connecting = true;
 
     try {
       // Resolve current user id for typing payloads.
@@ -48,52 +50,66 @@ class WebSocketAdapter {
       if (__DEV__) console.warn('[wsAdapter] Failed to fetch user session:', error);
     }
 
-    const channel = supabase.channel(APP_CHANNEL, {
-      config: { broadcast: { self: true } },
-    });
+    // If disconnect() was called while we were awaiting getSession, abort.
+    if (this.intentionalDisconnect) {
+      this.connecting = false;
+      return;
+    }
 
-    channel
-      .on('broadcast', { event: 'bounty.status' }, ({ payload }) => {
-        this.emit('bounty.status', payload);
-      })
-      .on('broadcast', { event: 'message.new' }, ({ payload }) => {
-        this.emit('message.new', payload);
-        this.emit('message', payload);
-      })
-      .on('broadcast', { event: 'message.delivered' }, ({ payload }) => {
-        this.emit('message.delivered', payload);
-      })
-      .on('broadcast', { event: 'message.read' }, ({ payload }) => {
-        this.emit('message.read', payload);
-      })
-      .on('broadcast', { event: 'presence.update' }, ({ payload }) => {
-        this.emit('presence.update', payload);
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          this.connected = true;
-          this.emit('connect', {});
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          this.connected = false;
-          if (!this.intentionalDisconnect) {
-            this.emit('disconnect', {});
-            // Attempt automatic reconnect after a short delay.
-            setTimeout(() => {
-              if (!this.intentionalDisconnect) {
-                this.appChannel = null;
-                this.connect();
-              }
-            }, RECONNECT_DELAY_MS);
-          }
-        }
+    try {
+      const channel = supabase.channel(APP_CHANNEL, {
+        // Do not receive our own broadcasts on the app-wide channel to avoid
+        // duplicate events (e.g. message.new, presence.update, bounty.status).
+        config: { broadcast: { self: false } },
       });
 
-    this.appChannel = channel;
+      channel
+        .on('broadcast', { event: 'bounty.status' }, ({ payload }) => {
+          this.emit('bounty.status', payload);
+        })
+        .on('broadcast', { event: 'message.new' }, ({ payload }) => {
+          this.emit('message.new', payload);
+          this.emit('message', payload);
+        })
+        .on('broadcast', { event: 'message.delivered' }, ({ payload }) => {
+          this.emit('message.delivered', payload);
+        })
+        .on('broadcast', { event: 'message.read' }, ({ payload }) => {
+          this.emit('message.read', payload);
+        })
+        .on('broadcast', { event: 'presence.update' }, ({ payload }) => {
+          this.emit('presence.update', payload);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            this.connected = true;
+            this.emit('connect', {});
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            this.connected = false;
+            if (!this.intentionalDisconnect) {
+              this.emit('disconnect', {});
+              // Attempt automatic reconnect after a short delay.
+              setTimeout(() => {
+                if (!this.intentionalDisconnect) {
+                  this.appChannel = null;
+                  this.connect();
+                }
+              }, RECONNECT_DELAY_MS);
+            }
+          }
+        });
+
+      this.appChannel = channel;
+    } finally {
+      // Always clear the in-flight flag so future connect() calls are not blocked.
+      this.connecting = false;
+    }
   }
 
   /** Disconnect from Supabase Realtime. */
   disconnect(): void {
     this.intentionalDisconnect = true;
+    this.connecting = false;
 
     if (this.appChannel) {
       supabase.removeChannel(this.appChannel).catch((err) => {
@@ -119,7 +135,7 @@ class WebSocketAdapter {
    * Replaces the old WebSocket.send() call.
    */
   send(type: string, data: any): void {
-    if (!this.appChannel) {
+    if (!this.appChannel || !this.connected) {
       return;
     }
     this.appChannel
@@ -227,8 +243,8 @@ class WebSocketAdapter {
 
   reconnect(): void {
     this.disconnect();
-    this.intentionalDisconnect = false;
     setTimeout(() => {
+      this.intentionalDisconnect = false;
       this.connect();
     }, 100);
   }

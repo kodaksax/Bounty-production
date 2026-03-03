@@ -19,8 +19,12 @@ const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
 
 /**
  * Returns a runtime-resolved API base URL appropriate for the current device.
- * Prefers EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL (Supabase Edge Functions) when set,
- * then falls back to the legacy Node server URL helpers.
+ * Prefers EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL when explicitly set.
+ * Falls back to deriving the Edge Functions URL from EXPO_PUBLIC_SUPABASE_URL
+ * (i.e. setting EXPO_PUBLIC_SUPABASE_URL alone is sufficient to route wallet
+ * and payment calls to Supabase Edge Functions without any extra config).
+ * When neither Supabase variable is set, falls back to the legacy Node server
+ * URL helpers.
  */
 export function getApiBaseUrl(fallbackPort = 3001): string {
   // If a Supabase Functions URL is configured, use it directly (no LAN resolution needed)
