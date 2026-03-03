@@ -126,7 +126,7 @@ export function ChatDetailScreen({
       <MessageBubble
         id={message.id}
         text={message.text}
-        isUser={message.senderId === currentUserId}
+        isUser={currentUserId !== null && message.senderId === currentUserId}
         status={message.status}
         isPinned={message.isPinned}
         onLongPress={handleLongPress}
