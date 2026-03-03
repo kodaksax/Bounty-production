@@ -1,13 +1,15 @@
 import getApiBaseFallback from 'lib/utils/dev-host'
 import { getReachableApiBaseUrl } from 'lib/utils/network'
 
-// Supabase Edge Functions base URL (set EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL in your .env).
-// When set, modules that import API_BASE_URL or call getApiBaseUrl() will route requests
-// through Edge Functions instead of the legacy Node server.
+// Supabase Edge Functions base URL.
+// Prefer EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL when explicitly set; otherwise
+// derive from EXPO_PUBLIC_SUPABASE_URL so wallet/payments route to Edge
+// Functions automatically without extra configuration.
 // Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
-const supabaseFunctionsUrl = (
-  (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined) || ''
-).replace(/\/+$/, '') // strip any accidental trailing slashes
+const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim() || ''
+const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim() || ''
+const derivedFunctionsUrl = supabaseBaseUrl ? `${supabaseBaseUrl.replace(/\/+$/, '')}/functions/v1` : ''
+const supabaseFunctionsUrl = (explicitFunctionsUrl || derivedFunctionsUrl).replace(/\/+$/, '')
 
 // Preferred environment variables (Expo public envs are bundled to client)
 const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
@@ -17,8 +19,12 @@ const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
 
 /**
  * Returns a runtime-resolved API base URL appropriate for the current device.
- * Prefers EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL (Supabase Edge Functions) when set,
- * then falls back to the legacy Node server URL helpers.
+ * Prefers EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL when explicitly set.
+ * Falls back to deriving the Edge Functions URL from EXPO_PUBLIC_SUPABASE_URL
+ * (i.e. setting EXPO_PUBLIC_SUPABASE_URL alone is sufficient to route wallet
+ * and payment calls to Supabase Edge Functions without any extra config).
+ * When neither Supabase variable is set, falls back to the legacy Node server
+ * URL helpers.
  */
 export function getApiBaseUrl(fallbackPort = 3001): string {
   // If a Supabase Functions URL is configured, use it directly (no LAN resolution needed)

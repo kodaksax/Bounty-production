@@ -17,7 +17,7 @@ import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect } from "expo-router";
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -324,6 +324,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
       <ScrollView
         className="flex-1 pb-40"
+        style={Platform.OS === 'web' ? { flex: 1, overflowY: 'scroll' } as any : undefined}
         contentContainerStyle={{ paddingBottom: 220 }}
         refreshControl={
           <RefreshControl

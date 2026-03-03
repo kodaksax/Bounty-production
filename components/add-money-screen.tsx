@@ -63,16 +63,16 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const handleAddMoney = async () => {
     const numAmount = Number.parseFloat(amount)
     if (!isNaN(numAmount) && numAmount > 0) {
-      
+
       // Check if we have payment methods
       if (paymentMethods.length === 0) {
         Alert.alert(
-          'No Payment Method', 
+          'No Payment Method',
           'You need to add a payment method before you can add money to your wallet. Choose from cards or bank accounts.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Add Payment Method', 
+            {
+              text: 'Add Payment Method',
               onPress: () => setShowPaymentMethodsModal(true)
             }
           ]
@@ -82,18 +82,18 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
       setIsProcessing(true)
       setError(null)
-      
+
       try {
         // Get auth token
         if (!session?.access_token) {
           throw new Error('Not authenticated. Please sign in again.')
         }
 
-          // Call backend to create PaymentIntent
-          const amountCents = Math.round(numAmount * 100)
-        
-          const endpoint = `${API_BASE_URL}/payments/create-payment-intent`
-          const response = await fetch(endpoint, {
+        // Call backend to create PaymentIntent
+        const amountCents = Math.round(numAmount * 100)
+
+        const endpoint = `${API_BASE_URL}/payments/create-payment-intent`
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -115,22 +115,22 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         }
 
         const { clientSecret, paymentIntentId } = await response.json()
-        
+
         // Use existing processPayment - this will use the clientSecret internally
         // The backend webhook will handle updating the wallet balance when payment succeeds
         const result = await processPayment(numAmount, paymentMethods[0]?.id)
-        
+
         if (result.success) {
           // Add to local wallet balance
-          await deposit(numAmount, { 
+          await deposit(numAmount, {
             method: 'Credit Card',
             title: 'Added Money via Stripe',
             status: 'completed'
           })
-          
+
           // Show success message
           Alert.alert(
-            'Success!', 
+            'Success!',
             `$${numAmount.toFixed(2)} has been added to your wallet.`,
             [{
               text: 'OK',
@@ -153,7 +153,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       }
     } else {
       Alert.alert(
-        'Invalid Amount', 
+        'Invalid Amount',
         'Please enter a valid amount greater than $0.',
         [{ text: 'OK' }]
       )
@@ -163,14 +163,14 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   // Check Apple Pay availability on mount
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      try {
-        const available = await applePayService.isAvailable()
-        if (mounted) setIsApplePayAvailable(available)
-      } catch (e) {
-        // ignore
-      }
-    })()
+      ; (async () => {
+        try {
+          const available = await applePayService.isAvailable()
+          if (mounted) setIsApplePayAvailable(available)
+        } catch (e) {
+          // ignore
+        }
+      })()
     return () => { mounted = false }
   }, [])
 
@@ -256,19 +256,22 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       </View>
 
       {/* Error Display */}
-      {error && (
+      {(error || stripeError) && (
         <View className="px-4 mb-4">
           <ErrorBanner
-            error={getUserFriendlyError(error)}
-            onDismiss={() => setError(null)}
-            onAction={error.type === 'payment' ? () => handleAddMoney() : undefined}
+            error={getUserFriendlyError(error || stripeError)}
+            onDismiss={() => {
+              setError(null)
+              if (stripeError) loadPaymentMethods().catch(() => { })
+            }}
+            onAction={error?.type === 'payment' ? () => handleAddMoney() : (stripeError ? () => loadPaymentMethods() : undefined)}
           />
         </View>
       )}
 
       {/* Keypad */}
       <View className="flex-1 px-8 pb-40">
-        {[ [1,2,3], [4,5,6], [7,8,9] ].map((row, idx) => (
+        {[[1, 2, 3], [4, 5, 6], [7, 8, 9]].map((row, idx) => (
           <View key={idx} className="flex-row justify-between mb-4">
             {row.map((num) => (
               <TouchableOpacity
@@ -312,41 +315,15 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       </View>
 
       {/* Add Button - fixed above home indicator */}
-  <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 66 }}>
+      <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 66 }}>
         <View className="px-4">
-            {/* Apple Pay button (iOS only) */}
-            {Platform.OS === 'ios' && isApplePayAvailable && (
-              <TouchableOpacity
-                className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
-                style={{ backgroundColor: '#000000' }}
-                onPress={handleApplePayPress}
-                disabled={Number.parseFloat(amount) <= 0 || isProcessing}
-                activeOpacity={0.8}
-              >
-                {isProcessing ? (
-                  <>
-                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                    <Text className="text-center text-base font-medium text-white">Processing...</Text>
-                  </>
-                ) : (
-                  <>
-                    <MaterialIcons name="apple" size={22} color="#ffffff" />
-                    <Text className="text-white text-base font-medium ml-2">Pay</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {/* Pay with Card removed per request */}
-
-            {/* Original Add Money button (keeps compatibility) */}
+          {/* Apple Pay button (iOS only) */}
+          {Platform.OS === 'ios' && isApplePayAvailable && (
             <TouchableOpacity
-              className={cn(
-                "w-full py-4 rounded-full flex-row items-center justify-center",
-                Number.parseFloat(amount) > 0 && !isProcessing ? "bg-gray-700" : "bg-gray-700/50"
-              )}
+              className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
+              style={{ backgroundColor: '#000000' }}
+              onPress={handleApplePayPress}
               disabled={Number.parseFloat(amount) <= 0 || isProcessing}
-              onPress={handleAddMoney}
               activeOpacity={0.8}
             >
               {isProcessing ? (
@@ -355,12 +332,49 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
                   <Text className="text-center text-base font-medium text-white">Processing...</Text>
                 </>
               ) : (
-                <Text className={cn(
-                  "text-center text-base font-medium",
-                  Number.parseFloat(amount) > 0 ? "text-white" : "text-gray-300"
-                )}>Add Money</Text>
+                <>
+                  <MaterialIcons name="apple" size={22} color="#ffffff" />
+                  <Text className="text-white text-base font-medium ml-2">Pay</Text>
+                </>
               )}
             </TouchableOpacity>
+          )}
+
+          {/* Pay with Card removed per request */}
+
+          {/* Original Add Money / Link Method button */}
+          <TouchableOpacity
+            className={cn(
+              "w-full py-4 rounded-full flex-row items-center justify-center",
+              (Number.parseFloat(amount) > 0 || paymentMethods.length === 0) && !isProcessing && !stripeLoading ? "bg-gray-700" : "bg-gray-700/50"
+            )}
+            disabled={(Number.parseFloat(amount) <= 0 && paymentMethods.length > 0) || isProcessing || stripeLoading}
+            onPress={paymentMethods.length === 0 ? () => setShowPaymentMethodsModal(true) : handleAddMoney}
+            activeOpacity={0.8}
+          >
+            {isProcessing || stripeLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <Text className="text-center text-base font-medium text-white">
+                  {stripeLoading ? "Checking Methods..." : "Processing..."}
+                </Text>
+              </>
+            ) : (
+              <Text className={cn(
+                "text-center text-base font-medium",
+                (Number.parseFloat(amount) > 0 || paymentMethods.length === 0) ? "text-white" : "text-gray-300"
+              )}>
+                {paymentMethods.length === 0 ? "Link Payment Method" : "Add Money"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Hint for new users */}
+          {paymentMethods.length === 0 && !stripeLoading && !stripeError && (
+            <Text className="text-emerald-100/70 text-xs text-center mt-3 px-6">
+              Link a credit card or bank account to add funds to your wallet.
+            </Text>
+          )}
         </View>
       </View>
 

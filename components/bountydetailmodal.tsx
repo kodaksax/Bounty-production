@@ -61,6 +61,7 @@ interface BountyDetailModalProps {
     is_time_sensitive?: boolean
     deadline?: string
     status?: string
+    is_for_honor?: boolean
   }
   onClose: () => void
   onNavigateToChat?: (conversationId: string) => void
@@ -803,6 +804,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  honorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#a7f3d0', // emerald-200
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  honorText: {
+    color: '#052e1b', // emerald-950
+    fontWeight: '800',
+    fontSize: 13,
   },
   descriptionContainer: {
     marginBottom: 16,
