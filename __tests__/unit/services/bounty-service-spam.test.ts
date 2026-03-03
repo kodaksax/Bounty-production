@@ -395,12 +395,13 @@ describe('Bounty Service - Spam Prevention', () => {
 
       const bounty = createTestBounty({ title: 'Valid Title' });
 
-      // Should not throw title validation error
-      try {
-        await bountyService.create(bounty);
-      } catch (error: any) {
-        expect(error.message).not.toContain('Title is required');
-      }
+      // Should successfully create a bounty and not throw a title validation error
+      await expect(bountyService.create(bounty)).resolves.toBeDefined();
+
+      // Ensure the Supabase chains were actually invoked (rate limit, duplicate check, profile, insert)
+      expect(supabase.from).toHaveBeenCalledWith('bounties');
+      expect(supabase.from).toHaveBeenCalledWith('profiles');
+      expect(supabase.from).toHaveBeenCalledTimes(4);
     });
   });
 });
