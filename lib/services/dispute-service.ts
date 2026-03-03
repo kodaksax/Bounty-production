@@ -379,10 +379,19 @@ export const disputeService = {
         throw error;
       }
 
+      // Fetch bounty once for escrow action and notifications
+      const bounty = await bountyService.getById(dispute.bountyId);
+
+      // Determine winner label for notifications
+      const winnerLabel = winner === 'hunter'
+        ? 'Funds released to hunter.'
+        : winner === 'poster'
+        ? 'Funds refunded to poster.'
+        : '';
+
       // Execute escrow action based on winner
       if (winner) {
         try {
-          const bounty = await bountyService.getById(dispute.bountyId);
           const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
 
           if (bounty && !isHonorBounty && bounty.payment_intent_id) {
@@ -418,16 +427,8 @@ export const disputeService = {
         }
       }
 
-      // Determine winner label for notifications
-      const winnerLabel = winner === 'hunter'
-        ? 'Funds released to hunter.'
-        : winner === 'poster'
-        ? 'Funds refunded to poster.'
-        : '';
-
       // Send notifications to involved parties
       try {
-        const bounty = await bountyService.getById(dispute.bountyId);
         if (bounty) {
           const outcomeMessage = winnerLabel
             ? ` Outcome: ${winnerLabel}`

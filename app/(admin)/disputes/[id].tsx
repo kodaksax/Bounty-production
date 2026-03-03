@@ -99,7 +99,7 @@ export default function AdminDisputeDetailScreen() {
     }
 
     if (!winner) {
-      Alert.alert('Error', 'Please select a winner (Release to Hunter or Refund to Poster)');
+      Alert.alert('Error', 'Please select a winner: Release to Hunter or Refund to Poster');
       return;
     }
 
