@@ -3,6 +3,7 @@ import { logger } from 'lib/utils/error-logger';
 import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
+import { paymentService } from './payment-service';
 
 /**
  * Helper to send notification via Supabase direct insert
@@ -109,6 +110,7 @@ export const disputeService = {
         evidence: [], // evidence should be uploaded via `uploadEvidence` and fetched separately
         status: data.status,
         resolution: data.resolution,
+        winner: data.winner || null,
         resolvedBy: data.resolved_by,
         resolvedAt: data.resolved_at,
         createdAt: data.created_at,
@@ -197,6 +199,7 @@ export const disputeService = {
         evidence: data.evidence_json ? JSON.parse(data.evidence_json) : [],
         status: data.status,
         resolution: data.resolution,
+        winner: data.winner || null,
         resolvedBy: data.resolved_by,
         resolvedAt: data.resolved_at,
         createdAt: data.created_at,
@@ -246,6 +249,7 @@ export const disputeService = {
         evidence: data.evidence_json ? JSON.parse(data.evidence_json) : [],
         status: data.status,
         resolution: data.resolution,
+        winner: data.winner || null,
         resolvedBy: data.resolved_by,
         resolvedAt: data.resolved_at,
         createdAt: data.created_at,
@@ -340,7 +344,8 @@ export const disputeService = {
   async resolveDispute(
     disputeId: string,
     resolution: string,
-    resolvedBy: string
+    resolvedBy: string,
+    winner?: 'hunter' | 'poster' | null
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
@@ -353,14 +358,20 @@ export const disputeService = {
         throw new Error('Dispute not found');
       }
 
+      const updateData: Record<string, any> = {
+        status: 'resolved',
+        resolution,
+        resolved_by: resolvedBy,
+        resolved_at: new Date().toISOString(),
+      };
+
+      if (winner) {
+        updateData.winner = winner;
+      }
+
       const { error } = await supabase
         .from('bounty_disputes')
-        .update({
-          status: 'resolved',
-          resolution,
-          resolved_by: resolvedBy,
-          resolved_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', disputeId);
 
       if (error) {
@@ -368,20 +379,71 @@ export const disputeService = {
         throw error;
       }
 
+      // Execute escrow action based on winner
+      if (winner) {
+        try {
+          const bounty = await bountyService.getById(dispute.bountyId);
+          const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
+
+          if (bounty && !isHonorBounty && bounty.payment_intent_id) {
+            if (winner === 'hunter') {
+              const releaseResult = await paymentService.releaseEscrow(bounty.payment_intent_id);
+              if (!releaseResult.success) {
+                logger.error('Failed to release escrow to hunter during dispute resolution', {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  escrowId: bounty.payment_intent_id,
+                  error: releaseResult.error,
+                });
+              }
+            } else if (winner === 'poster') {
+              const refundResult = await paymentService.refundEscrow(bounty.payment_intent_id);
+              if (!refundResult.success) {
+                logger.error('Failed to refund escrow to poster during dispute resolution', {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  escrowId: bounty.payment_intent_id,
+                  error: refundResult.error,
+                });
+              }
+            }
+          }
+        } catch (escrowError) {
+          // Log but don't fail the resolution if escrow action fails
+          logger.error('Error executing escrow action during dispute resolution', {
+            disputeId,
+            winner,
+            error: escrowError instanceof Error ? escrowError.message : String(escrowError),
+          });
+        }
+      }
+
+      // Determine winner label for notifications
+      const winnerLabel = winner === 'hunter'
+        ? 'Funds released to hunter.'
+        : winner === 'poster'
+        ? 'Funds refunded to poster.'
+        : '';
+
       // Send notifications to involved parties
       try {
         const bounty = await bountyService.getById(dispute.bountyId);
         if (bounty) {
+          const outcomeMessage = winnerLabel
+            ? ` Outcome: ${winnerLabel}`
+            : '';
+
           // Notify the dispute initiator
           await sendNotification(
             dispute.initiatorId,
             'dispute_resolved',
             'Dispute Resolved',
-            `Your dispute for bounty "${bounty.title}" has been resolved.`,
+            `Your dispute for bounty "${bounty.title}" has been resolved.${outcomeMessage}`,
             {
               bountyId: dispute.bountyId,
               disputeId: disputeId,
               resolution: resolution.substring(0, 100), // Truncate for notification
+              winner: winner || undefined,
             }
           );
 
@@ -391,11 +453,12 @@ export const disputeService = {
               String(bounty.user_id),
               'dispute_resolved',
               'Dispute Resolved',
-              `A dispute for bounty "${bounty.title}" has been resolved.`,
+              `A dispute for bounty "${bounty.title}" has been resolved.${outcomeMessage}`,
               {
                 bountyId: dispute.bountyId,
                 disputeId: disputeId,
                 resolution: resolution.substring(0, 100),
+                winner: winner || undefined,
               }
             );
           }
@@ -410,11 +473,12 @@ export const disputeService = {
               cancellation.requesterId,
               'dispute_resolved',
               'Dispute Resolved',
-              `A dispute for bounty "${bounty.title}" has been resolved.`,
+              `A dispute for bounty "${bounty.title}" has been resolved.${outcomeMessage}`,
               {
                 bountyId: dispute.bountyId,
                 disputeId: disputeId,
                 resolution: resolution.substring(0, 100),
+                winner: winner || undefined,
               }
             );
           }
@@ -464,6 +528,7 @@ export const disputeService = {
         evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
         status: item.status,
         resolution: item.resolution,
+        winner: item.winner || null,
         resolvedBy: item.resolved_by,
         resolvedAt: item.resolved_at,
         createdAt: item.created_at,
@@ -505,6 +570,7 @@ export const disputeService = {
         evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
         status: item.status,
         resolution: item.resolution,
+        winner: item.winner || null,
         resolvedBy: item.resolved_by,
         resolvedAt: item.resolved_at,
         createdAt: item.created_at,
@@ -743,7 +809,11 @@ export const disputeService = {
       }
 
       // Update dispute status (this will send notifications to all parties)
-      await this.resolveDispute(disputeId, decision.rationale, adminId);
+      // Map decision outcome to winner for escrow action
+      const winner = decision.outcome === 'release' ? 'hunter' as const
+        : decision.outcome === 'refund' ? 'poster' as const
+        : null;
+      await this.resolveDispute(disputeId, decision.rationale, adminId, winner);
 
       // Log audit event
       await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {
