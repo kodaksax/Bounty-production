@@ -86,7 +86,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
-  
+
   const [activeTab, setActiveTab] = useState("new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   // Always use guided multi-step flow on New tab
@@ -180,7 +180,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
     // Mark pending scroll — we'll measure and scroll when the expanded content calls back
     pendingScrollRef.current = { list, key }
   }
-  
+
   // Deadline now simple text entry; dedicated screen removed
 
   // ---- Data Loaders (refreshed after post and when opening screen) ----
@@ -220,7 +220,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setBountyRequests([])
       return
     }
-    
+
     try {
       setIsLoading((prev) => ({ ...prev, myBounties: true }))
       setError(null) // Clear previous error
@@ -246,7 +246,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setInProgressBounties([])
       return
     }
-    
+
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
       setError(null) // Clear previous error
@@ -300,7 +300,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
       setBountyRequests([])
       return
     }
-    
+
     setError(null)
     // Load in parallel
     loadMyBounties()
@@ -412,7 +412,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
               // Update UI only after successful deletion
               setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
-              
+
               // Refresh to ensure consistency
               await loadMyBounties()
             } catch (err: any) {
@@ -511,18 +511,18 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
   // Memoized keyExtractor functions
   const keyExtractorBounty = React.useCallback((item: Bounty) => item.id.toString(), []);
   const keyExtractorRequest = React.useCallback((item: BountyRequestWithDetails) => item.id.toString(), []);
-  
+
   // NOTE: Do NOT provide getItemLayout for expandable / variable-height rows.
   // MyPostingExpandable rows can change height when expanded/collapsed, so passing
   // a fixed getItemLayout would break virtualization and scroll offsets.
   // Only use getItemLayout for truly fixed-height items like ApplicantCard.
-  
+
   const getItemLayoutRequest = React.useCallback((_data: any, index: number) => ({
     length: 120, // Approximate applicant card height
     offset: 120 * index,
     index,
   }), []);
-  
+
   // Memoized render functions for better performance
   const renderMyPostingItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
     <View
@@ -595,17 +595,17 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             },
             showShadow
               ? {
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 6,
-                  elevation: 6,
-                }
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 6,
+                elevation: 6,
+              }
               : null,
           ]}
         >
           {/* Header */}
-            <View className="flex-row justify-between items-center px-4">
+          <View className="flex-row justify-between items-center px-4">
             {/* Left: logo aligned like messenger (no back icon) */}
             <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
               <BrandingLogo size="medium" />
@@ -693,8 +693,8 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           </View>
         </View>
 
-  {/* Scrollable Content Area - starts under visible bottom of header */}
-  <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
+        {/* Scrollable Content Area - starts under visible bottom of header */}
+        <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
           {/* Error message */}
           {error && (
             <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
@@ -740,18 +740,18 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               activeTab === "inProgress" ? (
                 <FlatList
                   ref={inProgressListRef}
-                  data={inProgressBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
+                  data={inProgressBounties.filter(b => workTypeFilter === 'all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
-                      {(['all','online','in_person'] as const).map(f => {
+                      {(['all', 'online', 'in_person'] as const).map(f => {
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity 
-                            key={f} 
-                            onPress={() => setWorkTypeFilter(f)} 
+                          <TouchableOpacity
+                            key={f}
+                            onPress={() => setWorkTypeFilter(f)}
                             className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                             accessibilityRole="button"
                             accessibilityLabel={`Filter by ${label} work in progress`}
@@ -869,18 +869,18 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               ) : activeTab === "myPostings" ? (
                 <FlatList
                   ref={myPostingsListRef}
-                  data={myBounties.filter(b => workTypeFilter==='all' || b.work_type === workTypeFilter)}
+                  data={myBounties.filter(b => workTypeFilter === 'all' || b.work_type === workTypeFilter)}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View className="flex-row gap-2 mb-1">
-                      {(['all','online','in_person'] as const).map(f => {
+                      {(['all', 'online', 'in_person'] as const).map(f => {
                         const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
                         const selected = workTypeFilter === f
                         return (
-                          <TouchableOpacity 
-                            key={f} 
-                            onPress={() => setWorkTypeFilter(f)} 
+                          <TouchableOpacity
+                            key={f}
+                            onPress={() => setWorkTypeFilter(f)}
                             className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                             accessibilityRole="button"
                             accessibilityLabel={`Filter by ${label} postings`}
@@ -971,69 +971,69 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }} style={{ height: 48 }}>
               <View className="flex-row items-center gap-3 mb-0">
-              {AMOUNT_PRESETS.map((amt) => {
-                const selected = formData.amount === amt && !formData.isForHonor;
-                const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
-                return (
-                  <TouchableOpacity
-                    key={amt}
-                    onPress={() => handleChooseAmount(amt)}
-                    className={cn(
-                      "px-4 py-2 rounded-full border",
-                      selected
-                        ? lowBalance
-                          ? "bg-amber-400/90 border-amber-200"
-                          : "bg-emerald-300 text-emerald-900 border-emerald-200"
-                        : "bg-emerald-900/40 border-emerald-500/40",
-                    )}
-                  >
-                    <Text
+                {AMOUNT_PRESETS.map((amt) => {
+                  const selected = formData.amount === amt && !formData.isForHonor;
+                  const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
+                  return (
+                    <TouchableOpacity
+                      key={amt}
+                      onPress={() => handleChooseAmount(amt)}
                       className={cn(
-                        "font-medium",
+                        "px-4 py-2 rounded-full border",
                         selected
                           ? lowBalance
-                            ? "text-amber-950"
-                            : "text-emerald-900"
-                          : "text-emerald-100"
+                            ? "bg-amber-400/90 border-amber-200"
+                            : "bg-emerald-300 text-emerald-900 border-emerald-200"
+                          : "bg-emerald-900/40 border-emerald-500/40",
                       )}
                     >
-                      ${amt}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              {/* Other chip: only shows custom amount label when otherSelected is true */}
-              {(() => {
-                const lowBalance = !formData.isForHonor && formData.amount > balance;
-                const highlight = otherSelected || lowBalance;
-                const displayLabel = otherSelected ? `$${formData.amount}` : 'Other…';
-                return (
-                  <TouchableOpacity
-                    onPress={() => setShowAddBountyAmount(true)}
-                    className={cn(
-                      "px-4 py-2 rounded-full border",
-                      highlight
-                        ? lowBalance
-                          ? "bg-amber-400/90 border-amber-200"
-                          : "bg-emerald-300 border-emerald-200"
-                        : "bg-emerald-900/40 border-emerald-500/40"
-                    )}
-                  >
-                    <Text
+                      <Text
+                        className={cn(
+                          "font-medium",
+                          selected
+                            ? lowBalance
+                              ? "text-amber-950"
+                              : "text-emerald-900"
+                            : "text-emerald-100"
+                        )}
+                      >
+                        ${amt}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {/* Other chip: only shows custom amount label when otherSelected is true */}
+                {(() => {
+                  const lowBalance = !formData.isForHonor && formData.amount > balance;
+                  const highlight = otherSelected || lowBalance;
+                  const displayLabel = otherSelected ? `$${formData.amount}` : 'Other…';
+                  return (
+                    <TouchableOpacity
+                      onPress={() => setShowAddBountyAmount(true)}
                       className={cn(
-                        "font-medium",
+                        "px-4 py-2 rounded-full border",
                         highlight
                           ? lowBalance
-                            ? "text-amber-950"
-                            : "text-emerald-900"
-                          : "text-emerald-100"
+                            ? "bg-amber-400/90 border-amber-200"
+                            : "bg-emerald-300 border-emerald-200"
+                          : "bg-emerald-900/40 border-emerald-500/40"
                       )}
                     >
-                      {displayLabel}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })()}
+                      <Text
+                        className={cn(
+                          "font-medium",
+                          highlight
+                            ? lowBalance
+                              ? "text-amber-950"
+                              : "text-emerald-900"
+                            : "text-emerald-100"
+                        )}
+                      >
+                        {displayLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             </ScrollView>
             {validationError && (
@@ -1055,13 +1055,13 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               const label = lowBalance ? "LOW BALANCE • Tap to Deposit" : "Post Bounty"
               const handlePress = () => {
                 if (lowBalance) { setShowAddMoney(true); return }
-                if (requiredMissing) { 
+                if (requiredMissing) {
                   let msg = 'Missing required:'
                   if (baseMissing) msg += ' Title, Description, Amount/For Honor;'
                   if (locationMissing) msg += ' Location;'
                   if (deadlineMissing) msg += ' Deadline;'
-                  setValidationError(msg.trim()); 
-                  return 
+                  setValidationError(msg.trim());
+                  return
                 }
                 setValidationError(null)
                 handleShowConfirmation()
@@ -1093,44 +1093,45 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
           </View>
         )}
 
-  {/* Bottom navigation is provided by the app container (BountyApp) */}
+        {/* Bottom navigation is provided by the app container (BountyApp) */}
 
-      {/* Confirmation Card */}
-      {showConfirmationCard && (
-        <View className="fixed inset-0 z-50">
-          <BountyConfirmationCard
-            bountyData={{
-              title: formData.title,
-              description: formData.description,
-              amount: formData.amount,
-              isForHonor: formData.isForHonor,
-              location: formData.location,
-              workType: formData.workType,
-              isTimeSensitive: formData.isTimeSensitive,
-              deadline: formData.isTimeSensitive ? formData.deadline : undefined,
+        {/* Confirmation Card */}
+        {showConfirmationCard && (
+          <View className="fixed inset-0 z-50">
+            <BountyConfirmationCard
+              bountyData={{
+                title: formData.title,
+                description: formData.description,
+                amount: formData.amount,
+                isForHonor: formData.isForHonor,
+                location: formData.location,
+                workType: formData.workType,
+                isTimeSensitive: formData.isTimeSensitive,
+                deadline: formData.isTimeSensitive ? formData.deadline : undefined,
+              }}
+              onConfirm={handlePostBounty}
+              onCancel={() => setShowConfirmationCard(false)}
+            />
+          </View>
+        )}
+        {/* Deadline screen removed; using inline text input */}
+
+        {/* Multi-Step flow is rendered inline above for the New tab */}
+
+        {/* Edit Posting Modal */}
+        {editingBounty && (
+          <EditPostingModal
+            key={editingBounty.id}
+            visible={showEditModal}
+            bounty={editingBounty}
+            onClose={() => {
+              setShowEditModal(false)
+              setEditingBounty(null)
             }}
-            onConfirm={handlePostBounty}
-            onCancel={() => setShowConfirmationCard(false)}
+            onSave={handleSaveEdit}
           />
-        </View>
-      )}
-      {/* Deadline screen removed; using inline text input */}
-
-      {/* Multi-Step flow is rendered inline above for the New tab */}
-
-      {/* Edit Posting Modal */}
-      {editingBounty && (
-        <EditPostingModal
-          visible={showEditModal}
-          bounty={editingBounty}
-          onClose={() => {
-            setShowEditModal(false)
-            setEditingBounty(null)
-          }}
-          onSave={handleSaveEdit}
-        />
-      )}
-    </View>
+        )}
+      </View>
     </TouchableWithoutFeedback>
   )
 }

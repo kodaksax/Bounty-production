@@ -412,6 +412,7 @@ export interface BountyDispute {
   evidence?: DisputeEvidence[];
   status: 'open' | 'under_review' | 'resolved' | 'closed';
   resolution?: string;
+  winner?: 'hunter' | 'poster' | null;
   resolvedBy?: string;
   resolvedAt?: string;
   createdAt: string;

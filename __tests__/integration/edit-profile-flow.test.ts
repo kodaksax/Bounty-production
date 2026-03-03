@@ -145,7 +145,10 @@ describe('Edit Profile Integration Flow', () => {
           data: mockProfile,
           error: null,
         }),
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
+=======
+>>>>>>> main
         upsert: jest.fn().mockReturnThis(),
       });
 
@@ -166,9 +169,13 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -188,9 +195,13 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle validation errors', async () => {
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -216,9 +227,13 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -274,9 +289,13 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -502,8 +521,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle database constraint violations', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -523,8 +541,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle rate limiting', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -593,9 +610,13 @@ describe('Edit Profile Integration Flow', () => {
       };
 
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: updatedProfile,
@@ -631,9 +652,13 @@ describe('Edit Profile Integration Flow', () => {
 
       // Try to update but fail
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockRejectedValue(new Error('Update failed')),
       });
@@ -660,9 +685,13 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle simultaneous profile updates', async () => {
       mockSupabase.from.mockReturnValue({
+<<<<<<< copilot/fix-empty-bounty-title
         update: jest.fn().mockReturnThis(),
         upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+=======
+        upsert: jest.fn().mockReturnThis(),
+>>>>>>> main
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: { ...mockProfile, username: 'updated' },
