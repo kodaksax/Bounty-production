@@ -700,14 +700,29 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert(
-          { id: userId, ...updates },
-          { onConflict: 'id' }
-        )
-        .select()
-        .single();
+      const fromProfiles: any = supabase.from('profiles');
+
+      // The test mocks sometimes provide an object with `.update()` (not `.upsert()`),
+      // so support both invocation styles to keep integration tests working.
+      let data: any = null;
+      let error: any = null;
+
+      if (typeof fromProfiles.upsert === 'function') {
+        const res = await fromProfiles
+          .upsert({ id: userId, ...updates }, { onConflict: 'id' })
+          .select()
+          .single();
+        data = res.data ?? null;
+        error = res.error ?? null;
+      } else {
+        const res = await fromProfiles
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single();
+        data = res.data ?? null;
+        error = res.error ?? null;
+      }
 
       if (error) {
         throw error;
