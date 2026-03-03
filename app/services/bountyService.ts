@@ -2,6 +2,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
+import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
 import { analyticsService } from 'lib/services/analytics-service';
 import { performanceService } from 'lib/services/performance-service';
@@ -46,9 +47,9 @@ export const bountyService = {
 
     try {
       // Title validation guard — reject empty or too-short titles before any DB work
-      const trimmedTitle = (draft.title ?? '').trim();
-      if (!trimmedTitle || trimmedTitle.length < 5) {
-        throw new Error('Title is required and must be at least 5 characters.');
+      const titleError = validateTitle(draft.title);
+      if (titleError) {
+        throw new Error(titleError);
       }
 
       // Enforce posting to Supabase only for this guided flow

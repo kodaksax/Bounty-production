@@ -1,6 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import type { Bounty, BountyStatus } from "lib/services/database.types";
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
+import { validateTitle } from "lib/utils/bounty-validation";
 import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
@@ -660,9 +661,9 @@ export const bountyService = {
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
       // Title validation guard — reject empty or too-short titles before any DB work
-      const trimmedTitle = (bounty.title ?? '').trim();
-      if (!trimmedTitle || trimmedTitle.length < 5) {
-        throw new Error('Title is required and must be at least 5 characters after trimming whitespace.');
+      const titleError = validateTitle(bounty.title);
+      if (titleError) {
+        throw new Error(titleError);
       }
 
       // Spam prevention: rate limiting - max 10 bounties per day

@@ -349,28 +349,28 @@ describe('Bounty Service - Spam Prevention', () => {
     it('should reject bounty with empty title', async () => {
       const bounty = createTestBounty({ title: '' });
       await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Title is required and must be at least 5 characters'
+        'Title is required'
       );
     });
 
     it('should reject bounty with whitespace-only title', async () => {
       const bounty = createTestBounty({ title: '     ' });
       await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Title is required and must be at least 5 characters'
+        'Title is required'
       );
     });
 
     it('should reject bounty with title shorter than 5 trimmed characters', async () => {
       const bounty = createTestBounty({ title: '  ab ' });
       await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Title is required and must be at least 5 characters'
+        'Title must be at least 5 characters'
       );
     });
 
     it('should reject bounty with undefined title', async () => {
       const bounty = createTestBounty({ title: undefined });
       await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Title is required and must be at least 5 characters'
+        'Title is required'
       );
     });
 

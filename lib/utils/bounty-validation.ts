@@ -12,13 +12,14 @@
  * @returns Error message string if invalid, null if valid
  */
 export function validateTitle(value: string | undefined | null): string | null {
-  if (!value || value.trim().length === 0) {
+  const trimmed = (value ?? '').trim();
+  if (trimmed.length === 0) {
     return 'Title is required';
   }
-  if (value.trim().length < 5) {
+  if (trimmed.length < 5) {
     return 'Title must be at least 5 characters';
   }
-  if (value.trim().length > 120) {
+  if (trimmed.length > 120) {
     return 'Title must not exceed 120 characters';
   }
   return null;
