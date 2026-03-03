@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
+import type { Bounty } from './database.types';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 import { paymentService } from './payment-service';
@@ -347,7 +348,7 @@ export const disputeService = {
     resolution: string,
     resolvedBy: string,
     winner?: 'hunter' | 'poster' | null,
-    prefetchedBounty?: any
+    prefetchedBounty?: Bounty | null
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
