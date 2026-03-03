@@ -730,8 +730,6 @@ export class AuthProfileService {
           .single();
         data = res.data ?? null;
         error = res.error ?? null;
-      } catch (e: any) {
-        error = e;
       }
 
       // If update returned no data or an error indicating missing row, try upsert
