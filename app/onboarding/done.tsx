@@ -18,10 +18,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { supabase } from '../../lib/supabase';
@@ -34,6 +36,7 @@ export default function DoneScreen() {
   const { profile: localProfile } = useUserProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { userId } = useAuthProfile();
+  const { profile: authProfile } = useAuthContext();
   const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
 
   // Use onboarding data primarily, fallback to normalized/local
@@ -50,11 +53,16 @@ export default function DoneScreen() {
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
 
-  // Use ref to ensure markComplete runs only once per screen mount
-  const hasMarkedComplete = useRef(false);
+  // readyToNavigate: set to true only after authProfileService has confirmed
+  // onboarding_completed: true in React state. We watch authProfile from
+  // useAuthContext — when it flips to true we know both index.tsx AND
+  // bounty-app.tsx will see the correct value and won't redirect back.
+  const [readyToNavigate, setReadyToNavigate] = useState(false);
+  const hasSavedRef = useRef(false);
+  const hasNavigatedRef = useRef(false);
 
+  // --- Step 1: Animate + save profile on mount ---
   useEffect(() => {
-    // Animate check mark
     Animated.sequence([
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -69,54 +77,26 @@ export default function DoneScreen() {
       }),
     ]).start();
 
-    // Mark onboarding as complete and sync all profile data
-    // Use ref guard to prevent duplicate saves if component re-renders
-    const markComplete = async () => {
-      // Skip if already marked complete
-      if (hasMarkedComplete.current) return;
-      hasMarkedComplete.current = true;
+    const saveAndMark = async () => {
+      if (hasSavedRef.current) return;
+      hasSavedRef.current = true;
 
       try {
-        // Set the permanent completion flag in AsyncStorage for backward compatibility
         await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
 
-        // IMPORTANT: Update the Supabase profile with ALL onboarding data
-        // This ensures profile data persists and is available across all screens
         if (userId) {
-          // Prepare profile update with all fields from onboarding context
-          const profileUpdate: Partial<Profile> = {
-            onboarding_completed: true,
-          };
+          const profileUpdate: Partial<Profile> = { onboarding_completed: true };
 
-          // Add username if available
-          if (onboardingData.username) {
-            profileUpdate.username = onboardingData.username;
-          }
-
-          // Add optional fields from onboarding
-          if (onboardingData.displayName) {
-            profileUpdate.display_name = onboardingData.displayName;
-          }
-          if (onboardingData.title) {
-            profileUpdate.title = onboardingData.title;
-          }
-          if (onboardingData.bio) {
-            profileUpdate.about = onboardingData.bio;
-          }
-          if (onboardingData.location) {
-            profileUpdate.location = onboardingData.location;
-          }
-          if (onboardingData.skills && onboardingData.skills.length > 0) {
-            profileUpdate.skills = onboardingData.skills;
-          }
-          // Only persist avatar_url when we have a confirmed remote URI,
-          // not a local file:// path that would break on other devices.
+          if (onboardingData.username) profileUpdate.username = onboardingData.username;
+          if (onboardingData.displayName) profileUpdate.display_name = onboardingData.displayName;
+          if (onboardingData.title) profileUpdate.title = onboardingData.title;
+          if (onboardingData.bio) profileUpdate.about = onboardingData.bio;
+          if (onboardingData.location) profileUpdate.location = onboardingData.location;
+          if (onboardingData.skills?.length > 0) profileUpdate.skills = onboardingData.skills;
           if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
             profileUpdate.avatar_url = onboardingData.avatarUri;
           }
-          if (onboardingData.phone) {
-            profileUpdate.phone = onboardingData.phone;
-          }
+          if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
           const { error } = await supabase
             .from('profiles')
@@ -124,55 +104,58 @@ export default function DoneScreen() {
             .eq('id', userId);
 
           if (error) {
-            console.error('[Onboarding] Error saving profile data to Supabase:', error);
-            // Don't throw - we still want to proceed
+            console.error('[Onboarding] Supabase update error:', error);
           } else {
-            console.log('[Onboarding] Successfully saved all profile data to database');
+            console.log('[Onboarding] Profile saved to Supabase');
           }
         }
 
-        // Request notification permissions at the end of onboarding
+        // CRITICAL: Call authProfileService.updateProfile so the in-memory AuthContext
+        // profile is updated synchronously before any navigation happens.
+        // This is what causes readyToNavigate to flip via the useEffect below.
+        await authProfileService.updateProfile({ onboarding_completed: true });
+        console.log('[Onboarding] authProfileService updated — waiting for React state commit');
+
         try {
           const token = await notificationService.requestPermissionsAndRegisterToken();
-          if (token) {
-            console.log('[Onboarding] Notification permissions granted');
-          } else {
-            console.log('[Onboarding] Notification permissions denied or unavailable');
-          }
-        } catch (notifError) {
-          console.error('[Onboarding] Failed to request notification permissions:', notifError);
+          console.log('[Onboarding] Notification token:', token ? 'granted' : 'denied');
+        } catch (e) {
+          console.error('[Onboarding] Notification permission error:', e);
         }
       } catch (error) {
-        console.error('[Onboarding] Error marking onboarding as complete:', error);
+        console.error('[Onboarding] saveAndMark error:', error);
       }
     };
 
-    markComplete();
+    saveAndMark();
   }, [scaleAnim, fadeAnim, userId, onboardingData]);
-  // Note: onboardingData is intentionally in deps to use latest values.
-  // The hasMarkedComplete ref guard prevents duplicate execution on re-renders.
+
+  // --- Step 2: Watch authProfile from React context ---
+  // Only set readyToNavigate when AuthContext has committed onboarding_completed: true.
+  // At this point BOTH index.tsx and bounty-app.tsx guards will see the correct value
+  // and will NOT redirect back to /onboarding.
+  useEffect(() => {
+    if (authProfile?.onboarding_completed === true) {
+      console.log('[Onboarding] authProfile confirmed onboarding_completed: true — ready to navigate');
+      setReadyToNavigate(true);
+    }
+  }, [authProfile]);
+
+  // --- Step 3: Navigate only when button was pressed AND profile is confirmed ---
+  const [buttonPressed, setButtonPressed] = useState(false);
+
+  useEffect(() => {
+    if (buttonPressed && readyToNavigate && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      console.log('[Onboarding] Navigating to bounty-app');
+      router.replace('/tabs/bounty-app');
+    }
+  }, [buttonPressed, readyToNavigate, router]);
 
   const handleContinue = async () => {
-    // Clear onboarding form data from context
     await clearOnboardingData();
 
-    // CRITICAL: Push onboarding_completed: true into the auth service's in-memory
-    // state and cache BEFORE navigating. Do NOT use refreshProfile() here — it hits
-    // the 5-min AsyncStorage cache and returns the stale profile (onboarding_completed: false),
-    // which causes index.tsx to see an incomplete profile and loop back to /onboarding.
-    // updateProfile() writes to Supabase, updates the cache, and notifies AuthContext
-    // listeners with the correct value so index.tsx never sees the stale state.
-    try {
-      const { authProfileService } = await import('../../lib/services/auth-profile-service');
-      await authProfileService.updateProfile({ onboarding_completed: true });
-      console.log('[Onboarding] Profile marked complete in auth service');
-    } catch (refreshError) {
-      console.error('[Onboarding] Error updating profile in auth service:', refreshError);
-      // Don't block navigation — Supabase already has the correct value from markComplete()
-    }
-
-    // Also refresh the cached user profile so hooks like useUserProfile/useNormalizedProfile
-    // immediately pick up fields like `location` and `skills` saved during onboarding.
+    // Refresh secondary caches (non-blocking, best effort)
     try {
       const { cachedDataService, CACHE_KEYS } = await import('../../lib/services/cached-data-service');
       const { userProfileService } = await import('../../lib/services/userProfile');
@@ -180,14 +163,20 @@ export default function DoneScreen() {
         const profile = await userProfileService.getProfile(userId);
         const completeness = await userProfileService.checkCompleteness(userId);
         await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(userId), { profile, completeness });
-        console.log('[Onboarding] Cached user profile refreshed');
       }
-    } catch (cacheErr) {
-      console.error('[Onboarding] Error refreshing cached user profile:', cacheErr);
+    } catch (e) {
+      // non-critical
     }
 
-    // Navigate to the Bounty app dashboard
-    router.replace('/tabs/bounty-app');
+    // Signal that the button was pressed. Navigation fires in the useEffect
+    // above once readyToNavigate is also true, guaranteeing AuthContext has
+    // already committed onboarding_completed: true before bounty-app.tsx renders.
+    setButtonPressed(true);
+
+    // If authProfileService already updated before the button was pressed
+    // (the common path), readyToNavigate is already true and navigation
+    // fires on the next tick. If not (slow network), the useEffect above
+    // will fire as soon as the profile update propagates.
   };
 
   return (
@@ -205,26 +194,13 @@ export default function DoneScreen() {
         bounces={false}
       >
         {/* Success Animation */}
-        <Animated.View
-          style={[
-            styles.checkCircle,
-            {
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.checkCircle, { transform: [{ scale: scaleAnim }] }]}>
           <MaterialIcons name="check" size={72} color="#052e1b" />
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
-          <Text style={styles.title}>
-            You
-            {"'"}
-            re All Set!
-          </Text>
-          <Text style={styles.subtitle}>
-            Welcome to Bounty, @{displayUsername || 'user'}!
-          </Text>
+          <Text style={styles.title}>You{"'"}re All Set!</Text>
+          <Text style={styles.subtitle}>Welcome to Bounty, @{displayUsername || 'user'}!</Text>
 
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Your Profile Summary</Text>
@@ -306,13 +282,20 @@ export default function DoneScreen() {
       {/* Continue Button — pinned to bottom, always tappable */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-            <Text style={styles.continueButtonText}>Start Exploring</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <TouchableOpacity
+            style={[styles.continueButton, buttonPressed && !readyToNavigate && styles.continueButtonLoading]}
+            onPress={handleContinue}
+            disabled={buttonPressed && !readyToNavigate}
+          >
+            <Text style={styles.continueButtonText}>
+              {buttonPressed && !readyToNavigate ? 'Almost there...' : 'Start Exploring'}
+            </Text>
+            {(!buttonPressed || readyToNavigate) && (
+              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+            )}
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Progress indicator */}
         <View style={styles.progressContainer}>
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
@@ -335,7 +318,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 24,
-    // Explicit height keeps it from shifting when content grows
     zIndex: 1,
   },
   scrollView: {
@@ -456,6 +438,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     gap: 8,
     marginBottom: 16,
+  },
+  continueButtonLoading: {
+    opacity: 0.7,
   },
   continueButtonText: {
     color: '#052e1b',
