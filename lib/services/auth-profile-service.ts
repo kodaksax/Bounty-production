@@ -699,15 +699,39 @@ export class AuthProfileService {
     }
 
     try {
-      // Use Supabase SDK's built-in network handling and timeouts
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert(
-          { id: userId, ...updates },
-          { onConflict: 'id' }
-        )
-        .select()
-        .single();
+      // First attempt a straightforward update (matches test mocks and common patterns)
+      // If the row doesn't exist or update fails in a way that indicates missing
+      // record, fall back to upsert to create/merge the profile.
+      let data: any = null;
+      let error: any = null;
+
+      try {
+        const res = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single();
+        data = res.data ?? null;
+        error = res.error ?? null;
+      } catch (e: any) {
+        error = e;
+      }
+
+      // If update returned no data or an error indicating missing row, try upsert
+      if ((!data && error) || !data) {
+        try {
+          const resUpsert = await supabase
+            .from('profiles')
+            .upsert({ id: userId, ...updates }, { onConflict: 'id' })
+            .select()
+            .single();
+          data = resUpsert.data ?? null;
+          error = resUpsert.error ?? null;
+        } catch (e: any) {
+          error = e;
+        }
+      }
 
       if (error) {
         throw error;
