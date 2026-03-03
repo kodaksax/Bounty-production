@@ -25,7 +25,6 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
-import { supabase } from '../../lib/supabase';
 
 const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
 
@@ -49,83 +48,64 @@ export default function DoneScreen() {
 
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
-  const hasSavedRef = useRef(false);
   const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
+    // Animation only — no Supabase writes here.
+    // All profile persistence happens in handleContinue so we can guarantee
+    // the database write completes before navigation (reviewer comment #1).
     Animated.sequence([
       Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-
-    const saveProfile = async () => {
-      if (hasSavedRef.current) return;
-      hasSavedRef.current = true;
-
-      try {
-        await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
-
-        if (userId) {
-          const profileUpdate: Partial<Profile> = { onboarding_completed: true };
-          if (onboardingData.username) profileUpdate.username = onboardingData.username;
-          if (onboardingData.displayName) profileUpdate.display_name = onboardingData.displayName;
-          if (onboardingData.title) profileUpdate.title = onboardingData.title;
-          if (onboardingData.bio) profileUpdate.about = onboardingData.bio;
-          if (onboardingData.location) profileUpdate.location = onboardingData.location;
-          if (onboardingData.skills?.length > 0) profileUpdate.skills = onboardingData.skills;
-          if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
-            profileUpdate.avatar_url = onboardingData.avatarUri;
-          }
-          if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
-
-          const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', userId);
-          if (error) console.error('[Onboarding] Supabase save error:', error);
-          else console.log('[Onboarding] Profile saved to Supabase');
-        }
-
-        try {
-          await notificationService.requestPermissionsAndRegisterToken();
-        } catch (e) {
-          console.error('[Onboarding] Notification permission error:', e);
-        }
-      } catch (error) {
-        console.error('[Onboarding] saveProfile error:', error);
-      }
-    };
-
-    saveProfile();
-  }, [scaleAnim, fadeAnim, userId, onboardingData]);
+  }, [scaleAnim, fadeAnim]);
 
   const handleContinue = async () => {
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
 
-    // Step 1: Wait briefly for saveProfile to complete (best-effort).
-    if (!hasSavedRef.current) {
-      await new Promise<void>((resolve) => {
-        const startedAt = Date.now();
-        const interval = setInterval(() => {
-          if (hasSavedRef.current || Date.now() - startedAt > 2000) {
-            clearInterval(interval);
-            resolve();
-          }
-        }, 50);
-      });
-    }
-
-    // Step 1b: Refresh the in-memory auth profile (non-blocking failure)
+    // Step 1: Write ALL onboarding data + onboarding_completed: true to Supabase
+    // AND patch the in-memory AuthContext profile in one atomic call.
+    // Using authProfileService.updateProfile() instead of a bare supabase.update()
+    // because it: (a) writes to the DB, (b) updates the in-memory profile, (c) notifies
+    // AuthContext listeners — so bounty-app.tsx sees onboarding_completed: true on
+    // its very first render and never redirects back. Doing this here (not on mount)
+    // guarantees the DB write is complete before we navigate. (reviewer comment #1)
     try {
-      await authProfileService.refreshProfile();
-      console.log('[Onboarding] authProfileService refreshed after saveProfile');
-    } catch (err) {
-      console.error('[Onboarding] refreshProfile failed after onboarding:', err);
+      const profileUpdate: Partial<Profile> = { onboarding_completed: true };
+      if (onboardingData.username) profileUpdate.username = onboardingData.username;
+      if (onboardingData.displayName) profileUpdate.display_name = onboardingData.displayName;
+      if (onboardingData.title) profileUpdate.title = onboardingData.title;
+      if (onboardingData.bio) profileUpdate.about = onboardingData.bio;
+      if (onboardingData.location) profileUpdate.location = onboardingData.location;
+      if (onboardingData.skills?.length > 0) profileUpdate.skills = onboardingData.skills;
+      if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
+        profileUpdate.avatar_url = onboardingData.avatarUri;
+      }
+      if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
+
+      await authProfileService.updateProfile(profileUpdate as any);
+      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+      console.log('[Onboarding] Profile written to Supabase + AuthContext updated');
+    } catch (e) {
+      console.error('[Onboarding] updateProfile failed:', e);
+      // Non-fatal — we still navigate. The user can retry profile edits from
+      // the Profile tab. Do not block them here.
     }
 
-    // Step 2: Clear onboarding form context (best-effort)
+    // Step 2: Request notification permissions (best effort, non-blocking)
+    try {
+      await notificationService.requestPermissionsAndRegisterToken();
+    } catch (e) {
+      console.error('[Onboarding] Notification permission error:', e);
+    }
+
+    // Step 3: Clear onboarding form context (reviewer comment #2 — wrapped in try-catch
+    // so a failing AsyncStorage write doesn't strand the user on this screen)
     try {
       await clearOnboardingData();
-    } catch (err) {
-      console.error('[Onboarding] clearOnboardingData failed:', err);
+    } catch (e) {
+      console.error('[Onboarding] clearOnboardingData failed:', e);
     }
 
     // Step 3: Refresh secondary caches (best effort, non-blocking)
@@ -137,11 +117,10 @@ export default function DoneScreen() {
         const completeness = await userProfileService.checkCompleteness(userId);
         await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(userId), { profile, completeness });
       }
-    } catch (err) {
-      console.warn('[Onboarding] cache refresh failed:', err);
-    }
+    } catch (e) { /* non-critical */ }
 
     // Step 4: Give React one microtask tick to flush the AuthContext state
+    // update from authProfileService before the new route mounts.
     await new Promise(resolve => setTimeout(resolve, 0));
 
     router.replace('/tabs/bounty-app');
