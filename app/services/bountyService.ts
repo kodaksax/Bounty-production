@@ -45,6 +45,12 @@ export const bountyService = {
     });
 
     try {
+      // Title validation guard — reject empty or too-short titles before any DB work
+      const trimmedTitle = (draft.title ?? '').trim();
+      if (!trimmedTitle || trimmedTitle.length < 5) {
+        throw new Error('Title is required and must be at least 5 characters.');
+      }
+
       // Enforce posting to Supabase only for this guided flow
       if (!isSupabaseConfigured) {
         const reasons: string[] = []

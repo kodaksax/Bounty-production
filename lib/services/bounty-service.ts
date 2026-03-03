@@ -659,6 +659,12 @@ export const bountyService = {
    */
   async create(bounty: Omit<Bounty, "id" | "created_at">): Promise<Bounty | null> {
     try {
+      // Title validation guard — reject empty or too-short titles before any DB work
+      const trimmedTitle = (bounty.title ?? '').trim();
+      if (!trimmedTitle || trimmedTitle.length < 5) {
+        throw new Error('Title is required and must be at least 5 characters after trimming whitespace.');
+      }
+
       // Spam prevention: rate limiting - max 10 bounties per day
       const posterId = (bounty as any).poster_id || (bounty as any).user_id;
       if (posterId && isSupabaseConfigured) {

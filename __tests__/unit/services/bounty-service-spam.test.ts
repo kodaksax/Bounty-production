@@ -344,4 +344,63 @@ describe('Bounty Service - Spam Prevention', () => {
       );
     });
   });
+
+  describe('Title Validation Guard', () => {
+    it('should reject bounty with empty title', async () => {
+      const bounty = createTestBounty({ title: '' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required and must be at least 5 characters'
+      );
+    });
+
+    it('should reject bounty with whitespace-only title', async () => {
+      const bounty = createTestBounty({ title: '     ' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required and must be at least 5 characters'
+      );
+    });
+
+    it('should reject bounty with title shorter than 5 trimmed characters', async () => {
+      const bounty = createTestBounty({ title: '  ab ' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required and must be at least 5 characters'
+      );
+    });
+
+    it('should reject bounty with undefined title', async () => {
+      const bounty = createTestBounty({ title: undefined });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required and must be at least 5 characters'
+      );
+    });
+
+    it('should accept bounty with valid title (>= 5 trimmed chars)', async () => {
+      // Set up mocks so the create call progresses past title validation
+      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
+      const duplicateChain = createMockQueryChain({ data: [], error: null });
+      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
+      const insertChain = createMockQueryChain({
+        data: { id: 1, title: 'Valid Title' },
+        error: null,
+      });
+
+      let callCount = 0;
+      supabase.from.mockImplementation((table: string) => {
+        callCount++;
+        if (table === 'bounties' && callCount === 1) return rateLimitChain;
+        if (table === 'bounties' && callCount === 2) return duplicateChain;
+        if (table === 'profiles') return profileChain;
+        return insertChain;
+      });
+
+      const bounty = createTestBounty({ title: 'Valid Title' });
+
+      // Should not throw title validation error
+      try {
+        await bountyService.create(bounty);
+      } catch (error: any) {
+        expect(error.message).not.toContain('Title is required');
+      }
+    });
+  });
 });
