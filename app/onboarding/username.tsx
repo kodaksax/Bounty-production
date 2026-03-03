@@ -171,22 +171,33 @@ export default function UsernameScreen() {
         console.error('[onboarding] Local profile save error:', localError);
       });
 
-      // Update username in existing profile (auto-created on signup via database trigger).
-      // Use update() + eq() instead of upsert() to avoid INSERT-path issues
-      // that can cause the request to hang indefinitely on conflict resolution.
-      // Wrapped in Promise.race with a timeout so a slow/stuck network request
-      // surfaces an error instead of blocking the user forever.
-      const SAVE_TIMEOUT_MS = 15000;
+      // Upsert the username into the profiles table.
+      // upsert() handles both the "profile already exists" (UPDATE path) and the
+      // rare "profile row missing" (INSERT path) cases in one round-trip.
+      // onConflict:'id' ensures that a conflict on the primary key triggers an
+      // update rather than an error, while a conflict on the UNIQUE username
+      // column (different user already owns it) still surfaces as error 23505.
+      // Wrapped in Promise.race so a non-responsive network surfaces quickly
+      // instead of blocking the user indefinitely.
+      const SAVE_TIMEOUT_MS = 10000;
       let saveTimerId: ReturnType<typeof setTimeout> | undefined;
+
+      class SaveTimeoutError extends Error {
+        constructor() { super('SaveTimeoutError'); this.name = 'SaveTimeoutError'; }
+      }
 
       const supabaseResult = await Promise.race([
         supabase
           .from('profiles')
-          .update({ username })
-          .eq('id', userId),
+          .upsert(
+            { id: userId, username, onboarding_completed: false },
+            { onConflict: 'id' },
+          )
+          .select('id, username')
+          .single(),
         new Promise<never>((_, reject) => {
           saveTimerId = setTimeout(
-            () => reject(new Error('Save timed out. Please check your connection and try again.')),
+            () => reject(new SaveTimeoutError()),
             SAVE_TIMEOUT_MS,
           );
         }),
@@ -200,11 +211,9 @@ export default function UsernameScreen() {
           setSubmitTick((t) => t + 1);
           return;
         }
-        console.error('[onboarding] Supabase update error:', supabaseResult.error);
-        setError('Failed to save profile. Please try again.');
-        submittingRef.current = false;
-        setSubmitTick((t) => t + 1);
-        return;
+        // For other Supabase errors log and fall through to navigate anyway —
+        // the username can be retried from profile settings.
+        console.error('[onboarding] Supabase upsert error:', supabaseResult.error);
       }
 
       // Fire-and-forget: sync auth profile cache (non-blocking)
@@ -226,9 +235,27 @@ export default function UsernameScreen() {
       }
     } catch (err) {
       console.error('[onboarding] Error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save username. Please try again.');
-      submittingRef.current = false;
-      setSubmitTick((t) => t + 1);
+      if (err instanceof Error && err.name === 'SaveTimeoutError') {
+        // Network too slow — save locally and let the user continue onboarding.
+        // The username will be synced on the next successful Supabase operation.
+        console.warn('[onboarding] Save timed out — proceeding with local save only');
+        updateAuthProfile({ username }).catch((authError) => {
+          console.error('[onboarding] Error updating auth profile after timeout:', authError);
+        });
+        try {
+          router.push('/onboarding/details');
+        } catch (navError) {
+          console.error('[onboarding] Navigation error after timeout:', navError);
+          setError('Navigation failed. Please try again.');
+        } finally {
+          submittingRef.current = false;
+          setSubmitTick((t) => t + 1);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to save username. Please try again.');
+        submittingRef.current = false;
+        setSubmitTick((t) => t + 1);
+      }
     }
   };
 
