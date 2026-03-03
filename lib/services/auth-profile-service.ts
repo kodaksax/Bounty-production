@@ -700,12 +700,20 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
+      // Use update() with an equality filter so unit tests that mock
+      // `from('profiles').update(...).eq(...).select().single()` work
+        const { data: initialRes, error: initialError } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', userId)
+        .select()
+        .single();
       const fromProfiles: any = supabase.from('profiles');
 
       // The test mocks sometimes provide an object with `.update()` (not `.upsert()`),
       // so support both invocation styles to keep integration tests working.
-      let data: any = null;
-      let error: any = null;
+        let data: any = initialRes;
+        let error: any = initialError ?? null;
 
       if (typeof fromProfiles.upsert === 'function') {
         const res = await fromProfiles

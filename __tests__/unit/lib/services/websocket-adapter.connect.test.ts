@@ -1,163 +1,200 @@
-jest.useFakeTimers()
-
-describe('wsAdapter.connect() token fallback', () => {
+describe('wsAdapter — Supabase Realtime', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
+  })
+
+  it('connects via supabase.channel and emits connect on SUBSCRIBED', async () => {
+    const subscribeMock = jest.fn()
+    const onMock = jest.fn().mockReturnThis()
+    const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
+
+    let subscribeCb: ((status: string) => void) | null = null
+    subscribeMock.mockImplementation((cb: (status: string) => void) => {
+      subscribeCb = cb
+      return channelMock
+    })
+
+    const channelFactoryMock = jest.fn().mockReturnValue(channelMock)
+    const getSessionMock = jest.fn().mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+    })
+
+    jest.doMock('../../../../lib/supabase', () => ({
+      supabase: {
+        auth: { getSession: getSessionMock },
+        channel: channelFactoryMock,
+        removeChannel: jest.fn().mockResolvedValue(undefined),
+      },
+    }))
+
+    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
+
+    const connectPromise = wsAdapter.connect()
+
+    // Simulate Supabase Realtime reporting SUBSCRIBED
+    if (subscribeCb) (subscribeCb as any)('SUBSCRIBED')
+
+    await connectPromise
+
+    expect(channelFactoryMock).toHaveBeenCalledWith('realtime:app-events', expect.any(Object))
+    expect(wsAdapter.isConnected()).toBe(true)
+    expect(wsAdapter.getConnectionState()).toBe('OPEN')
+  })
+
+  it('does not create a second channel when called twice while connected', async () => {
+    const subscribeMock = jest.fn()
+    const onMock = jest.fn().mockReturnThis()
+    const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
+
+    subscribeMock.mockImplementation((cb: (status: string) => void) => {
+      cb('SUBSCRIBED')
+      return channelMock
+    })
+
+    const channelFactoryMock = jest.fn().mockReturnValue(channelMock)
+    const getSessionMock = jest.fn().mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+    })
+
+    jest.doMock('../../../../lib/supabase', () => ({
+      supabase: {
+        auth: { getSession: getSessionMock },
+        channel: channelFactoryMock,
+        removeChannel: jest.fn().mockResolvedValue(undefined),
+      },
+    }))
+
+    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
+
+    await wsAdapter.connect()
+    await wsAdapter.connect() // second call should be no-op
+
+    expect(channelFactoryMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits disconnect and cleans up channels on disconnect()', async () => {
+    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const subscribeMock = jest.fn()
+    const onMock = jest.fn().mockReturnThis()
+    const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
+
+    subscribeMock.mockImplementation((cb: (status: string) => void) => {
+      cb('SUBSCRIBED')
+      return channelMock
+    })
+
+    jest.doMock('../../../../lib/supabase', () => ({
+      supabase: {
+        auth: { getSession: jest.fn().mockResolvedValue({ data: { session: { user: { id: 'u1' } } } }) },
+        channel: jest.fn().mockReturnValue(channelMock),
+        removeChannel: removeChannelMock,
+      },
+    }))
+
+    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
+
+    const disconnectEvents: any[] = []
+    wsAdapter.on('disconnect', (d: any) => disconnectEvents.push(d))
+
+    await wsAdapter.connect()
+    wsAdapter.disconnect()
+
+    expect(wsAdapter.isConnected()).toBe(false)
+    expect(removeChannelMock).toHaveBeenCalledWith(channelMock)
+    expect(disconnectEvents.length).toBeGreaterThan(0)
+  })
+
+  it('auto-reconnects when subscription status is CHANNEL_ERROR', async () => {
     jest.useFakeTimers()
-  })
 
-  afterEach(() => {
+    const subscribeMock = jest.fn()
+    const onMock = jest.fn().mockReturnThis()
+    const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
+
+    let subscriptionStatusCb: ((status: string) => void) | undefined
+
+    subscribeMock.mockImplementation((cb: (status: string) => void) => {
+      subscriptionStatusCb = cb
+      return channelMock
+    })
+
+    const channelFactoryMock = jest.fn().mockReturnValue(channelMock)
+    const getSessionMock = jest.fn().mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+    })
+
+    jest.doMock('../../../../lib/supabase', () => ({
+      supabase: {
+        auth: { getSession: getSessionMock },
+        channel: channelFactoryMock,
+        removeChannel: jest.fn().mockResolvedValue(undefined),
+      },
+    }))
+
+    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
+
+    await wsAdapter.connect()
+    expect(subscriptionStatusCb).toBeDefined()
+
+    // Simulate initial successful subscription.
+    subscriptionStatusCb && subscriptionStatusCb('SUBSCRIBED')
+    expect(channelFactoryMock).toHaveBeenCalledTimes(1)
+
+    // Simulate a CHANNEL_ERROR, which should schedule a reconnect via setTimeout.
+    subscriptionStatusCb && subscriptionStatusCb('CHANNEL_ERROR')
+
+    // Fast-forward all timers so the scheduled reconnect runs.
+    jest.runAllTimers()
+
+    // Allow any pending promises in reconnect() / connect() to resolve.
+    await Promise.resolve()
+
+    expect(channelFactoryMock).toHaveBeenCalledTimes(2)
+
     jest.useRealTimers()
-    // restore global WebSocket
-    // @ts-ignore
-    delete global.WebSocket
   })
 
-  it('proceeds to create WebSocket when token arrives via onAuthStateChange', async () => {
-    const unsubscribeMock = jest.fn()
+  it('reconnect() tears down existing channel and creates a new one', async () => {
+    const removeChannelMock = jest.fn().mockResolvedValue(undefined)
+    const subscribeMock = jest.fn()
+    const onMock = jest.fn().mockReturnThis()
+    const channelMock = { on: onMock, subscribe: subscribeMock, send: jest.fn().mockResolvedValue('ok'), state: 'joined' }
 
-    const onAuthStateChangeMock = jest.fn((cb: any) => {
-      // Provide session synchronously for deterministic test behavior
-      cb('SIGNED_IN', { access_token: 'tok-abc' })
-      return { data: { subscription: { unsubscribe: unsubscribeMock } } }
+    subscribeMock.mockImplementation((cb: (status: string) => void) => {
+      // Immediately mark the channel as subscribed.
+      cb('SUBSCRIBED')
+      return channelMock
     })
 
-    const getSessionMock = jest.fn().mockResolvedValue({ data: { session: null } })
+    const channelFactoryMock = jest.fn().mockReturnValue(channelMock)
 
     jest.doMock('../../../../lib/supabase', () => ({
       supabase: {
-        auth: {
-          getSession: getSessionMock,
-          onAuthStateChange: onAuthStateChangeMock,
-        },
+        auth: { getSession: jest.fn().mockResolvedValue({ data: { session: { user: { id: 'u1' } } } }) },
+        channel: channelFactoryMock,
+        removeChannel: removeChannelMock,
       },
     }))
 
-    // Mock NetInfo to report connected
-    jest.doMock('@react-native-community/netinfo', () => ({
-      fetch: jest.fn().mockResolvedValue({ isConnected: true }),
-    }))
-
-    // Provide a fake probeHost by mocking the module function on the adapter after import
-
-    // Mock global WebSocket constructor to capture URL
-    let createdUrl: string | undefined
-    // @ts-ignore
-    global.WebSocket = jest.fn().mockImplementation((url: string) => {
-      createdUrl = url
-      return {
-        send: jest.fn(),
-        close: jest.fn(),
-        readyState: 1,
-        onopen: null,
-        onmessage: null,
-        onclose: null,
-        onerror: null,
-      }
-    })
+    jest.useFakeTimers()
 
     const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
 
-    // stub probeHost to avoid network calls
-    jest.spyOn(wsAdapter as any, 'probeHost').mockResolvedValue(true)
+    // Initial connect should create the first channel.
+    await wsAdapter.connect()
+    expect(channelFactoryMock).toHaveBeenCalledTimes(1)
 
-    const p = wsAdapter.connect()
-    // trigger the async auth callback
-    jest.runOnlyPendingTimers()
-    await p
-
-    expect(getSessionMock).toHaveBeenCalled()
-    expect(onAuthStateChangeMock).toHaveBeenCalled()
-    expect(unsubscribeMock).toHaveBeenCalled()
-    expect(createdUrl).toBeDefined()
-    expect(createdUrl).toContain('token=tok-abc')
-  })
-
-  it('times out and does not create a WebSocket when no token appears', async () => {
-    const unsubscribeMock = jest.fn()
-    const onAuthStateChangeMock = jest.fn((_cb: any) => {
-      // never call the callback
-      return { data: { subscription: { unsubscribe: unsubscribeMock } } }
-    })
-
-    const getSessionMock = jest.fn().mockResolvedValue({ data: { session: null } })
-
-    jest.doMock('../../../../lib/supabase', () => ({
-      supabase: {
-        auth: {
-          getSession: getSessionMock,
-          onAuthStateChange: onAuthStateChangeMock,
-        },
-      },
-    }))
-
-    jest.doMock('@react-native-community/netinfo', () => ({
-      fetch: jest.fn().mockResolvedValue({ isConnected: true }),
-    }))
-
-    // @ts-ignore
-    global.WebSocket = jest.fn()
-
-    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
-    jest.spyOn(wsAdapter as any, 'probeHost').mockResolvedValue(true)
-
-    // Start connect but don't await the returned promise; instead drive timers
-    // and assert side-effects. This prevents the test from hanging if the
-    // internal promise is still pending while timers run under fake timers.
-    wsAdapter.connect()
-    // allow microtasks to let connect() advance to the timer scheduling
-    await Promise.resolve()
-    // Force any pending timers (including the 5s fallback) to run
-    jest.runOnlyPendingTimers()
-    // allow microtasks
+    // Calling reconnect() should tear down the old channel and create a new one.
+    wsAdapter.reconnect()
+    // Fast-forward the 100ms delay inside reconnect().
+    jest.runAllTimers()
     await Promise.resolve()
 
-    // No WebSocket should have been constructed
-    // @ts-ignore
-    expect(global.WebSocket).not.toHaveBeenCalled()
-    expect(onAuthStateChangeMock).toHaveBeenCalled()
-    expect(unsubscribeMock).toHaveBeenCalled()
-  })
+    expect(removeChannelMock).toHaveBeenCalledWith(channelMock)
+    expect(channelFactoryMock).toHaveBeenCalledTimes(2)
 
-  it('clears timeout and only unsubscribes once when token arrives early', async () => {
-    const unsubscribeMock = jest.fn()
-
-    const onAuthStateChangeMock = jest.fn((cb: any) => {
-      // Provide session synchronously to ensure timeout is cleared
-      cb('SIGNED_IN', { access_token: 'tok-xyz' })
-      return { data: { subscription: { unsubscribe: unsubscribeMock } } }
-    })
-
-    const getSessionMock = jest.fn().mockResolvedValue({ data: { session: null } })
-
-    jest.doMock('../../../../lib/supabase', () => ({
-      supabase: {
-        auth: {
-          getSession: getSessionMock,
-          onAuthStateChange: onAuthStateChangeMock,
-        },
-      },
-    }))
-
-    jest.doMock('@react-native-community/netinfo', () => ({
-      fetch: jest.fn().mockResolvedValue({ isConnected: true }),
-    }))
-
-    // @ts-ignore
-    global.WebSocket = jest.fn().mockImplementation(() => ({ send: jest.fn(), close: jest.fn(), readyState: 1 }))
-
-    const { wsAdapter } = require('../../../../lib/services/websocket-adapter')
-    jest.spyOn(wsAdapter as any, 'probeHost').mockResolvedValue(true)
-
-    const p = wsAdapter.connect()
-    // trigger the auth callback after 10ms
-    jest.advanceTimersByTime(10)
-    await p
-
-    // advance far past the timeout window to see if the timeout handler would try to unsubscribe again
-    jest.advanceTimersByTime(6000)
-
-    expect(unsubscribeMock).toHaveBeenCalledTimes(1)
+    jest.useRealTimers()
   })
 })
+
