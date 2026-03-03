@@ -59,8 +59,8 @@ describe('Bounty Service - Spam Prevention', () => {
     chain.eq = jest.fn().mockReturnValue(chain);
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.in = jest.fn().mockReturnValue(chain);
-    chain.single = jest.fn().mockReturnValue(chain);
-    chain.insert = jest.fn().mockResolvedValue(finalResult);
+    chain.single = jest.fn().mockResolvedValue(finalResult);
+    chain.insert = jest.fn().mockReturnValue(chain);
     chain.update = jest.fn().mockReturnValue(chain);
     chain.maybeSingle = jest.fn().mockResolvedValue({ data: { username: 'testuser' }, error: null });
     
