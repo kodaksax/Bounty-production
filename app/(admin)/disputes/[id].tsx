@@ -17,7 +17,6 @@ import { AdminCard } from '../../../components/admin/AdminCard';
 import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useAdmin } from '../../../lib/admin-context';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute, BountyCancellation } from '../../../lib/types';
@@ -32,9 +31,7 @@ interface DisputeDetailData {
 export default function AdminDisputeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { session } = useAuthContext();
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
-  const adminId = session?.user?.id;
 
   const [data, setData] = useState<DisputeDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +40,8 @@ export default function AdminDisputeDetailScreen() {
   const [showResolveForm, setShowResolveForm] = useState(false);
 
   const loadDisputeDetails = useCallback(async () => {
+    if (!isAdmin || isAdminLoading) return;
+    
     try {
       setLoading(true);
       const dispute = await disputeService.getDisputeById(id);
@@ -65,7 +64,7 @@ export default function AdminDisputeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, isAdmin, isAdminLoading]);
 
   useEffect(() => {
     loadDisputeDetails();
@@ -89,7 +88,7 @@ export default function AdminDisputeDetailScreen() {
   };
 
   const handleResolveDispute = async () => {
-    if (!data || !adminId) {
+    if (!data) {
       Alert.alert('Error', 'Missing required information');
       return;
     }
@@ -112,8 +111,7 @@ export default function AdminDisputeDetailScreen() {
               setResolving(true);
               const success = await disputeService.resolveDispute(
                 data.dispute.id,
-                resolution,
-                adminId
+                resolution
               );
 
               if (success) {

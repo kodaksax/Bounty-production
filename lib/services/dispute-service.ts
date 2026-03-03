@@ -362,19 +362,20 @@ export const disputeService = {
    */
   async resolveDispute(
     disputeId: string,
-    resolution: string,
-    resolvedBy: string
+    resolution: string
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
       }
 
-      // Verify the resolving user has admin role
-      if (!(await verifyAdminRole())) {
-        logger.error('Non-admin attempted to resolve dispute', { disputeId, resolvedBy });
+      // Verify the resolving user has admin role and derive resolved_by from session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id || session.user.app_metadata?.role !== 'admin') {
+        logger.error('Non-admin attempted to resolve dispute', { disputeId });
         throw new Error('Unauthorized: admin role required');
       }
+      const resolvedBy = session.user.id;
 
       // Get the dispute first to access its data
       const dispute = await this.getDisputeById(disputeId);
@@ -772,7 +773,7 @@ export const disputeService = {
       }
 
       // Update dispute status (this will send notifications to all parties)
-      await this.resolveDispute(disputeId, decision.rationale, adminId);
+      await this.resolveDispute(disputeId, decision.rationale);
 
       // Log audit event
       await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {
