@@ -1,13 +1,15 @@
 import getApiBaseFallback from 'lib/utils/dev-host'
 import { getReachableApiBaseUrl } from 'lib/utils/network'
 
-// Supabase Edge Functions base URL (set EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL in your .env).
-// When set, modules that import API_BASE_URL or call getApiBaseUrl() will route requests
-// through Edge Functions instead of the legacy Node server.
+// Supabase Edge Functions base URL.
+// Prefer EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL when explicitly set; otherwise
+// derive from EXPO_PUBLIC_SUPABASE_URL so wallet/payments route to Edge
+// Functions automatically without extra configuration.
 // Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
-const supabaseFunctionsUrl = (
-  (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined) || ''
-).replace(/\/+$/, '') // strip any accidental trailing slashes
+const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim() || ''
+const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim() || ''
+const derivedFunctionsUrl = supabaseBaseUrl ? `${supabaseBaseUrl.replace(/\/+$/, '')}/functions/v1` : ''
+const supabaseFunctionsUrl = (explicitFunctionsUrl || derivedFunctionsUrl).replace(/\/+$/, '')
 
 // Preferred environment variables (Expo public envs are bundled to client)
 const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
