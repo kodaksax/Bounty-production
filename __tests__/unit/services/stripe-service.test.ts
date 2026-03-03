@@ -620,4 +620,68 @@ describe('Stripe Service', () => {
       expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
     });
   });
+
+  describe('refundEscrow', () => {
+    it('should successfully refund an escrow', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          paymentIntentId: 'pi_test_refund',
+          refundAmount: 5000,
+          status: 'refunded',
+        }),
+      });
+
+      const result = await stripeService.refundEscrow('escrow-123', 'auth-token');
+
+      expect(result).toEqual({
+        paymentIntentId: 'pi_test_refund',
+        refundAmount: 5000,
+        status: 'refunded',
+      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/payments/escrows/escrow-123/refund'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(performanceService.startMeasurement).toHaveBeenCalledWith('escrow_refund', 'payment_process', { escrowId: 'escrow-123' });
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: true }));
+    });
+
+    it('should handle paymentIntent nested response format', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          paymentIntent: { id: 'pi_nested_refund' },
+          refundAmount: 3000,
+          status: 'refunded',
+        }),
+      });
+
+      const result = await stripeService.refundEscrow('escrow-456');
+
+      expect(result.paymentIntentId).toBe('pi_nested_refund');
+      expect(result.refundAmount).toBe(3000);
+    });
+
+    it('should throw on API error response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      await expect(stripeService.refundEscrow('escrow-err')).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: false, status: 500 }));
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+
+      await expect(stripeService.refundEscrow('escrow-net')).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: false }));
+    });
+
+    it('should throw validation error when escrowId is empty', async () => {
+      await expect(stripeService.refundEscrow('')).rejects.toBeDefined();
+    });
+  });
 });

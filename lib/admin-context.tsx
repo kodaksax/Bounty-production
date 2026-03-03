@@ -40,11 +40,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
-      // Check user metadata for admin role
-      // In production, this should be verified via a backend API call
-      // that checks the database for the user's role
-      const isAdminUser = session.user?.user_metadata?.role === 'admin' || 
-                          session.user?.app_metadata?.role === 'admin';
+      // Check app_metadata for admin role (not user_metadata, which is user-writable)
+      const isAdminUser = session.user?.app_metadata?.role === 'admin';
       
       if (isAdminUser) {
         await AsyncStorage.setItem(ADMIN_VERIFIED_AT_KEY, Date.now().toString());

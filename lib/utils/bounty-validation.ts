@@ -5,6 +5,27 @@
  */
 
 /**
+ * Validates a bounty title. Uses trimmed length so whitespace-padded
+ * strings are rejected.
+ *
+ * @param value - The raw title string
+ * @returns Error message string if invalid, null if valid
+ */
+export function validateTitle(value: string | undefined | null): string | null {
+  const trimmed = (value ?? '').trim();
+  if (trimmed.length === 0) {
+    return 'Title is required';
+  }
+  if (trimmed.length < 5) {
+    return 'Title must be at least 5 characters';
+  }
+  if (trimmed.length > 120) {
+    return 'Title must not exceed 120 characters';
+  }
+  return null;
+}
+
+/**
  * Validates if the given amount is within the user's wallet balance.
  * Honor bounties skip balance validation as they don't require payment.
  * 

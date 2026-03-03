@@ -723,6 +723,12 @@ export class AuthProfileService {
         data = res.data ?? null;
         error = res.error ?? null;
       }
+      } else {
+        logger.error('Supabase client missing upsert/update methods for profiles table');
+        return null;
+      }
+
+      const { data, error } = res || { data: null, error: null };
 
       if (error) {
         throw error;
