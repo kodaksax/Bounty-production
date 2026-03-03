@@ -49,7 +49,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       }
 
       // Check balance before posting using shared validation (for non-honor bounties)
-      // This pre-check provides immediate user feedback before attempting creation
       if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
         throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
@@ -71,7 +70,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         });
 
         if (!withdrawSuccess) {
-          // Attempt to roll back: delete the bounty since funds could not be escrowed
           try {
             await bountyService.deleteBounty(result.id);
             console.error('Bounty creation rolled back due to failed fund deduction.');
@@ -81,49 +79,56 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           }
           throw new Error('Failed to deduct funds from wallet. Your bounty was not posted.');
         }
-
-        // No need to log a separate bounty_posted transaction; withdraw() already logs the transaction.
       }
 
       // Clear draft on success
       await clearDraft();
 
-      // Check if we're online to show appropriate message
       const { offlineQueueService } = await import('lib/services/offline-queue-service');
       const isOnline = offlineQueueService.getOnlineStatus();
 
-      // Show success message
-      Alert.alert(
-        isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📤',
-        isOnline
-          ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
-          : 'You\'re offline. Your bounty will be posted automatically when you reconnect.',
-        [
-          {
-            text: isOnline ? 'View Bounty' : 'OK',
-            onPress: () => {
-              if (onComplete) {
-                onComplete(result.id.toString());
-              }
+      if (Platform.OS === 'web') {
+        // Alert.alert is a no-op on web — navigate immediately after success
+        if (onComplete) {
+          onComplete(result.id.toString());
+        }
+      } else {
+        Alert.alert(
+          isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📋',
+          isOnline
+            ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
+            : "You're offline. Your bounty will be posted automatically when you reconnect.",
+          [
+            {
+              text: isOnline ? 'View Bounty' : 'OK',
+              onPress: () => {
+                if (onComplete) {
+                  onComplete(result.id.toString());
+                }
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
     },
     {
       debounceMs: 1000,
       onError: (error) => {
         const userError = getUserFriendlyError(error);
-        Alert.alert(
-          userError.title,
-          userError.message + '\n\nYour draft has been saved. Please try again.',
-          [{ text: 'OK' }]
-        );
+        if (Platform.OS === 'web') {
+          // Error is already surfaced via the ErrorBanner component below
+          console.error('Bounty post error:', error);
+        } else {
+          Alert.alert(
+            userError.title,
+            userError.message + '\n\nYour draft has been saved. Please try again.',
+            [{ text: 'OK' }]
+          );
+        }
       },
     }
   );
 
-  // Auto-save draft whenever it changes
   useEffect(() => {
     if (!isLoading) {
       // Draft is already saved via saveDraft calls in step components
@@ -145,36 +150,36 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      'Discard Draft?',
-      'Your progress will be saved. You can return to this draft anytime.',
-      [
-        { text: 'Keep Editing', style: 'cancel' },
-        {
-          text: 'Exit',
-          style: 'destructive',
-          onPress: () => {
-            if (onCancel) onCancel();
+    if (Platform.OS === 'web') {
+      // Alert.alert is a no-op on web — call onCancel directly
+      if (onCancel) onCancel();
+    } else {
+      Alert.alert(
+        'Discard Draft?',
+        'Your progress will be saved. You can return to this draft anytime.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Exit',
+            style: 'destructive',
+            onPress: () => {
+              if (onCancel) onCancel();
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
-  // Handle hardware back button logic
   useBackHandler(() => {
-    // If not at the first step, go back one step
     if (currentStep > 1) {
       handleBack();
-      return true; // Consume the event
+      return true;
     }
-
-    // If at the first step, show the cancel/discard alert
     handleCancel();
-    return true; // Consume the event
+    return true;
   }, true);
 
-  // Notify consumer on initial mount and whenever currentStep changes.
   useEffect(() => {
     onStepChange?.(currentStep);
   }, [currentStep, onStepChange]);
@@ -195,12 +200,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       keyboardVerticalOffset={insets.top}
     >
       <View className="flex-1">
-        {/* Email Verification Banner */}
         {!isEmailVerified && (
           <EmailVerificationBanner email={userEmail} />
         )}
 
-        {/* Inline Stepper (no duplicate app header) */}
         <View className="px-0" style={{ paddingTop: 8, paddingBottom: 8 }}>
           <StepperHeader
             currentStep={currentStep}
@@ -209,7 +212,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           />
         </View>
 
-        {/* Step Content */}
         <View className="flex-1">
           {currentStep === 1 && (
             <StepTitle
@@ -253,7 +255,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           )}
         </View>
 
-        {/* Error Display */}
         {submitError && (
           <View className="px-4 pb-4">
             <ErrorBanner

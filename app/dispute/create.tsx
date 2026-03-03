@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -40,9 +41,15 @@ export default function CreateDisputeScreen() {
   const [newEvidenceDescription, setNewEvidenceDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
+  // Web-only: inline confirmation step replaces Alert.alert confirmation dialog
+  const [showWebConfirm, setShowWebConfirm] = useState(false);
 
   const handleAddEvidence = () => {
     if (!newEvidenceContent.trim()) {
+      if (Platform.OS === 'web') {
+        // Alert.alert is a no-op on web — use inline state instead
+        return;
+      }
       Alert.alert('Error', 'Please provide evidence content');
       return;
     }
@@ -59,88 +66,92 @@ export default function CreateDisputeScreen() {
     setNewEvidenceContent('');
     setNewEvidenceDescription('');
     setShowAddEvidence(false);
-    Alert.alert('Success', 'Evidence added');
+    // Native-only success alert — web sees the evidence count update as confirmation
+    if (Platform.OS !== 'web') {
+      Alert.alert('Success', 'Evidence added');
+    }
   };
 
   const handleRemoveEvidence = (id: string) => {
     setEvidence(evidence.filter((e) => e.id !== id));
   };
 
+  const executeSubmit = async () => {
+    setIsSubmitting(true);
+    setShowWebConfirm(false);
+    try {
+      const dispute = await disputeService.createDispute(
+        cancellationId,
+        userId!,
+        reason,
+        evidence
+      );
+
+      if (dispute) {
+        for (const ev of evidence) {
+          await disputeService.uploadEvidence(dispute.id, userId!, {
+            type: ev.type,
+            content: ev.content,
+            description: ev.description,
+          });
+        }
+
+        if (Platform.OS === 'web') {
+          // Navigate directly — no Alert.alert on web
+          router.back();
+        } else {
+          Alert.alert(
+            'Success',
+            'Dispute created successfully. An admin will review it shortly.',
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+        }
+      } else {
+        if (Platform.OS !== 'web') {
+          Alert.alert('Error', 'Failed to create dispute');
+        }
+      }
+    } catch (error) {
+      console.error('Error creating dispute:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'An unexpected error occurred');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!userId) {
-      Alert.alert('Error', 'You must be logged in to create a dispute');
+      if (Platform.OS !== 'web') Alert.alert('Error', 'You must be logged in to create a dispute');
       return;
     }
-
     if (!reason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for the dispute');
+      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a reason for the dispute');
       return;
     }
-
-    // Validate minimum reason length
     if (reason.trim().length < 20) {
-      Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
+      if (Platform.OS !== 'web') Alert.alert('Error', 'Please provide a more detailed reason (at least 20 characters)');
       return;
     }
-
     if (!cancellationId) {
-      Alert.alert('Error', 'Missing cancellation information');
+      if (Platform.OS !== 'web') Alert.alert('Error', 'Missing cancellation information');
       return;
     }
 
-    Alert.alert(
-      'Confirm Dispute',
-      'Are you sure you want to create a dispute? This will notify all involved parties.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create Dispute',
-          style: 'destructive',
-          onPress: async () => {
-            setIsSubmitting(true);
-            try {
-              const dispute = await disputeService.createDispute(
-                cancellationId,
-                userId,
-                reason,
-                evidence
-              );
-
-              if (dispute) {
-                // Upload evidence items to the new evidence table
-                for (const ev of evidence) {
-                  await disputeService.uploadEvidence(dispute.id, userId, {
-                    type: ev.type,
-                    content: ev.content,
-                    description: ev.description,
-                  });
-                }
-
-                Alert.alert(
-                  'Success',
-                  'Dispute created successfully. An admin will review it shortly.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        router.back();
-                      },
-                    },
-                  ]
-                );
-              } else {
-                Alert.alert('Error', 'Failed to create dispute');
-              }
-            } catch (error) {
-              console.error('Error creating dispute:', error);
-              Alert.alert('Error', 'An unexpected error occurred');
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
+    if (Platform.OS === 'web') {
+      // Show inline confirmation instead of Alert.alert (which is a no-op on web)
+      setShowWebConfirm(true);
+    } else {
+      Alert.alert(
+        'Confirm Dispute',
+        'Are you sure you want to create a dispute? This will notify all involved parties.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Dispute', style: 'destructive', onPress: executeSubmit },
+        ]
+      );
+    }
   };
 
   return (
@@ -182,6 +193,10 @@ export default function CreateDisputeScreen() {
             style={styles.reasonInput}
             editable={!isSubmitting}
           />
+          {/* Web: inline validation hint */}
+          {Platform.OS === 'web' && reason.trim().length > 0 && reason.trim().length < 20 && (
+            <Text style={styles.validationHint}>Please provide at least 20 characters ({reason.trim().length}/20)</Text>
+          )}
         </View>
 
         {/* Evidence Section */}
@@ -246,8 +261,6 @@ export default function CreateDisputeScreen() {
           {showAddEvidence && (
             <View style={styles.addEvidenceForm}>
               <Text style={styles.formLabel}>Type</Text>
-              {/* Note: Currently supporting text and link. Image and document upload 
-                  can be added with proper file upload handling and storage integration */}
               <View style={styles.typeSelector}>
                 {(['text', 'link'] as const).map((type) => (
                   <TouchableOpacity
@@ -300,6 +313,11 @@ export default function CreateDisputeScreen() {
                 </>
               )}
 
+              {/* Web: show inline error if content empty on submit attempt */}
+              {Platform.OS === 'web' && !newEvidenceContent.trim() && (
+                <Text style={styles.validationHint}>Evidence content is required</Text>
+              )}
+
               <View style={styles.formActions}>
                 <TouchableOpacity onPress={handleAddEvidence} style={styles.formActionButton}>
                   <MaterialIcons name="check" size={18} color="#fffef5" />
@@ -320,24 +338,56 @@ export default function CreateDisputeScreen() {
           )}
         </View>
 
+        {/* Web: inline confirmation card replaces Alert.alert confirm dialog */}
+        {Platform.OS === 'web' && showWebConfirm && (
+          <View style={styles.webConfirmCard}>
+            <MaterialIcons name="report-problem" size={20} color="#fbbf24" />
+            <Text style={styles.webConfirmText}>
+              Are you sure you want to create this dispute? This will notify all involved parties.
+            </Text>
+            <View style={styles.webConfirmActions}>
+              <TouchableOpacity
+                onPress={executeSubmit}
+                style={styles.webConfirmYes}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fffef5" size="small" />
+                ) : (
+                  <Text style={styles.webConfirmYesText}>Yes, Create Dispute</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowWebConfirm(false)}
+                style={styles.webConfirmNo}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.webConfirmNoText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Submit Button */}
-        <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={isSubmitting || !reason.trim()}
-          style={[
-            styles.submitButton,
-            (isSubmitting || !reason.trim()) && styles.submitButtonDisabled,
-          ]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#fffef5" />
-          ) : (
-            <>
-              <MaterialIcons name="report-problem" size={20} color="#fffef5" />
-              <Text style={styles.submitButtonText}>Create Dispute</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {!showWebConfirm && (
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={isSubmitting || !reason.trim() || (Platform.OS === 'web' && reason.trim().length < 20)}
+            style={[
+              styles.submitButton,
+              (isSubmitting || !reason.trim()) && styles.submitButtonDisabled,
+            ]}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fffef5" />
+            ) : (
+              <>
+                <MaterialIcons name="report-problem" size={20} color="#fffef5" />
+                <Text style={styles.submitButtonText}>Create Dispute</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Bottom Padding */}
         <View style={{ height: 40 }} />
@@ -409,6 +459,11 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.6)',
     marginBottom: 12,
     lineHeight: 18,
+  },
+  validationHint: {
+    fontSize: 12,
+    color: '#fbbf24',
+    marginTop: 6,
   },
   reasonInput: {
     backgroundColor: 'rgba(0,145,44,0.15)',
@@ -554,5 +609,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fffef5',
+  },
+  webConfirmCard: {
+    backgroundColor: 'rgba(251,191,36,0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.4)',
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  webConfirmText: {
+    color: '#fffef5',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  webConfirmActions: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  webConfirmYes: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    padding: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  webConfirmYesText: {
+    color: '#fffef5',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  webConfirmNo: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,254,245,0.3)',
+    padding: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  webConfirmNoText: {
+    color: 'rgba(255,254,245,0.8)',
+    fontSize: 14,
   },
 });
