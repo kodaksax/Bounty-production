@@ -5,16 +5,16 @@ import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 
 /**
- * Verify that the given user has admin role via app_metadata
+ * Verify that the current session user has admin role via app_metadata
  */
-async function verifyAdminRole(userId: string): Promise<boolean> {
+async function verifyAdminRole(): Promise<boolean> {
   try {
     if (!isSupabaseConfigured) return false;
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session || session.user?.id !== userId) return false;
+    if (!session?.user) return false;
 
-    return session.user?.app_metadata?.role === 'admin';
+    return session.user.app_metadata?.role === 'admin';
   } catch {
     return false;
   }
@@ -330,7 +330,7 @@ export const disputeService = {
 
       // Verify the current user has admin role
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id || !(await verifyAdminRole(session.user.id))) {
+      if (!session?.user?.id || !(await verifyAdminRole())) {
         logger.error('Non-admin attempted to update dispute status', { disputeId, status });
         throw new Error('Unauthorized: admin role required');
       }
@@ -371,7 +371,7 @@ export const disputeService = {
       }
 
       // Verify the resolving user has admin role
-      if (!(await verifyAdminRole(resolvedBy))) {
+      if (!(await verifyAdminRole())) {
         logger.error('Non-admin attempted to resolve dispute', { disputeId, resolvedBy });
         throw new Error('Unauthorized: admin role required');
       }
