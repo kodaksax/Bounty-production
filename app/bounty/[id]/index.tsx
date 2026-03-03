@@ -13,13 +13,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
-import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { useAuthContext } from '../../../hooks/use-auth-context';
 
 export default function BountyDetailRouter() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const currentUserId = getCurrentUserId();
+  const { session } = useAuthContext();
+  const currentUserId = session?.user?.id ?? null;
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,18 +55,22 @@ export default function BountyDetailRouter() {
       }
 
       // Check if user has a request for this bounty (hunter flow)
-      const requests = await bountyRequestService.getAll({
-        bountyId,
-        userId: currentUserId,
-      });
-
-      if (requests.length > 0) {
-        // User is a hunter with a request - redirect to hunter flow
-        router.replace({
-          pathname: '/in-progress/[bountyId]/hunter',
-          params: { bountyId },
+      // Only run if we have a valid userId; unauthenticated users have no existing requests
+      // and will be directed to the postings view (which handles auth-gating for applying)
+      if (currentUserId) {
+        const requests = await bountyRequestService.getAll({
+          bountyId,
+          userId: currentUserId,
         });
-        return;
+
+        if (requests.length > 0) {
+          // User is a hunter with a request - redirect to hunter flow
+          router.replace({
+            pathname: '/in-progress/[bountyId]/hunter',
+            params: { bountyId },
+          });
+          return;
+        }
       }
 
       // User has no relationship to this bounty as poster or hunter

@@ -27,7 +27,6 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
-import { getCurrentUserId } from "../lib/utils/data-utils"
 import { ReportModal } from "./ReportModal"
 
 // Alert defer delay to allow React to process state updates before showing alert

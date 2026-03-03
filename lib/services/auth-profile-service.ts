@@ -732,6 +732,21 @@ export class AuthProfileService {
         error = res.error ?? null;
       }
 
+      // If update returned no data or an error indicating missing row, try upsert
+      if ((!data && error) || !data) {
+        try {
+          const resUpsert = await supabase
+            .from('profiles')
+            .upsert({ id: userId, ...updates }, { onConflict: 'id' })
+            .select()
+            .single();
+          data = resUpsert.data ?? null;
+          error = resUpsert.error ?? null;
+        } catch (e: any) {
+          error = e;
+        }
+      }
+
       if (error) {
         throw error;
       }
