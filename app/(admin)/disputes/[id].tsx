@@ -17,7 +17,7 @@ import { AdminCard } from '../../../components/admin/AdminCard';
 import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
-import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useAdmin } from '../../../lib/admin-context';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute, BountyCancellation } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -31,16 +31,21 @@ interface DisputeDetailData {
 export default function AdminDisputeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { session } = useAuthContext();
-  const adminId = session?.user?.id;
+  const { isAdmin, isLoading: isAdminLoading } = useAdmin();
 
   const [data, setData] = useState<DisputeDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [resolution, setResolution] = useState('');
+  const [winner, setWinner] = useState<'hunter' | 'poster' | null>(null);
   const [showResolveForm, setShowResolveForm] = useState(false);
 
   const loadDisputeDetails = useCallback(async () => {
+    if (!isAdmin || isAdminLoading) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       const dispute = await disputeService.getDisputeById(id);
@@ -63,7 +68,7 @@ export default function AdminDisputeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, isAdmin, isAdminLoading]);
 
   useEffect(() => {
     loadDisputeDetails();
@@ -87,7 +92,7 @@ export default function AdminDisputeDetailScreen() {
   };
 
   const handleResolveDispute = async () => {
-    if (!data || !adminId) {
+    if (!data) {
       Alert.alert('Error', 'Missing required information');
       return;
     }
@@ -97,9 +102,17 @@ export default function AdminDisputeDetailScreen() {
       return;
     }
 
+    if (!winner) {
+      Alert.alert('Error', 'Please select a winner: Release to Hunter or Refund to Poster');
+      return;
+    }
+
+    const winnerAction = winner === 'hunter' ? 'Release to Hunter' : 'Refund to Poster';
+    const winnerOutcome = winner === 'hunter' ? 'Funds released to hunter.' : 'Funds refunded to poster.';
+
     Alert.alert(
       'Confirm Resolution',
-      'Are you sure you want to resolve this dispute? This action cannot be undone.',
+      `Are you sure you want to resolve this dispute?\n\nOutcome: ${winnerAction}\n\nThis action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -111,18 +124,19 @@ export default function AdminDisputeDetailScreen() {
               const success = await disputeService.resolveDispute(
                 data.dispute.id,
                 resolution,
-                adminId
+                winner
               );
 
               if (success) {
                 Alert.alert(
                   'Success',
-                  'Dispute has been resolved successfully',
+                  `Dispute has been resolved successfully. ${winnerOutcome}`,
                   [
                     {
                       text: 'OK',
                       onPress: () => {
                         setShowResolveForm(false);
+                        setWinner(null);
                         loadDisputeDetails();
                       },
                     },
@@ -174,6 +188,30 @@ export default function AdminDisputeDetailScreen() {
   //   }
   // };
 
+
+  if (isAdminLoading) {
+    return (
+      <View style={styles.container}>
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#059669" />
+          <Text style={styles.loadingText}>Checking permissions...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={styles.container}>
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="block" size={48} color="rgba(255,254,245,0.6)" />
+          <Text style={styles.errorText}>Access denied. Admin privileges required.</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -347,6 +385,14 @@ export default function AdminDisputeDetailScreen() {
                   : 'N/A'}
               </Text>
             </View>
+            {dispute.winner && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Winner</Text>
+                <Text style={[styles.infoValue, { color: '#10b981' }]}>
+                  {dispute.winner === 'hunter' ? 'Hunter (Funds Released)' : 'Poster (Funds Refunded)'}
+                </Text>
+              </View>
+            )}
             <View style={styles.textSection}>
               <Text style={styles.textLabel}>Resolution Details</Text>
               <Text style={styles.textContent}>{dispute.resolution}</Text>
@@ -386,8 +432,58 @@ export default function AdminDisputeDetailScreen() {
               <View style={styles.resolveForm}>
                 <Text style={styles.resolveFormTitle}>Resolution Details</Text>
                 <Text style={styles.resolveFormHint}>
-                  Describe how this dispute was resolved and any actions taken.
+                  Select a winner and describe how this dispute was resolved.
                 </Text>
+
+                {/* Winner Selection */}
+                <Text style={styles.winnerLabel}>Winner *</Text>
+                <View style={styles.winnerSelection}>
+                  <TouchableOpacity
+                    onPress={() => setWinner('hunter')}
+                    disabled={resolving}
+                    style={[
+                      styles.winnerButton,
+                      winner === 'hunter' && styles.winnerButtonActive,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="arrow-forward"
+                      size={18}
+                      color={winner === 'hunter' ? '#fff' : '#10b981'}
+                    />
+                    <Text
+                      style={[
+                        styles.winnerButtonText,
+                        winner === 'hunter' && styles.winnerButtonTextActive,
+                      ]}
+                    >
+                      Release to Hunter
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setWinner('poster')}
+                    disabled={resolving}
+                    style={[
+                      styles.winnerButton,
+                      winner === 'poster' && styles.winnerButtonActivePoster,
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="reply"
+                      size={18}
+                      color={winner === 'poster' ? '#fff' : '#f59e0b'}
+                    />
+                    <Text
+                      style={[
+                        styles.winnerButtonText,
+                        winner === 'poster' && styles.winnerButtonTextActive,
+                      ]}
+                    >
+                      Refund to Poster
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TextInput
                   value={resolution}
                   onChangeText={setResolution}
@@ -402,11 +498,11 @@ export default function AdminDisputeDetailScreen() {
                 <View style={styles.resolveFormActions}>
                   <TouchableOpacity
                     onPress={handleResolveDispute}
-                    disabled={resolving || !resolution.trim()}
+                    disabled={resolving || !resolution.trim() || !winner}
                     style={[
                       styles.actionButton,
                       styles.resolveButton,
-                      (resolving || !resolution.trim()) && styles.actionButtonDisabled,
+                      (resolving || !resolution.trim() || !winner) && styles.actionButtonDisabled,
                     ]}
                   >
                     {resolving ? (
@@ -422,6 +518,7 @@ export default function AdminDisputeDetailScreen() {
                     onPress={() => {
                       setShowResolveForm(false);
                       setResolution('');
+                      setWinner(null);
                     }}
                     disabled={resolving}
                     style={[styles.actionButton, styles.cancelButton]}
@@ -620,6 +717,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,254,245,0.6)',
     marginBottom: 12,
+  },
+  winnerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,254,245,0.6)',
+    marginBottom: 8,
+  },
+  winnerSelection: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  winnerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,254,245,0.3)',
+    backgroundColor: 'transparent',
+    gap: 6,
+  },
+  winnerButtonActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  winnerButtonActivePoster: {
+    backgroundColor: '#d97706',
+    borderColor: '#d97706',
+  },
+  winnerButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,254,245,0.8)',
+  },
+  winnerButtonTextActive: {
+    color: '#fff',
   },
   resolutionInput: {
     backgroundColor: 'rgba(0,145,44,0.15)',

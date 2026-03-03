@@ -700,21 +700,19 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
-      const queryBase: any = supabase.from('profiles');
+      const from = supabase.from('profiles') as any;
 
-      // Some test mocks (and older Supabase wrappers) provide `update()` but
-      // not `upsert()`. Prefer `upsert` when available, fall back to `update`
-      // to make the service resilient in tests and environments with
-      // different client shapes.
-      let res: any;
-      if (typeof queryBase.upsert === 'function') {
-        res = await queryBase
+      // Some tests/mocks provide `update` but not `upsert`.
+      // Try `upsert` first (modern path), fall back to `update(...).eq(id)` for older mocks.
+      let res: { data?: any; error?: any };
+
+      if (typeof from.upsert === 'function') {
+        res = await from
           .upsert({ id: userId, ...updates }, { onConflict: 'id' })
           .select()
           .single();
-      } else if (typeof queryBase.update === 'function') {
-        // Many unit/integration tests mock `update()` and then chain `eq()`/`select()`
-        res = await queryBase
+      } else if (typeof from.update === 'function') {
+        res = await from
           .update(updates)
           .eq('id', userId)
           .select()
@@ -725,6 +723,8 @@ export class AuthProfileService {
           .insert({ id: userId, ...updates })
           .select()
           .single();
+        logger.error('Supabase client missing upsert/update methods for profiles table');
+        return null;
       }
 
       const { data, error } = res || { data: null, error: null };

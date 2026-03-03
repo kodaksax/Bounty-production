@@ -18,6 +18,18 @@ jest.mock('../../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     from: mockFrom,
+    auth: {
+      getSession: jest.fn().mockResolvedValue({
+        data: {
+          session: {
+            user: {
+              id: 'admin-user-id',
+              app_metadata: { role: 'admin' },
+            },
+          },
+        },
+      }),
+    },
   },
 }));
 
@@ -26,6 +38,7 @@ jest.mock('../../lib/utils/error-logger', () => ({
   logger: {
     error: jest.fn(),
     warn: jest.fn(),
+    warning: jest.fn(),
     info: jest.fn(),
     debug: jest.fn(),
   },
@@ -42,6 +55,14 @@ jest.mock('../../lib/services/bounty-service', () => ({
 jest.mock('../../lib/services/cancellation-service', () => ({
   cancellationService: {
     getCancellationById: jest.fn(),
+  },
+}));
+
+// Mock payment service
+jest.mock('../../lib/services/payment-service', () => ({
+  paymentService: {
+    releaseEscrow: jest.fn().mockResolvedValue({ success: true }),
+    refundEscrow: jest.fn().mockResolvedValue({ success: true }),
   },
 }));
 
@@ -192,6 +213,429 @@ describe('DisputeService', () => {
       );
 
       expect(result).toBe(true);
+    });
+  });
+
+  describe('resolveDispute', () => {
+    it('should resolve a dispute with winner=hunter and store winner in DB', async () => {
+      const mockDispute = {
+        id: 'dispute-123',
+        cancellation_id: 'cancel-123',
+        bounty_id: 'bounty-123',
+        initiator_id: 'user-123',
+        reason: 'Test dispute',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-123',
+        user_id: 'poster-123',
+        title: 'Test Bounty',
+        amount: 50000,
+        payment_intent_id: 'escrow-123',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.releaseEscrow as jest.Mock).mockResolvedValue({ success: true });
+
+      const result = await disputeService.resolveDispute(
+        'dispute-123',
+        'Hunter completed work successfully',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.releaseEscrow).toHaveBeenCalledWith('escrow-123');
+    });
+
+    it('should resolve a dispute with winner=poster and refund escrow', async () => {
+      const mockDispute = {
+        id: 'dispute-123',
+        cancellation_id: 'cancel-123',
+        bounty_id: 'bounty-123',
+        initiator_id: 'user-123',
+        reason: 'Test dispute',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-123',
+        user_id: 'poster-123',
+        title: 'Test Bounty',
+        amount: 50000,
+        payment_intent_id: 'escrow-123',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.refundEscrow as jest.Mock).mockResolvedValue({ success: true });
+
+      const result = await disputeService.resolveDispute(
+        'dispute-123',
+        'Poster was right, refunding',
+        'poster'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.refundEscrow).toHaveBeenCalledWith('escrow-123');
+    });
+
+    it('should resolve without escrow action for honor bounties', async () => {
+      const mockDispute = {
+        id: 'dispute-123',
+        cancellation_id: 'cancel-123',
+        bounty_id: 'bounty-123',
+        initiator_id: 'user-123',
+        reason: 'Test dispute',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-123',
+        user_id: 'poster-123',
+        title: 'Honor Bounty',
+        amount: 0,
+        is_for_honor: true,
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-123',
+        'Resolved for honor bounty',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      // No escrow action for honor bounties
+      expect(mockPaymentService.releaseEscrow).not.toHaveBeenCalled();
+      expect(mockPaymentService.refundEscrow).not.toHaveBeenCalled();
+    });
+
+    it('should resolve without escrow action for monetary bounties missing payment_intent_id', async () => {
+      const mockDispute = {
+        id: 'dispute-456',
+        cancellation_id: 'cancel-456',
+        bounty_id: 'bounty-456',
+        initiator_id: 'user-456',
+        reason: 'Test dispute - no payment intent',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-456',
+        user_id: 'poster-456',
+        title: 'Monetary Bounty Without Payment Intent',
+        amount: 50000,
+        // intentionally no payment_intent_id
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-456',
+        'Resolved for monetary bounty without payment intent',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      // No escrow action should be attempted when payment_intent_id is missing
+      expect(mockPaymentService.releaseEscrow).not.toHaveBeenCalled();
+      expect(mockPaymentService.refundEscrow).not.toHaveBeenCalled();
+      // Should log a warning about missing payment_intent_id
+      expect(logger.warning).toHaveBeenCalled();
+    });
+
+    it('should still resolve when releaseEscrow returns failure', async () => {
+      const mockDispute = {
+        id: 'dispute-789',
+        cancellation_id: 'cancel-789',
+        bounty_id: 'bounty-789',
+        initiator_id: 'user-789',
+        reason: 'Test dispute - release fails',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-789',
+        user_id: 'poster-789',
+        title: 'Bounty With Failed Release',
+        amount: 50000,
+        payment_intent_id: 'escrow-789',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.releaseEscrow as jest.Mock).mockResolvedValue({
+        success: false,
+        error: { message: 'Escrow release failed' },
+      });
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-789',
+        'Hunter wins but release fails',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.releaseEscrow).toHaveBeenCalledWith('escrow-789');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to release escrow to hunter during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-789' })
+      );
+    });
+
+    it('should still resolve when refundEscrow returns failure', async () => {
+      const mockDispute = {
+        id: 'dispute-790',
+        cancellation_id: 'cancel-790',
+        bounty_id: 'bounty-790',
+        initiator_id: 'user-790',
+        reason: 'Test dispute - refund fails',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-790',
+        user_id: 'poster-790',
+        title: 'Bounty With Failed Refund',
+        amount: 50000,
+        payment_intent_id: 'escrow-790',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.refundEscrow as jest.Mock).mockResolvedValue({
+        success: false,
+        error: { message: 'Escrow refund failed' },
+      });
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-790',
+        'Poster wins but refund fails',
+        'poster'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.refundEscrow).toHaveBeenCalledWith('escrow-790');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to refund escrow to poster during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-790' })
+      );
+    });
+
+    it('should still resolve when escrow action throws an exception', async () => {
+      const mockDispute = {
+        id: 'dispute-791',
+        cancellation_id: 'cancel-791',
+        bounty_id: 'bounty-791',
+        initiator_id: 'user-791',
+        reason: 'Test dispute - escrow throws',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-791',
+        user_id: 'poster-791',
+        title: 'Bounty With Escrow Exception',
+        amount: 50000,
+        payment_intent_id: 'escrow-791',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.releaseEscrow as jest.Mock).mockRejectedValue(new Error('Network timeout'));
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-791',
+        'Hunter wins but escrow throws',
+        'hunter'
+      );
+
+      // Resolution should still succeed even if escrow action throws
+      expect(result).toBe(true);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Error executing escrow action during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-791', winner: 'hunter' })
+      );
     });
   });
 
