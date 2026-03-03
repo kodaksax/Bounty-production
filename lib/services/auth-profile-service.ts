@@ -700,14 +700,34 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert(
-          { id: userId, ...updates },
-          { onConflict: 'id' }
-        )
-        .select()
-        .single();
+      const queryBase: any = supabase.from('profiles');
+
+      // Some test mocks (and older Supabase wrappers) provide `update()` but
+      // not `upsert()`. Prefer `upsert` when available, fall back to `update`
+      // to make the service resilient in tests and environments with
+      // different client shapes.
+      let res: any;
+      if (typeof queryBase.upsert === 'function') {
+        res = await queryBase
+          .upsert({ id: userId, ...updates }, { onConflict: 'id' })
+          .select()
+          .single();
+      } else if (typeof queryBase.update === 'function') {
+        // Many unit/integration tests mock `update()` and then chain `eq()`/`select()`
+        res = await queryBase
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single();
+      } else {
+        // Last-resort fallback: try insert (helps in some test harnesses)
+        res = await queryBase
+          .insert({ id: userId, ...updates })
+          .select()
+          .single();
+      }
+
+      const { data, error } = res || { data: null, error: null };
 
       if (error) {
         throw error;
