@@ -7,6 +7,22 @@ import { cancellationService } from './cancellation-service';
 import { paymentService } from './payment-service';
 
 /**
+ * Verify that the current session user has admin role via app_metadata
+ */
+async function verifyAdminRole(): Promise<boolean> {
+  try {
+    if (!isSupabaseConfigured) return false;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+
+    return session.user.app_metadata?.role === 'admin';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Helper to send notification via Supabase direct insert
  */
 async function sendNotification(
@@ -277,6 +293,13 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // Verify the current user has admin role
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id || !(await verifyAdminRole())) {
+        logger.error('Non-admin attempted to update dispute status', { disputeId, status });
+        throw new Error('Unauthorized: admin role required');
+      }
+
       const { error } = await supabase
         .from('bounty_disputes')
         .update({ status })
@@ -306,7 +329,6 @@ export const disputeService = {
   async resolveDispute(
     disputeId: string,
     resolution: string,
-    resolvedBy: string,
     winner?: 'hunter' | 'poster' | null,
     prefetchedBounty?: Bounty | null
   ): Promise<boolean> {
@@ -314,6 +336,14 @@ export const disputeService = {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
       }
+
+      // Verify the resolving user has admin role and derive resolved_by from session
+      if (!(await verifyAdminRole())) {
+        logger.error('Non-admin attempted to resolve dispute', { disputeId });
+        throw new Error('Unauthorized: admin role required');
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const resolvedBy = session!.user!.id;
 
       // Get the dispute first to access its data
       const dispute = await this.getDisputeById(disputeId);
@@ -789,7 +819,7 @@ export const disputeService = {
       const winner = decision.outcome === 'release' ? 'hunter' as const
         : decision.outcome === 'refund' ? 'poster' as const
         : null;
-      await this.resolveDispute(disputeId, decision.rationale, adminId, winner, bounty);
+      await this.resolveDispute(disputeId, decision.rationale, winner, bounty);
 
       // Log audit event
       await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {

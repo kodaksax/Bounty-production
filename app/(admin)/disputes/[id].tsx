@@ -17,7 +17,7 @@ import { AdminCard } from '../../../components/admin/AdminCard';
 import { disputeService } from '../../../lib/services/dispute-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
-import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useAdmin } from '../../../lib/admin-context';
 import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 import type { BountyDispute, BountyCancellation } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -31,8 +31,7 @@ interface DisputeDetailData {
 export default function AdminDisputeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { session } = useAuthContext();
-  const adminId = session?.user?.id;
+  const { isAdmin, isLoading: isAdminLoading } = useAdmin();
 
   const [data, setData] = useState<DisputeDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +41,11 @@ export default function AdminDisputeDetailScreen() {
   const [showResolveForm, setShowResolveForm] = useState(false);
 
   const loadDisputeDetails = useCallback(async () => {
+    if (!isAdmin || isAdminLoading) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       const dispute = await disputeService.getDisputeById(id);
@@ -64,7 +68,7 @@ export default function AdminDisputeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, isAdmin, isAdminLoading]);
 
   useEffect(() => {
     loadDisputeDetails();
@@ -88,7 +92,7 @@ export default function AdminDisputeDetailScreen() {
   };
 
   const handleResolveDispute = async () => {
-    if (!data || !adminId) {
+    if (!data) {
       Alert.alert('Error', 'Missing required information');
       return;
     }
@@ -120,7 +124,6 @@ export default function AdminDisputeDetailScreen() {
               const success = await disputeService.resolveDispute(
                 data.dispute.id,
                 resolution,
-                adminId,
                 winner
               );
 
@@ -185,6 +188,30 @@ export default function AdminDisputeDetailScreen() {
   //   }
   // };
 
+
+  if (isAdminLoading) {
+    return (
+      <View style={styles.container}>
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#059669" />
+          <Text style={styles.loadingText}>Checking permissions...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={styles.container}>
+        <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="block" size={48} color="rgba(255,254,245,0.6)" />
+          <Text style={styles.errorText}>Access denied. Admin privileges required.</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
