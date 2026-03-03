@@ -86,6 +86,13 @@ export interface EscrowReleaseResult {
   error?: { message: string };
 }
 
+export interface EscrowRefundResult {
+  success: boolean;
+  paymentIntentId?: string;
+  refundAmount?: number;
+  error?: { message: string };
+}
+
 /**
  * Payment Service
  * Centralizes all payment operations with business logic
@@ -298,6 +305,29 @@ class PaymentService {
       return {
         success: false,
         error: { message: error.message || 'Failed to release escrow' },
+      };
+    }
+  }
+
+  /**
+   * Refund an escrow: server cancels/refunds the PaymentIntent, returning funds to poster
+   */
+  async refundEscrow(
+    escrowId: string,
+    authToken?: string
+  ): Promise<EscrowRefundResult> {
+    try {
+      const res = await stripeService.refundEscrow(escrowId, authToken);
+      return {
+        success: true,
+        paymentIntentId: res.paymentIntentId,
+        refundAmount: res.refundAmount,
+      };
+    } catch (error: any) {
+      console.error('[PaymentService] Error refunding escrow:', error);
+      return {
+        success: false,
+        error: { message: error.message || 'Failed to refund escrow' },
       };
     }
   }

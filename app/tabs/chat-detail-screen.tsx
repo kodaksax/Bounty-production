@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { useRouter } from "expo-router"
 import { useCallback, useRef, useState } from "react"
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageActions } from "../../components/MessageActions"
 import { MessageBubble } from "../../components/MessageBubble"
@@ -45,8 +45,7 @@ export function ChatDetailScreen({
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
-  const [showComposer, setShowComposer] = useState(false)
-  const [composerText, setComposerText] = useState('')
+  const [inputText, setInputText] = useState('')
   const listRef = useRef<FlatList<Message>>(null)
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
@@ -126,7 +125,7 @@ export function ChatDetailScreen({
       <MessageBubble
         id={message.id}
         text={message.text}
-        isUser={message.senderId === currentUserId}
+        isUser={currentUserId !== null && message.senderId === currentUserId}
         status={message.status}
         isPinned={message.isPinned}
         onLongPress={handleLongPress}
@@ -149,6 +148,7 @@ export function ChatDetailScreen({
   })
 
   const selectedMessage = messages.find(m => m.id === selectedMessageId)
+  const trimmedInputText = inputText.trim()
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
@@ -213,7 +213,11 @@ export function ChatDetailScreen({
       )}
 
       {/* Messages and Input */}
-      <View className="flex-1">
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
+      >
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#ffffff" />
@@ -241,21 +245,34 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
-            <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10), bottom: BOTTOM_NAV_OFFSET }] }>
-              <TouchableOpacity 
-                style={styles.inputButton}
-                onPress={() => {
-                  setComposerText('')
-                  setShowComposer(true)
-                }}
-              >
-                <Text style={styles.inputPlaceholder}>Type a message...</Text>
-                <MaterialIcons name="send" size={20} color="#d1fae5" />
-              </TouchableOpacity>
+            <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inlineTextInput}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  placeholder="Type a message..."
+                  placeholderTextColor="rgba(209,250,229,0.5)"
+                  multiline
+                  accessibilityLabel="Message input field"
+                  accessibilityHint="Enter your message to send"
+                />
+                <TouchableOpacity
+                  style={[styles.sendButton, !trimmedInputText && styles.sendButtonDisabled]}
+                  onPress={async () => {
+                    if (trimmedInputText.length === 0) return
+                    setInputText('')
+                    await handleSendMessage(trimmedInputText)
+                  }}
+                  disabled={!trimmedInputText}
+                >
+                  <MaterialIcons name="send" size={20} color="#d1fae5" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
 
       {/* Message Actions Modal */}
       <MessageActions
@@ -266,56 +283,6 @@ export function ChatDetailScreen({
         onReport={handleReport}
         isPinned={selectedMessage?.isPinned}
       />
-
-      {/* Composer Modal raised above BottomNav and keyboard */}
-      <Modal
-        visible={showComposer}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowComposer(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowComposer(false)} />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
-            style={{ width: '100%' }}
-          >
-            <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12), marginBottom: BOTTOM_NAV_OFFSET }] }>
-              <Text style={styles.sheetTitle}>Send Message</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  value={composerText}
-                  onChangeText={setComposerText}
-                  placeholder="Type your message..."
-                  placeholderTextColor="rgba(209,250,229,0.5)"
-                  multiline
-                  autoFocus
-                  style={styles.textArea}
-                />
-              </View>
-              <View style={styles.sheetButtons}>
-                <TouchableOpacity style={[styles.sheetBtn, styles.cancelBtn]} onPress={() => setShowComposer(false)}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.sheetBtn, styles.sendBtn]}
-                  onPress={async () => {
-                    const t = composerText.trim()
-                    if (t.length === 0) return
-                    setShowComposer(false)
-                    setComposerText('')
-                    await handleSendMessage(t)
-                  }}
-                >
-                  <MaterialIcons name="send" size={18} color="#052e1b" />
-                  <Text style={styles.sendText}>Send</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
 
       {/* Report Modal */}
       <ReportModal
@@ -335,100 +302,44 @@ export function ChatDetailScreen({
 export default ChatDetailScreen;
 
 const styles = StyleSheet.create({
+  keyboardAvoidingContainer: {
+    flex: 1,
+  },
   messageList: {
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: 80 + 60, // Space for input + BottomNav
+    paddingBottom: 16,
   },
   inputContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: 12,
-    // Make the area outside the rounded message box match the main screen
-    // (use emerald-600 to match `bg-emerald-600` on the root View)
     backgroundColor: '#059669', // emerald-600
     borderTopWidth: 1,
-    // use a slightly darker border so the input area still reads as separate
     borderTopColor: '#047857', // emerald-700
   },
-  inputButton: {
+  inputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-end',
     backgroundColor: 'rgba(6, 95, 70, 0.6)',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.3)',
   },
-  inputPlaceholder: {
-    color: '#d1fae5',
-    fontSize: 15,
-  },
-  modalOverlay: {
+  inlineTextInput: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#065f46',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-  },
-  sheetTitle: {
-    color: '#e5fff7',
-    fontWeight: '600',
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  inputWrapper: {
-    backgroundColor: 'rgba(4,120,87,0.6)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  textArea: {
     color: '#ffffff',
-    minHeight: 80,
     fontSize: 15,
+    maxHeight: 100,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
-  sheetButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  sheetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  cancelBtn: {
-    backgroundColor: 'rgba(6,95,70,0.5)',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.25)'
-  },
-  cancelText: {
-    color: '#d1fae5',
-    fontWeight: '600',
-  },
-  sendBtn: {
-    backgroundColor: '#a7f3d0',
+  sendButton: {
     marginLeft: 8,
+    padding: 4,
+    alignSelf: 'flex-end',
   },
-  sendText: {
-    color: '#052e1b',
-    fontWeight: '700',
-    marginLeft: 6,
+  sendButtonDisabled: {
+    opacity: 0.4,
   },
 })

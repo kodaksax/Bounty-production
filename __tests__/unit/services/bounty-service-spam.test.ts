@@ -59,8 +59,8 @@ describe('Bounty Service - Spam Prevention', () => {
     chain.eq = jest.fn().mockReturnValue(chain);
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.in = jest.fn().mockReturnValue(chain);
-    chain.single = jest.fn().mockReturnValue(chain);
-    chain.insert = jest.fn().mockResolvedValue(finalResult);
+    chain.single = jest.fn().mockResolvedValue(finalResult);
+    chain.insert = jest.fn().mockReturnValue(chain);
     chain.update = jest.fn().mockReturnValue(chain);
     chain.maybeSingle = jest.fn().mockResolvedValue({ data: { username: 'testuser' }, error: null });
     
@@ -342,6 +342,66 @@ describe('Bounty Service - Spam Prevention', () => {
       await expect(bountyService.create(bounty)).rejects.toThrow(
         'Duplicate content detected'
       );
+    });
+  });
+
+  describe('Title Validation Guard', () => {
+    it('should reject bounty with empty title', async () => {
+      const bounty = createTestBounty({ title: '' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required'
+      );
+    });
+
+    it('should reject bounty with whitespace-only title', async () => {
+      const bounty = createTestBounty({ title: '     ' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required'
+      );
+    });
+
+    it('should reject bounty with title shorter than 5 trimmed characters', async () => {
+      const bounty = createTestBounty({ title: '  ab ' });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title must be at least 5 characters'
+      );
+    });
+
+    it('should reject bounty with undefined title', async () => {
+      const bounty = createTestBounty({ title: undefined });
+      await expect(bountyService.create(bounty)).rejects.toThrow(
+        'Title is required'
+      );
+    });
+
+    it('should accept bounty with valid title (>= 5 trimmed chars)', async () => {
+      // Set up mocks so the create call progresses past title validation
+      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
+      const duplicateChain = createMockQueryChain({ data: [], error: null });
+      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
+      const insertChain = createMockQueryChain({
+        data: { id: 1, title: 'Valid Title' },
+        error: null,
+      });
+
+      let callCount = 0;
+      supabase.from.mockImplementation((table: string) => {
+        callCount++;
+        if (table === 'bounties' && callCount === 1) return rateLimitChain;
+        if (table === 'bounties' && callCount === 2) return duplicateChain;
+        if (table === 'profiles') return profileChain;
+        return insertChain;
+      });
+
+      const bounty = createTestBounty({ title: 'Valid Title' });
+
+      // Should successfully create a bounty and not throw a title validation error
+      await expect(bountyService.create(bounty)).resolves.toBeDefined();
+
+      // Ensure the Supabase chains were actually invoked (rate limit, duplicate check, profile, insert)
+      expect(supabase.from).toHaveBeenCalledWith('bounties');
+      expect(supabase.from).toHaveBeenCalledWith('profiles');
+      expect(supabase.from).toHaveBeenCalledTimes(4);
     });
   });
 });

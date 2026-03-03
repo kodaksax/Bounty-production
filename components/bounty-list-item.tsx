@@ -34,7 +34,7 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
 
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
-  
+
   // Determine which avatar to show: prop > profile > placeholder
   const avatarUrl = poster_avatar || posterProfile?.avatar
 
@@ -92,8 +92,8 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
         accessibilityHint="Tap to view bounty details and apply"
       >
         {/* Leading avatar - clickable to view profile */}
-        <TouchableOpacity 
-          onPress={handleAvatarPress} 
+        <TouchableOpacity
+          onPress={handleAvatarPress}
           disabled={!user_id}
           style={styles.leadingAvatarWrap}
           accessibilityRole="button"
@@ -144,8 +144,8 @@ function BountyListItemComponent({ id, title, username, price, distance, descrip
       </TouchableOpacity>
 
       {showDetail && (
-          <BountyDetailModal
-            bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar }}
+        <BountyDetailModal
+          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar, is_for_honor: isForHonor }}
           onClose={handleCloseDetail}
         />
       )}

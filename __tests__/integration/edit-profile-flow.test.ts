@@ -146,6 +146,7 @@ describe('Edit Profile Integration Flow', () => {
           error: null,
         }),
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
       });
 
       authProfileService.setSession({
@@ -164,8 +165,9 @@ describe('Edit Profile Integration Flow', () => {
         about: 'Updated bio',
       };
 
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
@@ -185,8 +187,9 @@ describe('Edit Profile Integration Flow', () => {
     });
 
     it('should handle validation errors', async () => {
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
@@ -212,8 +215,9 @@ describe('Edit Profile Integration Flow', () => {
         avatar: avatarUrl,
       };
 
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
@@ -269,8 +273,9 @@ describe('Edit Profile Integration Flow', () => {
         avatar: uploadedUrl,
       };
 
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
@@ -497,8 +502,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle database constraint violations', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -518,8 +522,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle rate limiting', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -587,8 +590,9 @@ describe('Edit Profile Integration Flow', () => {
         avatar: avatarUrl,
       };
 
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
@@ -624,12 +628,13 @@ describe('Edit Profile Integration Flow', () => {
       const initialUsername = initialProfile?.username;
 
       // Try to update but fail
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockRejectedValue(new Error('Update failed')),
-      });
+            });
 
       const result = await authProfileService.updateProfile({
         username: 'new_username',
@@ -652,8 +657,9 @@ describe('Edit Profile Integration Flow', () => {
     });
 
     it('should handle simultaneous profile updates', async () => {
-      mockSupabase.from.mockReturnValue({
+            mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({

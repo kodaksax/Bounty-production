@@ -36,23 +36,24 @@ export default function CreateDisputeScreen() {
 
   const [reason, setReason] = useState('');
   const [evidence, setEvidence] = useState<LocalEvidenceItem[]>([]);
-  const [newEvidenceType, setNewEvidenceType] = useState<'text' | 'image' | 'document' | 'link'>('text');
+  const [newEvidenceType, setNewEvidenceType] = useState<'text' | 'link'>('text');
   const [newEvidenceContent, setNewEvidenceContent] = useState('');
   const [newEvidenceDescription, setNewEvidenceDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   // Web-only: inline confirmation step replaces Alert.alert confirmation dialog
   const [showWebConfirm, setShowWebConfirm] = useState(false);
+  const [showEvidenceError, setShowEvidenceError] = useState(false);
 
   const handleAddEvidence = () => {
     if (!newEvidenceContent.trim()) {
-      if (Platform.OS === 'web') {
-        // Alert.alert is a no-op on web — use inline state instead
-        return;
+      setShowEvidenceError(true);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'Please provide evidence content');
       }
-      Alert.alert('Error', 'Please provide evidence content');
       return;
     }
+    setShowEvidenceError(false);
 
     const newEvidence: LocalEvidenceItem = {
       id: generateEvidenceId(),
@@ -215,7 +216,8 @@ export default function CreateDisputeScreen() {
             )}
           </View>
           <Text style={styles.sectionHint}>
-            Provide screenshots, documents, links, or written descriptions to support your case.
+            Provide links or written descriptions to support your case. Image and document uploads
+            coming soon.
           </Text>
 
           {/* Evidence List */}
@@ -313,8 +315,8 @@ export default function CreateDisputeScreen() {
                 </>
               )}
 
-              {/* Web: show inline error if content empty on submit attempt */}
-              {Platform.OS === 'web' && !newEvidenceContent.trim() && (
+              {/* Show inline error when user attempts to add with empty content */}
+              {showEvidenceError && !newEvidenceContent.trim() && (
                 <Text style={styles.validationHint}>Evidence content is required</Text>
               )}
 
@@ -328,6 +330,7 @@ export default function CreateDisputeScreen() {
                     setShowAddEvidence(false);
                     setNewEvidenceContent('');
                     setNewEvidenceDescription('');
+                    setShowEvidenceError(false);
                   }}
                   style={[styles.formActionButton, styles.formActionButtonCancel]}
                 >

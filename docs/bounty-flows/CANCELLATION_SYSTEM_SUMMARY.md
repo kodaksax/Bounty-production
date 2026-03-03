@@ -122,7 +122,7 @@ Created `bounty_disputes` Table:
 - `createDispute()` - Creates dispute from cancellation
 - `getDisputeById()` - Retrieves dispute details
 - `getDisputeByCancellationId()` - Finds dispute for cancellation
-- `addEvidence()` - Appends evidence to existing dispute
+- `uploadEvidence()` - Uploads evidence to dispute_evidence table
 - `updateDisputeStatus()` - Changes dispute state
 - `resolveDispute()` - Closes dispute with resolution
 - `getDisputesByUserId()` - Lists user's disputes
