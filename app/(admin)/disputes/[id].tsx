@@ -124,7 +124,6 @@ export default function AdminDisputeDetailScreen() {
               const success = await disputeService.resolveDispute(
                 data.dispute.id,
                 resolution,
-                adminId,
                 winner
               );
 

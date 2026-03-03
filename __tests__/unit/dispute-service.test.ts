@@ -18,6 +18,18 @@ jest.mock('../../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     from: mockFrom,
+    auth: {
+      getSession: jest.fn().mockResolvedValue({
+        data: {
+          session: {
+            user: {
+              id: 'admin-user-id',
+              app_metadata: { role: 'admin' },
+            },
+          },
+        },
+      }),
+    },
   },
 }));
 
@@ -254,7 +266,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-123',
         'Hunter completed work successfully',
-        'admin-123',
         'hunter'
       );
 
@@ -311,7 +322,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-123',
         'Poster was right, refunding',
-        'admin-123',
         'poster'
       );
 
@@ -367,7 +377,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-123',
         'Resolved for honor bounty',
-        'admin-123',
         'hunter'
       );
 
@@ -426,7 +435,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-456',
         'Resolved for monetary bounty without payment intent',
-        'admin-456',
         'hunter'
       );
 
@@ -492,7 +500,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-789',
         'Hunter wins but release fails',
-        'admin-789',
         'hunter'
       );
 
@@ -558,7 +565,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-790',
         'Poster wins but refund fails',
-        'admin-790',
         'poster'
       );
 
@@ -621,7 +627,6 @@ describe('DisputeService', () => {
       const result = await disputeService.resolveDispute(
         'dispute-791',
         'Hunter wins but escrow throws',
-        'admin-791',
         'hunter'
       );
 

@@ -329,7 +329,6 @@ export const disputeService = {
   async resolveDispute(
     disputeId: string,
     resolution: string,
-    resolvedBy: string,
     winner?: 'hunter' | 'poster' | null,
     prefetchedBounty?: Bounty | null
   ): Promise<boolean> {
@@ -820,7 +819,7 @@ export const disputeService = {
       const winner = decision.outcome === 'release' ? 'hunter' as const
         : decision.outcome === 'refund' ? 'poster' as const
         : null;
-      await this.resolveDispute(disputeId, decision.rationale, adminId, winner, bounty);
+      await this.resolveDispute(disputeId, decision.rationale, winner, bounty);
 
       // Log audit event
       await this.logAuditEvent(disputeId, 'resolution_decision', adminId, 'admin', {
