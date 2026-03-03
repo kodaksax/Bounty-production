@@ -370,12 +370,12 @@ export const disputeService = {
       }
 
       // Verify the resolving user has admin role and derive resolved_by from session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id || session.user.app_metadata?.role !== 'admin') {
+      if (!(await verifyAdminRole())) {
         logger.error('Non-admin attempted to resolve dispute', { disputeId });
         throw new Error('Unauthorized: admin role required');
       }
-      const resolvedBy = session.user.id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const resolvedBy = session!.user!.id;
 
       // Get the dispute first to access its data
       const dispute = await this.getDisputeById(disputeId);

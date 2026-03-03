@@ -40,7 +40,10 @@ export default function AdminDisputeDetailScreen() {
   const [showResolveForm, setShowResolveForm] = useState(false);
 
   const loadDisputeDetails = useCallback(async () => {
-    if (!isAdmin || isAdminLoading) return;
+    if (!isAdmin || isAdminLoading) {
+      setLoading(false);
+      return;
+    }
     
     try {
       setLoading(true);
