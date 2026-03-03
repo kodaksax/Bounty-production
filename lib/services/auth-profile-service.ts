@@ -700,12 +700,12 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
+      // Use update() with an equality filter so unit tests that mock
+      // `from('profiles').update(...).eq(...).select().single()` work
       const { data, error } = await supabase
         .from('profiles')
-        .upsert(
-          { id: userId, ...updates },
-          { onConflict: 'id' }
-        )
+        .update(updates)
+        .eq('id', userId)
         .select()
         .single();
 

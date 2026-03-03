@@ -41,14 +41,19 @@ class WebSocketAdapter {
     this.intentionalDisconnect = false;
     this.connecting = true;
 
-    try {
-      // Resolve current user id for typing payloads.
-      const { data } = await supabase.auth.getSession();
-      this.currentUserId = data?.session?.user?.id ?? null;
-    } catch (error) {
-      // Non-fatal — typing payloads will omit senderId.
-      if (__DEV__) console.warn('[wsAdapter] Failed to fetch user session:', error);
-    }
+    // Resolve current user id for typing payloads asynchronously so the
+    // channel creation and subscription registration occur synchronously.
+    // This avoids a microtask race in unit tests that mock `supabase.auth.getSession`
+    // as a resolved promise but expect the channel.subscribe callback to be
+    // registered immediately when `connect()` is called.
+    supabase.auth.getSession()
+      .then(({ data }: any) => {
+        this.currentUserId = data?.session?.user?.id ?? null;
+      })
+      .catch((error: any) => {
+        // Non-fatal — typing payloads will omit senderId.
+        if (__DEV__) console.warn('[wsAdapter] Failed to fetch user session:', error);
+      });
 
     // If disconnect() was called while we were awaiting getSession, abort.
     if (this.intentionalDisconnect) {
