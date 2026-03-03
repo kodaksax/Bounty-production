@@ -153,21 +153,26 @@ export default function DoneScreen() {
   // The hasMarkedComplete ref guard prevents duplicate execution on re-renders.
 
   const handleContinue = async () => {
-    // Clear onboarding data from context as it's now saved to profile
+    // Clear onboarding form data from context
     await clearOnboardingData();
 
-    // Refresh the auth profile service to pick up the completed profile
+    // CRITICAL: Push onboarding_completed: true into the auth service's in-memory
+    // state and cache BEFORE navigating. Do NOT use refreshProfile() here — it hits
+    // the 5-min AsyncStorage cache and returns the stale profile (onboarding_completed: false),
+    // which causes index.tsx to see an incomplete profile and loop back to /onboarding.
+    // updateProfile() writes to Supabase, updates the cache, and notifies AuthContext
+    // listeners with the correct value so index.tsx never sees the stale state.
     try {
       const { authProfileService } = await import('../../lib/services/auth-profile-service');
-      await authProfileService.refreshProfile();
-      console.log('[Onboarding] Profile refreshed after onboarding completion');
+      await authProfileService.updateProfile({ onboarding_completed: true });
+      console.log('[Onboarding] Profile marked complete in auth service');
     } catch (refreshError) {
-      console.error('[Onboarding] Error refreshing profile:', refreshError);
-      // Don't block navigation
+      console.error('[Onboarding] Error updating profile in auth service:', refreshError);
+      // Don't block navigation — Supabase already has the correct value from markComplete()
     }
 
-    // Also refresh the cached user profile so other hooks immediately pick up
-    // fields like `location` saved during onboarding.
+    // Also refresh the cached user profile so hooks like useUserProfile/useNormalizedProfile
+    // immediately pick up fields like `location` and `skills` saved during onboarding.
     try {
       const { cachedDataService, CACHE_KEYS } = await import('../../lib/services/cached-data-service');
       const { userProfileService } = await import('../../lib/services/userProfile');
