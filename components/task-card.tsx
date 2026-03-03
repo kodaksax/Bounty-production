@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import type { ReactNode } from "react"
-import React, { useState } from "react"
+import { useState } from "react"
 import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native"
 import { BountyDetailModal } from "./bountydetailmodal"
 
@@ -16,6 +16,7 @@ export interface TaskCardProps {
   description?: string
   highlight?: "price" | "distance"
   containerStyle?: StyleProp<ViewStyle>
+  isForHonor?: boolean
 }
 
 export function TaskCard({
@@ -28,6 +29,7 @@ export function TaskCard({
   description,
   highlight = "distance",
   containerStyle,
+  isForHonor,
 }: TaskCardProps) {
   const [showDetail, setShowDetail] = useState(false)
 
@@ -57,9 +59,16 @@ export function TaskCard({
           <View className="flex justify-between items-center">
             <View>
               <Text className="text-xs text-gray-400">Total Bounty</Text>
-              <Text className={`font-bold ${highlight === "price" ? "text-yellow-400 text-lg" : "text-yellow-400"}`}>
-                ${price}
-              </Text>
+              {isForHonor ? (
+                <View className="flex-row items-center bg-emerald-400/20 px-2 py-1 rounded-full mt-1">
+                  <MaterialIcons name="favorite" size={12} color="#fcd34d" />
+                  <Text className="text-yellow-400 font-bold ml-1 text-xs">For Honor</Text>
+                </View>
+              ) : (
+                <Text className={`font-bold ${highlight === "price" ? "text-yellow-400 text-lg" : "text-yellow-400"}`}>
+                  ${price}
+                </Text>
+              )}
             </View>
             <View className="text-right">
               <Text className="text-xs text-gray-400">Approx. Distance</Text>
@@ -73,7 +82,7 @@ export function TaskCard({
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username, title, price, distance, description }}
+          bounty={{ id, username, title, price, distance, description, is_for_honor: isForHonor }}
           onClose={() => setShowDetail(false)}
         />
       )}

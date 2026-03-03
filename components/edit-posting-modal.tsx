@@ -30,12 +30,26 @@ export function EditPostingModal({
 }: EditPostingModalProps) {
   const insets = useSafeAreaInsets();
   const [formData, setFormData] = useState({
-    title: bounty.title,
-    description: bounty.description,
-    amount: bounty.amount,
-    isForHonor: bounty.is_for_honor,
+    title: bounty.title || "",
+    description: bounty.description || "",
+    amount: bounty.amount || 0,
+    isForHonor: bounty.is_for_honor || false,
     location: bounty.location || "",
   });
+
+  // Sync state with props when bounty changes (e.g. when modal is reused)
+  React.useEffect(() => {
+    if (visible && bounty) {
+      setFormData({
+        title: bounty.title || "",
+        description: bounty.description || "",
+        amount: bounty.amount || 0,
+        isForHonor: bounty.is_for_honor || false,
+        location: bounty.location || "",
+      });
+      setError(null);
+    }
+  }, [visible, bounty]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +71,7 @@ export function EditPostingModal({
     try {
       setIsSubmitting(true);
       setError(null);
-      
+
       await onSave({
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -65,7 +79,7 @@ export function EditPostingModal({
         is_for_honor: formData.isForHonor,
         location: formData.location.trim() || undefined,
       });
-      
+
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update posting");
@@ -192,7 +206,7 @@ export function EditPostingModal({
                     style={styles.input}
                     placeholder="0"
                     placeholderTextColor="#6ee7b780"
-                    value={String(formData.amount || "")}
+                    value={formData.amount === 0 ? "" : String(formData.amount)}
                     onChangeText={(text) => {
                       const num = parseFloat(text) || 0;
                       setFormData({ ...formData, amount: num });

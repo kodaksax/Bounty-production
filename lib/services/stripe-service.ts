@@ -106,6 +106,13 @@ export interface StripeEscrowReleaseResponse {
   status?: 'released' | 'failed';
 }
 
+// Escrow refund response from backend
+export interface StripeEscrowRefundResponse {
+  paymentIntentId?: string;
+  refundAmount?: number;
+  status?: 'refunded' | 'canceled' | 'failed';
+}
+
 // Connect account verification response from backend
 export interface StripeConnectVerificationResponse {
   detailsSubmitted: boolean;
@@ -1137,6 +1144,49 @@ class StripeService {
     } catch (error) {
       console.error('[StripeService] Error releasing escrow:', error);
       await performanceService.endMeasurement('escrow_release', { success: false, error: String(error) });
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
+   * Refund an escrow: server cancels/refunds the PaymentIntent, returning funds to poster
+   */
+  async refundEscrow(
+    escrowId: string,
+    authToken?: string
+  ): Promise<StripeEscrowRefundResponse> {
+    performanceService.startMeasurement('escrow_refund', 'payment_process', { escrowId });
+
+    try {
+      await this.initialize();
+
+      if (!escrowId) {
+        throw { type: 'validation_error', code: 'invalid_params', message: 'escrowId is required' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/payments/escrows/${encodeURIComponent(escrowId)}/refund`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        await performanceService.endMeasurement('escrow_refund', { success: false, status: response.status });
+        throw { type: 'api_error', code: response.status.toString(), message: 'Failed to refund escrow' };
+      }
+
+      const data = (await response.json()) as StripeEscrowRefundResponse & { paymentIntent?: { id?: string } };
+
+      const paymentIntentId = data.paymentIntentId || data.paymentIntent?.id;
+
+      await performanceService.endMeasurement('escrow_refund', { success: true, paymentIntentId });
+
+      return { paymentIntentId, refundAmount: data.refundAmount, status: data.status };
+    } catch (error) {
+      console.error('[StripeService] Error refunding escrow:', error);
+      await performanceService.endMeasurement('escrow_refund', { success: false, error: String(error) });
       throw this.handleStripeError(error);
     }
   }
