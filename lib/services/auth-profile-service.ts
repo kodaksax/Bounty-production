@@ -123,7 +123,7 @@ export class AuthProfileService {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           console.log('[authProfileService] Profiles table query result', { hasData: !!data, hasError: !!error });
         }
-      } catch (e: any) {
+      } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           console.error('[authProfileService] Profiles table query exception:', e);
         }
@@ -430,10 +430,10 @@ export class AuthProfileService {
       this.currentProfile = onboardingNeededProfile;
       this.notifyListeners(onboardingNeededProfile);
       return onboardingNeededProfile;
-    } catch (error: any) {
+    } catch (error) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
-      const msg = (error && (error.message || String(error))) || '';
+      const msg = (error && (((error as any).message) || String(error))) || '';
       if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
         console.error('[authProfileService] Received HTML response - likely misconfigured Supabase URL');
         logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
@@ -700,34 +700,29 @@ export class AuthProfileService {
 
     try {
       // Use Supabase SDK's built-in network handling and timeouts
-      const from = supabase.from('profiles') as any;
+      const fromProfiles: any = supabase.from('profiles');
 
-      // Some tests/mocks provide `update` but not `upsert`.
-      // Try `upsert` first (modern path), fall back to `update(...).eq(id)` for older mocks.
-      let res: { data?: any; error?: any };
+      // The test mocks sometimes provide an object with `.update()` (not `.upsert()`),
+      // so support both invocation styles to keep integration tests working.
+      let data: any = null;
+      let error: any = null;
 
-      if (typeof from.upsert === 'function') {
-        res = await from
+      if (typeof fromProfiles.upsert === 'function') {
+        const res = await fromProfiles
           .upsert({ id: userId, ...updates }, { onConflict: 'id' })
           .select()
           .single();
-      } else if (typeof from.update === 'function') {
-        res = await from
+        data = res.data ?? null;
+        error = res.error ?? null;
+      } else {
+        const res = await fromProfiles
           .update(updates)
           .eq('id', userId)
           .select()
           .single();
-      } else {
-        // Last-resort fallback: try insert (helps in some test harnesses)
-        res = await queryBase
-          .insert({ id: userId, ...updates })
-          .select()
-          .single();
-        logger.error('Supabase client missing upsert/update methods for profiles table');
-        return null;
+        data = res.data ?? null;
+        error = res.error ?? null;
       }
-
-      const { data, error } = res || { data: null, error: null };
 
       if (error) {
         throw error;
