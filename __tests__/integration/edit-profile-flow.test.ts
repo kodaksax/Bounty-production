@@ -493,8 +493,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle database constraint violations', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
@@ -514,8 +513,7 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle rate limiting', async () => {
       mockSupabase.from.mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
