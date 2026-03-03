@@ -437,6 +437,201 @@ describe('DisputeService', () => {
       // Should log a warning about missing payment_intent_id
       expect(logger.warning).toHaveBeenCalled();
     });
+
+    it('should still resolve when releaseEscrow returns failure', async () => {
+      const mockDispute = {
+        id: 'dispute-789',
+        cancellation_id: 'cancel-789',
+        bounty_id: 'bounty-789',
+        initiator_id: 'user-789',
+        reason: 'Test dispute - release fails',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-789',
+        user_id: 'poster-789',
+        title: 'Bounty With Failed Release',
+        amount: 50000,
+        payment_intent_id: 'escrow-789',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.releaseEscrow as jest.Mock).mockResolvedValue({
+        success: false,
+        error: { message: 'Escrow release failed' },
+      });
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-789',
+        'Hunter wins but release fails',
+        'admin-789',
+        'hunter'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.releaseEscrow).toHaveBeenCalledWith('escrow-789');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to release escrow to hunter during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-789' })
+      );
+    });
+
+    it('should still resolve when refundEscrow returns failure', async () => {
+      const mockDispute = {
+        id: 'dispute-790',
+        cancellation_id: 'cancel-790',
+        bounty_id: 'bounty-790',
+        initiator_id: 'user-790',
+        reason: 'Test dispute - refund fails',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-790',
+        user_id: 'poster-790',
+        title: 'Bounty With Failed Refund',
+        amount: 50000,
+        payment_intent_id: 'escrow-790',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.refundEscrow as jest.Mock).mockResolvedValue({
+        success: false,
+        error: { message: 'Escrow refund failed' },
+      });
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-790',
+        'Poster wins but refund fails',
+        'admin-790',
+        'poster'
+      );
+
+      expect(result).toBe(true);
+      expect(mockPaymentService.refundEscrow).toHaveBeenCalledWith('escrow-790');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to refund escrow to poster during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-790' })
+      );
+    });
+
+    it('should still resolve when escrow action throws an exception', async () => {
+      const mockDispute = {
+        id: 'dispute-791',
+        cancellation_id: 'cancel-791',
+        bounty_id: 'bounty-791',
+        initiator_id: 'user-791',
+        reason: 'Test dispute - escrow throws',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-791',
+        user_id: 'poster-791',
+        title: 'Bounty With Escrow Exception',
+        amount: 50000,
+        payment_intent_id: 'escrow-791',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+      (mockPaymentService.releaseEscrow as jest.Mock).mockRejectedValue(new Error('Network timeout'));
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-791',
+        'Hunter wins but escrow throws',
+        'admin-791',
+        'hunter'
+      );
+
+      // Resolution should still succeed even if escrow action throws
+      expect(result).toBe(true);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Error executing escrow action during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-791', winner: 'hunter' })
+      );
+    });
   });
 
   describe('makeResolutionDecision', () => {
