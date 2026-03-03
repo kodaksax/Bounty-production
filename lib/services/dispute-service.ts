@@ -5,6 +5,22 @@ import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 
 /**
+ * Verify that the given user has admin role via app_metadata
+ */
+async function verifyAdminRole(userId: string): Promise<boolean> {
+  try {
+    if (!isSupabaseConfigured) return false;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || session.user?.id !== userId) return false;
+
+    return session.user?.app_metadata?.role === 'admin';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Helper to send notification via Supabase direct insert
  */
 async function sendNotification(
@@ -312,6 +328,13 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // Verify the current user has admin role
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id || !(await verifyAdminRole(session.user.id))) {
+        logger.error('Non-admin attempted to update dispute status', { disputeId, status });
+        throw new Error('Unauthorized: admin role required');
+      }
+
       const { error } = await supabase
         .from('bounty_disputes')
         .update({ status })
@@ -345,6 +368,12 @@ export const disputeService = {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
+      }
+
+      // Verify the resolving user has admin role
+      if (!(await verifyAdminRole(resolvedBy))) {
+        logger.error('Non-admin attempted to resolve dispute', { disputeId, resolvedBy });
+        throw new Error('Unauthorized: admin role required');
       }
 
       // Get the dispute first to access its data
