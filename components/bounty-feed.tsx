@@ -399,16 +399,29 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         />
       )
     }
+    // If a category filter is active, offer a clear-filter empty state.
+    if (activeCategory && activeCategory !== 'all') {
+      return (
+        <View style={{ width: '100%', alignItems: 'center' }}>
+          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
+          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
 
+    // Generic empty feed for new users: encourage posting a bounty
     return (
-      <>
-        <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-        <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-          <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
-        </TouchableOpacity>
-      </>
+      <EmptyState
+        icon="search-off"
+        title="No bounties yet"
+        description="No bounties near you yet. Be the first to post one!"
+        actionLabel="Post a bounty"
+        onAction={() => router.push('/screens/CreateBounty')}
+      />
     )
-  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties])
+  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties, activeCategory, setActiveCategory, router])
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
