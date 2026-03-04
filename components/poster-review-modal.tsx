@@ -17,7 +17,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+import { approveAndRelease } from '../lib/services/completion-approval';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
+import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
@@ -231,29 +233,47 @@ export function PosterReviewModal({
 
     try {
       setIsProcessing(true);
+      // Use centralized sequence: release funds first (if paid), then approve
+      const ok = await approveAndRelease({
+        bountyId,
+        hunterId,
+        title: `Bounty ${bountyId}`,
+        isForHonor,
+        releaseFn: releaseFunds,
+        approveFn: async (id: string) => {
+          await completionService.approveSubmission(id);
+          return true;
+        },
+        notifyFn: async (userId: string, payload?: Record<string, any>) => {
+          // Create an in-app notification prompting hunter to rate poster
+          try {
+            const notificationBody =
+              payload?.bountyTitle
+                ? `Please rate your experience for "${String(payload.bountyTitle)}".`
+                : 'Please rate your experience for this bounty.';
 
-      // Approve submission (handles completion approval + bounty status update)
-      await completionService.approveSubmission(bountyId);
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'rating_prompt',
+              title: 'Please rate the poster',
+              body: notificationBody,
+              data: { bountyId: String(bountyId), ...payload },
+              read: false,
+            });
+          } catch (e) {
+            console.warn('Failed to insert rating prompt notification', e);
+          }
+        },
+      });
 
-      // Release escrow if paid bounty
-      if (!isForHonor && bountyAmount > 0) {
-        try {
-          // Pass bountyId through as string (wallet now accepts string|number)
-          await releaseFunds(bountyId, hunterId, `Bounty ${bountyId}`);
-          // Trigger success haptic for successful payment release
-          triggerHaptic('success');
-        } catch (escrowError) {
-          console.error('Error releasing escrow:', escrowError);
-          Alert.alert(
-            'Payment Issue',
-            'Work approved but payment release failed. Please contact support.',
-            [{ text: 'OK' }]
-          );
-        }
-      } else {
-        // For honor bounties, still trigger success haptic for approval
-        triggerHaptic('success');
+      if (!ok) {
+        Alert.alert('Payment Issue', 'Work approved but payment release failed. Please contact support.');
+        setShowPayoutWarning(true);
+        return false;
       }
+
+      // Trigger success haptic after successful release+approve
+      triggerHaptic('success');
 
       // Show rating form
       setShowPayoutWarning(false);

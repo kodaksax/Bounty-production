@@ -23,6 +23,8 @@ import {
     View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
+import { logClientError } from '../lib/services/monitoring'
+import { useWallet } from '../lib/wallet-context'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
@@ -88,6 +90,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionPending, setSubmissionPending] = useState(false)
   const [hunterName, setHunterName] = useState<string>('Hunter')
+  const { transactions } = useWallet()
+
+  // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally
+  useEffect(() => {
+    try {
+      if (!bounty) return
+      if (String(bounty.status) !== 'completed') return
+      const escrowStillFunded = transactions.some(tx => tx.type === 'escrow' && String(tx.details?.bounty_id) === String(bounty.id) && tx.escrowStatus === 'funded')
+      if (escrowStillFunded) {
+        logClientError('Bounty completed but escrow still funded locally', { bountyId: String(bounty.id), bountyStatus: bounty.status })
+      }
+    } catch (e) {
+      // swallow
+    }
+  }, [bounty, transactions])
 
   useEffect(() => {
     let mounted = true

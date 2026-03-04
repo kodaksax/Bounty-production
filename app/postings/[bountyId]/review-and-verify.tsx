@@ -1,7 +1,7 @@
 // app/postings/[bountyId]/review-and-verify.tsx - Review & Verify Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -19,11 +19,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avat
 import { ROUTES } from '../../../lib/routes';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { approveAndRelease } from '../../../lib/services/completion-approval';
 import { completionService } from '../../../lib/services/completion-service';
 import type { Bounty, Profile } from '../../../lib/services/database.types';
 import { profileService } from '../../../lib/services/profile-service';
+import { supabase } from '../../../lib/supabase';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { useWallet } from '../../../lib/wallet-context';
 
 interface ProofItem {
   id: string;
@@ -52,6 +55,7 @@ export default function ReviewAndVerifyScreen() {
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [isViewerVisible, setIsViewerVisible] = useState(false);
   const [isRequestingRevision, setIsRequestingRevision] = useState(false);
+  const { releaseFunds } = useWallet();
 
   useEffect(() => {
     loadBounty();
@@ -233,9 +237,38 @@ export default function ReviewAndVerifyScreen() {
 
     try {
       setIsRequestingRevision(true); // Reuse this state for loading
-      
-      // Approve the submission via completion service
-      await completionService.approveSubmission(String(bounty.id));
+
+      // For consistency: release funds first, then approve submission, then submit rating
+      const ok = await approveAndRelease({
+        bountyId: String(bounty.id),
+        hunterId: hunterProfile.id,
+        title: bounty.title || `Bounty ${bounty.id}`,
+        isForHonor: Boolean(bounty.is_for_honor),
+        releaseFn: releaseFunds,
+        approveFn: async (id: string) => {
+          await completionService.approveSubmission(id);
+          return true;
+        },
+        notifyFn: async (userId: string) => {
+          try {
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'rating_prompt',
+              title: 'Please rate the poster',
+              body: `Please rate your experience for "${bounty.title || `Bounty ${bounty.id}`}".`,
+              data: { bountyId: String(bounty.id) },
+              read: false,
+            });
+          } catch (e) {
+            console.warn('Failed to insert rating prompt notification', e);
+          }
+        },
+      });
+
+      if (!ok) {
+        Alert.alert('Error', 'Failed to release funds or approve work. Please contact support.');
+        return;
+      }
 
       // Submit rating
       await completionService.submitRating({
