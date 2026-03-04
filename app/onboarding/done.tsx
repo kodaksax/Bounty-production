@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   ScrollView,
   StyleSheet,
@@ -50,6 +51,7 @@ export default function DoneScreen() {
 
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [isLoading, setIsLoading] = useState(false);
   const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function DoneScreen() {
   const handleContinue = async () => {
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
+    setIsLoading(true);
 
     // Step 1: Write ALL onboarding data + onboarding_completed: true to Supabase
     // AND patch the in-memory AuthContext profile in one atomic call.
@@ -153,7 +156,28 @@ export default function DoneScreen() {
     }
 
     router.replace('/tabs/bounty-app');
+    setIsLoading(false);
   };
+
+  // If the signed in user already has onboarding_completed, avoid flashing
+  // the onboarding flow: show the button loading state briefly then go in.
+  useEffect(() => {
+    const alreadyCompleted = !!((normalized as any)?.onboarding_completed || (localProfile as any)?.onboarding_completed);
+    if (!alreadyCompleted) return;
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    (async () => {
+      try {
+        setIsLoading(true);
+        // allow the button/animations to render briefly so there's no visual jump
+        await new Promise((res) => setTimeout(res, 600));
+        await authProfileService.refreshProfile().catch(() => {});
+        router.replace('/tabs/bounty-app');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [normalized, localProfile, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -258,9 +282,19 @@ export default function DoneScreen() {
       {/* Continue Button — pinned to bottom, always tappable */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-            <Text style={styles.continueButtonText}>Start Exploring</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <TouchableOpacity
+            style={[styles.continueButton, isLoading ? { opacity: 0.8 } : {}]}
+            onPress={handleContinue}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#052e1b" />
+            ) : (
+              <>
+                <Text style={styles.continueButtonText}>Start Exploring</Text>
+                <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+              </>
+            )}
           </TouchableOpacity>
         </Animated.View>
 
