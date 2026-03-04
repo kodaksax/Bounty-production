@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   ScrollView,
   StyleSheet,
@@ -26,7 +27,9 @@ import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 
-const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
+const ONBOARDING_COMPLETE_KEY_PREFIX = '@bounty_onboarding_completed';
+/** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
+const getOnboardingCompleteKey = (userId: string) => `${ONBOARDING_COMPLETE_KEY_PREFIX}:${userId}`;
 
 export default function DoneScreen() {
   const router = useRouter();
@@ -48,6 +51,7 @@ export default function DoneScreen() {
 
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [isLoading, setIsLoading] = useState(false);
   const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
@@ -63,6 +67,7 @@ export default function DoneScreen() {
   const handleContinue = async () => {
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
+    setIsLoading(true);
 
     // Step 1: Write ALL onboarding data + onboarding_completed: true to Supabase
     // AND patch the in-memory AuthContext profile in one atomic call.
@@ -84,13 +89,36 @@ export default function DoneScreen() {
       }
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
-      await authProfileService.updateProfile(profileUpdate as any);
-      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+      const updated = await authProfileService.updateProfile(profileUpdate as any);
+      if (!updated) {
+        // updateProfile returned null (in-memory profile was not refreshed); force a
+        // refresh so the DB's onboarding_completed=true is pulled into the AuthContext
+        // before we navigate — preventing the redirect loop in bounty-app.tsx.
+        await authProfileService.refreshProfile().catch((err) => {
+          console.error('[Onboarding] refreshProfile fallback failed:', err);
+        });
+      }
       console.log('[Onboarding] Profile written to Supabase + AuthContext updated');
     } catch (e) {
       console.error('[Onboarding] updateProfile failed:', e);
-      // Non-fatal — we still navigate. The user can retry profile edits from
-      // the Profile tab. Do not block them here.
+      // Even if the Supabase write failed, try refreshing the profile — the DB may have
+      // partially succeeded or a prior write may have set onboarding_completed.
+      await authProfileService.refreshProfile().catch((err) => {
+        console.error('[Onboarding] refreshProfile fallback failed:', err);
+      });
+    }
+
+    // Persist the onboarding-completed flag locally, scoped to this user.
+    // This is intentionally in its own try/catch so a storage failure doesn't
+    // mask a profile-update failure above, and errors are attributed correctly.
+    try {
+      if (userId) {
+        await AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true');
+      } else {
+        console.warn('[Onboarding] AsyncStorage write skipped: userId is not available');
+      }
+    } catch (err) {
+      console.error('[Onboarding] AsyncStorage write failed:', err);
     }
 
     // Step 2: Request notification permissions (best effort, non-blocking)
@@ -119,12 +147,37 @@ export default function DoneScreen() {
       }
     } catch (e) { /* non-critical */ }
 
-    // Step 4: Give React one microtask tick to flush the AuthContext state
-    // update from authProfileService before the new route mounts.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Step 4: Ensure AuthContext has the latest profile before navigating.
+    // We explicitly refresh the auth profile instead of relying on a fixed timeout.
+    try {
+      await authProfileService.refreshProfile();
+    } catch (e) {
+      console.error('[Onboarding] refreshProfile failed (continuing to app):', e);
+    }
 
     router.replace('/tabs/bounty-app');
+    setIsLoading(false);
   };
+
+  // If the signed in user already has onboarding_completed, avoid flashing
+  // the onboarding flow: show the button loading state briefly then go in.
+  useEffect(() => {
+    const alreadyCompleted = !!((normalized as any)?.onboarding_completed || (localProfile as any)?.onboarding_completed);
+    if (!alreadyCompleted) return;
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    (async () => {
+      try {
+        setIsLoading(true);
+        // allow the button/animations to render briefly so there's no visual jump
+        await new Promise((res) => setTimeout(res, 600));
+        await authProfileService.refreshProfile().catch(() => {});
+        router.replace('/tabs/bounty-app');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [normalized, localProfile, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -229,9 +282,19 @@ export default function DoneScreen() {
       {/* Continue Button — pinned to bottom, always tappable */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-            <Text style={styles.continueButtonText}>Start Exploring</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <TouchableOpacity
+            style={[styles.continueButton, isLoading ? { opacity: 0.8 } : {}]}
+            onPress={handleContinue}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#052e1b" />
+            ) : (
+              <>
+                <Text style={styles.continueButtonText}>Start Exploring</Text>
+                <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+              </>
+            )}
           </TouchableOpacity>
         </Animated.View>
 

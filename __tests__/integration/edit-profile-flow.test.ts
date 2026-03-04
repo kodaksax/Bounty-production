@@ -186,6 +186,45 @@ describe('Edit Profile Integration Flow', () => {
       expect(result?.about).toBe('Updated bio');
     });
 
+    it('should preserve initial update result when subsequent upsert returns null (regression: onboarding loop)', async () => {
+      // Simulate the exact failure mode that caused the onboarding loop:
+      // the initial update() succeeds and returns data, but the upsert()
+      // that followed (in the old code) returned null. The fix ensures the
+      // upsert is only attempted when the initial update returned no data.
+      const updatedProfile = {
+        ...mockProfile,
+        onboarding_completed: true,
+      };
+
+      let callCount = 0;
+      mockSupabase.from.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        upsert: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockImplementation(() => {
+          callCount += 1;
+          if (callCount === 1) {
+            // First call (initial update) succeeds
+            return Promise.resolve({ data: updatedProfile, error: null });
+          }
+          // Any subsequent call (old secondary upsert) returns null — this
+          // should no longer be reached after the fix.
+          return Promise.resolve({ data: null, error: null });
+        }),
+      });
+
+      const result = await authProfileService.updateProfile({
+        onboarding_completed: true,
+      } as any);
+
+      // Must return the successfully-updated profile, not null
+      expect(result).not.toBeNull();
+      expect((result as any)?.onboarding_completed).toBe(true);
+      // Only one DB call should have been made (the initial update)
+      expect(callCount).toBe(1);
+    });
+
     it('should handle validation errors', async () => {
             mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnThis(),
