@@ -720,16 +720,18 @@ export class AuthProfileService {
           .upsert({ id: userId, ...updates }, { onConflict: 'id' })
           .select()
           .single();
-        data = res.data ?? null;
-        error = res.error ?? null;
+        // Fall back to the initial update result if the upsert returns no data,
+        // so a successful first write is not lost when the upsert fails/returns null.
+        data = res.data ?? initialRes ?? null;
+        error = res.error ?? initialError ?? null;
       } else {
         const res = await fromProfiles
           .update(updates)
           .eq('id', userId)
           .select()
           .single();
-        data = res.data ?? null;
-        error = res.error ?? null;
+        data = res.data ?? initialRes ?? null;
+        error = res.error ?? initialError ?? null;
       }
 
       // If update returned no data or an error indicating missing row, try upsert

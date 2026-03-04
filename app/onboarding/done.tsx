@@ -84,13 +84,27 @@ export default function DoneScreen() {
       }
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
-      await authProfileService.updateProfile(profileUpdate as any);
+      const updated = await authProfileService.updateProfile(profileUpdate as any);
       await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+      if (!updated) {
+        // updateProfile returned null (in-memory profile was not refreshed); force a
+        // refresh so the DB's onboarding_completed=true is pulled into the AuthContext
+        // before we navigate — preventing the redirect loop in bounty-app.tsx.
+        await authProfileService.refreshProfile().catch((err) => {
+          console.error('[Onboarding] refreshProfile fallback failed:', err);
+        });
+      }
       console.log('[Onboarding] Profile written to Supabase + AuthContext updated');
     } catch (e) {
       console.error('[Onboarding] updateProfile failed:', e);
-      // Non-fatal — we still navigate. The user can retry profile edits from
-      // the Profile tab. Do not block them here.
+      // Best-effort: write the completion flag to AsyncStorage so that
+      // bounty-app.tsx can detect it even when the Supabase write failed.
+      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true').catch((err) => {
+        console.error('[Onboarding] AsyncStorage fallback failed:', err);
+      });
+      await authProfileService.refreshProfile().catch((err) => {
+        console.error('[Onboarding] refreshProfile fallback failed:', err);
+      });
     }
 
     // Step 2: Request notification permissions (best effort, non-blocking)
@@ -119,9 +133,10 @@ export default function DoneScreen() {
       }
     } catch (e) { /* non-critical */ }
 
-    // Step 4: Give React one microtask tick to flush the AuthContext state
-    // update from authProfileService before the new route mounts.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Step 4: Give React time to flush the AuthContext state update
+    // from authProfileService before the new route mounts (50ms is enough for
+    // a setState → context propagation cycle on both iOS and Android).
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     router.replace('/tabs/bounty-app');
   };
