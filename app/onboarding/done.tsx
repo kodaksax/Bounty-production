@@ -26,7 +26,9 @@ import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 
-const ONBOARDING_COMPLETE_KEY = '@bounty_onboarding_completed';
+const ONBOARDING_COMPLETE_KEY_PREFIX = '@bounty_onboarding_completed';
+/** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
+const getOnboardingCompleteKey = (userId: string) => `${ONBOARDING_COMPLETE_KEY_PREFIX}:${userId}`;
 
 export default function DoneScreen() {
   const router = useRouter();
@@ -85,7 +87,6 @@ export default function DoneScreen() {
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
       const updated = await authProfileService.updateProfile(profileUpdate as any);
-      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
       if (!updated) {
         // updateProfile returned null (in-memory profile was not refreshed); force a
         // refresh so the DB's onboarding_completed=true is pulled into the AuthContext
@@ -97,14 +98,24 @@ export default function DoneScreen() {
       console.log('[Onboarding] Profile written to Supabase + AuthContext updated');
     } catch (e) {
       console.error('[Onboarding] updateProfile failed:', e);
-      // Best-effort: write the completion flag to AsyncStorage so that
-      // bounty-app.tsx can detect it even when the Supabase write failed.
-      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true').catch((err) => {
-        console.error('[Onboarding] AsyncStorage fallback failed:', err);
-      });
+      // Even if the Supabase write failed, try refreshing the profile — the DB may have
+      // partially succeeded or a prior write may have set onboarding_completed.
       await authProfileService.refreshProfile().catch((err) => {
         console.error('[Onboarding] refreshProfile fallback failed:', err);
       });
+    }
+
+    // Persist the onboarding-completed flag locally, scoped to this user.
+    // This is intentionally in its own try/catch so a storage failure doesn't
+    // mask a profile-update failure above, and errors are attributed correctly.
+    try {
+      if (userId) {
+        await AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true');
+      } else {
+        console.warn('[Onboarding] AsyncStorage write skipped: userId is not available');
+      }
+    } catch (err) {
+      console.error('[Onboarding] AsyncStorage write failed:', err);
     }
 
     // Step 2: Request notification permissions (best effort, non-blocking)
@@ -133,10 +144,13 @@ export default function DoneScreen() {
       }
     } catch (e) { /* non-critical */ }
 
-    // Step 4: Give React time to flush the AuthContext state update
-    // from authProfileService before the new route mounts (50ms is enough for
-    // a setState → context propagation cycle on both iOS and Android).
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Step 4: Ensure AuthContext has the latest profile before navigating.
+    // We explicitly refresh the auth profile instead of relying on a fixed timeout.
+    try {
+      await authProfileService.refreshProfile();
+    } catch (e) {
+      console.error('[Onboarding] refreshProfile failed (continuing to app):', e);
+    }
 
     router.replace('/tabs/bounty-app');
   };
