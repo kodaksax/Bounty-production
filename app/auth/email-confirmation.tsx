@@ -17,12 +17,23 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 export default function EmailConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const { session } = useAuthContext();
+
+  // Auto-navigate to onboarding when the session is established
+  // (e.g. after the user clicks the confirmation link in their email)
+  React.useEffect(() => {
+    if (session) {
+      router.replace('/onboarding' as Href);
+      try { markInitialNavigationDone(); } catch {}
+    }
+  }, [session, router]);
 
   React.useEffect(() => {
     // Create pulsing animation for the email icon
@@ -110,9 +121,9 @@ export default function EmailConfirmationScreen() {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Sign in</Text>
+              <Text style={styles.stepTitle}>Get started automatically</Text>
               <Text style={styles.stepDescription}>
-                Return here and sign in with your credentials to get started
+                You will be signed in automatically and taken to set up your profile
               </Text>
             </View>
           </View>
