@@ -166,6 +166,12 @@ jest.mock('../services/outbox-service', () => ({
   },
 }));
 
+// Mock notification service
+jest.mock('../services/notification-service', () => ({
+  notificationService: {
+    notifyBountyCancellation: jest.fn(async () => undefined),
+  },
+}));
 
 
 // Mock logger
@@ -180,6 +186,7 @@ jest.mock('../services/logger', () => ({
 
 import { db } from '../db/connection';
 import { outboxService } from '../services/outbox-service';
+import { notificationService } from '../services/notification-service';
 import { refundService } from '../services/refund-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 
@@ -198,6 +205,8 @@ describe('Refund Service', () => {
       amount: 5000,
       status: 'succeeded',
     });
+    // Restore notification mock default
+    (notificationService.notifyBountyCancellation as jest.Mock).mockResolvedValue(undefined);
   });
 
   describe('processRefund', () => {
@@ -741,6 +750,81 @@ describe('Refund Service', () => {
       await refundService.processRefund(request);
 
       expect(stripeConnectService.refundPaymentIntent).toHaveBeenCalled();
+    });
+
+    it('should notify hunter when bounty has an assigned hunter', async () => {
+      (db.select as jest.Mock).mockImplementationOnce(() => ({
+        from: jest.fn(() => mockCreateChain('bounties', null, [{
+          id: 'bounty123',
+          creator_id: 'poster123',
+          hunter_id: 'hunter123',
+          amount_cents: 5000,
+          status: 'in_progress',
+          payment_intent_id: 'pi_test123',
+          title: 'Test Bounty',
+        }])),
+      }));
+
+      const result = await refundService.processRefund({
+        bountyId: 'bounty123',
+        reason: 'Poster cancelled',
+        cancelledBy: 'poster123',
+      });
+
+      expect(result.success).toBe(true);
+      expect(notificationService.notifyBountyCancellation).toHaveBeenCalledWith(
+        'hunter123',
+        'bounty123',
+        'Test Bounty'
+      );
+    });
+
+    it('should not notify when bounty has no assigned hunter', async () => {
+      (db.select as jest.Mock).mockImplementationOnce(() => ({
+        from: jest.fn(() => mockCreateChain('bounties', null, [{
+          id: 'bounty123',
+          creator_id: 'poster123',
+          hunter_id: null,
+          amount_cents: 5000,
+          status: 'open',
+          payment_intent_id: 'pi_test123',
+          title: 'Test Bounty',
+        }])),
+      }));
+
+      const result = await refundService.processRefund({
+        bountyId: 'bounty123',
+        reason: 'Poster cancelled',
+        cancelledBy: 'poster123',
+      });
+
+      expect(result.success).toBe(true);
+      expect(notificationService.notifyBountyCancellation).not.toHaveBeenCalled();
+    });
+
+    it('should still succeed when cancellation notification fails', async () => {
+      (db.select as jest.Mock).mockImplementationOnce(() => ({
+        from: jest.fn(() => mockCreateChain('bounties', null, [{
+          id: 'bounty123',
+          creator_id: 'poster123',
+          hunter_id: 'hunter123',
+          amount_cents: 5000,
+          status: 'in_progress',
+          payment_intent_id: 'pi_test123',
+          title: 'Test Bounty',
+        }])),
+      }));
+
+      (notificationService.notifyBountyCancellation as jest.Mock).mockRejectedValueOnce(new Error('notification failed'));
+
+      const result = await refundService.processRefund({
+        bountyId: 'bounty123',
+        reason: 'Poster cancelled',
+        cancelledBy: 'poster123',
+      });
+
+      // Refund should succeed even if notification fails
+      expect(result.success).toBe(true);
     });
   });
 });

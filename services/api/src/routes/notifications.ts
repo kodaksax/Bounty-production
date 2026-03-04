@@ -218,7 +218,8 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
-      const { token } = request.body as { token: string };
+      const body = request.body as { token?: string } | undefined;
+      const token = body?.token;
 
       if (!token || typeof token !== 'string') {
         return reply.code(400).send({ error: 'token is required and must be a string' });

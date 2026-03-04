@@ -214,6 +214,13 @@ jest.mock('../services/realtime-service', () => ({
   },
 }));
 
+// Mock notification service
+jest.mock('../services/notification-service', () => ({
+  notificationService: {
+    notifyPayment: jest.fn(async () => undefined),
+  },
+}));
+
 
 // Mock logger
 jest.mock('../services/logger', () => ({
@@ -229,6 +236,7 @@ import { db } from '../db/connection';
 import { completionReleaseService } from '../services/completion-release-service';
 import { consolidatedWalletService } from '../services/consolidated-wallet-service';
 import { emailService } from '../services/email-service';
+import { notificationService } from '../services/notification-service';
 import { outboxService } from '../services/outbox-service';
 import { realtimeService } from '../services/realtime-service';
 
@@ -237,6 +245,8 @@ import { realtimeService } from '../services/realtime-service';
 describe('Completion Release Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Restore notification mock default
+    (notificationService.notifyPayment as jest.Mock).mockResolvedValue(undefined);
   });
 
   describe('processCompletionRelease', () => {
@@ -683,6 +693,43 @@ describe('Completion Release Service', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
 
+    });
+
+    it('should send payment notification to hunter with correct amount in cents', async () => {
+      const request = {
+        bountyId: 'bounty123',
+        hunterId: 'hunter123',
+        paymentIntentId: 'pi_test123',
+      };
+
+      const result = await completionReleaseService.processCompletionRelease(request);
+
+      expect(result.success).toBe(true);
+      // notifyPayment expects amount in cents; releaseAmount=9500 dollars → 950000 cents
+      expect(notificationService.notifyPayment).toHaveBeenCalledWith(
+        'hunter123',
+        expect.any(Number),
+        'bounty123',
+        'Test Bounty'
+      );
+      // Verify the amount passed is in cents (9500 * 100 = 950000)
+      const callArgs = (notificationService.notifyPayment as jest.Mock).mock.calls[0];
+      expect(callArgs[1]).toBe(950000);
+    });
+
+    it('should still succeed when payment notification fails', async () => {
+      (notificationService.notifyPayment as jest.Mock).mockRejectedValueOnce(new Error('notification failed'));
+
+      const request = {
+        bountyId: 'bounty123',
+        hunterId: 'hunter123',
+        paymentIntentId: 'pi_test123',
+      };
+
+      const result = await completionReleaseService.processCompletionRelease(request);
+
+      // Release should succeed even if notification throws
+      expect(result.success).toBe(true);
     });
   });
 });
