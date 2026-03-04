@@ -5,14 +5,17 @@ import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
 
-export async function createPaymentIntent(amount: number) {
-  const res = await fetch(`${API_BASE_URL}/api/payments/create-payment-intent`, {
+export async function createPaymentIntent(amount: number, currency: string = 'usd', authToken?: string) {
+  const res = await fetch(`${API_BASE_URL}/payments/create-payment-intent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount })
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({ amountCents: Math.round(amount * 100), currency })
   });
   if (!res.ok) throw new Error('Failed to create payment intent');
-  return res.json(); // { clientSecret }
+  return res.json(); // { clientSecret, paymentIntentId }
 }
 interface StripeContextType {
   isInitialized: boolean;
@@ -135,8 +138,8 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
 
-      // Create payment intent
-      const paymentIntent = await stripeService.createPaymentIntent(amount);
+      // Create payment intent - pass auth token to authenticate with backend
+      const paymentIntent = await stripeService.createPaymentIntent(amount, 'usd', session?.access_token);
       
       // Use provided payment method or default to first available
       const pmId = paymentMethodId || paymentMethods[0]?.id;
@@ -176,11 +179,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
 
-      // Create payment intent with duplicate protection
+      // Create payment intent with duplicate protection - pass auth token to authenticate with backend
       const paymentIntent = await stripeService.createPaymentIntentSecure(
         amount, 
         'usd', 
-        undefined, 
+        session?.access_token, 
         options
       );
       
