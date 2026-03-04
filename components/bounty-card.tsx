@@ -132,6 +132,12 @@ export function BountyCard({
             <Text style={styles.urgentText}>URGENT</Text>
           </View>
         )}
+        {bounty.status === 'in_progress' && bounty.accepted_by && (
+          <View style={styles.filledBadge}>
+            <MaterialIcons name="check-circle" size={12} color="#065f46" />
+            <Text style={styles.filledText}>FILLED</Text>
+          </View>
+        )}
       </View>
 
       {/* Title */}
@@ -315,6 +321,21 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 10,
     fontWeight: "700",
+  },
+  filledBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#a7f3d0",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  filledText: {
+    color: "#065f46",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
   title: {
     fontSize: 18,

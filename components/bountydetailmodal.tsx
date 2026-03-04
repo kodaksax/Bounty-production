@@ -12,12 +12,13 @@ import {
   Dimensions,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
-  Platform
+  View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -78,6 +79,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [applicationMessage, setApplicationMessage] = useState('')
   const messagesEndRef = useRef<ScrollView>(null)
   const modalRef = useRef<View>(null)
   // Local state to hold a fuller bounty object if we need to fetch details
@@ -328,6 +330,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         hunter_id: currentUserId,
         status: 'pending',
         poster_id: posterId,
+        message: applicationMessage.trim() || null,
       } as any)
 
       if (request) {
@@ -619,8 +622,22 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
             </ScrollView>
 
-            {/* Accept Bounty Button - With safe area inset */}
+            {/* Apply section - message input + button */}
             <View style={styles.actionContainer}>
+              {!hasApplied && (
+                <TextInput
+                  style={styles.messageInput}
+                  placeholder="Add a short message to the poster (optional)…"
+                  placeholderTextColor="rgba(167, 243, 208, 0.5)"
+                  value={applicationMessage}
+                  onChangeText={setApplicationMessage}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={300}
+                  textAlignVertical="top"
+                  editable={!isApplying}
+                />
+              )}
               <TouchableOpacity
                 style={[
                   styles.acceptButton,
@@ -933,6 +950,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '500',
     fontSize: 16,
+  },
+  messageInput: {
+    backgroundColor: '#06402a', // emerald-900-ish tint
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.3)',
+    color: '#d1fae5',
+    fontSize: 14,
+    padding: 12,
+    minHeight: 72,
+    marginBottom: 10,
+    textAlignVertical: 'top',
   },
 });
 

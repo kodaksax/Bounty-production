@@ -86,6 +86,7 @@ export type BountyRequest = {
   poster_id?: string | null;  // denormalized poster reference for faster queries
   user_id?: string | null;  // legacy column; prefer hunter_id
   status: "pending" | "accepted" | "rejected";
+  message?: string | null;  // optional pitch/cover message from the hunter
   created_at: string;
   updated_at?: string;
 }

@@ -187,6 +187,14 @@ export function ApplicantCard({
           )}
         </View>
 
+        {/* Hunter's application message */}
+        {request.message ? (
+          <View style={styles.messageSection}>
+            <Text style={styles.messageSectionLabel}>Message from applicant</Text>
+            <Text style={styles.messageText}>{request.message}</Text>
+          </View>
+        ) : null}
+
         {/* Action buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
@@ -315,6 +323,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(110, 231, 183, 0.2)',
+  },
+  messageSection: {
+    marginBottom: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(110, 231, 183, 0.15)',
+  },
+  messageSectionLabel: {
+    color: '#a7f3d0',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  messageText: {
+    color: '#d1fae5',
+    fontSize: 14,
+    lineHeight: 20,
   },
   sectionLabel: {
     color: '#a7f3d0', // emerald-200
