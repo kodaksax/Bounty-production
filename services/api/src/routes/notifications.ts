@@ -209,5 +209,34 @@ export async function registerNotificationRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Delete push notification token (called on logout)
+  fastify.delete('/notifications/token', {
+    preHandler: authMiddleware
+  }, async (request: AuthenticatedRequest, reply) => {
+    try {
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const body = request.body as { token?: string } | undefined;
+      const token = body?.token;
+
+      if (!token || typeof token !== 'string') {
+        return reply.code(400).send({ error: 'token is required and must be a string' });
+      }
+
+      await notificationService.deletePushToken(request.userId, token);
+
+      return { success: true };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Error deleting push token for user ${request.userId}:`, errorMsg);
+      return reply.code(500).send({ 
+        error: 'Failed to delete push token',
+        details: 'An unexpected error occurred. Please try again later.'
+      });
+    }
+  });
+
   console.log('✅ Notification routes registered');
 }

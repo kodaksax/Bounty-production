@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import { db } from '../db/connection';
 import { notificationPreferences, notifications, pushTokens, users } from '../db/schema';
@@ -6,7 +6,7 @@ import { notificationPreferences, notifications, pushTokens, users } from '../db
 // Initialize Expo SDK
 const expo = new Expo();
 
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
+export type NotificationType = 'application' | 'acceptance' | 'rejection' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
 
 export interface CreateNotificationParams {
   userId: string;
@@ -51,8 +51,10 @@ export class NotificationService {
         case 'application':
           return pref.applications_enabled;
         case 'acceptance':
+        case 'rejection':
           return pref.acceptances_enabled;
         case 'completion':
+        case 'cancellation':
           return pref.completions_enabled;
         case 'payment':
           return pref.payments_enabled;
@@ -235,35 +237,48 @@ export class NotificationService {
         throw new Error(`Failed to ensure user profile exists for ${userId}`);
       }
 
-      // Check if token already exists for this user
-      const existing = await db
-        .select()
-        .from(pushTokens)
-        .where(and(
-          eq(pushTokens.user_id, userId),
-          eq(pushTokens.token, token)
-        ))
-        .limit(1);
+      // Atomically: remove this token from any other user and upsert for the current user.
+      // Wrapping in a transaction prevents the race condition window between the delete and insert.
+      await db.transaction(async (tx) => {
+        // Remove token from any other user to prevent cross-user notification leakage
+        // (e.g., device shared between accounts, or user re-installs app)
+        await tx
+          .delete(pushTokens)
+          .where(and(
+            eq(pushTokens.token, token),
+            ne(pushTokens.user_id, userId)
+          ));
 
-      if (existing.length > 0) {
-        // Update the existing token's timestamp
-        await db
-          .update(pushTokens)
-          .set({ 
-            updated_at: new Date(),
-            device_id: deviceId || existing[0].device_id
-          })
-          .where(eq(pushTokens.id, existing[0].id));
-        console.log(`✅ Updated push token for user ${userId}`);
-      } else {
-        // Insert new token
-        await db.insert(pushTokens).values({
-          user_id: userId,
-          token,
-          device_id: deviceId,
-        });
-        console.log(`✅ Registered new push token for user ${userId}`);
-      }
+        // Check if token already exists for this user
+        const existing = await tx
+          .select()
+          .from(pushTokens)
+          .where(and(
+            eq(pushTokens.user_id, userId),
+            eq(pushTokens.token, token)
+          ))
+          .limit(1);
+
+        if (existing.length > 0) {
+          // Update the existing token's timestamp
+          await tx
+            .update(pushTokens)
+            .set({ 
+              updated_at: new Date(),
+              device_id: deviceId || existing[0].device_id
+            })
+            .where(eq(pushTokens.id, existing[0].id));
+          console.log(`✅ Updated push token for user ${userId}`);
+        } else {
+          // Insert new token
+          await tx.insert(pushTokens).values({
+            user_id: userId,
+            token,
+            device_id: deviceId,
+          });
+          console.log(`✅ Registered new push token for user ${userId}`);
+        }
+      });
     } catch (error) {
       // Log detailed error information for debugging
       console.error(`❌ Error registering push token for user ${userId}:`, error);
@@ -280,6 +295,24 @@ export class NotificationService {
       }
       
       // Re-throw the error so the caller can handle it
+      throw error;
+    }
+  }
+
+  /**
+   * Delete push notification token (called on logout to prevent cross-user notification leakage)
+   */
+  async deletePushToken(userId: string, token: string): Promise<void> {
+    try {
+      await db
+        .delete(pushTokens)
+        .where(and(
+          eq(pushTokens.user_id, userId),
+          eq(pushTokens.token, token)
+        ));
+      console.log(`✅ Deleted push token for user ${userId}`);
+    } catch (error) {
+      console.error(`❌ Error deleting push token for user ${userId}:`, error);
       throw error;
     }
   }
@@ -389,6 +422,26 @@ export class NotificationService {
       type: 'acceptance',
       title: 'Bounty Accepted!',
       body: `Your application for "${bountyTitle}" was accepted`,
+      data: { bountyId },
+    });
+  }
+
+  async notifyBountyRejection(hunterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'rejection',
+      title: 'Application Not Selected',
+      body: `Your application for "${bountyTitle}" was not selected`,
+      data: { bountyId },
+    });
+  }
+
+  async notifyBountyCancellation(hunterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'cancellation',
+      title: 'Bounty Cancelled',
+      body: `The bounty "${bountyTitle}" has been cancelled`,
       data: { bountyId },
     });
   }

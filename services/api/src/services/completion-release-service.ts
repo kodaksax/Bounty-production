@@ -4,6 +4,7 @@ import { db } from '../db/connection';
 import { bounties, users, walletTransactions } from '../db/schema';
 import * as ConsolidatedWalletService from './consolidated-wallet-service';
 import { emailService } from './email-service';
+import { notificationService } from './notification-service';
 import { outboxService } from './outbox-service';
 
 export interface CompletionReleaseRequest {
@@ -175,6 +176,19 @@ export class CompletionReleaseService {
       } catch (emailError) {
         const { logger } = require('./logger');
         logger.warn('Email failed but continuing', emailError);
+      }
+
+      // Send push notification to hunter about payment
+      try {
+        // releaseAmount is in dollars; notifyPayment expects cents
+        await notificationService.notifyPayment(
+          request.hunterId,
+          Math.round(releaseAmount * 100),
+          request.bountyId,
+          bounty.title
+        );
+      } catch (notifError) {
+        console.warn(`⚠️ Failed to send payment notification to hunter ${request.hunterId}:`, notifError);
       }
 
       // Publish realtime event for bounty status change (non-blocking)
