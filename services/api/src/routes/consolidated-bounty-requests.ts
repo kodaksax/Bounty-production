@@ -875,6 +875,20 @@ export async function registerConsolidatedBountyRequestRoutes(
             'Bounty request accepted successfully'
           );
 
+          // Notify the hunter that their application was accepted
+          try {
+            await notificationService.notifyBountyAcceptance(
+              bountyRequest.hunter_id,
+              bountyRequest.bounty_id,
+              bounty.title
+            );
+          } catch (notificationError) {
+            request.log.warn(
+              { error: notificationError, hunterId: bountyRequest.hunter_id },
+              'Failed to send acceptance notification (non-fatal)'
+            );
+          }
+
           return updatedRequest;
         }
 
@@ -901,6 +915,22 @@ export async function registerConsolidatedBountyRequestRoutes(
           { userId, requestId, newStatus: body.status },
           'Bounty request updated successfully'
         );
+
+        // Send rejection notification to hunter when poster explicitly rejects
+        if (body.status === 'rejected') {
+          try {
+            await notificationService.notifyBountyRejection(
+              bountyRequest.hunter_id,
+              bountyRequest.bounty_id,
+              bounty.title
+            );
+          } catch (notificationError) {
+            request.log.warn(
+              { error: notificationError, hunterId: bountyRequest.hunter_id },
+              'Failed to send rejection notification (non-fatal)'
+            );
+          }
+        }
 
         return updatedRequest;
       } catch (error) {

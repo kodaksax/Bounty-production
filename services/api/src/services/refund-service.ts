@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { bounties, walletTransactions } from '../db/schema';
+import { notificationService } from './notification-service';
 import { outboxService } from './outbox-service';
 import { stripeConnectService } from './stripe-connect-service';
 
@@ -183,6 +184,19 @@ export class RefundService {
           title: bounty.title,
         },
       });
+
+      // Notify the hunter (if any) that the bounty was cancelled
+      if (bounty.hunter_id) {
+        try {
+          await notificationService.notifyBountyCancellation(
+            bounty.hunter_id,
+            request.bountyId,
+            bounty.title
+          );
+        } catch (notifError) {
+          console.warn(`⚠️ Failed to send cancellation notification to hunter ${bounty.hunter_id}:`, notifError);
+        }
+      }
 
       console.log(`✅ Successfully processed refund for bounty ${request.bountyId}: ${refundResult.refundId || refundResult.id}`);
 

@@ -85,6 +85,9 @@ try {
   // ignore
 }
 
+// Reusable no-op subscription for environments where expo-notifications is unavailable
+const NOOP_SUBSCRIPTION = { remove: () => {} };
+
 export class NotificationService {
   private static instance: NotificationService;
   private cachedNotifications: Notification[] = [];
@@ -95,6 +98,13 @@ export class NotificationService {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  /** Lazily load expo-notifications if not already loaded */
+  private ensureNotificationsModule(): void {
+    if (!Notifications) {
+      try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+    }
   }
 
   /**
@@ -114,9 +124,7 @@ export class NotificationService {
    */
   async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
     try {
-      if (!Notifications) {
-        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
-      }
+      this.ensureNotificationsModule();
       const { status } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       // Store the status for offline access
       await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
@@ -151,9 +159,7 @@ export class NotificationService {
    */
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
-      if (!Notifications) {
-        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
-      }
+      this.ensureNotificationsModule();
       const { status: existingStatus } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
       let finalStatus = existingStatus;
 
@@ -548,6 +554,13 @@ export class NotificationService {
     onNotificationReceived?: (notification: any) => void,
     onNotificationTapped?: (response: any) => void
   ) {
+    this.ensureNotificationsModule();
+
+    // If still unavailable (web or simulator), return a no-op subscription
+    if (!Notifications || typeof Notifications.addNotificationReceivedListener !== 'function') {
+      return { receivedSubscription: NOOP_SUBSCRIPTION, responseSubscription: NOOP_SUBSCRIPTION, remove: () => {} };
+    }
+
     // Listener for notifications received while app is in foreground
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification: any) => {
       if (onNotificationReceived) {
@@ -585,6 +598,61 @@ export class NotificationService {
       this.unreadCount = 0;
     } catch (error) {
       console.error('Error clearing notification cache:', error);
+    }
+  }
+
+  /**
+   * Deregister the current push token from the backend.
+   * Call on logout to prevent notifications from being delivered to a device
+   * after the user signs out (token scoping per user).
+   */
+  async deregisterPushToken(): Promise<void> {
+    try {
+      this.ensureNotificationsModule();
+      // Only proceed if we can retrieve the token
+      if (!Notifications) return;
+
+      const permStatus = await this.getStoredPermissionStatus();
+      if (permStatus !== 'granted') return;
+
+      let token: string | null = null;
+      try {
+        token = (await Notifications.getExpoPushTokenAsync()).data;
+      } catch {
+        return;
+      }
+      if (!token) return;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const url = `${API_BASE_URL}/notifications/token`;
+      try {
+        await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ token }),
+        });
+      } catch {
+        // Best-effort: also try Supabase fallback
+        try {
+          const userId = session.user?.id;
+          if (userId) {
+            await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
+          }
+        } catch {}
+      }
+
+      // Clear any locally cached pending tokens for this device
+      try {
+        await AsyncStorage.removeItem('notifications:pending_tokens');
+      } catch {}
+    } catch (error) {
+      // Non-fatal: log and continue logout
+      console.warn('[NotificationService] deregisterPushToken failed (non-fatal):', error);
     }
   }
 

@@ -3,6 +3,7 @@ import { clearRememberMePreference } from '../auth-session-storage';
 import { supabase } from '../supabase';
 import { markIntentionalSignOut } from '../utils/session-handler';
 import { authProfileService } from './auth-profile-service';
+import { notificationService } from './notification-service';
 
 export type LogoutDeps = Partial<{
   supabase: typeof supabase;
@@ -35,6 +36,9 @@ export async function performLogout(deps: LogoutDeps = {}) {
   } catch (e) {
     // ignore
   }
+
+  // Deregister push token before invalidating the session (best-effort, non-blocking)
+  void notificationService.deregisterPushToken().catch(() => undefined);
 
   // Try a full sign-out and wait for it (short timeout), fall back to local sign-out
   // Track whether sign-out ultimately failed so we only retry in background when needed
