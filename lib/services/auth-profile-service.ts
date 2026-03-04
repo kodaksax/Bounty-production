@@ -710,41 +710,29 @@ export class AuthProfileService {
         .single();
       const fromProfiles: any = supabase.from('profiles');
 
-      // The test mocks sometimes provide an object with `.update()` (not `.upsert()`),
-      // so support both invocation styles to keep integration tests working.
-        let data: any = initialRes;
-        let error: any = initialError ?? null;
+      // If the initial update succeeded, use its result directly and skip additional writes.
+      let data: any = initialRes;
+      let error: any = initialError ?? null;
 
-      if (typeof fromProfiles.upsert === 'function') {
-        const res = await fromProfiles
-          .upsert({ id: userId, ...updates }, { onConflict: 'id' })
-          .select()
-          .single();
-        data = res.data ?? null;
-        error = res.error ?? null;
-      } else {
-        const res = await fromProfiles
-          .update(updates)
-          .eq('id', userId)
-          .select()
-          .single();
-        data = res.data ?? null;
-        error = res.error ?? null;
-      }
-
-      // If update returned no data or an error indicating missing row, try upsert
-      if ((!data && error) || !data) {
-        try {
-          const resUpsert = await supabase
-            .from('profiles')
+      if (!data) {
+        // Initial update returned no row — try upsert to handle a missing-row case.
+        // The test mocks sometimes provide an object with `.update()` (not `.upsert()`),
+        // so support both invocation styles to keep integration tests working.
+        let res: { data: any; error: any };
+        if (typeof fromProfiles.upsert === 'function') {
+          res = await fromProfiles
             .upsert({ id: userId, ...updates }, { onConflict: 'id' })
             .select()
             .single();
-          data = resUpsert.data ?? null;
-          error = resUpsert.error ?? null;
-        } catch (e: any) {
-          error = e;
+        } else {
+          res = await fromProfiles
+            .update(updates)
+            .eq('id', userId)
+            .select()
+            .single();
         }
+        data = res.data ?? null;
+        error = res.data ? null : (res.error ?? initialError ?? null);
       }
 
       if (error) {

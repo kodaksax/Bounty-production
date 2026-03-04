@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
-import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthContext } from '../hooks/use-auth-context';
-import { logClientInfo, logClientError } from '../lib/services/monitoring';
+import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
+import { logClientError, logClientInfo } from '../lib/services/monitoring';
 
 interface WebSocketContextValue extends WebSocketState {
   connect: () => Promise<void>;
@@ -21,6 +21,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [lastConnectedAt, setLastConnectedAt] = useState<Date | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const prevIsConnectedRef = useRef<boolean | null>(null);
   // Ref to always hold the latest enhancedReconnect without being a dep of itself.
   // Initialized to a dev-only warning stub; the sync effect below replaces it
   // before any async reconnect timer could fire.
@@ -94,13 +95,22 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
    * Monitor connection state and update quality
    */
   useEffect(() => {
-    if (webSocketState.isConnected) {
+    const isConnected = webSocketState.isConnected;
+
+    // Only treat transitions — avoid updating `lastConnectedAt` on every render
+    // which would otherwise cause a state update loop when connected.
+    const prev = prevIsConnectedRef.current;
+
+    if (isConnected) {
       setConnectionQuality('excellent');
-      setLastConnectedAt(new Date());
+      // Update lastConnectedAt only when transitioning from non-connected -> connected
+      if (prev !== true) {
+        setLastConnectedAt(new Date());
+      }
       reconnectAttemptsRef.current = 0;
     } else {
       // If we were previously connected, this is a disconnect
-      if (lastConnectedAt) {
+      if (prev === true) {
         setConnectionQuality('poor');
         // Attempt to reconnect
         enhancedReconnect();
@@ -108,6 +118,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnectionQuality('disconnected');
       }
     }
+
+    prevIsConnectedRef.current = isConnected;
+
     // Clear any pending reconnect timeout on unmount to avoid state updates
     // on an unmounted component (e.g. during hot-reload or error-boundary recovery).
     return () => {
@@ -116,7 +129,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [webSocketState.isConnected, lastConnectedAt, enhancedReconnect]);
+  }, [webSocketState.isConnected, enhancedReconnect]);
 
   /**
    * Manage connection based on auth state

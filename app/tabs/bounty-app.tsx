@@ -7,11 +7,15 @@ import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import { BottomNav } from 'components/ui/bottom-nav'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAdmin } from '../../lib/admin-context'
+
+/** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
+const getOnboardingCompleteKey = (userId: string) => `@bounty_onboarding_completed:${userId}`
 
 function BountyAppInner() {
   const router = useRouter()
@@ -20,6 +24,23 @@ function BountyAppInner() {
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
   const currentUserId = session?.user?.id
+
+  // Fallback: check AsyncStorage for onboarding completion in case the Supabase
+  // profile update didn't propagate to AuthContext before this component mounted.
+  // Scoped per-user so a prior user's flag cannot bypass a new user's onboarding.
+  // null = not yet checked, true = completed, false = not completed.
+  const [storageOnboardingDone, setStorageOnboardingDone] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!currentUserId) {
+      // No authenticated user — no need to check storage; resolve immediately.
+      setStorageOnboardingDone(false)
+      return
+    }
+    AsyncStorage.getItem(getOnboardingCompleteKey(currentUserId))
+      .then(val => setStorageOnboardingDone(val === 'true'))
+      .catch(() => setStorageOnboardingDone(false))
+  }, [currentUserId])
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
@@ -45,7 +66,15 @@ function BountyAppInner() {
     }
   }, [activeScreen, showAdminTab, router])
 
-  if (isLoading) {
+  // Redirect unauthenticated users immediately — do not wait for AsyncStorage.
+  if (!isLoading && !session) {
+    if (__DEV__) {
+      console.log('[bounty-app] Not authenticated, redirecting to index')
+    }
+    return <Redirect href="/" />
+  }
+
+  if (isLoading || storageOnboardingDone === null) {
     return (
       <View className="flex-1 items-center justify-center bg-emerald-600">
         <ActivityIndicator size="large" color="#10b981" />
@@ -54,15 +83,19 @@ function BountyAppInner() {
     )
   }
 
-  if (!session) {
-    if (__DEV__) {
-      console.log('[bounty-app] Not authenticated, redirecting to index')
-    }
-    return <Redirect href="/" />
-  }
-
   // Guard: redirect users who haven't completed onboarding to the onboarding flow.
-  if (!isLoading && session && (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false)) {
+  // The profile is the authoritative source: if it explicitly marks onboarding as
+  // required or incomplete, always redirect — even if the local flag says done.
+  // Only when the profile is still null (Supabase propagation lag) do we fall back
+  // to the local per-user flag to avoid looping back to the username screen.
+  if (
+    !isLoading &&
+    session &&
+    (
+      (profile !== null && (profile.needs_onboarding === true || profile.onboarding_completed === false)) ||
+      (profile === null && !storageOnboardingDone)
+    )
+  ) {
     if (__DEV__) {
       console.log('[bounty-app] Profile incomplete or onboarding not done, redirecting to onboarding')
     }

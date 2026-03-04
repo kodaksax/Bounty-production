@@ -72,9 +72,10 @@ export default function AuthCallbackScreen() {
           setStatus('success');
           setMessage('Email Confirmed!');
           
-          // Wait a moment to show success, then redirect
+          // Wait a moment to show success, then redirect to onboarding
+          // (new users need to complete profile setup before accessing the app)
           setTimeout(() => {
-            router.replace('/tabs/bounty-app' as Href);
+            router.replace('/onboarding' as Href);
             try { markInitialNavigationDone(); } catch {}
           }, 2000);
           return;
