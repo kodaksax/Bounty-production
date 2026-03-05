@@ -245,7 +245,7 @@ export const bountyRequestService = {
 
         // Perform the insert as a standalone operation (do not chain `.select()`)
         // so test mocks that simulate insert errors are triggered correctly.
-        const insertRes: any = await supabase
+        const { data: insData, error } = await supabase
           .from('bounty_requests')
           .insert(normalizedRequest)
           .select('*')
