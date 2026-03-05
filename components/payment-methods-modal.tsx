@@ -2,7 +2,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import React, { useRef, useState } from "react"
-import { Alert, Dimensions, FlatList, PanResponder, Text, TouchableOpacity, View } from "react-native"
+import { Alert, Animated, Dimensions, Easing, FlatList, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
 import { theme } from '../lib/theme'
@@ -14,15 +14,18 @@ type PaymentMethodType = 'card' | 'bank_account'
 interface PaymentMethodsModalProps {
   isOpen: boolean
   onClose: () => void
+  /** Called when the backdrop (shaded area) is pressed. If provided, will be used instead of onClose. Useful to return to the parent screen. */
+  onBackdropPress?: () => void
   /** Preferred method type to show (optional) */
   preferredType?: PaymentMethodType
 }
 
-export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentMethodsModalProps) {
+export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferredType }: PaymentMethodsModalProps) {
   const modalRef = useRef<View>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [dragOffset, setDragOffset] = useState(0)
   const [initialY, setInitialY] = useState(0)
+  const animatedTranslateY = useRef(new Animated.Value(Dimensions.get('window').height)).current
+  const overlayOpacity = useRef(new Animated.Value(0)).current
   const [showAddCard, setShowAddCard] = useState(false)
   const [showAddBankAccount, setShowAddBankAccount] = useState(false)
   const [selectedMethodType, setSelectedMethodType] = useState<PaymentMethodType>(preferredType || 'card')
@@ -102,58 +105,97 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
     }
   }
 
-  // React Native/Expo Go: Use PanResponder for drag gestures
+  // React Native/Expo Go: Use PanResponder for drag gestures and drive Animated value
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderGrant: (evt, gestureState) => {
       setIsDragging(true)
       setInitialY(gestureState.y0)
-      setDragOffset(0)
+      animatedTranslateY.stopAnimation()
     },
     onPanResponderMove: (evt, gestureState) => {
-      if (!isDragging) return
       const offset = gestureState.moveY - initialY
       if (offset > 0) {
-        setDragOffset(offset)
+        animatedTranslateY.setValue(offset)
       }
     },
     onPanResponderRelease: (evt, gestureState) => {
       setIsDragging(false)
-      if (dragOffset > 100) {
-        onClose()
+      const offset = gestureState.moveY - initialY
+      if (offset > 120 || gestureState.vy > 0.8) {
+        Animated.timing(animatedTranslateY, {
+          toValue: Dimensions.get('window').height,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }).start(() => onClose())
       } else {
-        setDragOffset(0)
+        Animated.spring(animatedTranslateY, {
+          toValue: 0,
+          tension: 80,
+          friction: 10,
+          useNativeDriver: true
+        }).start()
       }
     },
     onPanResponderTerminate: () => {
       setIsDragging(false)
-      setDragOffset(0)
+      Animated.spring(animatedTranslateY, {
+        toValue: 0,
+        tension: 80,
+        friction: 10,
+        useNativeDriver: true
+      }).start()
     },
   })
 
+  // Animate in overlay + modal when opening
+  React.useEffect(() => {
+    if (isOpen) {
+      overlayOpacity.setValue(0)
+      animatedTranslateY.setValue(Dimensions.get('window').height)
+      Animated.parallel([
+        Animated.timing(overlayOpacity, { toValue: 0.6, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(animatedTranslateY, { toValue: 0, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true })
+      ]).start()
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
+  const handleBackdropPress = () => {
+    if (onBackdropPress) {
+      onBackdropPress()
+    } else {
+      onClose()
+    }
+  }
+
   return (
-    <View style={{
+    <Animated.View style={{
       position: 'absolute',
       left: 0,
       right: 0,
       bottom: 0,
       top: 0,
-      backgroundColor: 'rgba(0,0,0,0.6)',
       zIndex: 50,
       justifyContent: 'flex-end',
       alignItems: 'center'
-    }} {...panResponder.panHandlers}>
-      <View
+    }}>
+      <Pressable style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} onPress={handleBackdropPress}>
+        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: overlayOpacity }} />
+      </Pressable>
+
+      <Animated.View
         ref={modalRef}
+        {...panResponder.panHandlers}
         style={{
           backgroundColor: '#059669', // emerald-600
           width: '100%',
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
           overflow: 'hidden',
-          transform: [{ translateY: dragOffset }],
+          transform: [{ translateY: animatedTranslateY }],
           maxHeight: Dimensions.get('window').height * 0.92, // Increased for iPhone
           minHeight: 400, // Ensure minimum usable height
         }}
@@ -424,7 +466,7 @@ export function PaymentMethodsModal({ isOpen, onClose, preferredType }: PaymentM
             )}
           </View>
         )}
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   )
 }
