@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAdmin } from '../../lib/admin-context'
+import { authProfileService } from '../../lib/services/auth-profile-service'
 
 /** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
 const getOnboardingCompleteKey = (userId: string) => `@bounty_onboarding_completed:${userId}`
@@ -30,6 +31,9 @@ function BountyAppInner() {
   // Scoped per-user so a prior user's flag cannot bypass a new user's onboarding.
   // null = not yet checked, true = completed, false = not completed.
   const [storageOnboardingDone, setStorageOnboardingDone] = useState<boolean | null>(null)
+  // Track whether we have already attempted to repair the Supabase onboarding flag
+  // so we don't issue repeated update calls on every render.
+  const repairAttemptedRef = useRef(false)
 
   useEffect(() => {
     if (!currentUserId) {
@@ -41,6 +45,24 @@ function BountyAppInner() {
       .then(val => setStorageOnboardingDone(val === 'true'))
       .catch(() => setStorageOnboardingDone(false))
   }, [currentUserId])
+
+  // Background repair: when the local flag says onboarding is done but the Supabase
+  // profile still has onboarding_completed !== true (e.g. the write failed due to a
+  // bad network), silently update the profile so future restarts work correctly.
+  useEffect(() => {
+    if (
+      !repairAttemptedRef.current &&
+      storageOnboardingDone === true &&
+      currentUserId &&
+      profile !== null &&
+      profile.onboarding_completed !== true
+    ) {
+      repairAttemptedRef.current = true
+      authProfileService.updateProfile({ onboarding_completed: true }).catch(() => {
+        // Non-critical: the local flag is still the fallback on next restart.
+      })
+    }
+  }, [storageOnboardingDone, currentUserId, profile])
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled

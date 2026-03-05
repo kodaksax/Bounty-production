@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from "expo-router"
 import type { Href } from "expo-router"
 import { useEffect, useRef } from "react"
@@ -7,6 +8,9 @@ import { ROUTES } from "../lib/routes"
 import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 import 'react-native-get-random-values'; // must run before using tweetnacl
+
+/** Returns the per-user AsyncStorage key for the onboarding-completed flag (mirrors done.tsx). */
+const getOnboardingCompleteKey = (userId: string) => `@bounty_onboarding_completed:${userId}`
 
 /**
  * Root Index - Auth Gate
@@ -74,51 +78,94 @@ export default function Index() {
 
     // If user is authenticated, check their profile status
     if (session?.user) {
-      try {
-        if (!isActive || latestSessionIdRef.current !== startingSessionId) return
-        
-        // Prevent multiple navigations
-        if (hasNavigatedRef.current) {
-          if (__DEV__) {
-            console.log('[index] Already navigated, skipping')
-          }
-          return
-        }
-        
-        // Check if user needs to complete onboarding
-        // This happens when auth user exists but no profile is found, OR
-        // profile fetch failed (null) — treat as needing onboarding to avoid
-        // landing in the main app with no profile data (causes "Profile not found" errors)
-        if (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
-          if (__DEV__) {
-            console.log('[index] User needs onboarding, redirecting to onboarding flow')
-          }
-          hasNavigatedRef.current = true
-          router.replace('/onboarding')
-          try {
-            markInitialNavigationDone()
-          } catch (error) {
+      const userId = session.user.id
+
+      // Wrap navigation in an async function so we can await the AsyncStorage check
+      // without blocking the useEffect return value.
+      const navigate = async () => {
+        try {
+          if (!isActive || latestSessionIdRef.current !== startingSessionId) return
+
+          // Prevent multiple navigations
+          if (hasNavigatedRef.current) {
             if (__DEV__) {
-              console.warn('[index] markInitialNavigationDone failed after onboarding navigation:', error)
+              console.log('[index] Already navigated, skipping')
+            }
+            return
+          }
+
+          // Check if user needs to complete onboarding
+          // This happens when auth user exists but no profile is found, OR
+          // profile fetch failed (null) — treat as needing onboarding to avoid
+          // landing in the main app with no profile data (causes "Profile not found" errors)
+          if (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
+            // Before redirecting to onboarding, check the per-user AsyncStorage flag.
+            // When the Supabase write in done.tsx fails (e.g. bad network), the local
+            // flag is the only reliable indicator that onboarding was completed.
+            // bounty-app.tsx applies the same fallback so the user is never redirected
+            // back to onboarding once they reach the main screen.
+            let localOnboardingDone = false
+            try {
+              const val = await AsyncStorage.getItem(getOnboardingCompleteKey(userId))
+              localOnboardingDone = val === 'true'
+            } catch (storageError) {
+              if (__DEV__) {
+                console.warn('[index] AsyncStorage check failed, defaulting to onboarding:', storageError)
+              }
+            }
+
+            // Re-check guards after the async operation
+            if (!isActive || latestSessionIdRef.current !== startingSessionId || hasNavigatedRef.current) return
+
+            if (localOnboardingDone) {
+              // Local flag says onboarding was completed — go to main app.
+              // The Supabase profile will be repaired in the background by bounty-app.tsx.
+              if (__DEV__) {
+                console.log('[index] Supabase profile incomplete but local flag set — going to main app')
+              }
+              hasNavigatedRef.current = true
+              router.replace(ROUTES.TABS.BOUNTY_APP)
+              try {
+                markInitialNavigationDone()
+              } catch (error) {
+                if (__DEV__) {
+                  console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
+                }
+              }
+            } else {
+              if (__DEV__) {
+                console.log('[index] User needs onboarding, redirecting to onboarding flow')
+              }
+              hasNavigatedRef.current = true
+              router.replace('/onboarding')
+              try {
+                markInitialNavigationDone()
+              } catch (error) {
+                if (__DEV__) {
+                  console.warn('[index] markInitialNavigationDone failed after onboarding navigation:', error)
+                }
+              }
+            }
+          } else {
+            if (__DEV__) {
+              console.log('[index] Authenticated with complete profile, redirecting to main app')
+            }
+            hasNavigatedRef.current = true
+            router.replace(ROUTES.TABS.BOUNTY_APP)
+            try {
+              markInitialNavigationDone()
+            } catch (error) {
+              if (__DEV__) {
+                console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
+              }
             }
           }
-        } else {
-          if (__DEV__) {
-            console.log('[index] Authenticated with complete profile, redirecting to main app')
-          }
-          hasNavigatedRef.current = true
-          router.replace(ROUTES.TABS.BOUNTY_APP)
-          try {
-            markInitialNavigationDone()
-          } catch (error) {
-            if (__DEV__) {
-              console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
-            }
-          }
+        } catch (navError) {
+          console.error('[index] Navigation error:', navError)
         }
-      } catch (navError) {
-        console.error('[index] Navigation error:', navError)
       }
+
+      navigate()
     } else {
       // No session: user should see sign-in form
       // Reset navigation flag to allow navigation after sign-in
