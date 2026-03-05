@@ -28,8 +28,57 @@ import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 
 const ONBOARDING_COMPLETE_KEY_PREFIX = '@bounty_onboarding_completed';
+/**
+ * Maximum time to wait for pre-navigation work (e.g. profile sync, push registration)
+ * before proceeding to the main app. 8s is a compromise: long enough for slow mobile
+ * networks to complete in most cases, but short enough to avoid users getting stuck
+ * on the final onboarding screen if a dependency hangs.
+ */
+const PRE_NAV_TIMEOUT_MS = 8000;
 /** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
 const getOnboardingCompleteKey = (userId: string) => `${ONBOARDING_COMPLETE_KEY_PREFIX}:${userId}`;
+
+// Keep onboarding completion responsive even when a network dependency stalls.
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let settled = false;
+
+  const clearTimer = () => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimer();
+      console.warn(`[Onboarding] ${label} timed out after ${timeoutMs}ms`);
+      resolve(null);
+    }, timeoutMs);
+  });
+
+  const wrappedPromise = promise
+    .then((value) => {
+      settled = true;
+      clearTimer();
+      return value;
+    })
+    .catch((error) => {
+      settled = true;
+      clearTimer();
+      throw error;
+    });
+
+  try {
+    return await Promise.race([wrappedPromise, timeoutPromise]);
+  } finally {
+    // Ensure the losing branch cannot leave a pending timer behind.
+    clearTimer();
+  }
+}
 
 export default function DoneScreen() {
   const router = useRouter();
@@ -65,9 +114,25 @@ export default function DoneScreen() {
   }, [scaleAnim, fadeAnim]);
 
   const handleContinue = async () => {
-    if (hasNavigatedRef.current) return;
+    if (hasNavigatedRef.current || isLoading) return;
     hasNavigatedRef.current = true;
     setIsLoading(true);
+
+    // Write the per-user onboarding-completed flag immediately to reduce
+    // the race window where the profile write/refresh may still be pending.
+    // This is intentionally early: we accept temporary inconsistency to
+    // avoid users being redirected back into onboarding when network calls
+    // are slow. We'll still attempt the later persistence as redundancy.
+    try {
+      if (userId) {
+        await AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true');
+        console.log('[Onboarding] Early AsyncStorage onboarding flag written');
+      } else {
+        console.warn('[Onboarding] Early AsyncStorage write skipped: userId not available');
+      }
+    } catch (err) {
+      console.error('[Onboarding] Early AsyncStorage write failed:', err);
+    }
 
     // Step 1: Write ALL onboarding data + onboarding_completed: true to Supabase
     // AND patch the in-memory AuthContext profile in one atomic call.
@@ -89,23 +154,38 @@ export default function DoneScreen() {
       }
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
-      const updated = await authProfileService.updateProfile(profileUpdate as any);
+      const updated = await withTimeout(
+        authProfileService.updateProfile(profileUpdate as any),
+        PRE_NAV_TIMEOUT_MS,
+        'updateProfile'
+      );
       if (!updated) {
+        console.error('[Onboarding] updateProfile returned null (timeout or empty response); running refresh fallback');
         // updateProfile returned null (in-memory profile was not refreshed); force a
         // refresh so the DB's onboarding_completed=true is pulled into the AuthContext
         // before we navigate — preventing the redirect loop in bounty-app.tsx.
-        await authProfileService.refreshProfile().catch((err) => {
-          console.error('[Onboarding] refreshProfile fallback failed:', err);
-        });
+        const fallbackProfile = await withTimeout(
+          authProfileService.refreshProfile(),
+          PRE_NAV_TIMEOUT_MS,
+          'refreshProfile fallback'
+        );
+        if (fallbackProfile === null) {
+          console.error('[Onboarding] refreshProfile fallback returned null (likely timeout); proceeding to avoid blocking navigation');
+        }
       }
       console.log('[Onboarding] Profile written to Supabase + AuthContext updated');
     } catch (e) {
       console.error('[Onboarding] updateProfile failed:', e);
       // Even if the Supabase write failed, try refreshing the profile — the DB may have
       // partially succeeded or a prior write may have set onboarding_completed.
-      await authProfileService.refreshProfile().catch((err) => {
-        console.error('[Onboarding] refreshProfile fallback failed:', err);
-      });
+      const refreshAfterError = await withTimeout(
+        authProfileService.refreshProfile(),
+        PRE_NAV_TIMEOUT_MS,
+        'refreshProfile after update error'
+      );
+      if (refreshAfterError === null) {
+        console.error('[Onboarding] refreshProfile after update error returned null (likely timeout); navigation may rely on AsyncStorage fallback');
+      }
     }
 
     // Persist the onboarding-completed flag locally, scoped to this user.
@@ -123,7 +203,11 @@ export default function DoneScreen() {
 
     // Step 2: Request notification permissions (best effort, non-blocking)
     try {
-      await notificationService.requestPermissionsAndRegisterToken();
+      await withTimeout(
+        notificationService.requestPermissionsAndRegisterToken(),
+        PRE_NAV_TIMEOUT_MS,
+        'notification permission/token registration'
+      );
     } catch (e) {
       console.error('[Onboarding] Notification permission error:', e);
     }
@@ -145,17 +229,35 @@ export default function DoneScreen() {
         const completeness = await userProfileService.checkCompleteness(userId);
         await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(userId), { profile, completeness });
       }
-    } catch (e) { /* non-critical */ }
+    } catch (e) {
+      // Non-critical cache refresh failure should not block completion.
+      console.error('[Onboarding] Secondary cache refresh failed:', e);
+    }
 
     // Step 4: Ensure AuthContext has the latest profile before navigating.
     // We explicitly refresh the auth profile instead of relying on a fixed timeout.
     try {
-      await authProfileService.refreshProfile();
+      const finalRefresh = await withTimeout(
+        authProfileService.refreshProfile(),
+        PRE_NAV_TIMEOUT_MS,
+        'final refreshProfile'
+      );
+      if (finalRefresh === null) {
+        console.error('[Onboarding] final refreshProfile returned null (likely timeout); continuing with local onboarding-complete flag');
+      }
     } catch (e) {
       console.error('[Onboarding] refreshProfile failed (continuing to app):', e);
     }
 
-    router.replace('/tabs/bounty-app');
+    try {
+      router.replace('/tabs/bounty-app');
+      hasNavigatedRef.current = true;
+    } catch (e) {
+      console.error('[Onboarding] Navigation failed:', e);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(false);
   };
 
@@ -165,14 +267,29 @@ export default function DoneScreen() {
     const alreadyCompleted = !!((normalized as any)?.onboarding_completed || (localProfile as any)?.onboarding_completed);
     if (!alreadyCompleted) return;
     if (hasNavigatedRef.current) return;
-    hasNavigatedRef.current = true;
+
     (async () => {
       try {
         setIsLoading(true);
         // allow the button/animations to render briefly so there's no visual jump
         await new Promise((res) => setTimeout(res, 600));
-        await authProfileService.refreshProfile().catch(() => {});
-        router.replace('/tabs/bounty-app');
+        const refreshed = await withTimeout(
+          authProfileService.refreshProfile(),
+          PRE_NAV_TIMEOUT_MS,
+          'auto-navigation refreshProfile'
+        );
+        if (refreshed === null) {
+          console.error('[Onboarding] auto-navigation refreshProfile returned null (likely timeout); attempting navigation anyway');
+        }
+
+        try {
+          router.replace('/tabs/bounty-app');
+          hasNavigatedRef.current = true;
+        } catch (e) {
+          console.error('[Onboarding] Auto-navigation failed:', e);
+          // `finally` will clear loading state; avoid redundant set here.
+          return;
+        }
       } finally {
         setIsLoading(false);
       }

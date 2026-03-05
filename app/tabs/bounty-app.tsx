@@ -6,8 +6,8 @@ import type { BountyFeedHandle } from 'components/bounty-feed'
 import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
-import { BottomNav } from 'components/ui/bottom-nav'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { BottomNav } from 'components/ui/bottom-nav'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
@@ -92,7 +92,12 @@ function BountyAppInner() {
     !isLoading &&
     session &&
     (
-      (profile !== null && (profile.needs_onboarding === true || profile.onboarding_completed === false)) ||
+      // If the profile explicitly indicates onboarding is required OR
+      // the profile is null and the per-user storage flag says not done,
+      // redirect to onboarding. However, allow the per-user AsyncStorage
+      // flag to temporarily override an authored `onboarding_completed: false`
+      // value to reduce redirect loops when the DB/profile hasn't propagated yet.
+      (profile !== null && (profile.needs_onboarding === true || (profile.onboarding_completed === false && !storageOnboardingDone))) ||
       (profile === null && !storageOnboardingDone)
     )
   ) {
