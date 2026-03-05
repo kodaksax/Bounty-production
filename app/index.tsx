@@ -1,16 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from "expo-router"
 import type { Href } from "expo-router"
 import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
+import { getOnboardingCompleteKey } from "../lib/storage/onboarding"
 import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 import 'react-native-get-random-values'; // must run before using tweetnacl
-
-/** Returns the per-user AsyncStorage key for the onboarding-completed flag (mirrors done.tsx). */
-const getOnboardingCompleteKey = (userId: string) => `@bounty_onboarding_completed:${userId}`
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 /**
  * Root Index - Auth Gate

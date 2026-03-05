@@ -1,5 +1,4 @@
 "use client"
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { MaterialIcons } from '@expo/vector-icons'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import * as AppleAuthentication from 'expo-apple-authentication'
@@ -19,6 +18,7 @@ import { setRememberMePreference } from '../../lib/auth-session-storage'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
@@ -28,28 +28,6 @@ import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 WebBrowser.maybeCompleteAuthSession()
-
-/**
- * Returns the per-user AsyncStorage key for the onboarding-completed flag.
- * Mirrors the key written by done.tsx so we can read it here as a fallback.
- */
-function getOnboardingCompleteKey(userId: string) {
-  return `@bounty_onboarding_completed:${userId}`
-}
-
-/**
- * Returns true if the per-user AsyncStorage flag indicates the user already
- * completed onboarding. Used as a fallback when the Supabase profile write
- * failed (e.g. bad network) so the user is not sent back to the username screen.
- */
-async function hasLocalOnboardingFlag(userId: string): Promise<boolean> {
-  try {
-    const val = await AsyncStorage.getItem(getOnboardingCompleteKey(userId))
-    return val === 'true'
-  } catch {
-    return false
-  }
-}
 
 export default function SignInRoute() {
   return <SignInForm />
