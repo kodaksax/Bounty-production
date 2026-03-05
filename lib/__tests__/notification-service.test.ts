@@ -8,6 +8,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as notifModule from '../services/notification-service';
 import { supabase } from '../supabase';
+import { makeThrowingFrom } from './supabase-mock';
 // Mock the imported supabase instance used by the service
 jest.mock('../supabase', () => ({
   supabase: {
@@ -42,7 +43,7 @@ describe('lib notification service (unit)', () => {
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: { access_token: 'token', user: { id: 'user-1' } } } });
 
     // Force supabase.from to throw so code uses API fallback
-    (supabase.from as jest.Mock).mockImplementation(() => { throw new Error('Supabase fail'); });
+    (supabase.from as jest.Mock).mockImplementation(makeThrowingFrom(new Error('Supabase fail')));
 
     const result = await (notifModule as any).notificationService.fetchNotifications(10, 0);
 
