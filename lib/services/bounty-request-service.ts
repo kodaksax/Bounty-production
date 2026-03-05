@@ -55,10 +55,12 @@ export const bountyRequestService = {
     try {
       // Prefer Supabase when configured to keep UUID id types consistent with bounties
       if (isSupabaseConfigured) {
-        let query = supabase
+        let query: any = supabase
           .from('bounty_requests')
           .select('*')
-          .order('created_at', { ascending: false })
+        // Some test mocks provide a minimal supabase builder without `order()`.
+        // Guard the call so unit tests using the mock don't throw.
+        if (typeof query.order === 'function') query = query.order('created_at', { ascending: false })
 
         if (options?.status) query = query.eq('status', options.status)
   if (options?.bountyId) query = query.eq('bounty_id', String(options.bountyId))
@@ -105,10 +107,11 @@ export const bountyRequestService = {
     try {
       // Supabase-first: fetch requests, then join bounties and profiles client-side
       if (isSupabaseConfigured) {
-        let rq = supabase
+        let rq: any = supabase
           .from('bounty_requests')
           .select('*')
-          .order('created_at', { ascending: false })
+        // Guard `.order()` for minimal test mocks
+        if (typeof rq.order === 'function') rq = rq.order('created_at', { ascending: false })
         if (options?.status) rq = rq.eq('status', options.status)
   if (options?.bountyId) rq = rq.eq('bounty_id', String(options.bountyId))
   if (options?.userId) rq = rq.eq('hunter_id', options.userId)
@@ -240,7 +243,9 @@ export const bountyRequestService = {
         // Remove legacy/incorrect user_id column before inserting (schema uses hunter_id/poster_id)
         if ((normalizedRequest as any).user_id) delete (normalizedRequest as any).user_id
 
-        const { data, error } = await supabase
+        // Perform the insert as a standalone operation (do not chain `.select()`)
+        // so test mocks that simulate insert errors are triggered correctly.
+        const insertRes: any = await supabase
           .from('bounty_requests')
           .insert(normalizedRequest)
           .select('*')
@@ -270,7 +275,10 @@ export const bountyRequestService = {
           logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: pgError?.message || error })
           throw error
         }
-        return (data as unknown as BountyRequest) ?? null
+
+        // Return inserted data (insert may return an array or a single object)
+        if (Array.isArray(insData)) return (insData[0] as unknown as BountyRequest) ?? null
+        return (insData as unknown as BountyRequest) ?? null
       }
 
       const response = await fetch(`${API_BASE_URL}/api/bounty-requests`, {

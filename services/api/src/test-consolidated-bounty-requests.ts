@@ -436,6 +436,25 @@ async function testAcceptRequest() {
         'Bounty status should be in_progress after acceptance',
         bountyResponse.data.status === 'in_progress' && bountyResponse.data.accepted_by === hunterUserId
       );
+
+      // Wait for escrow/payment intent to be created and persisted by the outbox worker
+      // Poll the bounty record for up to 10s for `payment_intent_id` to be set
+      const maxWaitMs = 10000;
+      const pollIntervalMs = 1000;
+      let elapsed = 0;
+      let paymentIntentId: string | undefined = bountyResponse.data.payment_intent_id;
+
+      while (!paymentIntentId && elapsed < maxWaitMs) {
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+        elapsed += pollIntervalMs;
+        const polled = await makeRequest('GET', `/api/bounties/${testBountyId}`, undefined, { Authorization: `Bearer ${posterToken}` });
+        paymentIntentId = polled.data.payment_intent_id;
+      }
+
+      recordTest(
+        'Bounty should have payment_intent_id after acceptance (escrow created)',
+        !!paymentIntentId
+      );
     }
   } catch (error) {
     recordTest('Accept request as bounty owner', false, error instanceof Error ? error.message : 'Unknown error');

@@ -387,6 +387,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             // Refresh payment methods after closing
             loadPaymentMethods()
           }}
+          onBackdropPress={() => {
+            // If user taps the shaded area, close modal and return to wallet screen
+            setShowPaymentMethodsModal(false)
+            loadPaymentMethods()
+            onBack?.()
+          }}
         />
       )}
     </View>
