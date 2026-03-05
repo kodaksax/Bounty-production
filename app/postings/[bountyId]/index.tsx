@@ -2,14 +2,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
@@ -254,9 +254,9 @@ export default function BountyDashboard() {
     : bounty.description;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: '#1a3d2e' }]}>
         <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -264,8 +264,8 @@ export default function BountyDashboard() {
       </View>
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
+        style={[styles.scrollView, { width: '100%' }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 18 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Bounty Header Card */}
@@ -477,6 +477,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a3d2e',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   loadingContainer: {
     flex: 1,
