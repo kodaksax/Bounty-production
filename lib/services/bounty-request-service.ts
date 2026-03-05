@@ -246,8 +246,28 @@ export const bountyRequestService = {
           .select('*')
           .single()
         if (error) {
+          // PostgreSQL error code 23505 = unique_violation
+          // The hunter already has a pending application for this bounty.
+          // Return the existing record so the caller can treat this as a success
+          // (e.g. set hasApplied = true) instead of surfacing a confusing error.
+          const pgError = error as { code?: string; message?: string }
+          if (pgError?.code === '23505') {
+            const { data: existing, error: fetchErr } = await supabase
+              .from('bounty_requests')
+              .select('*')
+              .eq('bounty_id', String(normalizedRequest.bounty_id))
+              .eq('hunter_id', String(normalizedRequest.hunter_id))
+              .single()
+            if (fetchErr) {
+              // If we can't read the existing record (e.g. RLS), log and fall through to throw original error
+              logger.error('Failed to fetch existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr?.message || fetchErr })
+            } else if (existing) {
+              // Supabase returns rows as `Record<string, unknown>`; BountyRequest has the same shape
+              return existing as unknown as BountyRequest
+            }
+          }
           // Log Supabase error details for better diagnostics
-          logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: (error as any)?.message || error })
+          logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: pgError?.message || error })
           throw error
         }
         return (data as unknown as BountyRequest) ?? null
