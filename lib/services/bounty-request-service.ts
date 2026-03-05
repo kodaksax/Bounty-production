@@ -248,38 +248,32 @@ export const bountyRequestService = {
         const insertRes: any = await supabase
           .from('bounty_requests')
           .insert(normalizedRequest)
-
-        const { data: insData, error: insError } = insertRes || {}
-
-        if (insError) {
-          // Log Supabase error details for diagnostics
-          logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: (insError as any)?.message || insError })
-
-          // Treat unique-violation (duplicate insert) as success by returning
-          // the existing record. This matches UX: attempting to create the
-          // same request should return the existing resource rather than fail.
-          try {
-            const code = (insError as any)?.code || (insError as any)?.status || ''
-            const isUniqueViolation = String(code) === '23505' || /duplicate/i.test((insError as any)?.message || '')
-            if (isUniqueViolation && normalizedRequest.bounty_id && normalizedRequest.hunter_id) {
-              const { data: existing, error: selErr } = await supabase
-                .from('bounty_requests')
-                .select('*')
-                .eq('bounty_id', String(normalizedRequest.bounty_id))
-                .eq('hunter_id', String(normalizedRequest.hunter_id))
-                .single()
-              if (selErr) {
-                logger.error('Error selecting existing bounty_request after unique violation', { selErr })
-                throw insError
-              }
-              return (existing as unknown as BountyRequest) ?? null
+          .select('*')
+          .single()
+        if (error) {
+          // PostgreSQL error code 23505 = unique_violation
+          // The hunter already has a pending application for this bounty.
+          // Return the existing record so the caller can treat this as a success
+          // (e.g. set hasApplied = true) instead of surfacing a confusing error.
+          const pgError = error as { code?: string; message?: string }
+          if (pgError?.code === '23505') {
+            const { data: existing, error: fetchErr } = await supabase
+              .from('bounty_requests')
+              .select('*')
+              .eq('bounty_id', String(normalizedRequest.bounty_id))
+              .eq('hunter_id', String(normalizedRequest.hunter_id))
+              .single()
+            if (fetchErr) {
+              // If we can't read the existing record (e.g. RLS), log and fall through to throw original error
+              logger.error('Failed to fetch existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr?.message || fetchErr })
+            } else if (existing) {
+              // Supabase returns rows as `Record<string, unknown>`; BountyRequest has the same shape
+              return existing as unknown as BountyRequest
             }
-          } catch (inner) {
-            // If selection fails, rethrow original insertion error to be handled
-            throw insError
           }
-
-          throw insError
+          // Log Supabase error details for better diagnostics
+          logger.error('Supabase error creating bounty request', { request: normalizedRequest, error: pgError?.message || error })
+          throw error
         }
 
         // Return inserted data (insert may return an array or a single object)
