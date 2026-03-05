@@ -13,8 +13,6 @@ import { useWallet } from '../lib/wallet-context'
 import { ErrorBanner } from './error-banner'
 import { PaymentMethodsModal } from './payment-methods-modal'
 
-import { API_BASE_URL } from 'lib/config/api'
-
 interface AddMoneyScreenProps {
   onBack?: () => void
   onAddMoney?: (amount: number) => void
@@ -84,40 +82,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       setError(null)
 
       try {
-        // Get auth token
+        // Verify auth before proceeding
         if (!session?.access_token) {
           throw new Error('Not authenticated. Please sign in again.')
         }
 
-        // Call backend to create PaymentIntent
-        const amountCents = Math.round(numAmount * 100)
-
-        const endpoint = `${API_BASE_URL}/payments/create-payment-intent`
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            amountCents,
-            currency: 'usd',
-            metadata: {
-              purpose: 'wallet_deposit',
-              amount: numAmount
-            }
-          })
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || 'Failed to create payment intent')
-        }
-
-        const { clientSecret, paymentIntentId } = await response.json()
-
-        // Use existing processPayment - this will use the clientSecret internally
-        // The backend webhook will handle updating the wallet balance when payment succeeds
+        // processPayment handles creating the payment intent (with auth) and confirming it
         const result = await processPayment(numAmount, paymentMethods[0]?.id)
 
         if (result.success) {

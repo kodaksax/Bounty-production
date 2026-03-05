@@ -1,19 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-// Fixed import path: stripe-context.tsx sits in lib/, so services is a sibling folder under lib/
-import { API_BASE_URL } from 'lib/config/api';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
 
-export async function createPaymentIntent(amount: number) {
-  const res = await fetch(`${API_BASE_URL}/api/payments/create-payment-intent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount })
-  });
-  if (!res.ok) throw new Error('Failed to create payment intent');
-  return res.json(); // { clientSecret }
-}
 interface StripeContextType {
   isInitialized: boolean;
   isLoading: boolean;
@@ -135,8 +124,15 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
 
-      // Create payment intent
-      const paymentIntent = await stripeService.createPaymentIntent(amount);
+      // Ensure user is authenticated before attempting to create a payment intent
+      if (!session?.access_token) {
+        const errorMessage = 'Not authenticated. Please sign in again.';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
+
+      // Create payment intent - pass auth token to authenticate with backend
+      const paymentIntent = await stripeService.createPaymentIntent(amount, 'usd', session.access_token);
       
       // Use provided payment method or default to first available
       const pmId = paymentMethodId || paymentMethods[0]?.id;
@@ -176,11 +172,18 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
 
-      // Create payment intent with duplicate protection
+      // Ensure user is authenticated before attempting to create a payment intent
+      if (!session?.access_token) {
+        const errorMessage = 'Not authenticated. Please sign in again.';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
+
+      // Create payment intent with duplicate protection - pass auth token to authenticate with backend
       const paymentIntent = await stripeService.createPaymentIntentSecure(
         amount, 
         'usd', 
-        undefined, 
+        session.access_token, 
         options
       );
       
