@@ -6,16 +6,15 @@ import type { BountyFeedHandle } from 'components/bounty-feed'
 import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useAdmin } from '../../lib/admin-context'
-
-/** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
-const getOnboardingCompleteKey = (userId: string) => `@bounty_onboarding_completed:${userId}`
+import { authProfileService } from '../../lib/services/auth-profile-service'
+import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 function BountyAppInner() {
   const router = useRouter()
@@ -30,6 +29,9 @@ function BountyAppInner() {
   // Scoped per-user so a prior user's flag cannot bypass a new user's onboarding.
   // null = not yet checked, true = completed, false = not completed.
   const [storageOnboardingDone, setStorageOnboardingDone] = useState<boolean | null>(null)
+  // Track whether we have already attempted to repair the Supabase onboarding flag
+  // so we don't issue repeated update calls on every render.
+  const repairAttemptedRef = useRef(false)
 
   useEffect(() => {
     if (!currentUserId) {
@@ -41,6 +43,29 @@ function BountyAppInner() {
       .then(val => setStorageOnboardingDone(val === 'true'))
       .catch(() => setStorageOnboardingDone(false))
   }, [currentUserId])
+
+  // Background repair: when the local flag says onboarding is done but the Supabase
+  // profile still has onboarding_completed !== true (e.g. the write failed due to a
+  // bad network), silently update the profile so future restarts work correctly.
+  useEffect(() => {
+    if (
+      !repairAttemptedRef.current &&
+      storageOnboardingDone === true &&
+      currentUserId &&
+      profile !== null &&
+      profile.onboarding_completed !== true
+    ) {
+      // Mark that a repair attempt is in-flight to avoid duplicate updates.
+      repairAttemptedRef.current = true
+      authProfileService
+        .updateProfile({ onboarding_completed: true })
+        .catch(() => {
+          // Non-critical: the local flag is still the fallback on next restart.
+          // Reset so a future render/foreground event can retry the repair.
+          repairAttemptedRef.current = false
+        })
+    }
+  }, [storageOnboardingDone, currentUserId, profile])
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled

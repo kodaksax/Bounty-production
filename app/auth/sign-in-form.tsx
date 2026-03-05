@@ -18,6 +18,7 @@ import { setRememberMePreference } from '../../lib/auth-session-storage'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding'
 import { storage } from '../../lib/storage'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
@@ -234,14 +235,24 @@ export function SignInForm() {
             // 2. Profile exists but has no username (incomplete)
             // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
             if (!profile || !profile.username || profile.onboarding_completed !== true) {
-              // User needs to complete onboarding
-              console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', {
-                correlationId,
-                hasUsername: !!profile?.username,
-                onboardingCompleted: profile?.onboarding_completed
-              })
-              router.replace('/onboarding')
-              try { markInitialNavigationDone(); } catch { }
+              // Before redirecting, check the per-user AsyncStorage flag as a fallback.
+              // The Supabase write may have failed on a prior session; the local flag
+              // is the only reliable signal that onboarding was actually completed.
+              // Only trust the flag when a username exists (i.e. the username step ran).
+              if (profile?.username && await hasLocalOnboardingFlag(data.session.user.id)) {
+                console.log('[sign-in] Supabase flag missing but local flag set — skipping onboarding', { correlationId })
+                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                try { markInitialNavigationDone(); } catch { }
+              } else {
+                // User needs to complete onboarding
+                console.log('[sign-in] Profile incomplete or onboarding not completed, redirecting to onboarding', {
+                  correlationId,
+                  hasUsername: !!profile?.username,
+                  onboardingCompleted: profile?.onboarding_completed
+                })
+                router.replace('/onboarding')
+                try { markInitialNavigationDone(); } catch { }
+              }
             } else {
               // User has completed onboarding, go to app
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId })
@@ -406,13 +417,20 @@ export function SignInForm() {
             // 2. Profile exists but has no username (incomplete)
             // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
             if (!profile || !profile.username || profile.onboarding_completed !== true) {
-              // User needs to complete onboarding
-              console.log('[google] Profile incomplete or onboarding not completed, redirecting to onboarding', {
-                hasUsername: !!profile?.username,
-                onboardingCompleted: profile?.onboarding_completed
-              })
-              router.replace('/onboarding')
-              try { markInitialNavigationDone(); } catch { }
+              // Before redirecting, check the per-user AsyncStorage flag as a fallback.
+              if (profile?.username && await hasLocalOnboardingFlag(data.session.user.id)) {
+                console.log('[google] Supabase flag missing but local flag set — skipping onboarding')
+                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                try { markInitialNavigationDone(); } catch { }
+              } else {
+                // User needs to complete onboarding
+                console.log('[google] Profile incomplete or onboarding not completed, redirecting to onboarding', {
+                  hasUsername: !!profile?.username,
+                  onboardingCompleted: profile?.onboarding_completed
+                })
+                router.replace('/onboarding')
+                try { markInitialNavigationDone(); } catch { }
+              }
             } else {
               // User has completed onboarding, go to app
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
@@ -641,12 +659,19 @@ export function SignInForm() {
                             // 2. Profile exists but has no username (incomplete)
                             // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
                             if (!profile || !profile.username || profile.onboarding_completed !== true) {
-                              console.log('[apple] Profile incomplete or onboarding not completed, redirecting to onboarding', {
-                                hasUsername: !!profile?.username,
-                                onboardingCompleted: profile?.onboarding_completed
-                              })
-                              router.replace('/onboarding')
-                              try { markInitialNavigationDone(); } catch { }
+                              // Before redirecting, check the per-user AsyncStorage flag as a fallback.
+                              if (profile?.username && await hasLocalOnboardingFlag(data.session.user.id)) {
+                                console.log('[apple] Supabase flag missing but local flag set — skipping onboarding')
+                                router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
+                                try { markInitialNavigationDone(); } catch { }
+                              } else {
+                                console.log('[apple] Profile incomplete or onboarding not completed, redirecting to onboarding', {
+                                  hasUsername: !!profile?.username,
+                                  onboardingCompleted: profile?.onboarding_completed
+                                })
+                                router.replace('/onboarding')
+                                try { markInitialNavigationDone(); } catch { }
+                              }
                             } else {
                               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } })
                               try { markInitialNavigationDone(); } catch { }
