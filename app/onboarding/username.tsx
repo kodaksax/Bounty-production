@@ -9,14 +9,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -264,7 +266,8 @@ export default function UsernameScreen() {
       style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
+      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+        <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
         {/* Branding Header */}
         <View style={styles.brandingHeader}>
           <BrandingLogo size="medium" />
@@ -380,7 +383,8 @@ export default function UsernameScreen() {
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
         </View>
-      </View>
+        </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

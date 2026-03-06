@@ -9,13 +9,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -304,13 +303,8 @@ export default function DoneScreen() {
         <BrandingLogo size="medium" />
       </View>
 
-      {/* Scrollable content area */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
+      {/* Content area (non-scrolling) */}
+      <View style={styles.contentContainer}>
         {/* Success Animation */}
         <Animated.View style={[styles.checkCircle, { transform: [{ scale: scaleAnim }] }]}>
           <MaterialIcons name="check" size={72} color="#052e1b" />
@@ -395,7 +389,7 @@ export default function DoneScreen() {
             You can update your profile anytime from the Profile tab
           </Text>
         </Animated.View>
-      </ScrollView>
+      </View>
 
       {/* Continue Button — pinned to bottom, always tappable */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -444,6 +438,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  // Combined style for non-scrolling content area — avoids mixing
+  // `scrollView` (container) and `scrollContent` (inner content)
+  contentContainer: {
+    flex: 1,
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 16,
