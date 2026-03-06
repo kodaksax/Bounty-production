@@ -247,6 +247,7 @@ export function UpdatePasswordScreen() {
                   placeholder="Enter new password"
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
+                  textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                   editable={!loading}
                   className={`w-full bg-white/10 rounded-lg px-12 py-3 text-white ${
                     fieldErrors.password ? 'border border-red-400' : ''
@@ -297,7 +298,7 @@ export function UpdatePasswordScreen() {
                   </Text>
 
                   {/* Requirements Checklist */}
-                  <View className="mt-3 bg-white/5 rounded-lg p-3">
+                  <View className="mt-3 bg-white/10 rounded-lg p-3">
                     <Text className="text-white/60 text-xs mb-2">Password must have:</Text>
                     {passwordStrength.requirements.map((req) => (
                       <View key={req.id} className="flex-row items-center mb-1">
@@ -333,6 +334,7 @@ export function UpdatePasswordScreen() {
                   placeholder="Confirm new password"
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
+                  textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                   editable={!loading}
                   className={`w-full bg-white/10 rounded-lg px-12 py-3 text-white ${
                     fieldErrors.confirmPassword ? 'border border-red-400' : ''
@@ -409,7 +411,7 @@ export function UpdatePasswordScreen() {
 
           {/* Security Tips */}
           <View className="mt-auto pt-8">
-            <View className="bg-white/5 rounded-lg p-4">
+            <View className="bg-white/10 rounded-lg p-4">
               <View className="flex-row items-center mb-2">
                 <MaterialIcons name="lightbulb" size={16} color="rgba(255,255,255,0.6)" />
                 <Text className="text-white/60 text-xs font-medium ml-2">Password Tips</Text>

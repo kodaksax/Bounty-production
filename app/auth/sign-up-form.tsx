@@ -10,7 +10,7 @@ import { ValidationPatterns } from '../../hooks/use-form-validation'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
-import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
+import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
 export default function SignUpRoute() {
@@ -210,8 +210,9 @@ export function SignUpForm() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                 editable={!isLoading}
-                className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.email ? 'border border-red-400' : ''}`}
+                className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.email ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
                 returnKeyType="next"
                 blurOnSubmit={false}
@@ -250,8 +251,9 @@ export function SignUpForm() {
                   placeholder="At least 8 characters"
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
+                  textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                   editable={!isLoading}
-                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                  className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -284,8 +286,9 @@ export function SignUpForm() {
                   placeholder="Confirm password"
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
+                  textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                   editable={!isLoading}
-                  className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
+                  className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                   returnKeyType="done"
                   onSubmitEditing={handleSubmit}

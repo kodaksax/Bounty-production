@@ -5,7 +5,7 @@ import { Button } from 'components/ui/button'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
@@ -132,6 +132,7 @@ export function ResetPasswordScreen() {
                     keyboardType="email-address"
                     editable={!loading}
                     placeholderTextColor="rgba(255,255,255,0.4)"
+                    textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                     className={`w-full bg-white/10 rounded-lg pl-12 pr-4 py-3 text-white ${
                       fieldError ? 'border border-red-400' : ''
                     }`}
@@ -180,7 +181,7 @@ export function ResetPasswordScreen() {
                 </TouchableOpacity>
 
                 {/* Additional Help */}
-                <View className="bg-white/5 rounded-lg p-4 mt-4">
+                <View className="bg-white/10 rounded-lg p-4 mt-4">
                   <Text className="text-white/60 text-xs text-center mb-2">
                     Check your spam folder if you don
                     {"'"}
@@ -217,8 +218,8 @@ export function ResetPasswordScreen() {
           </View>
 
           {/* Security Note */}
-          <View className="mt-auto pt-8">
-            <View className="flex-row items-center justify-center bg-white/5 rounded-lg p-3">
+            <View className="mt-auto pt-8">
+            <View className="flex-row items-center justify-center bg-white/10 rounded-lg p-3">
               <MaterialIcons name="security" size={16} color="rgba(255,255,255,0.5)" />
               <Text className="text-white/50 text-xs ml-2">
                 Your security is our priority. Reset links are single-use and expire after 1 hour.

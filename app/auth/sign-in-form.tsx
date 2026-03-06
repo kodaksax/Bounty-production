@@ -18,11 +18,11 @@ import { setRememberMePreference } from '../../lib/auth-session-storage'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { identify, initMixpanel, track } from '../../lib/mixpanel'
 import { ROUTES } from '../../lib/routes'
-import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding'
 import { storage } from '../../lib/storage'
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
-import { validateEmail, suggestEmailCorrection } from '../../lib/utils/auth-validation'
+import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
@@ -506,7 +506,8 @@ export function SignInForm() {
                   autoCapitalize="none"
                   autoComplete="email"
                   editable={!isSubmitting}
-                  className={`w-full bg-white/5 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                    className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                    textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -552,7 +553,8 @@ export function SignInForm() {
                     secureTextEntry={!showPassword}
                     autoComplete="password"
                     editable={!isSubmitting}
-                    className={`w-full bg-white/5 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    textContentType={Platform.OS === 'ios' ? 'password' : undefined}
                     placeholderTextColor="rgba(255,255,255,0.4)"
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
