@@ -9,16 +9,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -26,8 +27,7 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
-
-const ONBOARDING_COMPLETE_KEY_PREFIX = '@bounty_onboarding_completed';
+import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 /**
  * Maximum time to wait for pre-navigation work (e.g. profile sync, push registration)
  * before proceeding to the main app. 8s is a compromise: long enough for slow mobile
@@ -35,8 +35,6 @@ const ONBOARDING_COMPLETE_KEY_PREFIX = '@bounty_onboarding_completed';
  * on the final onboarding screen if a dependency hangs.
  */
 const PRE_NAV_TIMEOUT_MS = 8000;
-/** Returns the per-user AsyncStorage key for the onboarding-completed flag. */
-const getOnboardingCompleteKey = (userId: string) => `${ONBOARDING_COMPLETE_KEY_PREFIX}:${userId}`;
 
 // Keep onboarding completion responsive even when a network dependency stalls.
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T | null> {
@@ -86,6 +84,7 @@ export default function DoneScreen() {
   const { profile: localProfile } = useUserProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { userId } = useAuthProfile();
+  const { session } = useAuthContext();
   const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
 
   const displayUsername = onboardingData.username || normalized?.username || (localProfile as any)?.username;
@@ -114,6 +113,8 @@ export default function DoneScreen() {
   }, [scaleAnim, fadeAnim]);
 
   const handleContinue = async () => {
+      const resolvedUserId = userId || session?.user?.id;
+
     if (hasNavigatedRef.current || isLoading) return;
     hasNavigatedRef.current = true;
     setIsLoading(true);
@@ -124,8 +125,8 @@ export default function DoneScreen() {
     // avoid users being redirected back into onboarding when network calls
     // are slow. We'll still attempt the later persistence as redundancy.
     try {
-      if (userId) {
-        await AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true');
+      if (resolvedUserId) {
+        await AsyncStorage.setItem(getOnboardingCompleteKey(resolvedUserId), 'true');
         console.log('[Onboarding] Early AsyncStorage onboarding flag written');
       } else {
         console.warn('[Onboarding] Early AsyncStorage write skipped: userId not available');
@@ -150,7 +151,7 @@ export default function DoneScreen() {
       if (onboardingData.location) profileUpdate.location = onboardingData.location;
       if (onboardingData.skills?.length > 0) profileUpdate.skills = onboardingData.skills;
       if (onboardingData.avatarUri && !onboardingData.avatarUri.startsWith('file://')) {
-        profileUpdate.avatar_url = onboardingData.avatarUri;
+        profileUpdate.avatar = onboardingData.avatarUri;
       }
       if (onboardingData.phone) profileUpdate.phone = onboardingData.phone;
 
@@ -192,8 +193,8 @@ export default function DoneScreen() {
     // This is intentionally in its own try/catch so a storage failure doesn't
     // mask a profile-update failure above, and errors are attributed correctly.
     try {
-      if (userId) {
-        await AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true');
+      if (resolvedUserId) {
+        await AsyncStorage.setItem(getOnboardingCompleteKey(resolvedUserId), 'true');
       } else {
         console.warn('[Onboarding] AsyncStorage write skipped: userId is not available');
       }
@@ -224,10 +225,10 @@ export default function DoneScreen() {
     try {
       const { cachedDataService, CACHE_KEYS } = await import('../../lib/services/cached-data-service');
       const { userProfileService } = await import('../../lib/services/userProfile');
-      if (userId) {
-        const profile = await userProfileService.getProfile(userId);
-        const completeness = await userProfileService.checkCompleteness(userId);
-        await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(userId), { profile, completeness });
+      if (resolvedUserId) {
+        const profile = await userProfileService.getProfile(resolvedUserId);
+        const completeness = await userProfileService.checkCompleteness(resolvedUserId);
+        await cachedDataService.setCache(CACHE_KEYS.USER_PROFILE(resolvedUserId), { profile, completeness });
       }
     } catch (e) {
       // Non-critical cache refresh failure should not block completion.

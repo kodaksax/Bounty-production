@@ -9,20 +9,21 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActionSheetIOS,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActionSheetIOS,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -41,6 +42,7 @@ export default function DetailsScreen() {
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
   const { userId } = useAuthProfile();
+  const { session } = useAuthContext();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
@@ -230,7 +232,11 @@ export default function DetailsScreen() {
     // This ensures profile data persists to the database and is available across devices
     // We update the profiles table directly to ensure all fields are saved
     const saveToSupabase = async () => {
-      if (!userId) return false;
+      const resolvedUserId = userId || session?.user?.id;
+      if (!resolvedUserId) {
+        console.error('[Onboarding Details] Cannot save profile: missing authenticated user id');
+        return false;
+      }
 
       const profileUpdate: Partial<Profile> = {};
 
@@ -249,10 +255,10 @@ export default function DetailsScreen() {
       if (skills.length > 0) {
         profileUpdate.skills = skills;
       }
-      // Only persist avatar_url when we have a confirmed remote URI,
+      // Only persist avatar when we have a confirmed remote URI,
       // not a local file:// path that would break on other devices.
       if (avatarUri && !avatarUri.startsWith('file://')) {
-        profileUpdate.avatar_url = avatarUri;
+        profileUpdate.avatar = avatarUri;
       }
 
       // Only update if we have fields to save
@@ -263,7 +269,7 @@ export default function DetailsScreen() {
       const { error } = await supabase
         .from('profiles')
         .update(profileUpdate)
-        .eq('id', userId);
+        .eq('id', resolvedUserId);
 
       if (error) {
         console.error('[Onboarding Details] Error saving to Supabase:', error);
