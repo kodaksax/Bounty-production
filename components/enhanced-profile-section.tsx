@@ -15,14 +15,14 @@ import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { showReportAlert } from "./ReportModal";
 import { ReputationScoreCompact } from "./ui/reputation-score";
@@ -310,8 +310,8 @@ export function EnhancedProfileSection({
               {renderVerificationBadge()}
             </View>
             <View className="ml-4 flex-1">
-              <Text className="text-lg font-bold">{effectiveProfile.name || effectiveProfile.username}</Text>
-              <Text className="text-xs text-emerald-300">{effectiveProfile.username}</Text>
+              <Text className="text-lg font-bold">{effectiveProfile.display_name || effectiveProfile.name || effectiveProfile.username}</Text>
+              <Text className="text-xs text-emerald-300">{effectiveProfile.username ? `@${effectiveProfile.username}` : ''}</Text>
               {/* Reputation Score - prominently displayed */}
               {renderReputationScore()}
               {effectiveProfile.title && (
