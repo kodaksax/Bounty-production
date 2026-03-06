@@ -506,8 +506,8 @@ export function SignInForm() {
                   autoCapitalize="none"
                   autoComplete="email"
                   editable={!isSubmitting}
-                    className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
-                    textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
+                  className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                  textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                   returnKeyType="next"
                   blurOnSubmit={false}

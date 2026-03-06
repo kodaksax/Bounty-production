@@ -218,7 +218,7 @@ export function ResetPasswordScreen() {
           </View>
 
           {/* Security Note */}
-            <View className="mt-auto pt-8">
+          <View className="mt-auto pt-8">
             <View className="flex-row items-center justify-center bg-white/10 rounded-lg p-3">
               <MaterialIcons name="security" size={16} color="rgba(255,255,255,0.5)" />
               <Text className="text-white/50 text-xs ml-2">
