@@ -1,12 +1,17 @@
 {
-  "servers": {
-    "mcpServers": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=xwlwqzzphmmhghiqvkeu"
-    },
-    "Sentry": {
-      "url": "https://mcp.sentry.dev/mcp/bounty-4e/react-native",
-      "type": "http"
-    }
-  }
+	"servers": {
+		"mcpServers": {
+			"type": "http",
+			"url": "https://mcp.supabase.com/mcp?project_ref=xwlwqzzphmmhghiqvkeu"
+		},
+		"Sentry": {
+			"url": "https://mcp.sentry.dev/mcp/bounty-4e/react-native",
+			"type": "http"
+		},
+		"supabase": {
+			"type": "http",
+			"url": "https://mcp.supabase.com/mcp?project_ref=xwlwqzzphmmhghiqvkeu&features=functions,branching,storage"
+		}
+	},
+	"inputs": []
 }

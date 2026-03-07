@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import {
-    checkIdempotencyKey,
-    removeIdempotencyKey,
-    storeIdempotencyKey
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
@@ -220,10 +220,21 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         setupIntentId: setupIntent.id,
       };
     } catch (error: any) {
+      // Log full error for diagnostics
       logger.error('[payments] Error creating setup intent:', error);
-      return reply.code(500).send({
-        error: 'Failed to create setup intent'
-      });
+
+      // If this is a Stripe error surface its message and code to the client
+      if (error && (error.type || error.code || error.message)) {
+        const status = error.type === 'StripeInvalidRequestError' || error.type === 'validation_error' ? 400 : 500;
+        return reply.code(status).send({
+          error: error.message || 'Stripe error while creating setup intent',
+          type: error.type,
+          code: error.code,
+          decline_code: error.decline_code,
+        });
+      }
+
+      return reply.code(500).send({ error: 'Failed to create setup intent' });
     }
   });
 
@@ -953,13 +964,20 @@ async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promis
   }
 
   // In production, check database first
-  // For now, create a new customer
-  const customer = await stripe.customers.create({
-    metadata: {
-      user_id: userId,
-    },
-  });
+  // For now, create a new customer in Stripe and cache in-memory
+  try {
+    const customer = await stripe.customers.create({
+      metadata: {
+        user_id: userId,
+      },
+    });
 
-  customerIds.set(userId, customer.id);
-  return customer.id;
+    customerIds.set(userId, customer.id);
+    return customer.id;
+  } catch (err: any) {
+    // Log detailed error with context to help diagnose failures creating customers
+    logger.error({ err }, `[payments] Failed to create Stripe customer for user ${userId}`);
+    // Re-throw so callers can surface meaningful errors
+    throw err;
+  }
 }

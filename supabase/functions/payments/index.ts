@@ -39,6 +39,100 @@ function sanitizePositiveNumber(input: unknown): number {
   return num
 }
 
+function isValidEmail(email: string): boolean {
+  // Basic RFC-safe validation for Stripe customer email values.
+  const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/
+  return emailRegex.test(email)
+}
+
+function deriveUsernameFromEmail(email: string, userId: string): string {
+  const prefix = email.includes('@') ? email.split('@')[0] : email
+  const cleaned = prefix.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)
+  if (cleaned.length > 0) return cleaned
+  return `user_${userId.slice(0, 8)}`
+}
+
+async function resolveStripeCustomerForUser(params: {
+  supabaseAdmin: ReturnType<typeof createClient>
+  stripe: Stripe
+  userId: string
+  userEmail?: string
+}) {
+  const { supabaseAdmin, stripe, userId, userEmail } = params
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, stripe_customer_id, email, username')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('[payments] Failed to fetch profile during customer resolution', { userId, profileError })
+  }
+
+  let customerId = profile?.stripe_customer_id ?? null
+  if (customerId) {
+    try {
+      await stripe.customers.retrieve(customerId)
+      return { customerId }
+    } catch (err: any) {
+      if (err?.code === 'resource_missing') {
+        console.warn('[payments] Stored stripe_customer_id is stale; recreating customer', {
+          userId,
+          stripeCustomerId: customerId,
+        })
+
+        customerId = null
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .update({ stripe_customer_id: null })
+            .eq('id', userId)
+        } catch (clearErr) {
+          console.error('[payments] Failed to clear stale stripe_customer_id', { userId, clearErr })
+        }
+      } else {
+        throw err
+      }
+    }
+  }
+
+  const resolvedEmail = sanitizeText(profile?.email ?? userEmail ?? '')
+  if (!resolvedEmail || !isValidEmail(resolvedEmail)) {
+    return {
+      error: 'No valid email found for this account. Please update your profile email and try again.',
+      status: 400,
+    }
+  }
+
+  const customer = await stripe.customers.create({
+    email: resolvedEmail,
+    metadata: { user_id: userId },
+  })
+  customerId = customer.id
+
+  const profilePatch: Record<string, unknown> = {
+    id: userId,
+    email: resolvedEmail,
+    stripe_customer_id: customerId,
+  }
+
+  if (!profile?.username) {
+    profilePatch.username = deriveUsernameFromEmail(resolvedEmail, userId)
+    profilePatch.balance = 0
+  }
+
+  const { error: upsertError } = await supabaseAdmin
+    .from('profiles')
+    .upsert(profilePatch, { onConflict: 'id' })
+
+  if (upsertError) {
+    console.error('[payments] Failed to upsert profile while saving stripe_customer_id', { userId, upsertError })
+  }
+
+  return { customerId }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -73,6 +167,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Invalid or expired token' }, 401)
   }
   const userId = user.id
+  const userEmail = sanitizeText(user.email ?? '')
 
   try {
     // POST /payments/create-payment-intent
@@ -101,21 +196,16 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Invalid currency. Supported: usd, eur, gbp.' }, 400)
       }
 
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('stripe_customer_id, email')
-        .eq('id', userId)
-        .single()
-
-      let customerId = profile?.stripe_customer_id
-      if (!customerId && profile?.email) {
-        const customer = await stripe.customers.create({
-          email: profile.email,
-          metadata: { user_id: userId },
-        })
-        customerId = customer.id
-        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId)
+      const customerResult = await resolveStripeCustomerForUser({
+        supabaseAdmin,
+        stripe,
+        userId,
+        userEmail,
+      })
+      if (customerResult.error || !customerResult.customerId) {
+        return jsonResponse({ error: customerResult.error ?? 'Unable to create customer profile' }, customerResult.status ?? 400)
       }
+      const customerId = customerResult.customerId
 
       const sanitizedMetadata: Record<string, string> = {}
       if (metadata.bounty_id) sanitizedMetadata.bounty_id = sanitizeText(metadata.bounty_id)
@@ -134,46 +224,21 @@ Deno.serve(async (req: Request) => {
 
     // POST /payments/create-setup-intent
     if (req.method === 'POST' && subPath === '/create-setup-intent') {
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('stripe_customer_id, email')
-        .eq('id', userId)
-        .single()
-
-      let customerId = profile?.stripe_customer_id
-      if (!customerId && profile?.email) {
-        // Basic email format validation before passing to Stripe
-        const emailValue = sanitizeText(profile.email)
-        // Validates that the email has exactly one @, a non-empty local part,
-        // and a domain with at least one dot followed by a 2+ char TLD.
-        const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/
-        if (!emailRegex.test(emailValue)) {
-          return jsonResponse({ error: 'Invalid email address on profile' }, 400)
+      let customerId: string
+      try {
+        const customerResult = await resolveStripeCustomerForUser({
+          supabaseAdmin,
+          stripe,
+          userId,
+          userEmail,
+        })
+        if (customerResult.error || !customerResult.customerId) {
+          return jsonResponse({ error: customerResult.error ?? 'Unable to create customer profile' }, customerResult.status ?? 400)
         }
-
-        try {
-          const customer = await stripe.customers.create({
-            email: emailValue,
-            metadata: { user_id: userId },
-          })
-          customerId = customer.id
-
-          const { error: updateError } = await supabaseAdmin
-            .from('profiles')
-            .update({ stripe_customer_id: customerId })
-            .eq('id', userId)
-
-          if (updateError) {
-            console.error('[payments] Failed to save stripe_customer_id', { userId, updateError })
-          }
-        } catch (err) {
-          console.error('[payments] Error creating Stripe customer for setup intent', { userId, err })
-          return jsonResponse({ error: 'Failed to create customer profile' }, 502)
-        }
-      }
-
-      if (!customerId) {
-        return jsonResponse({ error: 'Unable to create customer profile' }, 400)
+        customerId = customerResult.customerId
+      } catch (err) {
+        console.error('[payments] Error creating Stripe customer for setup intent', { userId, err })
+        return jsonResponse({ error: 'Failed to create customer profile' }, 502)
       }
 
       const setupIntent = await stripe.setupIntents.create({
@@ -221,28 +286,19 @@ Deno.serve(async (req: Request) => {
         // If Stripe says the customer or its payment methods don't exist
         // (common when switching between test/live keys), treat this as
         // "no payment methods" for the current user instead of a hard error.
-        const errorCode = (err && typeof err === 'object' && 'code' in err)
-          ? (err as { code?: string }).code
-          : undefined
-
-        if (errorCode === 'resource_missing') {
+        if (err?.code === 'resource_missing') {
           console.warn('[payments] Stripe customer missing for /payments/methods; clearing stripe_customer_id', {
             userId,
             stripeCustomerId: profile.stripe_customer_id,
-            error: err,
           })
 
           try {
-            const { error: updateError } = await supabaseAdmin
+            await supabaseAdmin
               .from('profiles')
               .update({ stripe_customer_id: null })
               .eq('id', userId)
-
-            if (updateError) {
-              console.error('[payments] Failed to clear stale stripe_customer_id', { userId, updateError })
-            }
           } catch (updateErr) {
-            console.error('[payments] Exception while clearing stale stripe_customer_id', { userId, updateErr })
+            console.error('[payments] Failed to clear stale stripe_customer_id', { userId, updateErr })
           }
 
           return jsonResponse({ paymentMethods: [] })
@@ -262,25 +318,16 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Payment method ID is required' }, 400)
       }
 
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('stripe_customer_id, email')
-        .eq('id', userId)
-        .single()
-
-      let customerId = profile?.stripe_customer_id
-      if (!customerId && profile?.email) {
-        const customer = await stripe.customers.create({
-          email: profile.email,
-          metadata: { user_id: userId },
-        })
-        customerId = customer.id
-        await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId)
+      const customerResult = await resolveStripeCustomerForUser({
+        supabaseAdmin,
+        stripe,
+        userId,
+        userEmail,
+      })
+      if (customerResult.error || !customerResult.customerId) {
+        return jsonResponse({ error: customerResult.error ?? 'Unable to create customer profile' }, customerResult.status ?? 400)
       }
-
-      if (!customerId) {
-        return jsonResponse({ error: 'Unable to create customer profile' }, 400)
-      }
+      const customerId = customerResult.customerId
 
       await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId })
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId)
