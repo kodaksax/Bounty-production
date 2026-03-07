@@ -89,3 +89,4 @@ supabase/.temp/
 temp/
 # Local editor/history artifacts
 .history/
+/supabase/.temp/
