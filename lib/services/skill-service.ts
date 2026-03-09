@@ -1,4 +1,5 @@
 import type { Skill } from "lib/services/database.types";
+import { LEGACY_API_BASE_URL } from "lib/config/network";
 import { logger } from "lib/utils/error-logger";
 
 export const skillService = {
@@ -8,7 +9,7 @@ export const skillService = {
   async getById(id: number): Promise<{ skill: Skill | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/skills/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills/${id}`
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required.
         // headers: { 'Authorization': `Bearer ${your_auth_token}` }
@@ -36,7 +37,7 @@ export const skillService = {
   async getAll(): Promise<{ skills: Skill[]; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/skills"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills`
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required.
         // headers: { 'Authorization': `Bearer ${your_auth_token}` }
@@ -61,7 +62,7 @@ export const skillService = {
   async create(skillData: Omit<Skill, "id" | "created_at">): Promise<{ skill: Skill | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/skills"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills`
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -94,7 +95,7 @@ export const skillService = {
   ): Promise<{ skill: Skill | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/skills/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills/${id}`
       const response = await fetch(API_URL, {
         method: "PATCH", // Or 'PUT'
         headers: {
@@ -124,7 +125,7 @@ export const skillService = {
   async delete(id: number): Promise<{ success: boolean; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/skills/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills/${id}`
       const response = await fetch(API_URL, {
         method: "DELETE",
         // ANNOTATION: Add authentication headers if required.
@@ -150,8 +151,8 @@ export const skillService = {
     // This method can call getAll if your API supports filtering,
     // or it can have its own endpoint.
     // ANNOTATION: Replace with your actual Hostinger API endpoint.
-    const API_URL = `https://your-hostinger-domain.com/api/skills?userId=${userId}`
-    // Or `https://your-hostinger-domain.com/api/users/${userId}/skills`
+    const API_URL = `${LEGACY_API_BASE_URL}/api/skills?userId=${userId}`
+    // Or `${LEGACY_API_BASE_URL}/api/users/${userId}/skills`
     try {
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required.
@@ -180,7 +181,7 @@ export const skillService = {
   ): Promise<{ skills: Skill[]; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint for bulk creation.
-      const API_URL = "https://your-hostinger-domain.com/api/skills/bulk"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills/bulk`
       const skillsWithUserId = skills.map((skill) => ({ ...skill, user_id: userId }))
 
       const response = await fetch(API_URL, {
@@ -212,7 +213,7 @@ export const skillService = {
   async deleteByUserId(userId: string): Promise<{ success: boolean; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint for bulk deletion.
-      const API_URL = `https://your-hostinger-domain.com/api/skills?userId=${userId}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/skills?userId=${userId}`
       const response = await fetch(API_URL, {
         method: "DELETE",
         // ANNOTATION: Add authentication headers if required.

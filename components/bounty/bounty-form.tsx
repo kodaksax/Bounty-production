@@ -11,6 +11,7 @@ import { Checkbox } from "components/ui/checkbox";
 import { Input } from "components/ui/input";
 import { Label } from "components/ui/label";
 import { Textarea } from "components/ui/textarea";
+import { LEGACY_API_BASE_URL } from "lib/config/network";
 import type { BountyFormValues } from "lib/types"; // Assuming you move types here
 import { useState } from "react";
 import type { z } from "zod";
@@ -81,8 +82,8 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       setIsSubmitting(true)
 
       const endpoint = isEditMode
-        ? `https://your-hostinger-api.com/bounties/${bountyId}` // TODO (Post-Launch): Hostinger API endpoint
-        : "https://your-hostinger-api.com/bounties" // TODO (Post-Launch): Hostinger API endpoint
+        ? `${LEGACY_API_BASE_URL}/bounties/${bountyId}`
+        : `${LEGACY_API_BASE_URL}/bounties`
 
       const method = isEditMode ? "PUT" : "POST"
 

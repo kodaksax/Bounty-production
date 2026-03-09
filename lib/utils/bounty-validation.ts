@@ -4,6 +4,9 @@
  * to ensure consistent validation logic.
  */
 
+/** Minimum number of characters required for a bounty description. */
+const MIN_DESCRIPTION_LENGTH = 20;
+
 /**
  * Validates a bounty title. Uses trimmed length so whitespace-padded
  * strings are rejected.
@@ -49,6 +52,24 @@ export function validateBalance(amount: number, balance: number, isForHonor: boo
  */
 export function getInsufficientBalanceMessage(amount: number, balance: number): string {
   return `The amount ($${amount}) exceeds your current balance ($${balance.toFixed(2)}). Please add funds to your wallet or choose a lower amount.`;
+}
+
+/**
+ * Validates a bounty description. Uses trimmed length so whitespace-padded
+ * strings are rejected.
+ *
+ * @param value - The raw description string
+ * @returns Error message string if invalid, null if valid
+ */
+export function validateDescription(value: string | undefined | null): string | null {
+  const trimmed = (value ?? '').trim();
+  if (trimmed.length === 0) {
+    return 'Description is required';
+  }
+  if (trimmed.length < MIN_DESCRIPTION_LENGTH) {
+    return `Description must be at least ${MIN_DESCRIPTION_LENGTH} characters`;
+  }
+  return null;
 }
 
 /**

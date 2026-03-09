@@ -1,4 +1,5 @@
 import type { Transaction } from "components/transaction-history-screen"
+import { LEGACY_API_BASE_URL } from "lib/config/network";
 import { logger } from "lib/utils/error-logger"
 
 /**
@@ -21,7 +22,7 @@ export const transactionService = {
     try {
       const { page = 1, limit = 20, type, startDate, endDate } = options || {}
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/transactions"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/transactions`
 
       const params = new URLSearchParams({
         userId,
@@ -71,7 +72,7 @@ export const transactionService = {
   async getTransactionById(id: string): Promise<{ transaction: Transaction | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/transactions/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/transactions/${id}`
 
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required by your Hostinger backend.
@@ -112,7 +113,7 @@ export const transactionService = {
   ): Promise<{ transaction: Transaction | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/transactions"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/transactions`
 
       const response = await fetch(API_URL, {
         method: "POST",
