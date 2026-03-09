@@ -118,5 +118,9 @@ export function isVerboseLogging(): boolean {
  * This constant must be used instead of hardcoded placeholder URLs so that
  * deployments only need to set a single environment variable.
  */
-export const LEGACY_API_BASE_URL =
+const RAW_LEGACY_API_BASE_URL =
   process.env.EXPO_PUBLIC_LEGACY_API_BASE_URL ?? 'https://your-hostinger-domain.com';
+
+export const LEGACY_API_BASE_URL = RAW_LEGACY_API_BASE_URL
+  .trim()
+  .replace(/\/+$/, '');
