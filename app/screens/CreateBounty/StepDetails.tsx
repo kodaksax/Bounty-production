@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
+import { validateDescription } from '../../../lib/utils/bounty-validation';
 import type { Attachment } from '../../../lib/types';
 
 interface StepDetailsProps {
@@ -58,16 +59,6 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
   const handleCloseViewer = () => {
     setViewerVisible(false);
     setSelectedAttachment(null);
-  };
-
-  const validateDescription = (value: string): string | null => {
-    if (!value || value.trim().length === 0) {
-      return 'Description is required';
-    }
-    if (value.length < 20) {
-      return 'Description must be at least 20 characters';
-    }
-    return null;
   };
 
   const handleDescriptionChange = (value: string) => {

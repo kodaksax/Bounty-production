@@ -111,3 +111,16 @@ export function isVerboseLogging(): boolean {
   return process.env.EXPO_PUBLIC_WS_VERBOSE === '1' || 
          process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
 }
+
+/**
+ * Legacy API base URL for services not yet migrated to the primary backend.
+ * Configure via the EXPO_PUBLIC_LEGACY_API_BASE_URL environment variable.
+ * This constant must be used instead of hardcoded placeholder URLs so that
+ * deployments only need to set a single environment variable.
+ */
+const RAW_LEGACY_API_BASE_URL =
+  process.env.EXPO_PUBLIC_LEGACY_API_BASE_URL ?? 'https://your-hostinger-domain.com';
+
+export const LEGACY_API_BASE_URL = RAW_LEGACY_API_BASE_URL
+  .trim()
+  .replace(/\/+$/, '');

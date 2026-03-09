@@ -3,6 +3,7 @@
  * Handles user blocking functionality
  */
 
+import { logger } from '../utils/error-logger';
 import { supabase } from '../supabase';
 import { getCurrentUserId } from '../utils/data-utils';
 
@@ -28,16 +29,17 @@ export const blockingService = {
 
       if (error) {
         // Check if already blocked (unique constraint violation)
-        if (error.code === '23505') {
+        const pgError = error as { code?: string; message?: string };
+        if (pgError.code === '23505') {
           return { success: false, error: 'User is already blocked' };
         }
-        console.error('Error blocking user:', error);
+        logger.error('Error blocking user:', { error });
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Error blocking user:', error);
+      logger.error('Error blocking user:', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to block user',
@@ -62,13 +64,13 @@ export const blockingService = {
         .eq('blocked_id', blockedId);
 
       if (error) {
-        console.error('Error unblocking user:', error);
+        logger.error('Error unblocking user:', { error });
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Error unblocking user:', error);
+      logger.error('Error unblocking user:', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to unblock user',
@@ -97,13 +99,13 @@ export const blockingService = {
 
       if (error && error.code !== 'PGRST116') {
         // PGRST116 = no rows found, which is fine
-        console.error('Error checking block status:', error);
+        logger.error('Error checking block status:', { error });
         return { isBlocked: false, error: error.message };
       }
 
       return { isBlocked: !!data };
     } catch (error) {
-      console.error('Error checking block status:', error);
+      logger.error('Error checking block status:', { error });
       return {
         isBlocked: false,
         error: error instanceof Error ? error.message : 'Failed to check block status',
@@ -127,13 +129,13 @@ export const blockingService = {
         .eq('blocker_id', blockerId);
 
       if (error) {
-        console.error('Error fetching blocked users:', error);
+        logger.error('Error fetching blocked users:', { error });
         return { success: false, error: error.message };
       }
 
       return { success: true, blockedUsers: data || [] };
     } catch (error) {
-      console.error('Error fetching blocked users:', error);
+      logger.error('Error fetching blocked users:', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch blocked users',
