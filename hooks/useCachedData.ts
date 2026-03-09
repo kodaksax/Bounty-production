@@ -91,6 +91,12 @@ export function useCachedData<T>(
       setIsOffline(!online);
     }, 5000);
 
+    // Register interval for test cleanup
+    if (process.env.NODE_ENV === 'test') {
+      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+    }
+
     return () => clearInterval(interval);
   }, []);
 

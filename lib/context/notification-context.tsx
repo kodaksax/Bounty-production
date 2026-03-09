@@ -233,6 +233,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       refreshUnreadCount();
     }, 30000); // 30 seconds
 
+    // Register interval for test cleanup
+    if (process.env.NODE_ENV === 'test') {
+      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+    }
+
     return () => {
       clearInterval(interval);
       // subscription?.remove();

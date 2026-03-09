@@ -1,6 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { bountyService } from 'lib/services/bounty-service'
 import { cancellationService } from 'lib/services/cancellation-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
@@ -9,18 +8,18 @@ import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
 import { userProfileService } from 'lib/services/user-profile-service'
 import type { Attachment, Conversation } from 'lib/types'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -62,35 +61,162 @@ const STAGES = [
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ]
 
+type ProofDraftItem = {
+  id: string
+  type: 'image' | 'file'
+  name: string
+  size?: number
+  uri?: string
+  remoteUri?: string
+  mimeType?: string
+}
+
 export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
   const router = useRouter()
-  const [conversation, setConversation] = useState<Conversation | null>(null)
-  const [wipExpanded, setWipExpanded] = useState(false)
-  const [readyToSubmitPressed, setReadyToSubmitPressed] = useState(false)
-  const [ratingDraft, setRatingDraft] = useState(0)
-  const [showReviewModal, setShowReviewModal] = useState(false)
-  const [hasSubmission, setHasSubmission] = useState(false)
-  const [reviewExpanded, setReviewExpanded] = useState(false)
-  const [payoutExpanded, setPayoutExpanded] = useState(false)
-  const [readyRecord, setReadyRecord] = useState<{ bounty_id: string; hunter_id: string; ready_at: string } | null>(null)
-  const [revisionFeedback, setRevisionFeedback] = useState<string | null>(null)
-  const [showRevisionBanner, setShowRevisionBanner] = useState(false)
-  // Persisted flag so the card-level badge remains even if the banner is dismissed
-  const [hasRevisionRequested, setHasRevisionRequested] = useState(false)
-  
-  // Cancellation and dispute state
-  const [hasCancellationRequest, setHasCancellationRequest] = useState(false)
-  const [hasDispute, setHasDispute] = useState(false)
+  type UIState = {
+    conversation: Conversation | null
+    wipExpanded: boolean
+    readyToSubmitPressed: boolean
+    ratingDraft: number
+    showReviewModal: boolean
+    hasSubmission: boolean
+    reviewExpanded: boolean
+    payoutExpanded: boolean
+    showRevisionBanner: boolean
+    hasCancellationRequest: boolean
+    hasDispute: boolean
+    timeElapsed: number
+    hunterName: string
+    localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'
+  }
+
+  const initialUIState = (name = 'Hunter'): UIState => ({
+    conversation: null,
+    wipExpanded: false,
+    readyToSubmitPressed: false,
+    ratingDraft: 0,
+    showReviewModal: false,
+    hasSubmission: false,
+    reviewExpanded: false,
+    payoutExpanded: false,
+    showRevisionBanner: false,
+    hasCancellationRequest: false,
+    hasDispute: false,
+    timeElapsed: 0,
+    hunterName: name,
+    localStageOverride: null,
+  })
+
+  type UIAction =
+    | { type: 'reset' }
+    | {
+        [K in keyof UIState]: {
+          type: 'set'
+          key: K
+          value: UIState[K]
+        }
+      }[keyof UIState]
+
+  function uiReducer(state: UIState, action: UIAction): UIState {
+    switch (action.type) {
+      case 'reset':
+        return initialUIState()
+      case 'set':
+        return { ...state, [action.key]: action.value }
+      default:
+        return state
+    }
+  }
+
+  const [uiState, dispatchUi] = useReducer(uiReducer, initialUIState())
+  const {
+    conversation,
+    wipExpanded,
+    readyToSubmitPressed,
+    ratingDraft,
+    showReviewModal,
+    hasSubmission,
+    reviewExpanded,
+    payoutExpanded,
+    showRevisionBanner,
+    hasCancellationRequest,
+    hasDispute,
+    timeElapsed,
+    hunterName,
+    localStageOverride,
+  } = uiState
+  // Draft/submission reducer consolidates per-bounty mutable fields to avoid
+  // leaking state across reused FlatList rows and to batch resets into one dispatch.
+  type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
+
+  type DraftState = {
+    completionMessage: string
+    proofItems: ProofDraftItem[]
+    isSubmitting: boolean
+    submissionPending: boolean
+    readyRecord: ReadyRecord
+    revisionFeedback: string | null
+    hasRevisionRequested: boolean
+  }
+
+  const initialDraft = (bountyId?: string): DraftState => ({
+    completionMessage: '',
+    proofItems: [],
+    isSubmitting: false,
+    submissionPending: false,
+    readyRecord: null,
+    revisionFeedback: null,
+    hasRevisionRequested: false,
+  })
+
+  type DraftAction =
+    | { type: 'reset'; bountyId?: string }
+    | { type: 'setMessage'; message: string }
+    | { type: 'setProofs'; proofs: ProofDraftItem[] }
+    | { type: 'addProofs'; proofs: ProofDraftItem[] }
+    | { type: 'removeProof'; id: string }
+    | { type: 'setSubmitting'; value: boolean }
+    | { type: 'setSubmissionPending'; value: boolean }
+    | { type: 'setReadyRecord'; record: ReadyRecord }
+    | { type: 'setRevisionFeedback'; text: string | null }
+
+  function draftReducer(state: DraftState, action: DraftAction): DraftState {
+    switch (action.type) {
+      case 'reset':
+        return initialDraft()
+      case 'setMessage':
+        return { ...state, completionMessage: action.message }
+      case 'setProofs':
+        return { ...state, proofItems: action.proofs }
+      case 'addProofs':
+        return { ...state, proofItems: [...state.proofItems, ...action.proofs] }
+      case 'removeProof':
+        return { ...state, proofItems: state.proofItems.filter(p => p.id !== action.id) }
+      case 'setSubmitting':
+        return { ...state, isSubmitting: action.value }
+      case 'setSubmissionPending':
+        return { ...state, submissionPending: action.value }
+      case 'setReadyRecord':
+        return { ...state, readyRecord: action.record }
+      case 'setRevisionFeedback':
+        return { ...state, revisionFeedback: action.text, hasRevisionRequested: !!action.text }
+      default:
+        return state
+    }
+  }
+
+  const [draft, dispatchDraft] = useReducer(draftReducer, initialDraft())
+  const { completionMessage, proofItems, isSubmitting, submissionPending, readyRecord, revisionFeedback, hasRevisionRequested } = draft
   
   // Hunter completion submission state
-  const [timeElapsed, setTimeElapsed] = useState(0)
   const [startTime] = useState(Date.now())
-  const [completionMessage, setCompletionMessage] = useState('')
-  const [proofItems, setProofItems] = useState<Array<{ id: string; type: 'image' | 'file'; name: string; size?: number }>>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submissionPending, setSubmissionPending] = useState(false)
-  const [hunterName, setHunterName] = useState<string>('Hunter')
   const { transactions } = useWallet()
+
+  useEffect(() => {
+    // Reset non-draft UI state when bounty changes; draft state is reset via reducer
+    dispatchUi({ type: 'reset' })
+    dispatchDraft({ type: 'reset' })
+  }, [bounty.id])
 
   // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally
   useEffect(() => {
@@ -114,7 +240,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const list = await messageService.getConversations()
         if (!mounted) return
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
-        setConversation(match)
+        dispatchUi({ type: 'set', key: 'conversation', value: match })
 
         // Fetch hunter name if available
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
@@ -123,7 +249,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             const hunterProfile = await userProfileService.getProfile(hunterId)
             if (!mounted) return
             if (hunterProfile?.username) {
-              setHunterName(hunterProfile.username)
+              dispatchUi({ type: 'set', key: 'hunterName', value: hunterProfile.username })
             }
           } catch (error) {
             // Fallback to default "Hunter" if profile fetch fails
@@ -136,13 +262,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           const submission = await completionService.getSubmission(String(bounty.id))
           if (!mounted) return
           const foundSubmission = !!submission && submission.status === 'pending'
-          setHasSubmission(foundSubmission)
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: foundSubmission })
           // Auto-expand Review & Verify section when submission is detected
           if (foundSubmission) {
-            setReviewExpanded(true)
-            setWipExpanded(false)
+            dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
+            dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
             // Move the visual stepper to Review & Verify so owner sees where action is needed
-            setLocalStageOverride('review_verify')
+            dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
           }
         }
         // For hunters, initialize revision indicator state from latest submission
@@ -159,26 +285,29 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               }
 
               if (isPendingForHunter) {
-                setHasSubmission(true)
-                setSubmissionPending(true)
-                setReviewExpanded(false)
-                setPayoutExpanded(true)
-                setShowRevisionBanner(false)
-                setHasRevisionRequested(false)
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
+                dispatchDraft({ type: 'setSubmissionPending', value: true })
+                dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
+                dispatchDraft({ type: 'setMessage', message: submission.message || '' })
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
+                dispatchUi({ type: 'set', key: 'payoutExpanded', value: true })
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+                dispatchDraft({ type: 'setRevisionFeedback', text: null })
               } else if (submission.status === 'revision_requested') {
-                setHasRevisionRequested(true)
-                setRevisionFeedback(submission.poster_feedback || null)
-                setShowRevisionBanner(true)
-                setLocalStageOverride('working_progress')
-                setWipExpanded(true)
-                setReviewExpanded(false)
-                setSubmissionPending(false)
-                setHasSubmission(false)
+                dispatchDraft({ type: 'setRevisionFeedback', text: submission.poster_feedback || null })
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true })
+                dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
+                dispatchDraft({ type: 'setMessage', message: submission.message || '' })
+                dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' })
+                dispatchUi({ type: 'set', key: 'wipExpanded', value: true })
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
+                dispatchDraft({ type: 'setSubmissionPending', value: false })
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
               } else {
-                setSubmissionPending(false)
-                setHasSubmission(false)
-                setShowRevisionBanner(false)
-                setHasRevisionRequested(false)
+                dispatchDraft({ type: 'setSubmissionPending', value: false })
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+                dispatchDraft({ type: 'setRevisionFeedback', text: null })
               }
             }
           } catch {}
@@ -187,7 +316,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         try {
           const ready = await completionService.getReady(String(bounty.id))
           if (!mounted) return
-          setReadyRecord(ready)
+          dispatchDraft({ type: 'setReadyRecord', record: ready })
         } catch {}
         
         // Check for cancellation request
@@ -195,7 +324,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
           if (!mounted) return
           if (cancellation && cancellation.status === 'pending') {
-            setHasCancellationRequest(true)
+            dispatchUi({ type: 'set', key: 'hasCancellationRequest', value: true })
           }
         } catch {}
         
@@ -204,7 +333,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
           if (!mounted) return
           if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
-            setHasDispute(true)
+            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
           }
         } catch {}
       } catch {}
@@ -229,7 +358,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   useEffect(() => {
     if (!isOwner && bounty.status === 'in_progress' && reviewExpanded) {
       const interval = setInterval(() => {
-        setTimeElapsed(Math.floor((Date.now() - startTime) / 1000))
+        dispatchUi({ type: 'set', key: 'timeElapsed', value: Math.floor((Date.now() - startTime) / 1000) })
       }, 1000)
       return () => clearInterval(interval)
     }
@@ -241,10 +370,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     let unsub: (() => void) | undefined
     try {
       unsub = completionService.subscribeReady(String(bounty.id), (rec) => {
-        setReadyRecord(rec)
+        dispatchDraft({ type: 'setReadyRecord', record: rec })
         if (variant === 'owner' && rec) {
           // If owner sees a ready record, show review submission availability
-          setHasSubmission(true)
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
         }
       })
     } catch (e) {
@@ -260,34 +389,35 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     try {
       unsub = completionService.subscribeSubmission(String(bounty.id), (submission) => {
         if (!submission) {
-          setHasSubmission(false)
-          setRevisionFeedback(null)
-          setShowRevisionBanner(false)
-          setHasRevisionRequested(false)
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
+          dispatchDraft({ type: 'setRevisionFeedback', text: null })
+          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+
           return
         }
         const isPending = submission.status === 'pending'
-        setHasSubmission(isPending)
+        dispatchUi({ type: 'set', key: 'hasSubmission', value: isPending })
+        dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
+        dispatchDraft({ type: 'setMessage', message: submission.message || '' })
         
         // If poster gets a new submission, auto-expand Review & Verify section
         if (isOwner && isPending) {
-          setReviewExpanded(true)
-          setWipExpanded(false)
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
+          dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
           // Show the stepper on the Review & Verify bubble for owner
-          setLocalStageOverride('review_verify')
+          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
         }
         
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
         if (!isOwner && submission.status === 'revision_requested') {
           // Store feedback and show banner instead of alert
-          setRevisionFeedback(submission.poster_feedback || 'The poster has requested changes to your work.')
-          setShowRevisionBanner(true)
-          setHasRevisionRequested(true)
-          setLocalStageOverride('working_progress')
-          setWipExpanded(true)
-          setReviewExpanded(false)
-          setSubmissionPending(false)
-          setHasSubmission(false)
+          dispatchDraft({ type: 'setRevisionFeedback', text: submission.poster_feedback || 'The poster has requested changes to your work.' })
+          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true })
+          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' })
+          dispatchUi({ type: 'set', key: 'wipExpanded', value: true })
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
+          dispatchDraft({ type: 'setSubmissionPending', value: false })
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
         }
       })
     } catch (e) {
@@ -304,7 +434,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [bounty.status])
 
   // Local override to move the UI to a specific stage when user advances via buttons
-  const [localStageOverride, setLocalStageOverride] = useState<null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'>(null)
 
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
@@ -352,11 +481,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`
       return `${Math.floor(delta / 86400)}d ago`
     } catch {
-      return 'just now'
+      Alert.alert('Sign In Required', 'You need to be signed in to submit your work. Please sign in and try again.')
     }
   }
   
   const handleSubmitCompletion = async () => {
+    if (!currentUserId) {
+      Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
+      return
+    }
+
     if (!completionMessage.trim()) {
       Alert.alert('Completion Message Required', 'Please add a message describing your completed work.')
       return
@@ -369,21 +503,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     // Define the actual submission logic
     const performSubmission = async () => {
       try {
-        setIsSubmitting(true)
+        dispatchDraft({ type: 'setSubmitting', value: true })
 
         // Check for existing pending submission to avoid duplicates
         const existing = await completionService.getSubmission(String(bounty.id))
-        if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId || '')) {
+        if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId)) {
           // Already have a pending submission from this hunter — avoid duplicate
           Alert.alert('Submission Pending', 'You already have a pending submission. Please wait for the poster to review or check your submission.')
-          setIsSubmitting(false)
-          setHasSubmission(true)
+          dispatchDraft({ type: 'setSubmitting', value: false })
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
           return
         }
 
         const resp = await completionService.submitCompletion({
           bounty_id: String(bounty.id),
-          hunter_id: currentUserId || '',
+          hunter_id: currentUserId,
           message: completionMessage.trim(),
           proof_items: proofItems,
         })
@@ -391,12 +525,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         if (resp) {
           Alert.alert('Submission Successful', 'Your work has been submitted for review!')
           // Lock review UI and show waiting state
-          setSubmissionPending(true)
-          setHasSubmission(true)
+          dispatchDraft({ type: 'setSubmissionPending', value: true })
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
           // Clear the revision badge on resubmission
-          setHasRevisionRequested(false)
-          setReviewExpanded(false)
-          setPayoutExpanded(true)
+          dispatchDraft({ type: 'setRevisionFeedback', text: null })
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
+          dispatchUi({ type: 'set', key: 'payoutExpanded', value: true })
           // Trigger parent refresh to update list
           if (onRefresh) onRefresh()
         }
@@ -404,7 +538,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         console.error('Error submitting completion:', err)
         Alert.alert('Error', 'Failed to submit completion. Please try again.')
       } finally {
-        setIsSubmitting(false)
+          dispatchDraft({ type: 'setSubmitting', value: false })
       }
     }
 
@@ -457,17 +591,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         uri: u.uri,
       } as any))
 
-      setProofItems((prev) => [...prev, ...newProofs])
-
-      // Persist each uploaded attachment to bounty attachments_json
-      for (const u of uploadedArray) {
-        const success = await bountyService.addAttachmentToBounty(bounty.id, u)
-        if (!success) {
-          Alert.alert('Attachment saved locally', 'Upload succeeded but failed to persist on the server.')
-        }
-      }
-      // Trigger parent refresh if provided
-      if (onRefresh) onRefresh()
+      dispatchDraft({ type: 'addProofs', proofs: newProofs })
     } catch (err) {
       console.error('Error adding proof:', err)
       Alert.alert('Upload failed', 'Could not add proof. Please try again.')
@@ -475,7 +599,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
   
   const handleRemoveProof = (id: string) => {
-    setProofItems(proofItems.filter(item => item.id !== id))
+    dispatchDraft({ type: 'removeProof', id })
   }
 
   const formatFileSize = (bytes?: number) => {
@@ -574,7 +698,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {variant === 'owner' && readyRecord && (
                   <TouchableOpacity
                     style={styles.readyBadge}
-                    onPress={() => setShowReviewModal(true)}
+                    onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                     accessibilityRole="button"
                     accessibilityLabel={`Hunter ready, opened review modal`}
                   >
@@ -585,7 +709,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {isOwner && hasSubmission && (
                   <TouchableOpacity
                     style={styles.headerReviewBtn}
-                    onPress={() => setShowReviewModal(true)}
+                    onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                     accessibilityRole="button"
                     accessibilityLabel="Open review modal"
                   >
@@ -619,7 +743,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               onToggle={() => {
                 // If the flow has been advanced (locked), prevent toggling WIP
                 if (readyToSubmitPressed || !!readyRecord) return
-                setWipExpanded(!wipExpanded)
+                dispatchUi({ type: 'set', key: 'wipExpanded', value: !wipExpanded })
               }}
               locked={readyToSubmitPressed || !!readyRecord}
             >
@@ -631,7 +755,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   {hasSubmission && (
                     <TouchableOpacity
                       style={styles.reviewSubmissionBtn}
-                      onPress={() => setShowReviewModal(true)}
+                      onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                     >
                       <MaterialIcons name="rate-review" size={20} color="#fff" />
                       <Text style={styles.reviewSubmissionText}>Review Submission</Text>
@@ -653,7 +777,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   
                   <RatingStars
                     rating={ratingDraft}
-                    onRatingChange={setRatingDraft}
+                    onRatingChange={(v) => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
                     label="Rate This Bounty:"
                   />
                 </View>
@@ -665,7 +789,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   {showRevisionBanner && revisionFeedback && (
                     <RevisionFeedbackBanner
                       feedback={revisionFeedback}
-                      onDismiss={() => setShowRevisionBanner(false)}
+                      onDismiss={() => dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })}
                       showDismiss={true}
                     />
                   )}
@@ -682,17 +806,22 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <TouchableOpacity
                     style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
                     onPress={async () => {
+                      if (!currentUserId) {
+                        Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
+                        return
+                      }
+
                       // Persist ready state and advance UI
-                      const ok = await completionService.markReady(String(bounty.id), String(currentUserId || ''))
+                      const ok = await completionService.markReady(String(bounty.id), currentUserId)
                       if (ok) {
-                        setReadyToSubmitPressed(true)
-                        setWipExpanded(false)
-                        setReviewExpanded(true)
-                        setLocalStageOverride('review_verify')
+                        dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true })
+                        dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
+                        dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
+                        dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
                         // update local readyRecord optimistically
                         const now = new Date().toISOString()
-                        const rec = { bounty_id: String(bounty.id), hunter_id: String(currentUserId || ''), ready_at: now }
-                        setReadyRecord(rec)
+                        const rec = { bounty_id: String(bounty.id), hunter_id: currentUserId, ready_at: now }
+                        dispatchDraft({ type: 'setReadyRecord', record: rec })
                         // Trigger parent refresh to update list
                         if (onRefresh) onRefresh()
                       } else {
@@ -714,7 +843,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Review & Verify"
               expanded={reviewExpanded}
-              onToggle={() => setReviewExpanded(!reviewExpanded)}
+              onToggle={() => dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })}
             >
               <View style={{ gap: 16 }}>
                 <View style={styles.infoBox}>
@@ -726,7 +855,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
                 <TouchableOpacity
                   style={styles.reviewSubmissionBtn}
-                  onPress={() => setShowReviewModal(true)}
+                  onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                 >
                   <MaterialIcons name="rate-review" size={20} color="#fff" />
                   <Text style={styles.reviewSubmissionText}>Review Submission</Text>
@@ -758,7 +887,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 // Prevent toggling open unless readyToSubmitPressed or a readyRecord exists or there's no pending submission
                 if (!readyToSubmitPressed && !readyRecord) return
                 if (submissionPending || hasSubmission) return
-                setReviewExpanded(!reviewExpanded)
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })
               }}
               locked={!readyToSubmitPressed && !readyRecord || submissionPending || hasSubmission}
             >
@@ -779,7 +908,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         placeholder="Describe your completed work..."
                         placeholderTextColor="rgba(255,254,245,0.4)"
                         value={completionMessage}
-                        onChangeText={setCompletionMessage}
+                        onChangeText={(t) => dispatchDraft({ type: 'setMessage', message: t })}
                         multiline
                         numberOfLines={4}
                         maxLength={1000}
@@ -841,7 +970,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Payout"
               expanded={payoutExpanded}
-              onToggle={() => setPayoutExpanded(!payoutExpanded)}
+              onToggle={() => dispatchUi({ type: 'set', key: 'payoutExpanded', value: !payoutExpanded })}
             >
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
@@ -927,10 +1056,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           hunterName={hunterName}
           bountyAmount={bounty.amount || 0}
           isForHonor={bounty.is_for_honor || false}
-          onClose={() => setShowReviewModal(false)}
+          onClose={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: false })}
           onComplete={() => {
-            setShowReviewModal(false)
-            setHasSubmission(false)
+            dispatchUi({ type: 'set', key: 'showReviewModal', value: false })
+            dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
             // Trigger refresh
             if (onRefresh) onRefresh()
           }}

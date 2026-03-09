@@ -169,6 +169,12 @@ export function startSessionMonitoring(): () => void {
   
   // Then check periodically
   intervalId = setInterval(checkAndRefresh, SESSION_CHECK_INTERVAL);
+
+  // Register interval for test cleanup
+  if (process.env.NODE_ENV === 'test') {
+    ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+    ;(globalThis as any).__BACKGROUND_INTERVALS.push(intervalId)
+  }
   
   // Return cleanup function
   return () => {

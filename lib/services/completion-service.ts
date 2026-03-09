@@ -146,6 +146,12 @@ export const completionService = {
       onUpdate(rec)
     }, 3000)
 
+    // Register interval for test cleanup
+    if (process.env.NODE_ENV === 'test') {
+      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+    }
+
     // initial fetch
     (async () => { const r = await completionService.getSubmission(bountyId); onUpdate(r) })()
 
@@ -196,6 +202,11 @@ export const completionService = {
    */
   async markReady(bountyId: string, hunterId: string): Promise<boolean> {
     try {
+      if (!bountyId || !hunterId) {
+        logger.error('Error marking ready', { bountyId, hunterId, error: 'Missing bountyId or hunterId' })
+        return false
+      }
+
       if (isSupabaseConfigured) {
         const payload = {
           bounty_id: bountyId,
@@ -204,7 +215,7 @@ export const completionService = {
         }
         const { error } = await supabase
           .from('completion_ready')
-          .upsert(payload, { onConflict: 'bounty_id' })
+          .upsert(payload, { onConflict: 'bounty_id,hunter_id' })
 
         if (error) throw error
         return true
@@ -300,6 +311,12 @@ export const completionService = {
       const record = await (completionService as any).getReady(bountyId)
       onUpdate(record)
     }, 3000)
+
+    // Register interval for test cleanup
+    if (process.env.NODE_ENV === 'test') {
+      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+    }
 
     // Initial fetch
     (async () => { const r = await completionService.getReady(bountyId); onUpdate(r) })()

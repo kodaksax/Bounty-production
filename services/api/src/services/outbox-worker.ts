@@ -1,8 +1,8 @@
 import { completionReleaseService } from './completion-release-service';
-import { OutboxEvent, outboxService } from './outbox-service';
-import { stripeConnectService } from './stripe-connect-service';
-import { refundService } from './refund-service';
 import { emailService } from './email-service';
+import { OutboxEvent, outboxService } from './outbox-service';
+import { refundService } from './refund-service';
+import { stripeConnectService } from './stripe-connect-service';
 
 export class OutboxWorker {
   private isRunning = false;
@@ -31,6 +31,12 @@ export class OutboxWorker {
         console.error('❌ Error in outbox worker interval:', error);
       }
     }, intervalMs);
+
+    // Register interval for test cleanup
+    if (process.env.NODE_ENV === 'test' && this.intervalId) {
+      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
+      ;(globalThis as any).__BACKGROUND_INTERVALS.push(this.intervalId)
+    }
   }
 
   /**

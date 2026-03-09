@@ -371,3 +371,16 @@ global.console = {
   warn: jest.fn(),
   log: jest.fn(),
 };
+
+// Cleanup any background intervals that tests registered to avoid leaked handles
+afterAll(() => {
+  try {
+    const list = globalThis.__BACKGROUND_INTERVALS || [];
+    for (const id of list) {
+      try { clearInterval(id); } catch (e) { /* ignore */ }
+    }
+    globalThis.__BACKGROUND_INTERVALS = [];
+  } catch (e) {
+    // swallow
+  }
+});
