@@ -82,8 +82,8 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       setIsSubmitting(true)
 
       const endpoint = isEditMode
-        ? `${LEGACY_API_BASE_URL}/bounties/${bountyId}`
-        : `${LEGACY_API_BASE_URL}/bounties`
+        ? `${LEGACY_API_BASE_URL}/api/bounties/${bountyId}`
+        : `${LEGACY_API_BASE_URL}/api/bounties`
 
       const method = isEditMode ? "PUT" : "POST"
 
