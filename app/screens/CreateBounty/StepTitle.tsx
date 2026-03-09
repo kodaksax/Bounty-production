@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { validateTitle } from '../../../lib/utils/bounty-validation';
 
 interface StepTitleProps {
   draft: BountyDraft;
@@ -26,19 +27,6 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
-
-  const validateTitle = (value: string): string | null => {
-    if (!value || value.trim().length === 0) {
-      return 'Title is required';
-    }
-    if (value.trim().length < 5) {
-      return 'Title must be at least 5 characters';
-    }
-    if (value.trim().length > 120) {
-      return 'Title must not exceed 120 characters';
-    }
-    return null;
-  };
 
   const handleTitleChange = (value: string) => {
     onUpdate({ title: value });

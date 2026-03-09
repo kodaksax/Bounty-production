@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Bounty } from "lib/services/database.types";
+import { LEGACY_API_BASE_URL } from "lib/config/network";
 import { logger } from "lib/utils/error-logger";
 import { z } from "zod";
 
@@ -18,7 +19,7 @@ export const enhancedBountyService = {
   async getById(id: number): Promise<{ bounty: Bounty | null; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         // ANNOTATION: Add authentication headers if required.
         // headers: { 'Authorization': `Bearer ${your_auth_token}` }
@@ -81,7 +82,7 @@ try {
 }
 
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/bounties`
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
@@ -159,7 +160,7 @@ try {
   const validatedData = bountySchema.parse(bountyData)
 
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = "https://your-hostinger-domain.com/api/bounties"
+      const API_URL = `${LEGACY_API_BASE_URL}/api/bounties`
       const posterId = (bountyData as any).poster_id || (bountyData as any).user_id
       const response = await fetch(API_URL, {
         method: "POST",
@@ -209,7 +210,7 @@ try {
       const validatedData = bountySchema.partial().parse(updates)
 
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         method: "PATCH", // or 'PUT'
         headers: {
@@ -311,7 +312,7 @@ try {
   async delete(id: number): Promise<{ success: boolean; error: Error | null }> {
     try {
       // ANNOTATION: Replace with your actual Hostinger API endpoint.
-      const API_URL = `https://your-hostinger-domain.com/api/bounties/${id}`
+      const API_URL = `${LEGACY_API_BASE_URL}/api/bounties/${id}`
       const response = await fetch(API_URL, {
         method: "DELETE",
         // ANNOTATION: Add authentication headers if required.
