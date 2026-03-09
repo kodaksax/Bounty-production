@@ -1,14 +1,14 @@
-import { useCallback } from 'react'
-import { Alert } from 'react-native'
 import type { BountyRequestWithDetails } from 'lib/services/bounty-request-service'
 import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
-import { navigationIntent } from 'lib/services/navigation-intent'
-import { logClientError, logClientInfo } from 'lib/services/monitoring'
-import { supabase } from 'lib/supabase'
-import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { messageService } from 'lib/services/message-service'
+import { logClientError, logClientInfo } from 'lib/services/monitoring'
+import { navigationIntent } from 'lib/services/navigation-intent'
+import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
+import { supabase } from 'lib/supabase'
+import { useCallback } from 'react'
+import { Alert } from 'react-native'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
@@ -262,49 +262,9 @@ export function useAcceptRequest({
         console.error('Error calling onBountyAccepted callback:', notifyErr)
       }
 
-      // Send notification to hunter about acceptance
-      try {
-        const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL
-        if (!API_BASE) {
-          console.error('EXPO_PUBLIC_API_BASE_URL is not set; skipping acceptance notification request.')
-        } else {
-          const response = await fetch(`${API_BASE}/api/notifications`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              user_id: hunterIdForConv,
-              type: 'acceptance',
-              title: 'Bounty Application Accepted!',
-              body: `Your application for "${bountyObj?.title || (request.bounty as any)?.title || 'the bounty'}" has been accepted!`,
-              data: {
-                bountyId: bountyId,
-                posterId: currentUserId,
-                ...((bountyObj?.amount || (request.bounty as any)?.amount) && { amount: (bountyObj?.amount ?? (request.bounty as any)?.amount) }),
-              }
-            })
-          })
-
-          if (!response.ok) {
-            let errorText: string | undefined
-            try {
-              errorText = await response.text()
-            } catch {
-              // ignore body parsing errors
-            }
-            console.error(
-              'Acceptance notification request failed:',
-              response.status,
-              response.statusText,
-              errorText
-            )
-          }
-        }
-      } catch (notifError) {
-        console.error('Failed to send acceptance notification:', notifError)
-        // Don't block the flow if notification fails
-      }
+      // Notifications are created server-side as part of the accept transaction
+      // via the consolidated-bounty-requests route. Removing client-side POST
+      // to avoid duplicate or failed requests.
 
       // Show escrow instructions if it's a paid bounty
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {

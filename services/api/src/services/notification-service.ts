@@ -2,6 +2,7 @@ import { and, desc, eq, ne } from 'drizzle-orm';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import { db } from '../db/connection';
 import { notificationPreferences, notifications, pushTokens, users } from '../db/schema';
+import { sendPushViaEdge } from './supabase-edge-client';
 
 // Initialize Expo SDK
 const expo = new Expo();
@@ -354,7 +355,19 @@ export class NotificationService {
         return;
       }
 
-      // Send notifications in chunks
+      // If SUPABASE_EDGE_URL is configured, proxy the sends through the Supabase Edge Function
+      const edgeUrl = process.env.SUPABASE_EDGE_URL
+      if (edgeUrl) {
+        try {
+          const resp = await sendPushViaEdge(messages.map(m => ({ to: m.to, title: m.title, body: m.body, data: m.data, sound: m.sound })));
+          console.log(`Edge function push response for user ${userId}:`, resp);
+        } catch (err) {
+          console.error('Error sending push via Supabase Edge Function:', err);
+        }
+        return;
+      }
+
+      // Fallback: send notifications in chunks via expo-server-sdk
       const chunks = expo.chunkPushNotifications(messages);
       const tickets = [];
 
