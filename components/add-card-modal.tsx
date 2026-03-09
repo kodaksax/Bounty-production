@@ -14,7 +14,7 @@ import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
   onBack: () => void
-  onSave?: (cardData: CardData) => void
+  onSave?: (cardData?: CardData) => void
   /**
    * When embedded is true the component renders inline (no backdrop/sheet)
    * This is used when the AddCardModal is shown inside another modal
@@ -184,11 +184,23 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   }
 
   const handlePaymentElementSuccess = async () => {
+    // Brief delay to allow Stripe's backend to make the new payment method available
+    await new Promise(r => setTimeout(r, 500))
     // Refresh payment methods after successful save
-    await refreshPaymentMethodsWithRetry(2, 3000)
+    await refreshPaymentMethodsWithRetry(3, 1000)
 
     Alert.alert('Success', 'Payment method added successfully!', [
-      { text: 'OK', onPress: onBack }
+      {
+        text: 'OK',
+        onPress: () => {
+          if (onSave) {
+            // Notify parent so it can trigger its own refresh and close the add-card view
+            onSave()
+          } else {
+            onBack()
+          }
+        },
+      },
     ])
   }
 
