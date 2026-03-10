@@ -1,7 +1,7 @@
 import { authProfileService, type AuthProfile } from 'lib/services/auth-profile-service';
 import { CURRENT_USER_ID } from 'lib/utils/data-utils';
 import { mergeNormalized, normalizeAuthProfile, normalizeUserProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthProfile } from './useAuthProfile';
 import { useProfile } from './useProfile';
 
@@ -72,12 +72,24 @@ export function useNormalizedProfile(userId?: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const normalizedFromSupabase = normalizeAuthProfile(supabaseProfile || null);
-  const normalizedFromAuthHook = isViewingSelf ? normalizeAuthProfile(authHookProfile || null) : null;
-  const normalizedFromLocal = normalizeUserProfile(localProfile || null);
+  const normalizedFromSupabase = useMemo(
+    () => normalizeAuthProfile(supabaseProfile || null),
+    [supabaseProfile]
+  );
+  const normalizedFromAuthHook = useMemo(
+    () => (isViewingSelf ? normalizeAuthProfile(authHookProfile || null) : null),
+    [isViewingSelf, authHookProfile]
+  );
+  const normalizedFromLocal = useMemo(
+    () => normalizeUserProfile(localProfile || null),
+    [localProfile]
+  );
 
   const primary = normalizedFromSupabase || normalizedFromAuthHook;
-  const effective = mergeNormalized(primary, normalizedFromLocal);
+  const effective = useMemo(
+    () => mergeNormalized(primary, normalizedFromLocal),
+    [primary, normalizedFromLocal]
+  );
 
   // Derive final normalized profile state (profile, loading, error) by merging Supabase, auth hook, and local profiles.
   // Intentionally no verbose logging here to avoid flooding the console in dev.

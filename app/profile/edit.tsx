@@ -7,22 +7,49 @@ import { AuthProfile } from "lib/services/auth-profile-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
+
+type EditProfileFormData = {
+  name: string;
+  username: string;
+  bio: string;
+  location: string;
+  portfolio: string;
+  skillsets: string;
+};
+
+const EMPTY_FORM_DATA: EditProfileFormData = {
+  name: "",
+  username: "",
+  bio: "",
+  location: "",
+  portfolio: "",
+  skillsets: "",
+};
+
+const isSameFormData = (a: EditProfileFormData, b: EditProfileFormData): boolean => (
+  a.name === b.name &&
+  a.username === b.username &&
+  a.bio === b.bio &&
+  a.location === b.location &&
+  a.portfolio === b.portfolio &&
+  a.skillsets === b.skillsets
+);
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -39,23 +66,9 @@ export default function EditProfileScreen() {
   const { updateProfile: updateAuthProfile } = useAuthProfile();
 
   // Initialize state with empty values - will be populated by useEffect when profile loads
-  const [formData, setFormData] = useState({
-    name: "",
-    username: "",
-    bio: "",
-    location: "",
-    portfolio: "",
-    skillsets: "",
-  });
+  const [formData, setFormData] = useState<EditProfileFormData>(EMPTY_FORM_DATA);
 
-  const [initialData, setInitialData] = useState({
-    name: "",
-    username: "",
-    bio: "",
-    location: "",
-    portfolio: "",
-    skillsets: "",
-  });
+  const [initialData, setInitialData] = useState<EditProfileFormData>(EMPTY_FORM_DATA);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
@@ -104,22 +117,34 @@ export default function EditProfileScreen() {
     },
   });
 
-  // Clear form data when user changes to prevent data leaks
+  const normalizedSkillsets = React.useMemo(
+    () => (Array.isArray(profile?.skills) ? profile.skills.join(", ") : ""),
+    [profile?.skills]
+  );
+
+  const profileFormData = React.useMemo<EditProfileFormData | null>(() => {
+    if (!profile) return null;
+    return {
+      name: profile.name || "",
+      username: profile.username || "",
+      bio: profile.bio || "",
+      location: profile.location || "",
+      portfolio: profile.portfolio || "",
+      skillsets: normalizedSkillsets,
+    };
+  }, [profile, normalizedSkillsets]);
+
+  // Keep local edit state in sync with profile snapshots without re-running on
+  // every render. This prevents maximum update depth errors caused by
+  // repeatedly setting local state from equivalent profile payloads.
   React.useEffect(() => {
-    if (profile) {
-      const data = {
-        name: profile.name || "",
-        username: profile.username || "",
-        bio: profile.bio || "",
-        location: profile.location || "",
-        portfolio: profile.portfolio || "",
-        skillsets: profile.skills?.join(", ") || "",
-      };
-      setFormData(data);
-      setInitialData(data);
-      setAvatarUrl(profile.avatar || null);
-    }
-  }, [profile, currentUserId]); // Include currentUserId to reset form when user changes
+    const nextData = profileFormData ?? EMPTY_FORM_DATA;
+    setFormData((prev) => (isSameFormData(prev, nextData) ? prev : nextData));
+    setInitialData((prev) => (isSameFormData(prev, nextData) ? prev : nextData));
+
+    const nextAvatar = profile?.avatar || null;
+    setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
+  }, [profileFormData, profile?.avatar, currentUserId]);
 
   // Check if form is dirty (has changes)
   const isDirty = React.useMemo(() => {

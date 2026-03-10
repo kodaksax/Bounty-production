@@ -8,8 +8,7 @@
  * 3. Improved focus indicators and visual styling
  */
 
-import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { Alert, Platform } from 'react-native';
 
 // Mock dependencies before imports
@@ -274,6 +273,42 @@ describe('EditProfileScreen', () => {
       
       // Bio is 8 characters, max is 160
       expect(getByText('8/160')).toBeTruthy();
+    });
+
+    it('should keep user edits when profile hook returns a new object reference', () => {
+      const { useNormalizedProfile } = require('../../hooks/useNormalizedProfile');
+      useNormalizedProfile.mockImplementation(() => ({
+        // Return a new object each render to simulate merged normalized payloads.
+        profile: { ...mockProfile },
+        loading: false,
+        error: null,
+      }));
+
+      const { getByPlaceholderText, getByDisplayValue } = render(<EditProfileScreen />);
+
+      const nameInput = getByPlaceholderText('Your display name');
+      fireEvent.changeText(nameInput, 'Jane Updated');
+
+      expect(getByDisplayValue('Jane Updated')).toBeTruthy();
+    });
+
+    it('should keep save enabled after edit even across rerenders', () => {
+      const { useNormalizedProfile } = require('../../hooks/useNormalizedProfile');
+      useNormalizedProfile.mockImplementation(() => ({
+        profile: { ...mockProfile },
+        loading: false,
+        error: null,
+      }));
+
+      const { getByPlaceholderText, getByText, rerender } = render(<EditProfileScreen />);
+
+      const bioInput = getByPlaceholderText('Tell others about yourself...');
+      fireEvent.changeText(bioInput, 'Updated bio text');
+
+      rerender(<EditProfileScreen />);
+
+      const saveButton = getByText('Save').parent;
+      expect(saveButton?.props.disabled).toBe(false);
     });
 
     it('should enforce bio character limit of 160', () => {
