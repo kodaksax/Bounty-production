@@ -60,7 +60,13 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (req.method === 'POST' && subPath === '/ready') {
-      const body = await req.json().catch(() => ({})) as { bounty_id?: string; hunter_id?: string }
+      let body: { bounty_id?: string; hunter_id?: string }
+      try {
+        body = await req.json() as { bounty_id?: string; hunter_id?: string }
+      } catch (e) {
+        return jsonResponse({ error: 'Invalid JSON in request body' }, 400)
+      }
+
       const bountyId = sanitizeUuid(body.bounty_id)
       const hunterId = sanitizeUuid(body.hunter_id ?? user.id)
 
