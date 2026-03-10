@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { storage } from '../../lib/storage';
 import type { Attachment } from '../../lib/types';
 
@@ -50,13 +50,23 @@ export function useBountyDraft(userId?: string) {
   const draftKey = getDraftKey(userId);
   const [draft, setDraft] = useState<BountyDraft>(defaultDraft);
   const [isLoading, setIsLoading] = useState(true);
+  // Counter ref to sequence async loads and ignore stale results
+  const loadRequestCounterRef = useRef(0);
 
   // Load draft from AsyncStorage on mount (re-runs when userId changes)
   useEffect(() => {
+    // Mark loading and capture a request id. If a new effect runs or the
+    // component unmounts, incrementing the counter will make this request stale.
     setIsLoading(true);
+    const requestId = ++loadRequestCounterRef.current;
+
     (async () => {
       try {
         const savedDraft = await storage.getItem(draftKey);
+
+        // If another load started since this one, ignore the result.
+        if (loadRequestCounterRef.current !== requestId) return;
+
         if (savedDraft) {
           setDraft(JSON.parse(savedDraft));
         } else {
@@ -64,23 +74,41 @@ export function useBountyDraft(userId?: string) {
           setDraft(defaultDraft);
         }
       } catch (error) {
-        console.error('Failed to load bounty draft:', error);
+        if (loadRequestCounterRef.current === requestId) {
+          console.error('Failed to load bounty draft:', error);
+        }
       } finally {
-        setIsLoading(false);
+        if (loadRequestCounterRef.current === requestId) {
+          setIsLoading(false);
+        }
       }
     })();
+
+    // Cleanup: bump the counter to invalidate any in-flight requests from
+    // this effect when it re-runs or on unmount.
+    return () => {
+      loadRequestCounterRef.current++;
+    };
   }, [draftKey]);
 
   // Save draft to AsyncStorage
   const saveDraft = useCallback(async (draftData: Partial<BountyDraft>) => {
     try {
-      const updated = { ...draft, ...draftData };
-      setDraft(updated);
-      await storage.setItem(draftKey, JSON.stringify(updated));
+      // Use a functional update so we always merge against the latest state
+      // even if multiple updates are queued. Capture the derived value and
+      // persist that exact snapshot to storage to avoid races.
+      let updatedValue: BountyDraft | undefined;
+      setDraft(prev => {
+        updatedValue = { ...prev, ...draftData };
+        return updatedValue;
+      });
+
+      // Persist the value derived from the same `prev` snapshot.
+      await storage.setItem(draftKey, JSON.stringify(updatedValue!));
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
-  }, [draft, draftKey]);
+  }, [draftKey]);
 
   // Clear draft from AsyncStorage
   const clearDraft = useCallback(async () => {
