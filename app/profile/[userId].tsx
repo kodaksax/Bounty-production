@@ -11,14 +11,14 @@ import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
@@ -212,14 +212,26 @@ export default function UserProfileScreen() {
         undefined // no bounty context
       );
 
+      if (!conversation || !conversation.id) {
+        throw new Error('Conversation created but no ID returned');
+      }
+
       // Set intent to open this conversation
       await navigationIntent.setPendingConversationId(conversation.id);
 
-      // Navigate to messenger
+      // Navigate to messenger - only after conversation is successfully created
       router.push(ROUTES.TABS.MESSENGER as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
-      Alert.alert('Error', 'Failed to start conversation. Please try again.');
+      // Ensure we don't navigate on error
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start conversation';
+      Alert.alert('Error', `${errorMessage}. Please try again.`);
+      // Make sure we clear any pending conversation ID on error
+      try {
+        await navigationIntent.setPendingConversationId(null);
+      } catch {
+        // Ignore clearing errors
+      }
     } finally {
       setIsCreatingChat(false);
     }
