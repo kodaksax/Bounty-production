@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 // 1. Update imports
 import { theme } from "lib/theme";
 import { shareBounty } from "lib/utils/share-utils";
@@ -24,6 +24,9 @@ interface BountyCardProps {
   // Cancellation/dispute states
   hasCancellationRequest?: boolean;
   hasDispute?: boolean;
+  // Profile picture of the other party (poster for hunters, hunter for posters)
+  otherPartyAvatar?: string | null;
+  otherPartyName?: string;
 }
 
 export function BountyCard({
@@ -41,6 +44,8 @@ export function BountyCard({
   submittedForReview,
   hasCancellationRequest,
   hasDispute,
+  otherPartyAvatar,
+  otherPartyName,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
 
@@ -101,8 +106,18 @@ export function BountyCard({
       style={styles.card}
       onPress={onPress}
     >
-      {/* Header row with status badge */}
+      {/* Header row with avatar and status badges */}
       <View style={styles.header}>
+        {/* Profile Avatar */}
+        {otherPartyAvatar && (
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{ uri: otherPartyAvatar }}
+              style={styles.avatar}
+              accessibilityLabel={`${otherPartyName || 'User'} profile picture`}
+            />
+          </View>
+        )}
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
           <Text style={styles.statusText}>{getStatusLabel()}</Text>
         </View>
@@ -296,6 +311,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
     gap: 8,
+  },
+  avatarContainer: {
+    marginRight: 4,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "rgba(110, 231, 183, 0.6)", // emerald-400 with opacity
   },
   statusBadge: {
     paddingHorizontal: 10,
