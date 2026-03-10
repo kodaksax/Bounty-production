@@ -11,6 +11,7 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
@@ -73,6 +74,9 @@ function BountyAppInner() {
   const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
   const [activeScreen, setActiveScreen] = useState(paramScreen)
   const [showBottomNav, setShowBottomNav] = useState(true)
+
+  // Track total unread message count for the bottom nav badge
+  const { totalUnreadCount: unreadMessageCount } = useConversations()
 
   // Ref to the BountyFeed component — used for scroll-to-top and refresh on tab repress
   const bountyFeedRef = useRef<BountyFeedHandle>(null)
@@ -172,7 +176,7 @@ function BountyAppInner() {
         />
       )}
 
-      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} />}
+      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
     </View>
   )
 }

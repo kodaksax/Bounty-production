@@ -336,30 +336,6 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       if (request) {
         setHasApplied(true)
 
-        // Send notification to poster about the application
-        try {
-          const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001'
-          await fetch(`${API_BASE}/api/notifications`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              user_id: posterId,
-              type: 'application',
-              title: 'New Bounty Application',
-              body: `Someone applied for your bounty: ${bounty.title}`,
-              data: {
-                bountyId: bounty.id,
-                hunterId: currentUserId,
-              }
-            })
-          })
-        } catch (notifError) {
-          console.error('Failed to send application notification:', notifError)
-          // Don't block the flow if notification fails
-        }
-
         // Set loading state to false after all async operations complete
         setIsApplying(false)
 

@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
 import { theme } from "../../lib/theme";
 
@@ -13,13 +13,14 @@ interface BottomNavProps {
   onNavigate: (screen: ScreenKey) => void;
   showAdmin?: boolean;
   onBountyTabRepress?: () => void; // Called when bounty tab is pressed while already active
+  unreadMessageCount?: number; // Total unread message count badge for the chat icon
 }
 
 // Navigation icon size constants for visual hierarchy
 const NAV_ICON_SIZE = 26;        // Standard nav icons
 const CENTER_ICON_SIZE = 32;     // Larger center GPS icon for emphasis
 
-export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress }: BottomNavProps) {
+export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress, unreadMessageCount = 0 }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
@@ -90,14 +91,23 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Create new bounty or message"
+            accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : "Create new bounty or message"}
             accessibilityState={{ selected: activeScreen === "create" }}
           >
-            <MaterialIcons
-              name="chat"
-              color={activeScreen === "create" ? "#fffef5" : "#9ca3af"}
-              size={NAV_ICON_SIZE}
-            />
+            <View style={styles.iconWrapper}>
+              <MaterialIcons
+                name="chat"
+                color={activeScreen === "create" ? "#fffef5" : "#9ca3af"}
+                size={NAV_ICON_SIZE}
+              />
+              {unreadMessageCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleNavigate("wallet")}
@@ -246,6 +256,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -28, // Align with raised center button
+  },
+  iconWrapper: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#1a3d2e',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   centerButton: {
     height: 68, // Slightly larger for emphasis
