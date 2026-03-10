@@ -2,7 +2,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { storage } from '../../lib/storage';
 import type { Attachment } from '../../lib/types';
 
-const DRAFT_KEY = 'bounty-draft-v1';
+const DRAFT_KEY_PREFIX = 'bounty-draft-v1';
+
+function getDraftKey(userId?: string): string {
+  return userId ? `${DRAFT_KEY_PREFIX}:${userId}` : DRAFT_KEY_PREFIX;
+}
+
+/**
+ * Standalone function to clear a specific user's bounty draft from storage.
+ * Safe to call outside of React (e.g. from auth-provider on sign-out).
+ */
+export async function clearBountyDraftForUser(userId?: string): Promise<void> {
+  try {
+    await storage.removeItem(getDraftKey(userId));
+  } catch (error) {
+    console.error('Failed to clear bounty draft for user', userId ?? '(anonymous)', ':', error);
+  }
+}
 
 export interface BountyDraft {
   title: string;
@@ -30,17 +46,22 @@ const defaultDraft: BountyDraft = {
   attachments: [],
 };
 
-export function useBountyDraft() {
+export function useBountyDraft(userId?: string) {
+  const draftKey = getDraftKey(userId);
   const [draft, setDraft] = useState<BountyDraft>(defaultDraft);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load draft from AsyncStorage on mount
+  // Load draft from AsyncStorage on mount (re-runs when userId changes)
   useEffect(() => {
+    setIsLoading(true);
     (async () => {
       try {
-        const savedDraft = await storage.getItem(DRAFT_KEY);
+        const savedDraft = await storage.getItem(draftKey);
         if (savedDraft) {
           setDraft(JSON.parse(savedDraft));
+        } else {
+          // No draft for this user — start fresh
+          setDraft(defaultDraft);
         }
       } catch (error) {
         console.error('Failed to load bounty draft:', error);
@@ -48,28 +69,28 @@ export function useBountyDraft() {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [draftKey]);
 
   // Save draft to AsyncStorage
   const saveDraft = useCallback(async (draftData: Partial<BountyDraft>) => {
     try {
       const updated = { ...draft, ...draftData };
       setDraft(updated);
-      await storage.setItem(DRAFT_KEY, JSON.stringify(updated));
+      await storage.setItem(draftKey, JSON.stringify(updated));
     } catch (error) {
       console.error('Failed to save bounty draft:', error);
     }
-  }, [draft]);
+  }, [draft, draftKey]);
 
   // Clear draft from AsyncStorage
   const clearDraft = useCallback(async () => {
     try {
       setDraft(defaultDraft);
-      await storage.removeItem(DRAFT_KEY);
+      await storage.removeItem(draftKey);
     } catch (error) {
       console.error('Failed to clear bounty draft:', error);
     }
-  }, []);
+  }, [draftKey]);
 
   return {
     draft,
